@@ -1,0 +1,32 @@
+{
+  "name": "@desktop-workspace/foundation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Reusable desktop app foundation modules for Electron renderer and bridge contracts.",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    }
+  },
+  "files": [
+    "src"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "format:check": "prettier --check .",
+    "type-check": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest --run",
+    "test:e2e": "vitest --run src/config.e2e.test.ts src/runtime.e2e.test.ts src/statlog.e2e.test.ts src/vfs.e2e.test.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "happy-dom": "^20.10.6",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
+  }
+}

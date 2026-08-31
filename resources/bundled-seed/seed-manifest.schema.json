@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ankye.github.io/dsh-launcher/schemas/bundled-seed.schema.json",
+  "title": "DSH Launcher bundled seed",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["format", "version", "remoteUrl", "harness", "pluginGeneration", "resources"],
+  "properties": {
+    "format": {
+      "const": "dsh-launcher-bundled-seed"
+    },
+    "version": {
+      "const": 1
+    },
+    "remoteUrl": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 2048
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["revision", "objectFormat", "bundlePath", "bundleSha256", "bundleBytes"],
+      "properties": {
+        "revision": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "objectFormat": {
+          "const": "sha1"
+        },
+        "bundlePath": {
+          "$ref": "#/$defs/resourcePath"
+        },
+        "bundleSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bundleBytes": {
+          "$ref": "#/$defs/byteLength"
+        }
+      }
+    },
+    "pluginGeneration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generationId",
+        "identity",
+        "resourcePath",
+        "packageManifestPath",
+        "packageManifestSha256",
+        "generationManifestPath",
+        "generationManifestSha256",
+        "bundles"
+      ],
+      "properties": {
+        "generationId": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+        },
+        "identity": {
+          "$ref": "#/$defs/sha256"
+        },
+        "resourcePath": {
+          "$ref": "#/$defs/resourcePath"
+        },
+        "packageManifestPath": {
+          "$ref": "#/$defs/resourcePath"
+        },
+        "packageManifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "generationManifestPath": {
+          "$ref": "#/$defs/resourcePath"
+        },
+        "generationManifestSha256": {
+          "$ref": "#/$defs/sha256"
+        },
+        "bundles": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "string",
+            "enum": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app"]
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "array",
+      "minItems": 3,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "bytes"],
+        "properties": {
+          "path": {
+            "$ref": "#/$defs/resourcePath"
+          },
+          "sha256": {
+            "$ref": "#/$defs/sha256"
+          },
+          "bytes": {
+            "$ref": "#/$defs/byteLength"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "byteLength": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "resourcePath": {
+      "type": "string",
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9][A-Za-z0-9._@/-]*$"
+    }
+  }
+}

@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-08-31
+goal: Deliver a macOS and Windows desktop workspace manager that clones,
+  versions, configures, and launches an exact DeepSeek Harness checkout.

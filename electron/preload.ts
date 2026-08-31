@@ -1,0 +1,112 @@
+import { contextBridge, ipcRenderer } from 'electron'
+import {
+  DESKTOP_API_VERSION,
+  DESKTOP_IPC_CHANNELS,
+  type ApiResult,
+  type BootstrapErrorCode,
+  type BootstrapInfo,
+  type CloneManagedHarnessRequest,
+  type CreateManagedWorkspaceRequest,
+  type DirectorySelectionPurpose,
+  type InstallBundledHarnessSeedRequest,
+  type LauncherHarnessState,
+  type PluginCatalogState,
+  type ManagedDirectorySelection,
+  type ManagedExecutableKind,
+  type ManagedExecutableSelection,
+  type ManagedInstallationsState,
+  type ManagedLauncherState,
+  type RegisterManagedToolchainRequest,
+  type RegisterManagedToolchainResult,
+  type RegisterManagedRootsRequest,
+  type StartManagedHarnessRequest,
+  type StopManagedHarnessRequest,
+  type SwitchManagedHarnessRevisionRequest,
+  type SwitchLauncherHarnessVersionRequest,
+  type SwitchLauncherHarnessBranchRequest,
+  type DesktopApi
+} from '../src/shared/contracts'
+
+const desktopApi: DesktopApi = Object.freeze({
+  apiVersion: DESKTOP_API_VERSION,
+  bootstrap: Object.freeze({
+    getInfo: (): Promise<ApiResult<BootstrapInfo, BootstrapErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.bootstrapInfo)
+  }),
+  managed: Object.freeze({
+    getState: (): Promise<ApiResult<ManagedLauncherState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedGetState),
+    selectDirectory: (
+      purpose: DirectorySelectionPurpose
+    ): Promise<ApiResult<ManagedDirectorySelection>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedSelectDirectory, { purpose }),
+    registerRoots: (
+      request: RegisterManagedRootsRequest
+    ): Promise<ApiResult<ManagedLauncherState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedRegisterRoots, request),
+    createWorkspace: (
+      request: CreateManagedWorkspaceRequest
+    ): Promise<ApiResult<ManagedLauncherState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedCreateWorkspace, request)
+  }),
+  managedInstallations: Object.freeze({
+    getState: (): Promise<ApiResult<ManagedInstallationsState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsGetState),
+    selectExecutable: (
+      purpose: ManagedExecutableKind
+    ): Promise<ApiResult<ManagedExecutableSelection>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsSelectExecutable, { purpose }),
+    registerToolchain: (
+      request: RegisterManagedToolchainRequest
+    ): Promise<ApiResult<RegisterManagedToolchainResult>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsRegisterToolchain, request),
+    installBundledSeed: (
+      request: InstallBundledHarnessSeedRequest
+    ): Promise<ApiResult<ManagedInstallationsState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsInstallBundledSeed, request),
+    cloneHarness: (
+      request: CloneManagedHarnessRequest
+    ): Promise<ApiResult<ManagedInstallationsState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsCloneHarness, request),
+    switchRevision: (
+      request: SwitchManagedHarnessRevisionRequest
+    ): Promise<ApiResult<ManagedInstallationsState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsSwitchRevision, request),
+    startHarness: (
+      request: StartManagedHarnessRequest
+    ): Promise<ApiResult<ManagedInstallationsState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsStartHarness, request),
+    stopHarness: (
+      request: StopManagedHarnessRequest
+    ): Promise<ApiResult<ManagedInstallationsState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.managedInstallationsStopHarness, request)
+  }),
+  launcherHarness: Object.freeze({
+    getState: (): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessGetState),
+    start: (): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessStart),
+    stop: (): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessStop),
+    refreshVersions: (): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessRefreshVersions),
+    update: (): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessUpdate),
+    switchVersion: (
+      request: SwitchLauncherHarnessVersionRequest
+    ): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessSwitchVersion, request),
+    switchBranch: (
+      request: SwitchLauncherHarnessBranchRequest
+    ): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessSwitchBranch, request)
+  }),
+  pluginCatalog: Object.freeze({
+    getState: (): Promise<ApiResult<PluginCatalogState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.pluginCatalogGetState),
+    refresh: (): Promise<ApiResult<PluginCatalogState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.pluginCatalogRefresh)
+  })
+})
+
+contextBridge.exposeInMainWorld('dshLauncher', desktopApi)

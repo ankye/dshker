@@ -1,0 +1,14 @@
+node_modules/
+out/
+dist/
+dist-web/
+release/
+# Generated bundled-seed staging: its bytes are hashed by seed-manifest.json,
+# so reformatting them breaks seed integrity verification.
+resources/bundled-seed/staged/
+coverage/
+.vite/
+.run/
+.codex/
+openspec/
+.env.example

@@ -1,0 +1,44 @@
+# Dependencies and caches
+node_modules/
+.vite/
+.vitest/
+.run/
+coverage/
+
+# Build outputs and release artifacts
+dist/
+dist-web/
+dist-electron/
+out/
+build/
+release/
+*.app/
+*.exe
+*.msi
+*.dmg
+*.pkg
+
+# Runtime app data
+projects/
+uploads/
+tmp/
+logs/
+
+# Secrets and local signing material
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.keystore
+*.mobileprovision
+*.cer
+*.key
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/settings.json

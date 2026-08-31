@@ -1,0 +1,120 @@
+{
+  "name": "@ankye/dsh-launcher",
+  "version": "0.1.0",
+  "description": "Managed desktop shell for DeepSeek Harness.",
+  "author": "ankye",
+  "private": true,
+  "type": "module",
+  "main": "out/main/index.cjs",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0",
+    "npm": ">=10.0.0"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "electron-vite dev",
+    "dev:debug": "node tools/electron-dev.mjs --remote-debugging-port 9223",
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:renderer": "vite",
+    "service:dev": "node service/node/vfs-service.mjs",
+    "service:smoke": "node tools/assert-no-template-service.mjs",
+    "visual:smoke": "node tools/visual-smoke.mjs --json",
+    "electron:renderer-smoke": "node tools/electron-renderer-smoke.mjs --json",
+    "environment:check": "node tools/environment-check.mjs",
+    "architecture:check": "node tools/architecture-check.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "type-check:foundation": "npm run type-check --workspace @desktop-workspace/foundation",
+    "type-check": "npm run type-check:foundation && vue-tsc --noEmit -p tsconfig.json",
+    "test": "vitest",
+    "test:coverage": "vitest --coverage",
+    "test:e2e": "npm run test:e2e --workspace @desktop-workspace/foundation",
+    "build": "vue-tsc --noEmit -p tsconfig.json && vite build",
+    "build:web": "vue-tsc --noEmit -p tsconfig.json && vite build --outDir dist-web",
+    "build:electron": "electron-vite build",
+    "seed:prepare": "node tools/prepare-bundled-seed.mjs",
+    "seed:verify": "node tools/verify-bundled-seed.mjs && node tools/verify-bundled-source.mjs",
+    "preview:web": "vite preview --host 127.0.0.1",
+    "bundled-source:verify": "npm run seed:verify",
+    "package": "npm run bundled-source:verify && electron-vite build && electron-builder --dir && npm run release:metadata -- --mode package",
+    "dist": "npm run bundled-source:verify && electron-vite build && electron-builder && npm run release:metadata -- --mode dist",
+    "performance:check": "node tools/performance-check.mjs --mode release-dry-run --json",
+    "release:metadata": "node tools/release-artifacts.mjs --release-dir release",
+    "release:verify": "node tools/release-artifacts.mjs --release-dir release --verify",
+    "release:smoke": "node tools/release-smoke.mjs --release-dir release --launch --json",
+    "release:readiness": "node tools/release-readiness.mjs --json",
+    "release:dry-run": "npm run release:readiness"
+  },
+  "dependencies": {
+    "@desktop-workspace/foundation": "file:packages/desktop-foundation",
+    "js-yaml": "^4.3.2",
+    "pinia": "^2.3.1",
+    "vue": "^3.5.13"
+  },
+  "overrides": {
+    "vite": {
+      "esbuild": "0.28.1"
+    },
+    "form-data": "4.0.6"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.15.3",
+    "@vitejs/plugin-vue": "^6.0.7",
+    "@vitest/coverage-v8": "^4.1.9",
+    "@vue/test-utils": "^2.4.6",
+    "@vue/tsconfig": "^0.7.0",
+    "electron": "^42.4.0",
+    "electron-builder": "^26.15.2",
+    "electron-vite": "^5.0.0",
+    "happy-dom": "^20.10.6",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "vite": "^7.3.5",
+    "vitest": "^4.1.9",
+    "vue-tsc": "^2.2.12"
+  },
+  "build": {
+    "appId": "com.ankye.dsh-launcher",
+    "productName": "DSH Launcher",
+    "icon": "resources/icon-512.png",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "resources/bundled-seed/staged",
+        "to": "bundled-seed",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "dsh-launcher-${version}-${os}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

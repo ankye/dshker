@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-label="DSH Launcher">
+  <defs>
+    <linearGradient id="background" x1="20" x2="236" y1="20" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2a3442"/>
+      <stop offset="1" stop-color="#141a23"/>
+    </linearGradient>
+    <linearGradient id="signal" x1="72" x2="190" y1="164" y2="84" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#78a7ff"/>
+      <stop offset="1" stop-color="#43d6a1"/>
+    </linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="52" fill="url(#background)"/>
+  <rect x="50" y="56" width="156" height="144" rx="20" fill="#202b38" stroke="#71819a" stroke-width="5"/>
+  <path d="M82 100h28l17 28-17 28H82l17-28-17-28Zm66 0h27l17 28-17 28h-27l17-28-17-28Z" fill="url(#signal)"/>
+  <circle cx="72" cy="76" r="7" fill="#43d6a1"/>
+  <circle cx="94" cy="76" r="7" fill="#78a7ff"/>
+  <circle cx="116" cy="76" r="7" fill="#f6c962"/>
+</svg>

@@ -1,0 +1,9 @@
+{
+  "exampleOnly": true,
+  "reason": "This file is documentation only. It is intentionally not a valid bundled-seed manifest and must never be packaged.",
+  "requiredBuildInputs": [
+    "DSH_BUNDLED_HARNESS_SOURCE",
+    "DSH_BUNDLED_HARNESS_REMOTE_URL",
+    "DSH_BUNDLED_GIT_EXECUTABLE"
+  ]
+}

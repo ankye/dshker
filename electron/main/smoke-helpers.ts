@@ -1,0 +1,186 @@
+import type { BrowserWindow as ElectronBrowserWindow, NativeImage } from 'electron'
+
+/** Renderer facts a packaged launch must prove before it counts as working. */
+export interface RendererEvidence {
+  shellMounted: boolean
+  shellElement: boolean
+  rendererText: boolean
+  preload: boolean
+  errors: string[]
+}
+
+/** Per-route reachability evidence for the shell's navigation. */
+export interface RouteSmokeEvidence {
+  ok: boolean
+  routes: Array<{ id: string; text: string; ok: boolean }>
+}
+
+/** First-frame pixel evidence proving the window painted real content. */
+export interface FrameEvidence {
+  width: number
+  height: number
+  nonblank: boolean
+  singleColor: boolean
+  sampledPixels: number
+  variedPixels: number
+  contentPixels: number
+}
+
+export function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds))
+}
+
+/**
+ * Polls the renderer until the shell reports itself mounted with the trusted
+ * preload bridge present, collecting console and crash errors throughout.
+ */
+export async function waitForRendererEvidence(
+  window: ElectronBrowserWindow
+): Promise<RendererEvidence> {
+  const errors: string[] = []
+  window.webContents.on('render-process-gone', (_event, details) => {
+    errors.push(`render-process-gone:${details.reason}`)
+  })
+  window.webContents.on('console-message', (_event, level, message) => {
+    if (level >= 3) errors.push(message)
+  })
+
+  const deadline = Date.now() + 8000
+  let evidence: RendererEvidence = {
+    shellMounted: false,
+    shellElement: false,
+    rendererText: false,
+    preload: false,
+    errors
+  }
+
+  while (Date.now() < deadline) {
+    try {
+      evidence = await window.webContents.executeJavaScript(
+        `(() => ({
+          shellMounted: document.documentElement.dataset.appShellMounted === 'true',
+          shellElement: Boolean(document.querySelector('.app-shell')),
+          rendererText: document.body?.innerText?.includes('DSH Launcher') === true,
+          preload: typeof window.dshLauncher === 'object' && window.dshLauncher !== null,
+          errors: []
+        }))()`
+      )
+      evidence.errors = errors
+      if (
+        evidence.shellMounted &&
+        evidence.shellElement &&
+        evidence.rendererText &&
+        evidence.preload
+      ) {
+        return evidence
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error))
+    }
+    await delay(100)
+  }
+
+  return evidence
+}
+
+/**
+ * Visits every shell route by clicking its navigation control.
+ *
+ * The Launcher shell keeps route state in memory and exposes no URL route, so a
+ * hash-based walk would silently pass without changing the view.
+ */
+export async function smokeRoutes(window: ElectronBrowserWindow): Promise<RouteSmokeEvidence> {
+  const cases = [
+    { id: 'launch', text: '一键启动' },
+    { id: 'advanced', text: '高级选项' },
+    { id: 'versions', text: '版本管理' },
+    { id: 'controller', text: '控制台' },
+    { id: 'settings', text: '应用设置' },
+    { id: 'runtime', text: '运行' }
+  ]
+  const routes: RouteSmokeEvidence['routes'] = []
+
+  for (const route of cases) {
+    const ok = await window.webContents.executeJavaScript(
+      `new Promise((resolve) => {
+        const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route.id)} + '"]');
+        if (!control) {
+          resolve(false);
+          return;
+        }
+        control.click();
+        setTimeout(() => {
+          const active = control.dataset.active === 'true';
+          const shown = document.body?.innerText?.includes(${JSON.stringify(route.text)}) === true;
+          resolve(active && shown);
+        }, 160);
+      })`
+    )
+    routes.push({ ...route, ok: Boolean(ok) })
+  }
+
+  return {
+    ok: routes.every((route) => route.ok),
+    routes
+  }
+}
+
+/** Samples the captured frame to distinguish real content from a blank fill. */
+export function analyzeFirstFrame(image: NativeImage): FrameEvidence {
+  const size = image.getSize()
+  const bitmap = image.toBitmap()
+  const stepX = Math.max(1, Math.floor(size.width / 48))
+  const stepY = Math.max(1, Math.floor(size.height / 48))
+  let sampledPixels = 0
+  let variedPixels = 0
+  let contentPixels = 0
+  let firstColor = ''
+
+  for (let y = 0; y < size.height; y += stepY) {
+    for (let x = 0; x < size.width; x += stepX) {
+      const offset = (y * size.width + x) * 4
+      const blue = bitmap[offset] ?? 0
+      const green = bitmap[offset + 1] ?? 0
+      const red = bitmap[offset + 2] ?? 0
+      const alpha = bitmap[offset + 3] ?? 0
+      const color = `${String(red)},${String(green)},${String(blue)},${String(alpha)}`
+      const brightness = (red + green + blue) / 3
+
+      if (!firstColor) firstColor = color
+      if (color !== firstColor) variedPixels += 1
+      if (alpha > 0 && brightness > 8 && brightness < 247) contentPixels += 1
+      sampledPixels += 1
+    }
+  }
+
+  return {
+    width: size.width,
+    height: size.height,
+    nonblank: contentPixels / Math.max(sampledPixels, 1) > 0.08,
+    singleColor: variedPixels / Math.max(sampledPixels, 1) < 0.02,
+    sampledPixels,
+    variedPixels,
+    contentPixels
+  }
+}
+
+export async function captureFirstFrame(window: ElectronBrowserWindow): Promise<NativeImage> {
+  let lastError: unknown
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      const image = await window.webContents.capturePage()
+      if (!image.isEmpty()) return image
+    } catch (error) {
+      lastError = error
+    }
+    await delay(150)
+  }
+  throw lastError instanceof Error ? lastError : new Error('Unable to capture first frame')
+}
+
+export async function waitForRendererPaint(window: ElectronBrowserWindow): Promise<void> {
+  await window.webContents.executeJavaScript(
+    `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`
+  )
+  await delay(250)
+}

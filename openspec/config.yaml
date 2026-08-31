@@ -1,0 +1,38 @@
+schema: spec-driven
+
+context: |
+  dsh-launcher is an independent macOS and Windows desktop product registered under
+  desktop_workspace/apps/dsh-launcher. Its reference scaffold is the workspace-owned
+  Electron, Vite, Vue 3, and TypeScript desktop template.
+  The product manages DeepSeek Harness installations without embedding Harness source in
+  the desktop artifact. One application registry owns separate Harness, plugin,
+  configuration, and settings roots. The Harness-owned $DSH_HOME or ~/.dsh remains
+  outside the Launcher registry and is reused across revisions. Installation and workspace records
+  bind those roots by identity and controlled relative namespace.
+  Only the selected checkout's dsh CLI with a named profile may launch Harness. The
+  renderer is context-isolated and uses a typed preload API; the main process owns Git,
+  filesystem, native dialog, subprocess, and secret-storage access.
+  Missing paths, tools, versions, fields, profiles, or services fail explicitly. Do not
+  infer a path, select another ref, use another dsh executable, or add fallback behavior.
+  Keep macOS and Windows behavior, packaging, signing, and verification aligned.
+
+rules:
+  proposal:
+    - State the target user, desired outcome, explicit non-goals, and affected repositories.
+    - Separate launcher-owned behavior from required DeepSeek Harness changes.
+  design:
+    - Define directory ownership, Git and process state machines, data flow, IPC versioning, security, failure behavior, and recovery.
+    - Record rejected alternatives and unresolved product decisions without choosing placeholders.
+  specs:
+    - Cover clone and registration, directory validation, exact-ref activation, dirty-state blocking, launch and stop, crash recovery, and cross-platform behavior with scenarios.
+  tasks:
+    - Split work into independently verifiable outcomes with owner, dependency, and macOS and Windows evidence.
+
+operations:
+  apply:
+    guidance:
+      - Do not implement while any required product or cross-repository protocol decision remains unresolved.
+      - Keep production entry points free of Mock, fixture, simulator, or test-only dependencies.
+  archive:
+    guidance:
+      - Require strict OpenSpec validation plus packaged macOS and Windows runtime evidence before archive.
