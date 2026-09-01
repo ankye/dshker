@@ -21,6 +21,11 @@
 - Removed unwired descriptor and child-IPC supervisor scaffolding for a transport
   this release does not implement; the rejected alternative is recorded in the
   change's design record.
+- Every route now scrolls inside the workbench stage and adapts to the window
+  height. The shell is pinned to the viewport so the topbar and statusbar stay
+  visible, the Console log stream is bounded instead of growing without limit,
+  and the run frame inherits available height rather than a fixed one. Packaged
+  smoke evidence checks all routes at three window heights.
 - Corrected the bundled-seed contract to DeepSeek Harness's real
   `@deepseek-ai/dsh-web-app` bundle; there is no `dsh-desktop-app` package.
 - Unified the bundled seed on one staged layout, so `seed:prepare` output is

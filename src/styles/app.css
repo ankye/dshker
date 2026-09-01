@@ -2,11 +2,13 @@
   box-sizing: border-box;
 }
 
+/* Exact viewport height, not a minimum: the shell manages its own scrolling, so
+ * the document itself must never grow and scroll behind the fixed chrome. */
 html,
 body,
 #app {
   min-width: 0;
-  min-height: 100%;
+  height: 100%;
   margin: 0;
 }
 
@@ -30,9 +32,17 @@ button:focus-visible,
   box-shadow: var(--focus-ring);
 }
 
+/*
+ * The shell owns exactly the viewport height so the topbar and statusbar stay
+ * fixed while each route scrolls inside its own stage. `min-height` would let
+ * tall content push the middle row open and scroll the whole document instead,
+ * which is why the height is pinned rather than merely suggested.
+ */
 .app-shell {
   display: grid;
-  min-height: 100vh;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
   grid-template-rows:
     var(--layout-topbar-height) minmax(0, 1fr)
     var(--layout-statusbar-height);
@@ -126,6 +136,7 @@ button:focus-visible,
 }
 
 .sidebar {
+  min-height: 0;
   overflow-y: auto;
   border-right: 1px solid var(--color-border);
   padding: var(--space-2) var(--space-1);
@@ -254,20 +265,34 @@ button:focus-visible,
   opacity: 0.46;
 }
 
+/* The one vertical scroll container for route content. `min-height: 0` lets it
+ * shrink below its content inside the grid row, which is what makes the
+ * scrollbar appear here instead of stretching the shell. */
 .workbench-stage {
+  display: grid;
   min-width: 0;
-  overflow: auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   padding: 0;
+  grid-template-rows: minmax(0, 1fr);
   background: var(--color-bg);
 }
 
+/* Routes fill a short viewport but may exceed a tall one; the stage scrolls. */
 .route-stage {
+  display: flex;
   min-height: 100%;
+  min-width: 0;
+  flex-direction: column;
 }
 
 .route-stage-header {
   display: flex;
   min-height: 3rem;
+  /* Never absorbed by a growing panel: the title row stays put while the body
+   * below it scrolls. */
+  flex: 0 0 auto;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-2) var(--space-5);
@@ -301,8 +326,14 @@ button:focus-visible,
 .version-management,
 .controller-panel,
 .settings-panel,
+/* Inherits the height the stage actually has, rather than recomputing it from
+ * `100vh` minus chrome — that arithmetic drifts whenever padding or chrome
+ * heights change, and it ignores the stage's own scroll state. */
 .runtime-tabs-panel {
-  min-height: calc(100vh - var(--layout-topbar-height) - var(--layout-statusbar-height) - 3rem);
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
   padding: var(--space-3) var(--space-5);
 }
 
@@ -851,12 +882,18 @@ button:focus-visible,
   font-size: var(--type-caption);
 }
 
+/* The log stream scrolls inside a bounded box. Without a max height and its own
+ * overflow, a long-running child's output would keep growing the Console route
+ * and push its controls out of reach. */
 .controller-output {
   display: grid;
   gap: var(--space-3);
-  min-height: 24rem;
+  min-height: 12rem;
+  max-height: min(32rem, 55vh);
   margin-top: var(--space-4);
   padding: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   background: #050709;
@@ -1070,11 +1107,15 @@ button:focus-visible,
   color: var(--color-text);
 }
 
+/* The run frame fills the height the stage gives it instead of claiming a fixed
+ * one, so shrinking the window shrinks the embedded page rather than pushing it
+ * past the viewport. */
 .runtime-frame-panel {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: var(--space-3);
-  min-height: 34rem;
+  min-height: 0;
+  flex: 1 1 auto;
   padding-top: var(--space-3);
 }
 
@@ -1092,7 +1133,8 @@ button:focus-visible,
 
 .runtime-frame {
   width: 100%;
-  min-height: 30rem;
+  height: 100%;
+  min-height: 16rem;
   border: 1px solid var(--color-border);
   background: #050709;
 }
@@ -1282,8 +1324,12 @@ button:focus-visible,
 }
 
 @media (max-width: 720px) {
+  /* Below the minimum usable width the shell may be panned horizontally, but
+   * vertical scrolling must stay inside the stage so the topbar and statusbar
+   * remain visible. */
   body {
-    overflow: auto;
+    overflow-x: auto;
+    overflow-y: hidden;
   }
 
   .app-shell {

@@ -184,3 +184,82 @@ export async function waitForRendererPaint(window: ElectronBrowserWindow): Promi
   )
   await delay(250)
 }
+
+/** Per-route proof that a given window size keeps chrome visible and content reachable. */
+export interface HeightAdaptationEvidence {
+  ok: boolean
+  cases: Array<{
+    height: number
+    route: string
+    chromeVisible: boolean
+    contentReachable: boolean
+    documentStatic: boolean
+  }>
+}
+
+/**
+ * Resizes the window to short heights and checks every route still works.
+ *
+ * A stylesheet assertion cannot prove this: only a real layout pass shows
+ * whether the topbar and statusbar survive a short window and whether overflow
+ * scrolls inside the stage instead of stretching the document.
+ */
+export async function smokeHeightAdaptation(
+  window: ElectronBrowserWindow,
+  routeIds: readonly string[]
+): Promise<HeightAdaptationEvidence> {
+  const cases: HeightAdaptationEvidence['cases'] = []
+  const [initialWidth, initialHeight] = window.getSize()
+
+  for (const height of [820, 560, 420]) {
+    window.setSize(initialWidth, height)
+    await delay(220)
+    for (const route of routeIds) {
+      const probe = await window.webContents.executeJavaScript(
+        `new Promise((resolve) => {
+          const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
+          if (control) control.click();
+          setTimeout(() => {
+            const doc = document.documentElement;
+            const shell = document.querySelector('.app-shell');
+            const stage = document.querySelector('.workbench-stage');
+            const topbar = document.querySelector('.topbar');
+            const rows = document.querySelectorAll('.app-shell > *');
+            const last = rows[rows.length - 1];
+            const viewport = window.innerHeight;
+            const top = topbar && topbar.getBoundingClientRect();
+            const bottom = last && last.getBoundingClientRect();
+            let reachable = true;
+            if (stage && stage.scrollHeight > stage.clientHeight + 1) {
+              stage.scrollTop = stage.scrollHeight;
+              reachable = stage.scrollTop > 0;
+              stage.scrollTop = 0;
+            }
+            resolve({
+              chromeVisible: Boolean(
+                top && bottom &&
+                top.top >= -1 && top.bottom <= viewport + 1 &&
+                bottom.bottom <= viewport + 1
+              ),
+              contentReachable: reachable,
+              documentStatic:
+                doc.scrollHeight <= doc.clientHeight + 1 &&
+                Boolean(shell) &&
+                shell.getBoundingClientRect().height <= viewport + 1
+            });
+          }, 170);
+        })`
+      )
+      cases.push({ height, route, ...probe })
+    }
+  }
+
+  window.setSize(initialWidth, initialHeight)
+  await delay(200)
+  return {
+    ok: cases.every(
+      (entry) => entry.chromeVisible && entry.contentReachable && entry.documentStatic
+    ),
+    cases
+  }
+}

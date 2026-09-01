@@ -192,6 +192,7 @@ function launchEvidenceChecks(payload, required) {
     launchPayload: Boolean(payload),
     appIdentity: payload?.checks?.appIdentity === true,
     routeSmoke: payload?.checks?.routeSmoke === true,
+    heightAdaptation: payload?.checks?.heightAdaptation === true,
     rendererShellMounted: payload?.checks?.rendererShellMounted === true,
     rendererShellElement: payload?.checks?.rendererShellElement === true,
     rendererText: payload?.checks?.rendererText === true,

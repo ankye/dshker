@@ -14,6 +14,15 @@ describe('visual smoke', () => {
     expect(result.findings.some((entry) => entry.name === 'layout.stable-shell-grid')).toBe(true)
     // A run page may never fall back to a guessed loopback port.
     expect(result.findings.some((entry) => entry.name === 'runtime.no-hardcoded-url')).toBe(true)
+    // Resizing the window must not hide chrome or a route's own controls.
+    for (const name of [
+      'layout.shell-pinned-to-viewport',
+      'layout.stage-scrolls',
+      'layout.console-log-bounded',
+      'layout.no-hand-computed-route-height'
+    ]) {
+      expect(result.findings.find((entry) => entry.name === name)?.ok).toBe(true)
+    }
 
     const evidencePath = path.join(appRoot, '.run/visual-smoke/latest.json')
     await access(evidencePath)

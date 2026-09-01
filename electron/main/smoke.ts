@@ -7,10 +7,12 @@ import { loadRenderer } from './window'
 import {
   analyzeFirstFrame,
   captureFirstFrame,
+  smokeHeightAdaptation,
   smokeRoutes,
   waitForRendererEvidence,
   waitForRendererPaint,
   type FrameEvidence,
+  type HeightAdaptationEvidence,
   type RendererEvidence,
   type RouteSmokeEvidence
 } from './smoke-helpers'
@@ -61,11 +63,16 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
     contentPixels: 0
   }
   let routeEvidence: RouteSmokeEvidence = { ok: false, routes: [] }
+  let heightEvidence: HeightAdaptationEvidence = { ok: false, cases: [] }
 
   try {
     await loadRenderer(smokeWindow)
     rendererEvidence = await waitForRendererEvidence(smokeWindow)
     routeEvidence = await smokeRoutes(smokeWindow)
+    heightEvidence = await smokeHeightAdaptation(
+      smokeWindow,
+      routeEvidence.routes.map((entry) => entry.id)
+    )
     await waitForRendererPaint(smokeWindow)
     firstFrame = analyzeFirstFrame(await captureFirstFrame(smokeWindow))
   } finally {
@@ -88,12 +95,14 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
       rendererEvidence.rendererText &&
       rendererEvidence.preload &&
       routeEvidence.ok &&
+      heightEvidence.ok &&
       firstFrame.nonblank &&
       !firstFrame.singleColor &&
       rendererEvidence.errors.length === 0,
     checks: {
       appIdentity,
       routeSmoke: routeEvidence.ok,
+      heightAdaptation: heightEvidence.ok,
       rendererShellMounted: rendererEvidence.shellMounted,
       rendererShellElement: rendererEvidence.shellElement,
       rendererText: rendererEvidence.rendererText,
@@ -103,6 +112,7 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
       rendererErrors: rendererEvidence.errors.length === 0
     },
     routeEvidence,
+    heightEvidence,
     rendererEvidence,
     firstFrame
   }
