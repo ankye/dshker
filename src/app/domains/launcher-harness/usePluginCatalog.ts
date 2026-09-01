@@ -1,12 +1,14 @@
 import { onMounted, ref } from 'vue'
 import type { PluginCatalogState } from '@/shared/contracts'
 
+// Module-level state: the curated plugin source is one Launcher-owned root, so
+// every surface observes the same catalog and the same refresh error.
+export const pluginCatalogState = ref<PluginCatalogState>()
+const loading = ref(false)
+const error = ref<string>()
+
 /** Renderer state for the Launcher-owned curated plugin source. */
 export function usePluginCatalog() {
-  const state = ref<PluginCatalogState>()
-  const loading = ref(false)
-  const error = ref<string>()
-
   /** Reads an already-synchronized catalog without reaching the network. */
   async function load(): Promise<void> {
     if (!window.dshLauncher) {
@@ -20,7 +22,7 @@ export function usePluginCatalog() {
         error.value = result.code
         return
       }
-      state.value = result.data
+      pluginCatalogState.value = result.data
       error.value = undefined
     } finally {
       loading.value = false
@@ -37,7 +39,7 @@ export function usePluginCatalog() {
         error.value = result.code
         return
       }
-      state.value = result.data
+      pluginCatalogState.value = result.data
       error.value = undefined
     } finally {
       loading.value = false
@@ -45,5 +47,5 @@ export function usePluginCatalog() {
   }
 
   onMounted(() => void load())
-  return { state, loading, error, load, refresh }
+  return { state: pluginCatalogState, loading, error, load, refresh }
 }

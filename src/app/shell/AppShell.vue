@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
+import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
 import { ManagedWorkspacesPanel } from '../domains/managed-workspaces'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
 import ControllerPanel from './components/ControllerPanel.vue'
@@ -9,16 +10,71 @@ import RuntimeTabsPanel from './components/RuntimeTabsPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ShellSidebar, { type NavigationItem } from './components/ShellSidebar.vue'
 import ShellStatusbar from './components/ShellStatusbar.vue'
+import ShellToast from './components/ShellToast.vue'
 import ShellTopbar from './components/ShellTopbar.vue'
 import VersionManagementPanel from './components/VersionManagementPanel.vue'
+import VersionStageActions from './components/VersionStageActions.vue'
 import { useLauncherShell } from './useLauncherShell'
 
 const shell = useLauncherShell()
+const harness = useLauncherHarness()
+const pluginCatalog = usePluginCatalog()
+
+const statusbarOperationLabel = computed(() => {
+  const operation = harness.activeOperation.value
+  if (operation === undefined || operation === 'refresh') return undefined
+  switch (operation) {
+    case 'switch':
+      return shell.t('status.operation.switch')
+    case 'update':
+      return shell.t('status.operation.update')
+    case 'start':
+      return shell.t('status.operation.start')
+    case 'stop':
+      return shell.t('status.operation.stop')
+    case 'installPlugin':
+      return shell.t('status.operation.installPlugin')
+    case 'uninstallPlugin':
+      return shell.t('status.operation.uninstallPlugin')
+  }
+})
+
+const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.t>[0]>> = {
+  bridge: 'toast.error.bridge',
+  'managed.harness_launch_failed': 'toast.error.harnessLaunchFailed',
+  'managed.git_operation_failed': 'toast.error.gitOperationFailed'
+}
+
+const TOAST_VISIBLE_MILLISECONDS = 8_000
+const toast = ref<Readonly<{ title: string; detail: string }>>()
+let toastTimer: ReturnType<typeof setTimeout> | undefined
+
+function dismissToast(): void {
+  toast.value = undefined
+  if (toastTimer !== undefined) clearTimeout(toastTimer)
+}
+
+watch(
+  () => [harness.error.value, pluginCatalog.error.value] as const,
+  ([harnessError, catalogError]) => {
+    const code = harnessError ?? catalogError
+    if (code === undefined) return
+    const messageKey = TOAST_ERROR_MESSAGE_KEYS[code] ?? 'toast.error.title'
+    toast.value = { title: shell.t(messageKey), detail: code }
+    if (toastTimer !== undefined) clearTimeout(toastTimer)
+    toastTimer = setTimeout(dismissToast, TOAST_VISIBLE_MILLISECONDS)
+  }
+)
+
+onUnmounted(() => {
+  if (toastTimer !== undefined) clearTimeout(toastTimer)
+})
 
 const applicationItems = computed<readonly NavigationItem[]>(() =>
   APPLICATION_ROUTES.map((route) => ({
     id: route.id,
-    label: shell.t(route.labelKey)
+    label: shell.t(route.labelKey),
+    icon: route.icon
   }))
 )
 const statusKind = computed(() => shell.bootstrap.value.kind)
@@ -73,6 +129,9 @@ const protocolVersion = computed(() =>
           :title="shell.t('versions.title')"
           :description="shell.t('versions.description')"
         >
+          <template #actions>
+            <VersionStageActions />
+          </template>
           <VersionManagementPanel />
         </RouteStage>
 
@@ -107,6 +166,15 @@ const protocolVersion = computed(() =>
       :protocol-version="protocolVersion"
       :scope-label="shell.t('footer.scope')"
       :scope-value="shell.t('footer.scopeValue')"
+      :operation-label="statusbarOperationLabel"
+    />
+
+    <ShellToast
+      v-if="toast"
+      :title="toast.title"
+      :detail="toast.detail"
+      :dismiss-label="shell.t('toast.dismiss')"
+      @dismiss="dismissToast"
     />
   </div>
 </template>

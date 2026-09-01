@@ -9,6 +9,7 @@ import {
   type CreateManagedWorkspaceRequest,
   type DirectorySelectionPurpose,
   type InstallBundledHarnessSeedRequest,
+  type InstallLauncherHarnessPluginRequest,
   type LauncherHarnessState,
   type PluginCatalogState,
   type ManagedDirectorySelection,
@@ -24,6 +25,7 @@ import {
   type SwitchManagedHarnessRevisionRequest,
   type SwitchLauncherHarnessVersionRequest,
   type SwitchLauncherHarnessBranchRequest,
+  type UninstallLauncherHarnessPluginRequest,
   type DesktopApi
 } from '../src/shared/contracts'
 
@@ -99,7 +101,15 @@ const desktopApi: DesktopApi = Object.freeze({
     switchBranch: (
       request: SwitchLauncherHarnessBranchRequest
     ): Promise<ApiResult<LauncherHarnessState>> =>
-      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessSwitchBranch, request)
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessSwitchBranch, request),
+    installPlugin: (
+      request: InstallLauncherHarnessPluginRequest
+    ): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessInstallPlugin, request),
+    uninstallPlugin: (
+      request: UninstallLauncherHarnessPluginRequest
+    ): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessUninstallPlugin, request)
   }),
   pluginCatalog: Object.freeze({
     getState: (): Promise<ApiResult<PluginCatalogState>> =>

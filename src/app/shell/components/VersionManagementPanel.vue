@@ -1,20 +1,24 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { useLauncherHarness } from '@/app/domains/launcher-harness'
-import { usePluginCatalog } from '@/app/domains/launcher-harness'
+import { computed, ref, watch } from 'vue'
+import { useLauncherHarness, usePluginCatalog } from '@/app/domains/launcher-harness'
 import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
 import { INITIAL_LOCALE, createTranslator } from '@/app/shared/i18n/i18n'
-
-type VersionTab = 'core' | 'plugins' | 'catalog'
-type CoreVersionTab = 'stable' | 'development'
+import { versionView } from '../versionViewState'
 
 const t = createTranslator(INITIAL_LOCALE)
 const harness = useLauncherHarness()
 const pluginCatalog = usePluginCatalog()
-const activeTab = ref<VersionTab>('core')
-const activeCoreTab = ref<CoreVersionTab>('stable')
-const branchPickerOpen = ref(false)
 const selectedBranch = ref('')
+const activeTab = versionView.activeVersionTab
+const activeCoreTab = versionView.activeCoreVersionTab
+const branchPickerOpen = versionView.branchPickerOpen
+
+watch(branchPickerOpen, (open) => {
+  if (open && harness.state.value?.kind === 'ready') {
+    selectedBranch.value = harness.state.value.currentBranch
+  }
+})
+
 const visibleVersions = computed(() => {
   if (harness.state.value?.kind !== 'ready') return []
   return activeCoreTab.value === 'stable'
@@ -38,92 +42,78 @@ const branchOptions = computed<readonly ThemedListboxOption<string>[]>(() => {
   ]
 })
 
-function openBranchPicker(): void {
-  if (harness.state.value?.kind !== 'ready') return
-  selectedBranch.value = harness.state.value.currentBranch
-  branchPickerOpen.value = true
-}
-
 async function switchBranch(): Promise<void> {
   if (!selectedBranch.value) return
   await harness.switchBranch({ branch: selectedBranch.value })
   branchPickerOpen.value = false
 }
+
+function isCurrentVersion(version: { readonly hash: string }): boolean {
+  return harness.state.value?.kind === 'ready' && harness.state.value.revision === version.hash
+}
+
+async function switchFromCheckbox(commit: string): Promise<void> {
+  if (harness.loading.value) return
+  await harness.switchVersion({ commit })
+}
 </script>
 
 <template>
   <section class="version-management">
-    <div class="page-tabs" role="tablist" :aria-label="t('versions.title')">
-      <button
-        v-for="tab in ['core', 'plugins', 'catalog'] as const"
-        :key="tab"
-        class="page-tab"
-        :aria-selected="activeTab === tab"
-        :data-active="activeTab === tab"
-        role="tab"
-        type="button"
-        @click="activeTab = tab"
-      >
-        {{
-          tab === 'core'
-            ? t('versions.core')
-            : tab === 'plugins'
-              ? t('versions.plugins')
-              : t('versions.catalog')
-        }}
-      </button>
+    <div class="version-tabs-row">
+      <div class="page-tabs" role="tablist" :aria-label="t('versions.title')">
+        <button
+          v-for="tab in ['core', 'plugins', 'catalog'] as const"
+          :key="tab"
+          class="page-tab"
+          :aria-selected="activeTab === tab"
+          :data-active="activeTab === tab"
+          role="tab"
+          type="button"
+          @click="activeTab = tab"
+        >
+          {{
+            tab === 'core'
+              ? t('versions.core')
+              : tab === 'plugins'
+                ? t('versions.plugins')
+                : t('versions.catalog')
+          }}
+        </button>
+      </div>
+      <div v-if="activeTab === 'core'" class="core-version-tabs" role="tablist">
+        <button
+          class="core-version-tab"
+          :data-active="activeCoreTab === 'stable'"
+          type="button"
+          role="tab"
+          :aria-selected="activeCoreTab === 'stable'"
+          @click="activeCoreTab = 'stable'"
+        >
+          {{ t('versions.core.stable') }}
+        </button>
+        <button
+          class="core-version-tab"
+          :data-active="activeCoreTab === 'development'"
+          type="button"
+          role="tab"
+          :aria-selected="activeCoreTab === 'development'"
+          @click="activeCoreTab = 'development'"
+        >
+          {{ t('versions.core.development') }}
+        </button>
+      </div>
     </div>
 
     <section v-if="activeTab === 'core'" class="version-tab-panel" role="tabpanel">
       <template v-if="harness.state.value?.kind === 'ready'">
-        <header class="core-version-summary">
-          <dl>
-            <div>
-              <dt>{{ t('versions.core.remote') }}</dt>
-              <dd>
-                <code>{{ harness.state.value.remoteUrl }}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>{{ t('versions.core.branch') }}</dt>
-              <dd>
-                <code>{{ harness.state.value.currentBranch }}</code>
-              </dd>
-            </div>
-            <div>
-              <dt>{{ t('versions.core.currentVersion') }}</dt>
-              <dd>
-                <code>{{ harness.state.value.revision }}</code>
-              </dd>
-            </div>
-          </dl>
-          <div class="core-version-actions">
-            <button
-              class="prototype-button prototype-button--secondary"
-              type="button"
-              :disabled="harness.loading.value || harness.state.value.launch.kind === 'running'"
-              @click="openBranchPicker"
-            >
-              {{ t('versions.core.switchBranch') }}
-            </button>
-            <button
-              class="prototype-button prototype-button--secondary"
-              type="button"
-              :disabled="harness.loading.value"
-              @click="harness.refreshVersions"
-            >
-              {{ t('versions.core.refresh') }}
-            </button>
-            <button
-              class="prototype-button prototype-button--secondary"
-              type="button"
-              :disabled="harness.loading.value || harness.state.value.launch.kind === 'running'"
-              @click="harness.update"
-            >
-              {{ t('versions.core.update') }}
-            </button>
-          </div>
-        </header>
+        <p class="version-meta-line" :title="harness.state.value.revision">
+          <code>{{ harness.state.value.remoteUrl }}</code>
+          <span aria-hidden="true">·</span>
+          <code>{{ harness.state.value.currentBranch }}</code>
+          <span aria-hidden="true">·</span>
+          <code>{{ harness.state.value.revision?.slice(0, 7) }}</code>
+        </p>
         <form v-if="branchPickerOpen" class="core-branch-picker" @submit.prevent="switchBranch">
           <ThemedListbox
             v-model="selectedBranch"
@@ -139,32 +129,13 @@ async function switchBranch(): Promise<void> {
             {{ t('versions.core.confirmBranch') }}
           </button>
         </form>
-        <div class="core-version-tabs" role="tablist">
-          <button
-            class="core-version-tab"
-            :data-active="activeCoreTab === 'stable'"
-            type="button"
-            role="tab"
-            :aria-selected="activeCoreTab === 'stable'"
-            @click="activeCoreTab = 'stable'"
-          >
-            {{ t('versions.core.stable') }}
-          </button>
-          <button
-            class="core-version-tab"
-            :data-active="activeCoreTab === 'development'"
-            type="button"
-            role="tab"
-            :aria-selected="activeCoreTab === 'development'"
-            @click="activeCoreTab = 'development'"
-          >
-            {{ t('versions.core.development') }}
-          </button>
-        </div>
         <div class="version-table-wrap">
           <table class="version-table version-table--core">
             <thead>
               <tr>
+                <th scope="col" class="version-select-column">
+                  {{ t('versions.core.selected') }}
+                </th>
                 <th scope="col">{{ t('versions.core.versionId') }}</th>
                 <th scope="col">{{ t('versions.core.change') }}</th>
                 <th scope="col">{{ t('versions.core.date') }}</th>
@@ -174,6 +145,17 @@ async function switchBranch(): Promise<void> {
             </thead>
             <tbody>
               <tr v-for="version in visibleVersions" :key="version.versionId">
+                <td class="version-select-column">
+                  <input
+                    class="version-select-check"
+                    type="checkbox"
+                    :checked="isCurrentVersion(version)"
+                    :disabled="harness.loading.value || isCurrentVersion(version)"
+                    :data-testid="`version-check-${version.versionId}`"
+                    :aria-label="t('versions.core.selected')"
+                    @click.prevent="switchFromCheckbox(version.hash)"
+                  />
+                </td>
                 <td>
                   <code>{{ version.versionId }}</code>
                 </td>
@@ -190,7 +172,7 @@ async function switchBranch(): Promise<void> {
                 <td>
                   <button
                     v-if="version.hash !== harness.state.value.revision"
-                    class="prototype-button prototype-button--secondary version-switch-action"
+                    class="version-action-button version-switch-action"
                     type="button"
                     :disabled="
                       harness.loading.value || harness.state.value.launch.kind === 'running'
@@ -209,14 +191,14 @@ async function switchBranch(): Promise<void> {
     </section>
 
     <section v-else-if="activeTab === 'plugins'" class="source-panel" role="tabpanel">
-      <h3>{{ t('versions.pluginSource.title') }}</h3>
-      <p>{{ t('versions.pluginSource.description') }}</p>
       <div v-if="harness.state.value?.kind === 'ready'" class="version-table-wrap">
         <table class="version-table">
           <thead>
             <tr>
               <th scope="col">{{ t('versions.plugins.name') }}</th>
               <th scope="col">{{ t('versions.plugins.version') }}</th>
+              <th scope="col">{{ t('versions.plugins.origin') }}</th>
+              <th scope="col">{{ t('versions.plugins.action') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -224,7 +206,28 @@ async function switchBranch(): Promise<void> {
               <td>
                 <code>{{ plugin.name }}</code>
               </td>
-              <td>{{ plugin.version }}</td>
+              <td class="plugin-version-cell">
+                {{ plugin.version || '—' }}
+              </td>
+              <td>
+                <span class="plugin-origin-badge" :data-origin="plugin.origin">{{
+                  plugin.origin === 'user'
+                    ? t('versions.plugins.originUser')
+                    : t('versions.plugins.originDefault')
+                }}</span>
+              </td>
+              <td class="plugin-action-cell">
+                <button
+                  v-if="plugin.origin === 'user'"
+                  class="version-action-button version-switch-action"
+                  type="button"
+                  :disabled="harness.loading.value"
+                  :data-testid="`uninstall-plugin-${plugin.name}`"
+                  @click="harness.uninstallPlugin({ name: plugin.name })"
+                >
+                  {{ t('versions.plugins.uninstall') }}
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -233,49 +236,58 @@ async function switchBranch(): Promise<void> {
     </section>
 
     <section v-else class="source-panel" role="tabpanel">
-      <h3>{{ t('versions.catalog.title') }}</h3>
-      <p>{{ t('versions.catalog.description') }}</p>
-      <div class="catalog-actions">
-        <button
-          class="prototype-button prototype-button--secondary"
-          type="button"
-          :disabled="pluginCatalog.loading.value"
-          @click="pluginCatalog.refresh"
-        >
-          {{ t('versions.catalog.refresh') }}
-        </button>
-      </div>
-      <dl v-if="pluginCatalog.state.value" class="source-path-list">
-        <div>
-          <dt>{{ t('versions.catalog.remote') }}</dt>
-          <dd>
-            <code>{{ pluginCatalog.state.value.remoteUrl }}</code>
-          </dd>
-        </div>
-        <div v-if="pluginCatalog.state.value.kind === 'ready'">
-          <dt>{{ t('versions.catalog.revision') }}</dt>
-          <dd>
-            <code>{{ pluginCatalog.state.value.revision }}</code>
-          </dd>
-        </div>
-      </dl>
+      <p
+        v-if="pluginCatalog.state.value?.kind === 'ready'"
+        class="version-meta-line"
+        :title="pluginCatalog.state.value.revision"
+      >
+        <code>{{ pluginCatalog.state.value.remoteUrl }}</code>
+        <span aria-hidden="true">@</span>
+        <code>{{ pluginCatalog.state.value.revision.slice(0, 7) }}</code>
+      </p>
       <div v-if="pluginCatalog.state.value?.kind === 'ready'" class="version-table-wrap">
         <table class="version-table catalog-table">
           <thead>
             <tr>
+              <th scope="col" class="version-select-column" />
               <th scope="col">{{ t('versions.catalog.name') }}</th>
               <th scope="col">{{ t('versions.catalog.category') }}</th>
               <th scope="col">{{ t('versions.catalog.descriptionColumn') }}</th>
               <th scope="col">{{ t('versions.catalog.url') }}</th>
+              <th scope="col" />
             </tr>
           </thead>
           <tbody>
             <tr v-for="plugin in pluginCatalog.state.value.entries" :key="plugin.id">
-              <td>{{ plugin.name }}</td>
-              <td>{{ plugin.category }}</td>
-              <td>{{ plugin.description }}</td>
-              <td>
+              <td class="version-select-column">
+                <input
+                  class="version-select-check"
+                  type="checkbox"
+                  :checked="versionView.selectedCatalogIds.has(plugin.id)"
+                  :disabled="harness.loading.value"
+                  :data-testid="`catalog-check-${plugin.id}`"
+                  :aria-label="t('versions.catalog.install')"
+                  @change="versionView.toggleCatalogSelection(plugin.id)"
+                />
+              </td>
+              <td class="catalog-name-cell" :title="plugin.name">{{ plugin.name }}</td>
+              <td class="catalog-category-cell">{{ plugin.category }}</td>
+              <td class="catalog-desc-cell" :title="plugin.description">
+                {{ plugin.description }}
+              </td>
+              <td class="catalog-url-cell">
                 <a :href="plugin.url" rel="noreferrer" target="_blank">{{ plugin.url }}</a>
+              </td>
+              <td class="catalog-action-cell">
+                <button
+                  class="version-action-button version-switch-action"
+                  type="button"
+                  :disabled="harness.loading.value"
+                  :data-testid="`install-plugin-${plugin.id}`"
+                  @click="harness.installPlugin({ source: plugin.url })"
+                >
+                  {{ t('versions.catalog.install') }}
+                </button>
               </td>
             </tr>
           </tbody>

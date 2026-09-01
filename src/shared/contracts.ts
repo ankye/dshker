@@ -26,6 +26,8 @@ export const DESKTOP_IPC_CHANNELS = {
   launcherHarnessUpdate: 'dsh-launcher:launcher-harness:update',
   launcherHarnessSwitchVersion: 'dsh-launcher:launcher-harness:switch-version',
   launcherHarnessSwitchBranch: 'dsh-launcher:launcher-harness:switch-branch',
+  launcherHarnessInstallPlugin: 'dsh-launcher:launcher-harness:install-plugin',
+  launcherHarnessUninstallPlugin: 'dsh-launcher:launcher-harness:uninstall-plugin',
   pluginCatalogGetState: 'dsh-launcher:plugin-catalog:get-state',
   pluginCatalogRefresh: 'dsh-launcher:plugin-catalog:refresh'
 } as const
@@ -226,10 +228,12 @@ export interface LauncherHarnessVersionView extends LauncherHarnessCommitView {
   readonly tag: string
 }
 
-/** One dependency installed in DSH's native `web` profile. */
+/** One plugin layer observed in DSH's native `web` profile. */
 export interface LauncherHarnessPluginView {
   readonly name: string
   readonly version: string
+  /** `default` marks in-box template bundles; `user` marks installed dependencies. */
+  readonly origin: 'default' | 'user'
 }
 
 /** One curated plugin parsed from awesome-dsh-plugin's YAML source record. */
@@ -356,6 +360,16 @@ export interface SwitchLauncherHarnessBranchRequest {
   readonly branch: string
 }
 
+/** A plugin install source admitted only as an HTTPS GitHub repository URL. */
+export interface InstallLauncherHarnessPluginRequest {
+  readonly source: string
+}
+
+/** A plugin uninstall selection admitted only by its installed package name. */
+export interface UninstallLauncherHarnessPluginRequest {
+  readonly name: string
+}
+
 /** Narrow preload capability; it deliberately has no file, process, or settings methods. */
 export interface DesktopApi {
   readonly apiVersion: typeof DESKTOP_API_VERSION
@@ -399,6 +413,12 @@ export interface DesktopApi {
     ): Promise<ApiResult<LauncherHarnessState>>
     switchBranch(
       request: SwitchLauncherHarnessBranchRequest
+    ): Promise<ApiResult<LauncherHarnessState>>
+    installPlugin(
+      request: InstallLauncherHarnessPluginRequest
+    ): Promise<ApiResult<LauncherHarnessState>>
+    uninstallPlugin(
+      request: UninstallLauncherHarnessPluginRequest
     ): Promise<ApiResult<LauncherHarnessState>>
   }>
   readonly pluginCatalog: Readonly<{

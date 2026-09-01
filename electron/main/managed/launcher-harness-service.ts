@@ -16,6 +16,15 @@ export interface LauncherHarnessServiceOptions {
   readonly dshHomeDirectory: string
   readonly gitExecutable: string
   readonly pnpmExecutable: string
+  /**
+   * Optional direct pnpm launch command for platforms whose registered pnpm is
+   * a shell shim. Windows pnpm is a `.CMD` wrapper, so the launcher runs the
+   * underlying Node script through `node` instead of spawning the shim.
+   */
+  readonly pnpmLauncher?: Readonly<{
+    readonly executable: string
+    readonly prefixArguments: readonly string[]
+  }>
 }
 
 /** Starts the packaged checkout without changing its native DSH configuration. */
@@ -138,6 +147,54 @@ export class LauncherHarnessService {
     return this.switchVersion(commit)
   }
 
+  /** Installs one curated plugin source into the native web profile via the DSH CLI. */
+  async installPlugin(source: string): Promise<LauncherHarnessState> {
+    if (!/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+/u.test(source)) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.input_invalid',
+        'A GitHub HTTPS plugin source is required.'
+      )
+    }
+    await this.#assertReadyForVersionOperation()
+    await this.#runPnpm(['dsh', '--', 'plugin', '--profile', 'web', 'add', source])
+    return this.getState()
+  }
+
+  /** Removes exactly one user-installed plugin from the native web profile via the DSH CLI. */
+  async uninstallPlugin(name: string): Promise<LauncherHarnessState> {
+    if (!/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) || name.length === 0) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.input_invalid',
+        'A valid plugin package name is required.'
+      )
+    }
+    await this.#assertReadyForVersionOperation()
+    const plugins = await this.#readPlugins()
+    const target = plugins.find((plugin) => plugin.name === name)
+    if (target === undefined || target.origin !== 'user') {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.input_invalid',
+        'Only a user-installed plugin can be removed.'
+      )
+    }
+    await this.#runPnpm(['dsh', '--', 'plugin', '--profile', 'web', 'remove', name])
+    return this.getState()
+  }
+
+  /** Resolves the direct pnpm command, forwarding shim-prefix arguments when present. */
+  #pnpmLaunch(
+    arguments_: readonly string[]
+  ): Readonly<{ executable: string; arguments: readonly string[] }> {
+    const launcher = this.#options.pnpmLauncher
+    if (launcher === undefined) {
+      return { executable: this.#options.pnpmExecutable, arguments: arguments_ }
+    }
+    return {
+      executable: launcher.executable,
+      arguments: [...launcher.prefixArguments, ...arguments_]
+    }
+  }
+
   /** Materializes an explicitly selected commit from origin/master. */
   async switchVersion(commit: string): Promise<LauncherHarnessState> {
     if (!/^[0-9a-f]{40}$/u.test(commit)) {
@@ -162,13 +219,17 @@ export class LauncherHarnessService {
       '--detach',
       commit
     ])
-    await runText(this.#options.pnpmExecutable, ['install', '--frozen-lockfile'], {
-      cwd: this.#options.harnessDirectory
-    })
-    await runText(this.#options.pnpmExecutable, ['run', 'build'], {
-      cwd: this.#options.harnessDirectory
-    })
+    await this.#runPnpm(['install', '--frozen-lockfile'])
+    await this.#runPnpm(['run', 'build'])
     return this.getState()
+  }
+
+  /** Runs one pnpm command inside the Launcher-owned Harness checkout. */
+  async #runPnpm(arguments_: readonly string[]): Promise<void> {
+    const launch = this.#pnpmLaunch(arguments_)
+    await runText(launch.executable, launch.arguments, {
+      cwd: this.#options.harnessDirectory
+    })
   }
 
   /** Resolves and switches to one branch from the fetched origin branch list. */
@@ -213,7 +274,8 @@ export class LauncherHarnessService {
     this.#launch = { kind: 'starting' }
     let child: ChildProcess
     try {
-      child = spawn(this.#options.pnpmExecutable, ['dsh', '--', 'web', '--no-open'], {
+      const launch = this.#pnpmLaunch(['dsh', '--', 'web', '--no-open'])
+      child = spawn(launch.executable, launch.arguments, {
         cwd: this.#options.harnessDirectory,
         env: { ...process.env },
         shell: false,
@@ -436,20 +498,53 @@ export class LauncherHarnessService {
       throw new Error('The native DSH web profile package record is invalid.')
     }
     const content = await readFile(packagePath, 'utf8')
-    const parsed: unknown = JSON.parse(content)
-    if (!isRecord(parsed)) throw new Error('The native DSH web profile package record is invalid.')
-    const dependencies = parsed.dependencies
-    if (dependencies === undefined) return []
-    if (!isRecord(dependencies))
-      throw new Error('The native DSH web profile package record is invalid.')
-    return Object.entries(dependencies)
-      .map(([name, version]) => {
-        if (typeof version !== 'string')
-          throw new Error('The native DSH web profile package record is invalid.')
-        return { name, version }
-      })
-      .sort((left, right) => left.name.localeCompare(right.name))
+    return parseProfilePluginRecords(JSON.parse(content))
   }
+}
+
+/**
+ * Derives the plugin-layer view from one parsed DSH `web` profile manifest.
+ *
+ * `dsh.profile.bundles` names every active layer; template bundles that are
+ * not dependencies are in-box defaults, while every dependency is a
+ * user-installed plugin. A name that is both stays one user entry.
+ */
+export function parseProfilePluginRecords(value: unknown): readonly LauncherHarnessPluginView[] {
+  if (!isRecord(value)) throw new Error('The native DSH web profile package record is invalid.')
+  const dependencies = value.dependencies ?? {}
+  if (!isRecord(dependencies)) {
+    throw new Error('The native DSH web profile package record is invalid.')
+  }
+  const bundles = readProfileBundles(value.dsh)
+  const views = new Map<string, LauncherHarnessPluginView>()
+  for (const [name, version] of Object.entries(dependencies)) {
+    if (typeof version !== 'string') {
+      throw new Error('The native DSH web profile package record is invalid.')
+    }
+    views.set(name, { name, version, origin: 'user' })
+  }
+  for (const name of bundles) {
+    if (views.has(name)) continue
+    views.set(name, { name, version: '', origin: 'default' })
+  }
+  return [...views.values()].sort(
+    (left, right) =>
+      Number(left.origin === 'default') - Number(right.origin === 'default') ||
+      left.name.localeCompare(right.name)
+  )
+}
+
+function readProfileBundles(value: unknown): readonly string[] {
+  if (value === undefined) return []
+  if (!isRecord(value) || !isRecord(value.profile)) {
+    throw new Error('The native DSH web profile package record is invalid.')
+  }
+  const bundles = value.profile.bundles
+  if (bundles === undefined) return []
+  if (!Array.isArray(bundles) || bundles.some((entry) => typeof entry !== 'string')) {
+    throw new Error('The native DSH web profile package record is invalid.')
+  }
+  return bundles
 }
 
 /** Loopback host DSH uses for its own announced Web URL. */

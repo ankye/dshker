@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import type { AppRouteId } from '../../shared/navigation/routes'
+import type { AppRouteId, NavIconId } from '../../shared/navigation/routes'
+import RouteIcon from './RouteIcon.vue'
 
 export interface NavigationItem {
   readonly id: AppRouteId
   readonly label: string
+  readonly icon: NavIconId
 }
 
 defineProps<{
@@ -45,7 +47,7 @@ const emit = defineEmits<{
         type="button"
         @click="emit('select', item.id)"
       >
-        <span class="nav-item-dot" aria-hidden="true" />
+        <RouteIcon :icon="item.icon" />
         <span class="nav-item-label">{{ item.label }}</span>
       </button>
     </nav>

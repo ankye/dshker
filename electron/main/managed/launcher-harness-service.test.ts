@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseAnnouncedWebUrl } from './launcher-harness-service'
+import { parseAnnouncedWebUrl, parseProfilePluginRecords } from './launcher-harness-service'
 
 describe('parseAnnouncedWebUrl', () => {
   it('reads the exact URL DSH announced, preserving its session credential', () => {
@@ -39,5 +39,36 @@ describe('parseAnnouncedWebUrl', () => {
     expect(parseAnnouncedWebUrl('dsh web: not-a-url')).toBeUndefined()
     // A quoted mention inside prose is not the launcher's own startup line.
     expect(parseAnnouncedWebUrl('see "dsh web: <url>" in the docs')).toBeUndefined()
+  })
+})
+
+describe('parseProfilePluginRecords', () => {
+  it('marks template bundles as default layers and dependencies as user plugins', () => {
+    const manifest = {
+      name: 'dsh-profile-web',
+      dependencies: { 'dsh-pet': 'github:a/b' },
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-pet'] } }
+    }
+    expect(parseProfilePluginRecords(manifest)).toEqual([
+      { name: 'dsh-pet', version: 'github:a/b', origin: 'user' },
+      { name: '@deepseek-ai/dsh-base', version: '', origin: 'default' }
+    ])
+  })
+
+  it('returns only template defaults when no dependency is installed', () => {
+    const manifest = {
+      dependencies: {},
+      dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] } }
+    }
+    expect(parseProfilePluginRecords(manifest).map((plugin) => plugin.origin)).toEqual([
+      'default',
+      'default'
+    ])
+  })
+
+  it('rejects malformed dependency and bundle records instead of guessing', () => {
+    expect(() => parseProfilePluginRecords({ dependencies: ['nope'] })).toThrow()
+    expect(() => parseProfilePluginRecords({ dsh: { profile: { bundles: [42] } } })).toThrow()
+    expect(() => parseProfilePluginRecords('nope')).toThrow()
   })
 })

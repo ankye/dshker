@@ -9,6 +9,14 @@ export interface BundledHarnessBootstrapOptions {
   readonly remoteUrl: string
   readonly gitExecutable: string
   readonly pnpmExecutable: string
+  /**
+   * Optional direct pnpm launch command for platforms whose registered pnpm is
+   * a shell shim (Windows `.CMD` wrapper), run through `node` instead.
+   */
+  readonly pnpmLauncher?: Readonly<{
+    readonly executable: string
+    readonly prefixArguments: readonly string[]
+  }>
 }
 
 /** Direct child-process seam for package bootstrap tests. */
@@ -58,15 +66,12 @@ export class BundledHarnessBootstrap {
         'origin',
         options.remoteUrl
       ])
-      await runProcess(
-        this.#spawnProcess,
-        options.pnpmExecutable,
-        ['install', '--frozen-lockfile'],
-        {
-          cwd: checkout
-        }
-      )
-      await runProcess(this.#spawnProcess, options.pnpmExecutable, ['run', 'build'], {
+      const install = this.#pnpmLaunch(options, ['install', '--frozen-lockfile'])
+      await runProcess(this.#spawnProcess, install.executable, install.arguments, {
+        cwd: checkout
+      })
+      const build = this.#pnpmLaunch(options, ['run', 'build'])
+      await runProcess(this.#spawnProcess, build.executable, build.arguments, {
         cwd: checkout
       })
       await rmdir(options.harnessDirectory)
@@ -74,6 +79,21 @@ export class BundledHarnessBootstrap {
       return true
     } finally {
       await rmdir(stagingRoot).catch(() => undefined)
+    }
+  }
+
+  /** Resolves the direct pnpm command, forwarding shim-prefix arguments when present. */
+  #pnpmLaunch(
+    options: BundledHarnessBootstrapOptions,
+    arguments_: readonly string[]
+  ): Readonly<{ executable: string; arguments: readonly string[] }> {
+    const launcher = options.pnpmLauncher
+    if (launcher === undefined) {
+      return { executable: options.pnpmExecutable, arguments: arguments_ }
+    }
+    return {
+      executable: launcher.executable,
+      arguments: [...launcher.prefixArguments, ...arguments_]
     }
   }
 }

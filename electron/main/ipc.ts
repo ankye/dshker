@@ -11,10 +11,12 @@ import {
   type CreateManagedWorkspaceRequest,
   type DirectorySelectionPurpose,
   type InstallBundledHarnessSeedRequest,
+  type InstallLauncherHarnessPluginRequest,
   type LauncherHarnessState,
   type PluginCatalogState,
   type SwitchLauncherHarnessVersionRequest,
   type SwitchLauncherHarnessBranchRequest,
+  type UninstallLauncherHarnessPluginRequest,
   type ManagedDirectorySelection,
   type ManagedExecutableKind,
   type ManagedExecutableSelection,
@@ -260,6 +262,30 @@ export function registerIpc(options: LauncherIpcOptions): void {
     }
   )
   ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessInstallPlugin,
+    async (event, payload: unknown, ...args): Promise<ApiResult<LauncherHarnessState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      return launcherHarnessResult(() =>
+        options.launcherHarnessService.installPlugin(
+          parseInstallLauncherHarnessPluginRequest(payload).source
+        )
+      )
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessUninstallPlugin,
+    async (event, payload: unknown, ...args): Promise<ApiResult<LauncherHarnessState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      return launcherHarnessResult(() =>
+        options.launcherHarnessService.uninstallPlugin(
+          parseUninstallLauncherHarnessPluginRequest(payload).name
+        )
+      )
+    }
+  )
+  ipcMain.handle(
     DESKTOP_IPC_CHANNELS.pluginCatalogRefresh,
     async (event, ...args): Promise<ApiResult<PluginCatalogState>> => {
       if (!isTrustedRenderer(event)) return invalidSender()
@@ -501,6 +527,29 @@ function parseSwitchLauncherHarnessBranchRequest(
     throw new ManagedRootError('managed.selection_invalid', 'Harness branch selection is invalid.')
   }
   return { branch: record.branch }
+}
+
+function parseInstallLauncherHarnessPluginRequest(
+  payload: unknown
+): InstallLauncherHarnessPluginRequest {
+  const record = exactRecord(payload, ['source'])
+  if (
+    typeof record.source !== 'string' ||
+    !/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+/u.test(record.source)
+  ) {
+    throw new ManagedRootError('managed.selection_invalid', 'Plugin source selection is invalid.')
+  }
+  return { source: record.source }
+}
+
+function parseUninstallLauncherHarnessPluginRequest(
+  payload: unknown
+): UninstallLauncherHarnessPluginRequest {
+  const record = exactRecord(payload, ['name'])
+  if (typeof record.name !== 'string' || !/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(record.name)) {
+    throw new ManagedRootError('managed.selection_invalid', 'Plugin name selection is invalid.')
+  }
+  return { name: record.name }
 }
 
 function parseRevisionRequest(payload: unknown): CloneManagedHarnessRequest['revision'] {

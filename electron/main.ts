@@ -1,4 +1,5 @@
 import { app, BrowserWindow, protocol } from 'electron'
+import { statSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -40,6 +41,69 @@ const EXECUTABLE_SELECTION_TTL_MILLISECONDS = 5 * 60 * 1_000
 const BUNDLED_HARNESS_REMOTE_URL = 'https://github.com/deepseek-ai/deepseek-harness.git'
 const IS_SMOKE_TEST =
   process.env.DESKTOP_APP_SMOKE_TEST === '1' || process.env.ELECTRON_SMOKE_TEST === '1'
+
+/** The pnpm Node script the Windows `.CMD` shim forwards to. */
+const PNPM_NODE_SCRIPT_RELATIVE_PATH = ['..', 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'] as const
+
+const GIT_EXECUTABLE = resolveGitExecutable()
+const PNPM_LAUNCHER = resolvePnpmLauncher()
+
+/**
+ * Resolves the system Git executable without a shell lookup.
+ *
+ * Windows ships no `/usr/bin/git`, so the launcher resolves the PATH-registered
+ * `git` command instead of hard-coding a POSIX path. POSIX systems keep the
+ * explicit `/usr/bin/git` identity the bundled seed contract already uses.
+ */
+function resolveGitExecutable(): string {
+  return process.platform === 'win32' ? 'git' : '/usr/bin/git'
+}
+
+/**
+ * Resolves the direct pnpm launch command without a shell.
+ *
+ * Windows registers pnpm as a `.CMD` batch shim that spawn cannot execute
+ * shell-free. The shim forwards to `node <pnpm.mjs>`, so the launcher resolves
+ * that Node script from PATH instead. POSIX systems keep the plain `pnpm`
+ * command identity.
+ */
+function resolvePnpmLauncher(): Readonly<{
+  executable: string
+  prefixArguments: readonly string[]
+}> {
+  if (process.platform !== 'win32') return { executable: 'pnpm', prefixArguments: [] }
+  const scriptPath = findPnpmNodeScript()
+  if (scriptPath === undefined) {
+    return { executable: 'pnpm', prefixArguments: [] }
+  }
+  return { executable: 'node', prefixArguments: [scriptPath] }
+}
+
+/** Finds the `pnpm.mjs` entry beside the PATH-registered `pnpm` shim, if any. */
+function findPnpmNodeScript(): string | undefined {
+  const pathExt = (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM')
+    .split(';')
+    .map((entry) => entry.toLowerCase())
+    .filter((entry) => entry.length > 0)
+  for (const directory of (process.env.PATH ?? '').split(';')) {
+    if (directory.length === 0) continue
+    for (const extension of pathExt) {
+      const shim = path.join(directory, `pnpm${extension}`)
+      if (!fileExists(shim)) continue
+      const script = path.resolve(directory, ...PNPM_NODE_SCRIPT_RELATIVE_PATH)
+      if (fileExists(script)) return script
+    }
+  }
+  return undefined
+}
+
+function fileExists(filePath: string): boolean {
+  try {
+    return statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
 
 /**
  * Renders the packaged shell for release evidence and exits.
@@ -91,14 +155,15 @@ async function registerLauncherServices(
   const launcherHarnessService = new LauncherHarnessService({
     harnessDirectory: path.join(launcherRoot, 'harness'),
     dshHomeDirectory: path.join(homedir(), '.dsh'),
-    gitExecutable: '/usr/bin/git',
-    pnpmExecutable: 'pnpm'
+    gitExecutable: GIT_EXECUTABLE,
+    pnpmExecutable: 'pnpm',
+    ...(PNPM_LAUNCHER.prefixArguments.length > 0 ? { pnpmLauncher: PNPM_LAUNCHER } : {})
   })
   registerIpc({
     managedWorkspaceService,
     pluginCatalog: new AwesomePluginCatalog({
       pluginsDirectory: path.join(launcherRoot, 'plugins'),
-      gitExecutable: '/usr/bin/git'
+      gitExecutable: GIT_EXECUTABLE
     }),
     launcherHarnessService,
     managedInstallationService: new ManagedInstallationService({
@@ -130,8 +195,9 @@ function initializeBundledHarnessInBackground(service: LauncherHarnessService): 
         'deepseek-harness.git.bundle'
       ),
       remoteUrl: BUNDLED_HARNESS_REMOTE_URL,
-      gitExecutable: '/usr/bin/git',
-      pnpmExecutable: 'pnpm'
+      gitExecutable: GIT_EXECUTABLE,
+      pnpmExecutable: 'pnpm',
+      ...(PNPM_LAUNCHER.prefixArguments.length > 0 ? { pnpmLauncher: PNPM_LAUNCHER } : {})
     })
     .then(() => service.setBootstrapState(undefined))
     .catch((error: unknown) => {

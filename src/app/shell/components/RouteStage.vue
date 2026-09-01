@@ -10,6 +10,9 @@ defineProps<{
     <header class="route-stage-header">
       <h2>{{ title }}</h2>
       <p>{{ description }}</p>
+      <div v-if="$slots.actions" class="route-stage-actions">
+        <slot name="actions" />
+      </div>
     </header>
     <slot />
   </section>

@@ -76,7 +76,23 @@ The Version management page SHALL provide three tabs in this order: Core, Extens
 
 - **WHEN** the user selects the Install extension tab
 - **THEN** the launcher identifies the registered preset or extension-catalog source directory
-- **AND** it does not mutate `~/.dsh` or imply that an extension was installed
+- **AND** an explicit user-triggered install is the only path that changes the profile
+
+### Requirement: Plugin management goes through the standard DSH CLI forwarder
+
+The Extensions view SHALL read the native `web` profile manifest read-only and distinguish in-box template bundles (`default`) from installed dependencies (`user-installed`). The Install extension view SHALL offer explicit install actions for curated GitHub sources. Install and uninstall SHALL be named typed operations that run the standard `dsh plugin --profile web add/remove` forwarder in the Launcher-owned Harness checkout; the Launcher SHALL NOT write the profile manifest, its node_modules, or the bundles list directly. Both actions SHALL be blocked while a Launcher-started DSH Web process is running.
+
+#### Scenario: User installs a curated plugin
+
+- **WHEN** the user triggers install for one curated GitHub source
+- **THEN** the launcher runs `dsh plugin --profile web add <source>` in the Harness checkout
+- **AND** the refreshed Extensions list reports the plugin as user-installed
+
+#### Scenario: User uninstalls a plugin
+
+- **WHEN** the user triggers uninstall for a user-installed plugin
+- **THEN** the launcher runs `dsh plugin --profile web remove <name>` and reconciles the layer list only through that CLI
+- **AND** in-box template bundles show no uninstall action
 
 ### Requirement: Core view exposes immutable revision state
 
