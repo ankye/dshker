@@ -72,6 +72,20 @@ artifact and records `signingStatus` in `release/release-manifest.json`.
 A release whose manifest still reports `unsigned-local` is a development build
 and must not be published.
 
+## GitHub Actions builds
+
+`.github/workflows/quality.yml` verifies every pull request and push to `main`
+with the locked dependencies, seed verification, architecture and format gates,
+type checks, tests, smoke checks, and both renderer and Electron builds.
+
+`.github/workflows/package.yml` runs for a `v*` tag or a manual dispatch. It
+first repeats the release-input quality gates, then builds an arm64 macOS DMG
+and an x64 Windows NSIS installer independently. Each installer is uploaded
+with `release-manifest.json` and `checksums.txt` as a 14-day GitHub Actions
+artifact. The workflow deliberately does not create a GitHub Release: without
+the externally managed signing and macOS notarization credentials, the generated
+packages are unsigned build evidence rather than a publishable release.
+
 ## Notarization Handoff
 
 Notarization applies to macOS only and happens after signing.

@@ -1,0 +1,101 @@
+name: Package desktop installers
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: package-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify tagged source
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run release-input checks
+        run: |
+          npm run seed:verify
+          npm run environment:check
+          npm run architecture:check
+          npm run format:check
+          npm run type-check
+          npm test -- --run
+          npm run test:e2e
+          npm run service:smoke
+          npm run visual:smoke
+          npm run performance:check -- --mode release-readiness --json
+
+  package:
+    name: ${{ matrix.name }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            os: macos-14
+            command: npm run dist:mac-arm64
+            artifact: dsh-launcher-macos-arm64
+            pattern: |
+              release/*.dmg
+              release/release-manifest.json
+              release/checksums.txt
+          - name: Windows x64
+            os: windows-latest
+            command: npm run dist:win-x64
+            artifact: dsh-launcher-windows-x64
+            pattern: |
+              release/*.exe
+              release/release-manifest.json
+              release/checksums.txt
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Build unsigned installer
+        run: ${{ matrix.command }}
+
+      - name: Verify generated metadata
+        run: npm run release:verify
+
+      # A repository without signing and notarization credentials must not
+      # publish a GitHub Release. These are traceable build artifacts only.
+      - name: Upload installer and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.pattern }}
+          if-no-files-found: error
+          retention-days: 14

@@ -40,6 +40,8 @@
     "bundled-source:verify": "npm run seed:verify",
     "package": "npm run bundled-source:verify && electron-vite build && electron-builder --dir && npm run release:metadata -- --mode package",
     "dist": "npm run bundled-source:verify && electron-vite build && electron-builder && npm run release:metadata -- --mode dist",
+    "dist:mac-arm64": "npm run bundled-source:verify && electron-vite build && electron-builder --mac --arm64 && npm run release:metadata -- --mode dist-mac-arm64",
+    "dist:win-x64": "npm run bundled-source:verify && electron-vite build && electron-builder --win --x64 && npm run release:metadata -- --mode dist-win-x64",
     "performance:check": "node tools/performance-check.mjs --mode release-dry-run --json",
     "release:metadata": "node tools/release-artifacts.mjs --release-dir release",
     "release:verify": "node tools/release-artifacts.mjs --release-dir release --verify",

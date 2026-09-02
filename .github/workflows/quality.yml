@@ -1,0 +1,58 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quality-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify launcher
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check release-input seed
+        run: npm run seed:verify
+
+      - name: Check environment and architecture
+        run: |
+          npm run environment:check
+          npm run architecture:check
+
+      - name: Check formatting and types
+        run: |
+          npm run format:check
+          npm run type-check
+
+      - name: Run tests and smoke checks
+        run: |
+          npm test -- --run
+          npm run service:smoke
+          npm run visual:smoke
+
+      - name: Build renderer and Electron entry points
+        run: |
+          npm run build
+          npm run build:electron
