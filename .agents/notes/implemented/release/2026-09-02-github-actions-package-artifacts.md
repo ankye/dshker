@@ -26,6 +26,10 @@ Each installer build records its complete command output. A failed build emits
 its final diagnostics as a check annotation and uploads the complete log with
 the workflow artifacts, so a hosted-runner difference remains diagnosable.
 
+Electron Builder receives `--publish never` for every local or hosted package
+command. Tags produce workflow artifacts only; a separate credential-owned
+release workflow remains necessary for a signed public release.
+
 ## Consequences
 
 The workflow never creates a GitHub Release from an unsigned package. Code
