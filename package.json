@@ -36,7 +36,7 @@
     "build:electron": "electron-vite build",
     "seed:prepare": "node tools/prepare-bundled-seed.mjs",
     "seed:prepare:ci": "node tools/prepare-ci-bundled-seed.mjs",
-    "seed:verify": "node tools/verify-bundled-seed.mjs && node tools/verify-bundled-source.mjs",
+    "seed:verify": "node tools/verify-bundled-seed.mjs",
     "preview:web": "vite preview --host 127.0.0.1",
     "bundled-source:verify": "npm run seed:verify",
     "package": "npm run bundled-source:verify && electron-vite build && electron-builder --dir && npm run release:metadata -- --mode package",

@@ -17,6 +17,11 @@ specification. CI clones the declared public HTTPS remote, checks out its exact
 SHA on a temporary branch, and verifies the generated resource before any
 application packaging begins.
 
+The preparation step verifies the Git bundle and its `master` reference while
+the selected Git executable is available. Later packaging verifies the staged
+manifest and resource hashes only; it must not hard-code a POSIX Git path, so
+the same tagged workflow can build on Windows.
+
 ## Consequences
 
 The workflow never creates a GitHub Release from an unsigned package. Code
