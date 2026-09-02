@@ -25,6 +25,7 @@ const CHECKSUMS_NAME = 'checksums.txt'
 const INTERNAL_OUTPUT_NAMES = new Set([
   'builder-debug.yml',
   'builder-effective-config.yaml',
+  'ci-build.log',
   'release-smoke.log'
 ])
 
