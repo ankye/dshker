@@ -1,45 +1,60 @@
 # DSH Launcher
 
-DSH Launcher is the macOS and Windows desktop shell for operating a selected
-DeepSeek Harness checkout. The launcher manages exact Harness worktrees,
-plugin generations, configuration, and settings in independently registered
-directories. The Harness-owned `$DSH_HOME` or `~/.dsh` remains outside Launcher
-management and is reused when a worktree revision changes.
+[简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [GitHub Actions builds](https://github.com/ankye/dsh-launcher/actions/workflows/package.yml)
 
-The repository is intentionally a submodule of
-`desktop_workspace/apps/dsh-launcher`, but it owns its source, tests,
-packaging, documentation, and release process.
+DSH Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows. It prepares a Launcher-owned Harness checkout, lets you inspect and switch Git commits, manages DSH extensions through the ordinary DSH CLI, starts DSH Web, and keeps the launch log in one place.
 
-## Current state
+The Launcher never replaces, moves, or resets native DSH state. Your existing `$DSH_HOME` or `~/.dsh` remains owned by DeepSeek Harness and is reused when you change the selected core version.
 
-The launcher starts a security-isolated Electron window at `dsh-app://launcher/`
-and exposes only named typed IPC operations. Working today:
+![DSH Launcher launch screen](docs/assets/screenshots/launch.png)
 
-- Registration and validation of explicit Git, Node.js, and pnpm executable
-  identities.
-- Managed Git mirrors, exact-SHA detached worktrees, and explicit branch, tag, or
-  commit selection under the Launcher-owned Harness root.
-- One-click launch of the selected worktree's standard `dsh web --no-open`
-  command, with its bounded stdout and stderr streamed into the Console view.
-- A run page that loads only the loopback URL the started process announced.
+## What you can do
 
-Readiness comes from the child's own startup URL line, which may carry a session
-credential, so the launcher never predicts a port or rebuilds the address. A
-private descriptor-bound child IPC bridge would prove more, but it needs a
-Harness-side counterpart that does not exist and that this change does not add;
-the rejected alternative is recorded in the change's `design.md`.
+- Start a packaged Harness seed automatically when `~/.dshlauncher/harness` is empty.
+- Browse the fetched commit history, refresh a remote, and explicitly switch the DSH core version.
+- See installed DSH extensions and browse the curated Awesome DSH Plugin catalog.
+- Start and stop the standard DSH Web command, inspect real-time output, and open the announced local Web page in tabs.
+- Read token usage from DSH session logs without writing native DSH data.
 
-Still open: Settings relocation UI, SHA-bound plugin generations, a real
-clone-through-stop smoke test, and signed macOS and Windows packages. See
-`openspec/changes/add-managed-harness-desktop-shell/tasks.md`, which records each
-task with its evidence.
+![Version management](docs/assets/screenshots/versions.png)
+
+## Install
+
+1. Open the [latest successful package workflow](https://github.com/ankye/dsh-launcher/actions/workflows/package.yml).
+2. Download the artifact for your platform:
+   - **macOS Apple Silicon**: `dsh-launcher-macos-arm64` (`.dmg`)
+   - **Windows x64**: `dsh-launcher-windows-x64` (`.exe`)
+3. Install the application and start **DSH Launcher**.
+
+Current GitHub Actions artifacts are unsigned build artifacts and expire after 14 days. macOS may require **Open** from Finder's context menu, and Windows may show SmartScreen. Install only an artifact you obtained from this repository and verified against its included checksum. Signed and notarized public releases are a separate delivery step.
+
+## First launch
+
+The first packaged launch creates these Launcher-owned directories automatically:
+
+| Directory                 | Purpose                                             |
+| ------------------------- | --------------------------------------------------- |
+| `~/.dshlauncher/harness`  | Selected DeepSeek Harness checkout and build output |
+| `~/.dshlauncher/plugins`  | Curated plugin catalog source                       |
+| `~/.dshlauncher/presets`  | Launcher-downloaded preset sources                  |
+| `~/.dshlauncher/settings` | Launcher preferences and records                    |
+
+If the Harness directory is empty, the application unpacks the bundled DSH source there in the background, installs its locked dependencies, and builds it. The Launch button stays disabled until that work completes; the app window remains usable.
+
+Then use the sidebar in this order when needed:
+
+1. **Launch** — review the selected commit and start DSH Web.
+2. **Advanced** — inspect Launcher-managed directories and tool settings.
+3. **Version management** — refresh, switch, and inspect core and extensions.
+4. **Console** — follow the exact process output and stop the managed process.
+5. **Settings** — choose theme, language, and npm acceleration preferences.
+6. **Run** — open the URL announced by the process in separate tabs.
+
+For step-by-step details, troubleshooting, and the directory ownership model, read the [English usage guide](docs/usage.en.md) or [Chinese usage guide](docs/usage.zh-CN.md).
 
 ## Development
 
-Requirements:
-
-- Node.js `^20.19.0 || >=22.12.0`
-- npm `>=10.0.0`
+Requirements: Node.js `^20.19.0 || >=22.12.0` and npm `>=10`.
 
 ```bash
 npm ci
@@ -56,28 +71,24 @@ npm run type-check
 npm test -- --run
 npm run service:smoke
 npm run visual:smoke
-npm run seed:verify
-npm run build
 npm run build:electron
 ```
 
-The same npm commands work in Windows PowerShell.
+## Build and release
+
+`npm run dist:mac-arm64` and `npm run dist:win-x64` create local unsigned installers. Tagging `v*` triggers GitHub Actions to build the same two targets and upload artifacts with `checksums.txt` and `release-manifest.json`; it intentionally does not create a GitHub Release until signing and macOS notarization are configured.
+
+See [docs/release.md](docs/release.md) for the release handoff and [docs/ci.md](docs/ci.md) for CI gates.
 
 ## Repository layout
 
-- `electron/` — Electron main and preload code.
-- `src/app/shell/` — dense operational shell and presentation.
-- `src/app/domains/` — Launcher product domains, each with a public `index.ts`.
-- `src/app/shared/controls/` — themed controls replacing native form widgets.
-- `src/app/shared/i18n/` — typed locale dictionaries.
-- `src/styles/` — application tokens and shell layout rules.
-- `src/shared/` — typed renderer/main contract.
-- `packages/desktop-foundation/` — reusable, app-neutral helpers.
-- `docs/` — architecture, development, integration, CI, and release guidance.
-- `openspec/` — approved product change records.
+- `electron/` — Electron main process, preload bridge, security, and process supervision.
+- `src/app/` — Vue user interface and product domains.
+- `src/shared/` — typed renderer/main contracts.
+- `resources/` — application visuals and bundled Harness seed metadata.
+- `docs/` — usage, architecture, development, CI, and release documentation.
 
-## Release stance
+## Open source
 
-Source checks are not release proof. macOS and Windows packages must separately
-prove signing, renderer isolation, artifact contents, and startup of an exact
-compatible Harness checkout. See [docs/release.md](docs/release.md).
+- [DSH Launcher](https://github.com/ankye/dsh-launcher)
+- [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)

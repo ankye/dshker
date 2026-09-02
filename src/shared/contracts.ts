@@ -33,7 +33,8 @@ export const DESKTOP_IPC_CHANNELS = {
   launcherHarnessExportLog: 'dsh-launcher:launcher-harness:export-log',
   tokenUsageGetState: 'dsh-launcher:token-usage:get-state',
   pluginCatalogGetState: 'dsh-launcher:plugin-catalog:get-state',
-  pluginCatalogRefresh: 'dsh-launcher:plugin-catalog:refresh'
+  pluginCatalogRefresh: 'dsh-launcher:plugin-catalog:refresh',
+  externalLinkOpen: 'dsh-launcher:external-link:open'
 } as const
 
 /** Immutable product identity compiled into the launcher artifact. */
@@ -41,8 +42,14 @@ export const APP_METADATA = {
   appId: 'dsh-launcher',
   bundleId: 'com.ankye.dsh-launcher',
   name: 'DSH Launcher',
-  version: '0.1.0'
+  version: '0.1.5'
 } as const
+
+/** The only product-source pages the Renderer may ask the OS browser to open. */
+export const LAUNCHER_EXTERNAL_LINK_IDS = ['launcher-repository', 'harness-repository'] as const
+
+/** One fixed external product-source destination. Arbitrary URLs are not admitted. */
+export type LauncherExternalLinkId = (typeof LAUNCHER_EXTERNAL_LINK_IDS)[number]
 
 /** Stable bootstrap failures that are safe to show before workspace setup. */
 export type BootstrapErrorCode =
@@ -97,8 +104,16 @@ export type ManagedOperationErrorCode =
   /** The DSH CLI refused the plugin install or uninstall. */
   | 'managed.harness_plugin_operation_failed'
 
+/** Failures from the fixed external product-source link capability. */
+export type ExternalLinkErrorCode =
+  | 'launcher.external_link_invalid'
+  | 'launcher.external_link_open_failed'
+
 /** Every typed error that may cross the first-release Launcher preload surface. */
-export type DesktopApiErrorCode = BootstrapErrorCode | ManagedOperationErrorCode
+export type DesktopApiErrorCode =
+  | BootstrapErrorCode
+  | ManagedOperationErrorCode
+  | ExternalLinkErrorCode
 
 /** A typed cross-process result without ambient exception serialization. */
 export type ApiResult<T, Code extends string = DesktopApiErrorCode> =
@@ -505,6 +520,10 @@ export interface DesktopApi {
   readonly pluginCatalog: Readonly<{
     getState(): Promise<ApiResult<PluginCatalogState>>
     refresh(): Promise<ApiResult<PluginCatalogState>>
+  }>
+  readonly externalLinks: Readonly<{
+    /** Opens one product-controlled source URL in the operating-system browser. */
+    open(linkId: LauncherExternalLinkId): Promise<ApiResult<void, ExternalLinkErrorCode>>
   }>
 }
 

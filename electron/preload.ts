@@ -31,7 +31,9 @@ import {
   type SwitchLauncherHarnessVersionRequest,
   type SwitchLauncherHarnessBranchRequest,
   type UninstallLauncherHarnessPluginRequest,
-  type DesktopApi
+  type DesktopApi,
+  type ExternalLinkErrorCode,
+  type LauncherExternalLinkId
 } from '../src/shared/contracts'
 
 const desktopApi: DesktopApi = Object.freeze({
@@ -131,6 +133,10 @@ const desktopApi: DesktopApi = Object.freeze({
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.pluginCatalogGetState),
     refresh: (): Promise<ApiResult<PluginCatalogState>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.pluginCatalogRefresh)
+  }),
+  externalLinks: Object.freeze({
+    open: (linkId: LauncherExternalLinkId): Promise<ApiResult<void, ExternalLinkErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.externalLinkOpen, linkId)
   })
 })
 

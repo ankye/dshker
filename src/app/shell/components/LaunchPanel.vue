@@ -1,12 +1,16 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import launcherIcon from '../../../../resources/dsh-launcher-logo-launcher.png'
 import launcherSplash from '../../../../resources/dsh-launcher-splash-orange.png'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { useLauncherHarness } from '@/app/domains/launcher-harness'
+import { APP_METADATA, type LauncherExternalLinkId } from '@/shared/contracts'
 import EmptyState from './EmptyState.vue'
 
 const t = useTranslator()
 const harness = useLauncherHarness()
+const openingLink = ref<LauncherExternalLinkId>()
+const sourceLinkFailed = ref(false)
 
 /**
  * The panel does not own routing, so a blocked state asks the shell to move
@@ -14,6 +18,21 @@ const harness = useLauncherHarness()
  * user cannot act on from where they are standing.
  */
 const emit = defineEmits<{ navigate: ['versions' | 'advanced'] }>()
+
+/** Opens one product-controlled source page through the typed main-process capability. */
+async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
+  if (openingLink.value !== undefined) return
+  const desktopApi = window.dshLauncher
+  if (!desktopApi) {
+    sourceLinkFailed.value = true
+    return
+  }
+  openingLink.value = linkId
+  sourceLinkFailed.value = false
+  const result = await desktopApi.externalLinks.open(linkId)
+  if (!result.ok) sourceLinkFailed.value = true
+  openingLink.value = undefined
+}
 </script>
 
 <template>
@@ -27,6 +46,55 @@ const emit = defineEmits<{ navigate: ['versions' | 'advanced'] }>()
         <p>{{ t('launch.hero.description') }}</p>
       </div>
     </header>
+
+    <section class="launch-introduction" :aria-label="t('launch.introduction.title')">
+      <div class="launch-introduction-copy">
+        <p class="eyebrow">{{ t('launch.introduction.kicker') }}</p>
+        <h4>{{ t('launch.introduction.title') }}</h4>
+        <p>{{ t('launch.introduction.description') }}</p>
+      </div>
+      <dl class="launch-introduction-facts">
+        <div>
+          <dt>{{ t('launch.introduction.launcherVersion') }}</dt>
+          <dd>v{{ APP_METADATA.version }}</dd>
+        </div>
+        <div>
+          <dt>{{ t('launch.introduction.coreVersion') }}</dt>
+          <dd>{{ t('launch.introduction.coreVersionValue') }}</dd>
+        </div>
+        <div>
+          <dt>{{ t('launch.introduction.nativeHome') }}</dt>
+          <dd>{{ t('launch.introduction.nativeHomeValue') }}</dd>
+        </div>
+      </dl>
+      <div class="launch-open-source">
+        <div>
+          <strong>{{ t('launch.openSource.title') }}</strong>
+          <p>{{ t('launch.openSource.description') }}</p>
+        </div>
+        <div class="launch-open-source-actions">
+          <button
+            type="button"
+            class="prototype-button prototype-button--secondary"
+            :disabled="openingLink !== undefined"
+            @click="openSourceLink('launcher-repository')"
+          >
+            {{ t('launch.openSource.launcher') }}
+          </button>
+          <button
+            type="button"
+            class="prototype-button prototype-button--secondary"
+            :disabled="openingLink !== undefined"
+            @click="openSourceLink('harness-repository')"
+          >
+            {{ t('launch.openSource.harness') }}
+          </button>
+        </div>
+        <p v-if="sourceLinkFailed" class="launch-open-source-error" role="status">
+          {{ t('launch.openSource.failure') }}
+        </p>
+      </div>
+    </section>
 
     <EmptyState
       v-if="

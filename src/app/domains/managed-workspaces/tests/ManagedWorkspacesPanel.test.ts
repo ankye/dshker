@@ -4,6 +4,7 @@ import type {
   ApiResult,
   DesktopApi,
   DirectorySelectionPurpose,
+  ExternalLinkErrorCode,
   ManagedDirectorySelection,
   ManagedLauncherState,
   ManagedWorkspaceView,
@@ -230,6 +231,12 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
     pluginCatalog: {
       getState: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       refresh: async () => apiFail('managed.missing_registry', 'Not used in this test.')
+    },
+    externalLinks: {
+      open: async (): Promise<ApiResult<void, ExternalLinkErrorCode>> => ({
+        ok: true,
+        data: undefined
+      })
     }
   }
 }

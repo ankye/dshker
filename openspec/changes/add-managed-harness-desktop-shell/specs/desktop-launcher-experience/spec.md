@@ -62,6 +62,22 @@ The Launch page SHALL show the Launcher splash region, the selected launch revis
 - **THEN** the Launch page states that no version can be started
 - **AND** it directs the user to Version management without presenting a synthetic launch target
 
+### Requirement: Launch page explains the selected product version and trusted source links
+
+The Launch page SHALL identify the compiled Launcher version, explain that the selected DSH commit below is the launchable core identity, and state that native `~/.dsh` remains DSH-owned. It SHALL provide named actions for only the fixed DSH Launcher and DeepSeek Harness GitHub repositories. The Renderer SHALL NOT submit an arbitrary URL to Electron or open an unapproved destination.
+
+#### Scenario: User opens a source repository
+
+- **WHEN** the user chooses either source action on Launch
+- **THEN** Electron main opens the matching fixed HTTPS GitHub URL in the operating-system browser
+- **AND** the Renderer receives no general external-navigation capability
+
+#### Scenario: Source action cannot open
+
+- **WHEN** the operating system refuses the selected fixed source URL
+- **THEN** the Launch page reports the failed action
+- **AND** it does not substitute another URL or browser surface
+
 ### Requirement: Version management uses three distinct tabs
 
 The Version management page SHALL provide three tabs in this order: Core, Extensions, and Install extension. Core SHALL contain the existing explicit DSH clone, seed import, revision-switch, and version-list controls. Extensions and Install extension SHALL identify their distinct Launcher source roots and show an explicit empty state when no authoritative extension records are available.

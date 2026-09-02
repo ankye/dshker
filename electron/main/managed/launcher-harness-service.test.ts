@@ -215,7 +215,7 @@ describe('normalizeGitRemote', () => {
 
 describe('localPathOf', () => {
   it('reads the checkout path of a file dependency', () => {
-    expect(localPathOf('file:/Users/me/plugins/thing')).toBe('/Users/me/plugins/thing')
+    expect(localPathOf('file:/fixtures/plugins/thing')).toBe('/fixtures/plugins/thing')
   })
 
   it('ignores a version that is not a local path', () => {

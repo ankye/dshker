@@ -173,7 +173,7 @@ describe('foldSessionLog resume', () => {
 
 describe('decodeProjectDirectory', () => {
   it('restores a project path from DSH flattened directory name', () => {
-    expect(decodeProjectDirectory('--Users-me-workspace--')).toBe('/Users/me/workspace')
+    expect(decodeProjectDirectory('--fixtures-workspace--')).toBe('/fixtures/workspace')
   })
 
   it('returns the original name when it carries no path markers', () => {

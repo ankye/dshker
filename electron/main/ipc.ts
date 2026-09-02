@@ -46,6 +46,7 @@ import { type ManagedWorkspaceService } from './managed/service'
 import { SessionUsageReader } from './managed/session-usage-reader'
 import { ToolchainRuntimeError } from './managed/toolchain'
 import { isTrustedRenderer } from './security'
+import { resolveExternalLink } from './external-links'
 
 /** Dependencies for the restricted Electron IPC registration. */
 export interface LauncherIpcOptions {
@@ -202,6 +203,26 @@ export function registerIpc(options: LauncherIpcOptions): void {
       if (!isTrustedRenderer(event)) return invalidSender()
       if (args.length !== 0) return invalidManagedPayload()
       return launcherHarnessResult(() => options.launcherHarnessService.getState())
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.externalLinkOpen,
+    async (event, payload: unknown, ...args): Promise<ApiResult<void>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0)
+        return apiFail('launcher.external_link_invalid', 'Invalid link request.')
+      let url: string
+      try {
+        url = resolveExternalLink(payload)
+      } catch {
+        return apiFail('launcher.external_link_invalid', 'Invalid link request.')
+      }
+      try {
+        await shell.openExternal(url)
+        return apiOk(undefined)
+      } catch {
+        return apiFail('launcher.external_link_open_failed', 'Could not open product source link.')
+      }
     }
   )
   ipcMain.handle(
