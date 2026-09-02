@@ -32,8 +32,15 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
+      - name: Resolve Git executable
+        shell: pwsh
+        run: |
+          $git = (Get-Command git).Source
+          "DSH_BUNDLED_GIT_EXECUTABLE=$git" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Run release-input checks
         run: |
+          npm run seed:prepare:ci
           npm run seed:verify
           npm run environment:check
           npm run architecture:check
@@ -83,6 +90,17 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci
+
+      - name: Resolve Git executable
+        shell: pwsh
+        run: |
+          $git = (Get-Command git).Source
+          "DSH_BUNDLED_GIT_EXECUTABLE=$git" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Prepare and verify pinned release-input seed
+        run: |
+          npm run seed:prepare:ci
+          npm run seed:verify
 
       - name: Build unsigned installer
         run: ${{ matrix.command }}

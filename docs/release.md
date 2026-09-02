@@ -86,6 +86,11 @@ artifact. The workflow deliberately does not create a GitHub Release: without
 the externally managed signing and macOS notarization credentials, the generated
 packages are unsigned build evidence rather than a publishable release.
 
+The embedded Harness seed is generated during each GitHub Actions run from
+`resources/bundled-seed/source.json`. That file pins the public HTTPS remote,
+branch, and complete Git revision. The 123MB generated bundle remains ignored,
+so an Actions checkout never reuses an untracked local seed.
+
 ## Notarization Handoff
 
 Notarization applies to macOS only and happens after signing.
