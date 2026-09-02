@@ -1,0 +1,10 @@
+# Launcher-owned invocation overlay. It is passed through dsh web --patch and
+# never becomes part of ~/.dsh or the selected Harness checkout.
+- insert:
+    - id: dsh-launcher-verbose-logger
+      name: '@deepseek-ai/cordis-plugin-logger-console'
+      config:
+        colors: false
+        levels:
+          default: 3
+        showDiff: true

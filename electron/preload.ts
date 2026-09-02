@@ -10,6 +10,8 @@ import {
   type DirectorySelectionPurpose,
   type InstallBundledHarnessSeedRequest,
   type InstallLauncherHarnessPluginRequest,
+  type LauncherHarnessLogExportResult,
+  type LauncherHarnessLogFileView,
   type LauncherHarnessState,
   type PluginCatalogState,
   type ManagedDirectorySelection,
@@ -20,6 +22,9 @@ import {
   type RegisterManagedToolchainRequest,
   type RegisterManagedToolchainResult,
   type RegisterManagedRootsRequest,
+  type SetLauncherHarnessPortRequest,
+  type TokenUsageRequest,
+  type TokenUsageState,
   type StartManagedHarnessRequest,
   type StopManagedHarnessRequest,
   type SwitchManagedHarnessRevisionRequest,
@@ -109,7 +114,17 @@ const desktopApi: DesktopApi = Object.freeze({
     uninstallPlugin: (
       request: UninstallLauncherHarnessPluginRequest
     ): Promise<ApiResult<LauncherHarnessState>> =>
-      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessUninstallPlugin, request)
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessUninstallPlugin, request),
+    setPort: (request: SetLauncherHarnessPortRequest): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessSetPort, request),
+    revealLog: (): Promise<ApiResult<LauncherHarnessLogFileView>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessRevealLog),
+    exportLog: (): Promise<ApiResult<LauncherHarnessLogExportResult>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessExportLog)
+  }),
+  tokenUsage: Object.freeze({
+    getState: (request?: TokenUsageRequest): Promise<ApiResult<TokenUsageState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.tokenUsageGetState, request)
   }),
   pluginCatalog: Object.freeze({
     getState: (): Promise<ApiResult<PluginCatalogState>> =>

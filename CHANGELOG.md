@@ -35,3 +35,16 @@
   artifact mounts its shell, reaches every route, and paints real content.
 - Fixed macOS release smoke to locate arch-suffixed build output such as
   `release/mac-arm64`, and to report the installed bundle id the manifest records.
+- Added a DSH web port setting under Advanced options, persisted outside the
+  Harness checkout so switching revisions keeps the selection. A fixed port is
+  passed as `dsh web --port`; the automatic default still omits the flag and
+  reads the port from the URL the child announces.
+- Separated the two settings surfaces: Advanced options now owns DSH launch
+  configuration, and Settings owns Launcher preferences only.
+- Fixed the display-language control, which previously changed nothing because
+  every surface built its translator from a hardcoded initial locale. Language
+  and theme are now shared reactive state, persisted across restarts.
+- Removed the NPM acceleration toggle: it had no main-process implementation and
+  silently did nothing when switched.
+- Packaged smoke now also captures a scrolled frame per route, so controls below
+  the first fold appear in design-review evidence.

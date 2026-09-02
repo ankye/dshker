@@ -15,6 +15,11 @@ export function createPreloadWebPreferences(
     contextIsolation: true,
     nodeIntegration: false,
     sandbox: true,
-    webSecurity: true
+    webSecurity: true,
+    // The run page embeds DSH Web in a <webview>, which is a separate top-level
+    // browsing context. An <iframe> cannot work here: DSH authenticates with a
+    // `SameSite=Strict` session cookie, which a cross-site frame never sends.
+    // Every guest is still constrained by the attach policy in security.ts.
+    webviewTag: true
   }
 }

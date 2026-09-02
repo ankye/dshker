@@ -2,6 +2,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type {
   InstallLauncherHarnessPluginRequest,
   LauncherHarnessState,
+  SetLauncherHarnessPortRequest,
   SwitchLauncherHarnessBranchRequest,
   SwitchLauncherHarnessVersionRequest,
   UninstallLauncherHarnessPluginRequest
@@ -16,17 +17,34 @@ export type LauncherHarnessOperation =
   | 'refresh'
   | 'installPlugin'
   | 'uninstallPlugin'
+  | 'setPort'
 
 // Module-level state: every shell surface observes the same Launcher-owned
 // checkout, so the busy state one panel starts must also drive the statusbar.
-const state = ref<LauncherHarnessState>()
+// Module-level: every surface observes one Launcher-owned harness state.
+export const harnessState = ref<LauncherHarnessState>()
+const state = harnessState
 const loading = ref(false)
 const error = ref<string>()
 const activeOperation = ref<LauncherHarnessOperation>()
 
+/**
+ * Counts launches the user actually initiated from this window.
+ *
+ * A counter rather than a boolean: the shell reacts to each new launch, so a
+ * second attempt after a failure must be distinguishable from the first.
+ */
+export const launchAttempts = ref(0)
+
 const ready = computed(() => state.value?.kind === 'ready')
+// `starting` must disable the control too: the child is spawned but has not yet
+// announced its URL, and a second activation would race the first.
 const canStart = computed(
-  () => ready.value && state.value?.launch.kind !== 'running' && !loading.value
+  () =>
+    ready.value &&
+    state.value?.launch.kind !== 'running' &&
+    state.value?.launch.kind !== 'starting' &&
+    !loading.value
 )
 
 /** Refreshes state from the restricted Electron bridge only. */
@@ -49,10 +67,36 @@ async function refresh(): Promise<void> {
   }
 }
 
-/** Requests the fixed DSH Web command from Electron main. */
+/**
+ * Requests the fixed DSH Web command from Electron main.
+ *
+ * Increments `launchAttempts` on success so the shell can follow the launch to
+ * the console. A failed launch prints its reason to that console, and the user
+ * previously had to know to go looking for it.
+ */
 async function start(): Promise<void> {
   if (!window.dshLauncher || !canStart.value) return
   await applyOperation('start', () => window.dshLauncher!.launcherHarness.start())
+  launchAttempts.value += 1
+}
+
+/** Reveals the launch log in the OS file manager. */
+async function revealLog(): Promise<boolean> {
+  if (!window.dshLauncher) return false
+  const result = await window.dshLauncher.launcherHarness.revealLog()
+  if (!result.ok) error.value = result.code
+  return result.ok
+}
+
+/** Exports the launch log through a native save dialog owned by the main process. */
+async function exportLog(): Promise<boolean> {
+  if (!window.dshLauncher) return false
+  const result = await window.dshLauncher.launcherHarness.exportLog()
+  if (!result.ok) {
+    error.value = result.code
+    return false
+  }
+  return result.data.saved
 }
 
 /** Stops only the DSH Web process created by the Launcher. */
@@ -94,11 +138,19 @@ export async function installPlugin(request: InstallLauncherHarnessPluginRequest
 }
 
 /** Removes exactly one user-installed plugin through the standard DSH CLI forwarder. */
-async function uninstallPlugin(request: UninstallLauncherHarnessPluginRequest): Promise<void> {
+export async function uninstallPlugin(
+  request: UninstallLauncherHarnessPluginRequest
+): Promise<void> {
   if (!window.dshLauncher || loading.value) return
   await applyOperation('uninstallPlugin', () =>
     window.dshLauncher!.launcherHarness.uninstallPlugin(request)
   )
+}
+
+/** Records the DSH web port the next launch will request. */
+async function setPort(request: SetLauncherHarnessPortRequest): Promise<void> {
+  if (!window.dshLauncher || loading.value) return
+  await applyOperation('setPort', () => window.dshLauncher!.launcherHarness.setPort(request))
 }
 
 async function applyOperation(
@@ -146,6 +198,9 @@ export function useLauncherHarness() {
     loading,
     error,
     activeOperation,
+    launchAttempts,
+    revealLog,
+    exportLog,
     ready,
     canStart,
     refresh,
@@ -156,6 +211,7 @@ export function useLauncherHarness() {
     switchVersion,
     switchBranch,
     installPlugin,
-    uninstallPlugin
+    uninstallPlugin,
+    setPort
   }
 }

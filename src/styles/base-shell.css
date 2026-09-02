@@ -1,0 +1,373 @@
+/* Document reset, shell grid, sidebar, navigation, and stage frame. */
+
+* {
+  box-sizing: border-box;
+}
+
+/* Exact viewport height, not a minimum: the shell manages its own scrolling, so
+ * the document itself must never grow and scroll behind the fixed chrome. */
+html,
+body,
+#app {
+  min-width: 0;
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  overflow: hidden;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--type-body);
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+button:focus-visible,
+[tabindex]:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/*
+ * The shell owns exactly the viewport height so the sidebar and statusbar stay
+ * fixed while each route scrolls inside its own stage. `min-height` would let
+ * tall content push the middle row open and scroll the whole document instead,
+ * which is why the height is pinned rather than merely suggested.
+ */
+.app-shell {
+  display: grid;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  /* No full-width identity row: the brand sits in the sidebar, so the body gets
+   * every pixel between the top of the window and the status bar. */
+  grid-template-rows: minmax(0, 1fr) var(--layout-statusbar-height);
+}
+
+/* Section kicker used by the launch hero and the managed-workspace panels. */
+.eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.route-stage h2,
+.setup-panel h3 {
+  margin: 0;
+  font-weight: var(--font-weight-semibold);
+}
+
+.route-stage-header p,
+.inspector-pane p,
+.setup-panel p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
+.status-chip {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-medium);
+}
+
+.status-chip[data-kind='ready'] {
+  border-color: color-mix(in srgb, var(--color-success), var(--color-border) 40%);
+  color: var(--color-success);
+}
+
+.status-chip[data-kind='blocked'] {
+  border-color: color-mix(in srgb, var(--color-warning), var(--color-border) 40%);
+  color: var(--color-warning);
+}
+
+.shell-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+}
+
+.shell-body[data-sidebar-collapsed='true'] {
+  grid-template-columns: var(--layout-sidebar-collapsed-width) minmax(0, 1fr);
+}
+
+.sidebar,
+.inspector-pane {
+  min-width: 0;
+  padding: var(--space-4);
+  background: var(--color-surface);
+}
+
+.sidebar {
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--color-border);
+  padding: var(--space-2) var(--space-1);
+  transition: width var(--motion-emphasis) var(--ease-standard);
+}
+
+.sidebar[data-collapsed='true'] {
+  width: 100%;
+}
+
+.sidebar-heading {
+  /* The rail is ~100px wide: the brand and the collapse control cannot share a
+   * row without truncating the product name, so they stack. */
+  display: grid;
+  justify-items: center;
+  min-height: var(--size-row);
+  gap: var(--space-1);
+  margin-bottom: var(--space-2);
+}
+
+/* Product identity, previously a full-width bar. */
+.sidebar-brand {
+  display: grid;
+  min-width: 0;
+  margin: 0;
+  justify-items: center;
+  gap: var(--space-1);
+  color: var(--color-text);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.sidebar-brand-mark {
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
+  place-items: center;
+  color: var(--color-accent);
+}
+
+.sidebar-brand-mark img {
+  width: 100%;
+  height: 100%;
+  border-radius: 0.4rem;
+  object-fit: cover;
+}
+
+/* The name wraps onto a second line instead of being clipped to an ellipsis. */
+.sidebar-brand-text {
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.sidebar-toggle {
+  display: grid;
+  width: var(--size-control);
+  height: var(--size-control);
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1.375rem;
+}
+
+.sidebar-toggle:hover {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.inspector-pane {
+  border-left: 1px solid var(--color-border);
+}
+
+.nav-group-label {
+  margin: var(--space-2) 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-label);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workspace-nav-label {
+  margin-top: var(--space-5);
+}
+
+.nav-list {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.nav-item {
+  position: relative;
+  display: grid;
+  min-height: 5.25rem;
+  place-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: var(--space-2);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* Navigation is the most-touched surface here, so missing feedback on it is
+   * the most noticeable. */
+  transition:
+    background-color var(--motion-fast) var(--ease-standard),
+    border-color var(--motion-fast) var(--ease-standard),
+    color var(--motion-fast) var(--ease-standard);
+}
+
+.nav-item .route-icon {
+  display: block;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+}
+
+.nav-item-label {
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  white-space: normal;
+}
+
+.nav-item:hover:not(:disabled) {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+.nav-item:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent), transparent 78%);
+}
+
+.nav-item[data-active='true'] {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--color-accent), transparent 84%);
+  color: var(--color-text);
+}
+
+.nav-item[data-active='true']::before {
+  position: absolute;
+  top: var(--space-3);
+  bottom: var(--space-3);
+  left: 0;
+  width: 0.1875rem;
+  border-radius: 0 999px 999px 0;
+  background: var(--color-accent);
+  content: '';
+}
+
+.sidebar[data-collapsed='true'] .nav-item {
+  min-height: 3.5rem;
+}
+
+.sidebar[data-collapsed='true'] .nav-item-label {
+  display: none;
+}
+
+.nav-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+/* The one vertical scroll container for route content. `min-height: 0` lets it
+ * shrink below its content inside the grid row, which is what makes the
+ * scrollbar appear here instead of stretching the shell. */
+.workbench-stage {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0;
+  /* The route owns the first row and the alert the second. A single-row grid
+   * put both children in the same cell, which is what made the alert appear to
+   * cover the settings listboxes regardless of how it was positioned. */
+  grid-template-rows: minmax(0, 1fr) auto;
+  background: var(--color-bg);
+}
+
+/* Routes fill a short viewport but may exceed a tall one; the stage scrolls. */
+.route-stage {
+  display: flex;
+  min-height: 100%;
+  min-width: 0;
+  flex-direction: column;
+  /* Switching routes replaces this element, so the animation re-runs per route
+   * and gives the change a direction instead of a hard cut. Content only fades
+   * and lifts a few pixels; nothing scales, which would read as a page load. */
+  animation: route-enter var(--motion-emphasis) var(--ease-out) both;
+}
+
+@keyframes route-enter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+
+.route-stage-header {
+  display: flex;
+  min-height: 3rem;
+  /* Never absorbed by a growing panel: the title row stays put while the body
+   * below it scrolls. */
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+}
+
+.route-stage h2 {
+  font-size: var(--type-ui);
+}
+
+.route-stage-header p {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: var(--type-caption);
+  color: var(--color-text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-stage-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  margin-left: auto;
+  gap: var(--space-3);
+}
+
+/* The status chip is the last item in the header and never shrinks. */
+.route-stage-actions .status-chip {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* The run route is a full-bleed browser surface: its own tab strip and address
+   bar replace the stage header, so it takes the whole content area. */
+.runtime-route {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  /* This route opts out of RouteStage, so it carries the entrance itself rather
+   * than being the one route that cuts in hard. */
+  animation: route-enter var(--motion-emphasis) var(--ease-out) both;
+}

@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { dialog, ipcMain, shell } from 'electron'
 import {
   APP_METADATA,
   DESKTOP_API_VERSION,
@@ -12,6 +12,8 @@ import {
   type DirectorySelectionPurpose,
   type InstallBundledHarnessSeedRequest,
   type InstallLauncherHarnessPluginRequest,
+  type LauncherHarnessLogExportResult,
+  type LauncherHarnessLogFileView,
   type LauncherHarnessState,
   type PluginCatalogState,
   type SwitchLauncherHarnessVersionRequest,
@@ -25,6 +27,8 @@ import {
   type RegisterManagedToolchainRequest,
   type RegisterManagedToolchainResult,
   type RegisterManagedRootsRequest,
+  type SetLauncherHarnessPortRequest,
+  type TokenUsageState,
   type StartManagedHarnessRequest,
   type StopManagedHarnessRequest,
   type SwitchManagedHarnessRevisionRequest
@@ -37,7 +41,9 @@ import { type ManagedInstallationService } from './managed/installation-service'
 import { type LauncherHarnessService } from './managed/launcher-harness-service'
 import { type AwesomePluginCatalog } from './managed/awesome-plugin-catalog'
 import { ManagedHarnessRuntimeError } from './managed/runtime-errors'
+import { LAUNCHER_HARNESS_ERROR_CODES } from './managed/ipc-error-codes'
 import { type ManagedWorkspaceService } from './managed/service'
+import { SessionUsageReader } from './managed/session-usage-reader'
 import { ToolchainRuntimeError } from './managed/toolchain'
 import { isTrustedRenderer } from './security'
 
@@ -46,6 +52,7 @@ export interface LauncherIpcOptions {
   readonly managedWorkspaceService: ManagedWorkspaceService
   readonly managedInstallationService: ManagedInstallationService
   readonly launcherHarnessService: LauncherHarnessService
+  readonly sessionUsageReader: SessionUsageReader
   readonly pluginCatalog: AwesomePluginCatalog
 }
 
@@ -286,6 +293,73 @@ export function registerIpc(options: LauncherIpcOptions): void {
     }
   )
   ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessRevealLog,
+    async (event, ...args): Promise<ApiResult<LauncherHarnessLogFileView>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      // The service owns the path; the renderer cannot name a file to reveal.
+      return launcherHarnessResult(() =>
+        options.launcherHarnessService.revealLog((target) => shell.showItemInFolder(target))
+      )
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessExportLog,
+    async (event, ...args): Promise<ApiResult<LauncherHarnessLogExportResult>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      return launcherHarnessResult(async () => {
+        // The destination comes from the user through a native dialog, never from
+        // the renderer, so no renderer-controlled path is ever written to.
+        const result = await dialog.showSaveDialog({
+          title: 'Export launch log',
+          defaultPath: `dsh-launcher-${new Date().toISOString().replace(/:/gu, '-')}.log`
+        })
+        if (result.canceled || result.filePath === undefined) {
+          return { saved: false, path: undefined }
+        }
+        await options.launcherHarnessService.exportLog(result.filePath)
+        return { saved: true, path: result.filePath }
+      })
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessSetPort,
+    async (event, payload: unknown, ...args): Promise<ApiResult<LauncherHarnessState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      return launcherHarnessResult(() =>
+        options.launcherHarnessService.setPort(parseSetLauncherHarnessPortRequest(payload).port)
+      )
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.tokenUsageGetState,
+    async (event, ...args): Promise<ApiResult<TokenUsageState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length > 1) return invalidManagedPayload()
+      const [request] = args
+      // The renderer is untrusted: only an integer row count is forwarded, and
+      // the reader clamps it to its own ceiling.
+      let limit: number | undefined
+      if (request !== undefined) {
+        if (typeof request !== 'object' || request === null) return invalidManagedPayload()
+        const value = (request as { limit?: unknown }).limit
+        if (value !== undefined) {
+          if (!Number.isSafeInteger(value) || (value as number) <= 0) {
+            return invalidManagedPayload()
+          }
+          limit = value as number
+        }
+      }
+      try {
+        return apiOk(await options.sessionUsageReader.read(limit === undefined ? {} : { limit }))
+      } catch {
+        return apiFail('managed.missing_registry', 'DSH session logs could not be read.')
+      }
+    }
+  )
+  ipcMain.handle(
     DESKTOP_IPC_CHANNELS.pluginCatalogRefresh,
     async (event, ...args): Promise<ApiResult<PluginCatalogState>> => {
       if (!isTrustedRenderer(event)) return invalidSender()
@@ -346,14 +420,21 @@ async function installationResult<T>(operation: () => Promise<T>): Promise<ApiRe
   }
 }
 
+/**
+ * Maps one Harness runtime failure to the code the renderer explains; the
+ * table itself lives in `./managed/ipc-error-codes` so a test holds it
+ * accountable. Collapsing every cause into `harness_launch_failed` once made a
+ * refused version switch — "stop DSH Web first" — read as "the core failed to
+ * start".
+ */
 async function launcherHarnessResult<T>(operation: () => Promise<T>): Promise<ApiResult<T>> {
   try {
     return apiOk(await operation())
   } catch (error) {
     if (error instanceof ManagedHarnessRuntimeError) {
       return apiFail(
-        'managed.harness_launch_failed',
-        'DSH Web could not complete the requested operation.'
+        LAUNCHER_HARNESS_ERROR_CODES[error.code] ?? 'managed.harness_launch_failed',
+        error.message
       )
     }
     return apiFail('managed.harness_launch_failed', 'The Launcher Harness checkout is unavailable.')
@@ -550,6 +631,28 @@ function parseUninstallLauncherHarnessPluginRequest(
     throw new ManagedRootError('managed.selection_invalid', 'Plugin name selection is invalid.')
   }
   return { name: record.name }
+}
+
+/** Admits only the two port shapes; the range itself is enforced by the service. */
+function parseSetLauncherHarnessPortRequest(payload: unknown): SetLauncherHarnessPortRequest {
+  const record = exactRecord(payload, ['port'])
+  const port = record.port
+  if (typeof port !== 'object' || port === null) {
+    throw new ManagedRootError('managed.selection_invalid', 'Port selection is invalid.')
+  }
+  const candidate = port as Record<string, unknown>
+  if (candidate.mode === 'auto') {
+    exactRecord(candidate, ['mode'])
+    return { port: { mode: 'auto' } }
+  }
+  if (candidate.mode !== 'fixed') {
+    throw new ManagedRootError('managed.selection_invalid', 'Port mode selection is invalid.')
+  }
+  exactRecord(candidate, ['mode', 'port'])
+  if (typeof candidate.port !== 'number') {
+    throw new ManagedRootError('managed.selection_invalid', 'Port selection must be a number.')
+  }
+  return { port: { mode: 'fixed', port: candidate.port } }
 }
 
 function parseRevisionRequest(payload: unknown): CloneManagedHarnessRequest['revision'] {

@@ -2,6 +2,8 @@
 defineProps<{
   readonly title: string
   readonly detail: string
+  readonly code: string
+  readonly codeLabel: string
   readonly dismissLabel: string
 }>()
 
@@ -23,6 +25,11 @@ const emit = defineEmits<{
         <span aria-hidden="true">×</span>
       </button>
     </div>
-    <code class="shell-toast-detail">{{ detail }}</code>
+    <p class="shell-toast-detail">{{ detail }}</p>
+    <!-- The raw code stays available for support without being the message. -->
+    <p class="shell-toast-code">
+      <span>{{ codeLabel }}</span>
+      <code>{{ code }}</code>
+    </p>
   </div>
 </template>

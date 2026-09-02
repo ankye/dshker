@@ -80,7 +80,7 @@
   "build": {
     "appId": "com.ankye.dsh-launcher",
     "productName": "DSH Launcher",
-    "icon": "resources/icon-512.png",
+    "icon": "resources/dsh-launcher-logo-launcher.png",
     "asar": true,
     "directories": {
       "output": "release"
@@ -97,6 +97,10 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "resources/dsh-launcher-verbose-logging.patch.yml",
+        "to": "dsh-launcher-verbose-logging.patch.yml"
       }
     ],
     "mac": {

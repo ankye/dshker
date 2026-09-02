@@ -1,5 +1,6 @@
 import { BrowserWindow } from 'electron'
-import { writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 import { APP_METADATA } from '../../src/shared/contracts'
 import { createPreloadWebPreferences } from './preload'
 import { installWindowNavigationPolicy } from './security'
@@ -19,6 +20,52 @@ import {
 
 function smokeOutputPath(): string | undefined {
   return process.env.DESKTOP_APP_SMOKE_OUTPUT ?? process.env.ELECTRON_SMOKE_OUTPUT
+}
+
+/**
+ * Writes one screenshot per route when DESKTOP_APP_SMOKE_SHOTS names a directory.
+ * Screenshots are evidence for design review, so a capture failure must not turn
+ * a passing functional smoke into a red gate.
+ */
+async function captureRouteScreenshots(
+  smokeWindow: BrowserWindow,
+  routeIds: readonly string[]
+): Promise<void> {
+  const directory = process.env.DESKTOP_APP_SMOKE_SHOTS
+  if (!directory) return
+  await mkdir(directory, { recursive: true })
+  for (const route of routeIds) {
+    try {
+      await smokeWindow.webContents.executeJavaScript(
+        `(() => {
+          const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
+          if (control) control.click();
+          return true;
+        })()`
+      )
+      await waitForRendererPaint(smokeWindow)
+      const image = await smokeWindow.webContents.capturePage()
+      await writeFile(join(directory, `${route}.png`), image.toPNG())
+
+      // A route taller than the stage keeps its lower controls out of the first
+      // frame, so a scrolled capture is recorded whenever one exists.
+      const scrolled = await smokeWindow.webContents.executeJavaScript(
+        `(() => {
+          const stage = document.querySelector('.workbench-stage');
+          if (!stage || stage.scrollHeight <= stage.clientHeight + 8) return false;
+          stage.scrollTop = stage.scrollHeight;
+          return true;
+        })()`
+      )
+      if (scrolled === true) {
+        await waitForRendererPaint(smokeWindow)
+        const tail = await smokeWindow.webContents.capturePage()
+        await writeFile(join(directory, `${route}-scrolled.png`), tail.toPNG())
+      }
+    } catch {
+      // Recorded by absence of the file; the functional checks stay authoritative.
+    }
+  }
 }
 
 /**
@@ -75,6 +122,13 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
     )
     await waitForRendererPaint(smokeWindow)
     firstFrame = analyzeFirstFrame(await captureFirstFrame(smokeWindow))
+    // Opt-in visual evidence. The packaged smoke is the only path that renders
+    // with the real preload and custom protocol, so design review reads its
+    // screenshots rather than a separately launched window.
+    await captureRouteScreenshots(
+      smokeWindow,
+      routeEvidence.routes.map((entry) => entry.id)
+    )
   } finally {
     smokeWindow.destroy()
   }

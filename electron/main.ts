@@ -1,5 +1,4 @@
 import { app, BrowserWindow, protocol } from 'electron'
-import { statSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -19,7 +18,9 @@ import {
   ManagedWorkspaceService,
   type ManagedPathStyle
 } from './main/managed'
+import { SessionUsageReader } from './main/managed/session-usage-reader'
 import { registerLauncherProtocol } from './main/protocol'
+import { resolvePnpmLauncher } from './main/pnpm-launcher'
 import { runSmokeTest, writeSmokeFailure } from './main/smoke'
 import { createWindow } from './main/window'
 
@@ -42,9 +43,6 @@ const BUNDLED_HARNESS_REMOTE_URL = 'https://github.com/deepseek-ai/deepseek-harn
 const IS_SMOKE_TEST =
   process.env.DESKTOP_APP_SMOKE_TEST === '1' || process.env.ELECTRON_SMOKE_TEST === '1'
 
-/** The pnpm Node script the Windows `.CMD` shim forwards to. */
-const PNPM_NODE_SCRIPT_RELATIVE_PATH = ['..', 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'] as const
-
 const GIT_EXECUTABLE = resolveGitExecutable()
 const PNPM_LAUNCHER = resolvePnpmLauncher()
 
@@ -57,52 +55,6 @@ const PNPM_LAUNCHER = resolvePnpmLauncher()
  */
 function resolveGitExecutable(): string {
   return process.platform === 'win32' ? 'git' : '/usr/bin/git'
-}
-
-/**
- * Resolves the direct pnpm launch command without a shell.
- *
- * Windows registers pnpm as a `.CMD` batch shim that spawn cannot execute
- * shell-free. The shim forwards to `node <pnpm.mjs>`, so the launcher resolves
- * that Node script from PATH instead. POSIX systems keep the plain `pnpm`
- * command identity.
- */
-function resolvePnpmLauncher(): Readonly<{
-  executable: string
-  prefixArguments: readonly string[]
-}> {
-  if (process.platform !== 'win32') return { executable: 'pnpm', prefixArguments: [] }
-  const scriptPath = findPnpmNodeScript()
-  if (scriptPath === undefined) {
-    return { executable: 'pnpm', prefixArguments: [] }
-  }
-  return { executable: 'node', prefixArguments: [scriptPath] }
-}
-
-/** Finds the `pnpm.mjs` entry beside the PATH-registered `pnpm` shim, if any. */
-function findPnpmNodeScript(): string | undefined {
-  const pathExt = (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM')
-    .split(';')
-    .map((entry) => entry.toLowerCase())
-    .filter((entry) => entry.length > 0)
-  for (const directory of (process.env.PATH ?? '').split(';')) {
-    if (directory.length === 0) continue
-    for (const extension of pathExt) {
-      const shim = path.join(directory, `pnpm${extension}`)
-      if (!fileExists(shim)) continue
-      const script = path.resolve(directory, ...PNPM_NODE_SCRIPT_RELATIVE_PATH)
-      if (fileExists(script)) return script
-    }
-  }
-  return undefined
-}
-
-function fileExists(filePath: string): boolean {
-  try {
-    return statSync(filePath).isFile()
-  } catch {
-    return false
-  }
 }
 
 /**
@@ -132,12 +84,38 @@ async function start(): Promise<void> {
     path.join(homedir(), '.dshlauncher'),
     path.join(app.getPath('userData'), 'dsh-launcher-bootstrap.json')
   )
+  registerHarnessShutdown(launcherHarnessService)
   createWindow(mainDirectory)
   initializeBundledHarnessInBackground(launcherHarnessService)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(mainDirectory)
   })
+}
+
+/** Keeps the DSH process tree under Launcher ownership through normal quits and termination signals. */
+function registerHarnessShutdown(service: LauncherHarnessService): void {
+  let shutdownInProgress = false
+  let shutdownComplete = false
+  const shutdown = async () => {
+    if (shutdownInProgress) return
+    shutdownInProgress = true
+    try {
+      await service.shutdown()
+      shutdownComplete = true
+      app.quit()
+    } catch (error) {
+      shutdownInProgress = false
+      console.error('DSH Launcher could not stop its managed DSH process tree.', error)
+    }
+  }
+  app.on('before-quit', (event) => {
+    if (shutdownComplete) return
+    event.preventDefault()
+    void shutdown()
+  })
+  process.once('SIGINT', () => void shutdown())
+  process.once('SIGTERM', () => void shutdown())
 }
 
 /**
@@ -155,12 +133,21 @@ async function registerLauncherServices(
   const launcherHarnessService = new LauncherHarnessService({
     harnessDirectory: path.join(launcherRoot, 'harness'),
     dshHomeDirectory: path.join(homedir(), '.dsh'),
+    launchPreferencesPath: path.join(launcherRoot, 'launch-preferences.json'),
+    launchLogPath: path.join(launcherRoot, 'logs', 'dsh-web.log'),
+    diagnosticsPatchPath: app.isPackaged
+      ? path.join(process.resourcesPath, 'dsh-launcher-verbose-logging.patch.yml')
+      : path.join(app.getAppPath(), 'resources', 'dsh-launcher-verbose-logging.patch.yml'),
     gitExecutable: GIT_EXECUTABLE,
-    pnpmExecutable: 'pnpm',
-    ...(PNPM_LAUNCHER.prefixArguments.length > 0 ? { pnpmLauncher: PNPM_LAUNCHER } : {})
+    pnpmExecutable: PNPM_LAUNCHER.executable,
+    pnpmLauncher: PNPM_LAUNCHER
   })
   registerIpc({
     managedWorkspaceService,
+    sessionUsageReader: new SessionUsageReader({
+      dshHomeDirectory: path.join(homedir(), '.dsh'),
+      cachePath: path.join(launcherRoot, 'session-usage-cache.json')
+    }),
     pluginCatalog: new AwesomePluginCatalog({
       pluginsDirectory: path.join(launcherRoot, 'plugins'),
       gitExecutable: GIT_EXECUTABLE
@@ -196,8 +183,8 @@ function initializeBundledHarnessInBackground(service: LauncherHarnessService): 
       ),
       remoteUrl: BUNDLED_HARNESS_REMOTE_URL,
       gitExecutable: GIT_EXECUTABLE,
-      pnpmExecutable: 'pnpm',
-      ...(PNPM_LAUNCHER.prefixArguments.length > 0 ? { pnpmLauncher: PNPM_LAUNCHER } : {})
+      pnpmExecutable: PNPM_LAUNCHER.executable,
+      pnpmLauncher: PNPM_LAUNCHER
     })
     .then(() => service.setBootstrapState(undefined))
     .catch((error: unknown) => {

@@ -14,6 +14,10 @@ export type ManagedHarnessRuntimeErrorCode =
   | 'runtime.shutdown_timeout'
   | 'runtime.child_crashed'
   | 'runtime.operation_in_progress'
+  /** A version or plugin change was refused because DSH Web is still running. */
+  | 'runtime.busy_running'
+  /** The DSH CLI refused a plugin install or uninstall. */
+  | 'runtime.plugin_operation_failed'
   | 'runtime.not_found'
 
 /** A non-secret error that identifies why one managed Harness generation cannot run. */

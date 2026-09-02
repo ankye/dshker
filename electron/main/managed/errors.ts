@@ -35,6 +35,10 @@ export type ManagedRootErrorCode =
   | 'managed.bundled_seed_invalid'
   | 'managed.harness_launch_failed'
   | 'managed.harness_launch_in_progress'
+  | 'managed.harness_busy_running'
+  | 'managed.harness_worktree_invalid'
+  | 'managed.harness_input_invalid'
+  | 'managed.harness_plugin_operation_failed'
 
 /** Carries a safe, typed failure without serializing filesystem or secret data by default. */
 export class ManagedRootError extends Error {

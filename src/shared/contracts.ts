@@ -28,6 +28,10 @@ export const DESKTOP_IPC_CHANNELS = {
   launcherHarnessSwitchBranch: 'dsh-launcher:launcher-harness:switch-branch',
   launcherHarnessInstallPlugin: 'dsh-launcher:launcher-harness:install-plugin',
   launcherHarnessUninstallPlugin: 'dsh-launcher:launcher-harness:uninstall-plugin',
+  launcherHarnessSetPort: 'dsh-launcher:launcher-harness:set-port',
+  launcherHarnessRevealLog: 'dsh-launcher:launcher-harness:reveal-log',
+  launcherHarnessExportLog: 'dsh-launcher:launcher-harness:export-log',
+  tokenUsageGetState: 'dsh-launcher:token-usage:get-state',
   pluginCatalogGetState: 'dsh-launcher:plugin-catalog:get-state',
   pluginCatalogRefresh: 'dsh-launcher:plugin-catalog:refresh'
 } as const
@@ -84,6 +88,14 @@ export type ManagedOperationErrorCode =
   | 'managed.bundled_seed_invalid'
   | 'managed.harness_launch_failed'
   | 'managed.harness_launch_in_progress'
+  /** A version or plugin operation was refused because DSH Web is still running. */
+  | 'managed.harness_busy_running'
+  /** The Launcher-owned checkout cannot serve the requested operation. */
+  | 'managed.harness_worktree_invalid'
+  /** The renderer supplied a selection the service rejected. */
+  | 'managed.harness_input_invalid'
+  /** The DSH CLI refused the plugin install or uninstall. */
+  | 'managed.harness_plugin_operation_failed'
 
 /** Every typed error that may cross the first-release Launcher preload surface. */
 export type DesktopApiErrorCode = BootstrapErrorCode | ManagedOperationErrorCode
@@ -234,6 +246,20 @@ export interface LauncherHarnessPluginView {
   readonly version: string
   /** `default` marks in-box template bundles; `user` marks installed dependencies. */
   readonly origin: 'default' | 'user'
+  /**
+   * Git remote backing this plugin, when one can be resolved.
+   *
+   * A plugin installed from a local `file:` path carries no source in the
+   * profile manifest, so the remote is read from the checkout it points at.
+   */
+  readonly sourceUrl?: string
+  /** Local checkout a `file:` dependency resolves to. */
+  readonly localPath?: string
+}
+
+/** Whether a catalog entry is already installed, matched by git source. */
+export interface PluginCatalogInstallState {
+  readonly installedNames: readonly string[]
 }
 
 /** One curated plugin parsed from awesome-dsh-plugin's YAML source record. */
@@ -259,11 +285,25 @@ export type PluginCatalogState =
       readonly entries: readonly PluginCatalogEntry[]
     }
 
-/** One bounded stdout or stderr fragment emitted by the Launcher-started DSH Web process. */
+/** One bounded lifecycle event, command echo, or child-output fragment for the Launcher-started DSH Web process. */
 export interface LauncherHarnessConsoleEntry {
-  readonly stream: 'stdout' | 'stderr'
+  readonly stream: 'launcher' | 'command' | 'stdout' | 'stderr'
   readonly occurredAt: number
   readonly text: string
+}
+
+/**
+ * Where the Launcher writes the started process's output.
+ *
+ * The in-memory console is capped, so a startup failure that scrolls past the
+ * cap is only recoverable from the file. The path is always reported, even
+ * before the first launch creates it, so the user can copy it while diagnosing.
+ */
+export interface LauncherHarnessLogFileView {
+  readonly path: string
+  /** False until the first launch writes output, so the UI can say so plainly. */
+  readonly exists: boolean
+  readonly byteLength: number
 }
 
 /**
@@ -288,21 +328,31 @@ export type LauncherHarnessState =
       readonly branches: readonly string[]
       readonly revision: string | undefined
       readonly launch: LauncherHarnessLaunchView
+      readonly port: LauncherHarnessPortSetting
       readonly commits: readonly LauncherHarnessCommitView[]
       readonly stableVersions: readonly LauncherHarnessVersionView[]
       readonly plugins: readonly LauncherHarnessPluginView[]
       readonly console: readonly LauncherHarnessConsoleEntry[]
+      readonly logFile: LauncherHarnessLogFileView
     }
   | {
       readonly kind: 'preparing' | 'missing' | 'invalid'
       readonly harnessDirectory: string
       readonly message: string
       readonly launch: LauncherHarnessLaunchView
+      readonly port: LauncherHarnessPortSetting
       readonly commits: readonly []
       readonly stableVersions: readonly []
       readonly plugins: readonly []
       readonly console: readonly LauncherHarnessConsoleEntry[]
+      readonly logFile: LauncherHarnessLogFileView
     }
+
+/** Outcome of exporting the log; a cancelled dialog is a success that wrote nothing. */
+export interface LauncherHarnessLogExportResult {
+  readonly saved: boolean
+  readonly path: string | undefined
+}
 
 /** Capability-only request that registers the exact three executable identities. */
 export interface RegisterManagedToolchainRequest {
@@ -365,6 +415,29 @@ export interface InstallLauncherHarnessPluginRequest {
   readonly source: string
 }
 
+/**
+ * The DSH web listen port the next launch will request.
+ *
+ * `mode: 'auto'` omits `--port` entirely and preserves the established
+ * behaviour of letting DSH choose. `mode: 'fixed'` passes `--port <port>`.
+ * The Launcher still reads the announced URL rather than assuming the
+ * requested port was actually bound.
+ */
+export type LauncherHarnessPortSetting =
+  | { readonly mode: 'auto' }
+  | { readonly mode: 'fixed'; readonly port: number }
+
+/** Lowest port accepted for a fixed selection; below this range binding needs privileges. */
+export const LAUNCHER_HARNESS_MIN_PORT = 1024 as const
+
+/** Highest valid TCP port. */
+export const LAUNCHER_HARNESS_MAX_PORT = 65_535 as const
+
+/** A port selection request originating in the renderer. */
+export interface SetLauncherHarnessPortRequest {
+  readonly port: LauncherHarnessPortSetting
+}
+
 /** A plugin uninstall selection admitted only by its installed package name. */
 export interface UninstallLauncherHarnessPluginRequest {
   readonly name: string
@@ -420,11 +493,66 @@ export interface DesktopApi {
     uninstallPlugin(
       request: UninstallLauncherHarnessPluginRequest
     ): Promise<ApiResult<LauncherHarnessState>>
+    setPort(request: SetLauncherHarnessPortRequest): Promise<ApiResult<LauncherHarnessState>>
+    /** Shows the log file in the OS file manager; no renderer-supplied path. */
+    revealLog(): Promise<ApiResult<LauncherHarnessLogFileView>>
+    /** Copies the log to a user-chosen destination via a native save dialog. */
+    exportLog(): Promise<ApiResult<LauncherHarnessLogExportResult>>
+  }>
+  readonly tokenUsage: Readonly<{
+    getState(request?: TokenUsageRequest): Promise<ApiResult<TokenUsageState>>
   }>
   readonly pluginCatalog: Readonly<{
     getState(): Promise<ApiResult<PluginCatalogState>>
     refresh(): Promise<ApiResult<PluginCatalogState>>
   }>
+}
+
+/** Token usage of one DSH session, as recorded by DSH's own token meter. */
+export interface SessionTokenUsage {
+  readonly sessionId: string
+  /** Project root the session ran in, restored from DSH's flattened directory name. */
+  readonly project: string
+  readonly createdAt: number
+  /** Log mtime, used as the session's last-activity time. */
+  readonly updatedAt: number
+  readonly sizeBytes: number
+  readonly turns: number
+  readonly steps: number
+  readonly model?: string
+  readonly provider?: string
+  /** First user prompt, truncated, so a session is recognizable in a list. */
+  readonly firstPrompt?: string
+  readonly uncachedInputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadTokens: number
+  readonly cacheWriteTokens: number
+}
+
+/** Summed billing buckets across every readable session. */
+export interface TokenUsageTotals {
+  readonly uncachedInputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadTokens: number
+  readonly cacheWriteTokens: number
+}
+
+/** How many detailed session rows the renderer wants; totals always cover all. */
+export interface TokenUsageRequest {
+  readonly limit?: number
+}
+
+/** Read-only view of DSH's recorded token usage. */
+export interface TokenUsageState {
+  readonly kind: 'ready'
+  /** The newest sessions in detail, bounded by the requested limit. */
+  readonly sessions: readonly SessionTokenUsage[]
+  /** Every readable session, so the page can say what the detail list omits. */
+  readonly totalSessions: number
+  /** Summed over every readable session, never only the returned page. */
+  readonly totals: TokenUsageTotals
+  /** Sessions whose log could not be read, reported instead of silently dropped. */
+  readonly unreadableSessions: number
 }
 
 /** Creates an admitted native result. */

@@ -1,15 +1,31 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
-import { SUPPORTED_LOCALES, INITIAL_LOCALE, createTranslator } from '@/app/shared/i18n/i18n'
+import { computed, onMounted } from 'vue'
+import { CopyPathButton, ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
+import { SUPPORTED_LOCALES, type SupportedLocale } from '@/app/shared/i18n/i18n'
+import { locale, setLocale, useTranslator } from '@/app/shared/i18n/useLocale'
+import { setTheme, theme, type Theme } from '@/app/shared/theme/useTheme'
+import { useManagedWorkspaces } from '@/app/domains/managed-workspaces'
 
-type Theme = 'system' | 'dark' | 'light'
+const t = useTranslator()
 
-const t = createTranslator(INITIAL_LOCALE)
-const theme = ref<Theme>('dark')
-const locale = ref(INITIAL_LOCALE)
-const npmMirror = ref(false)
-const themeLabel = computed(() => t(`settings.theme.${theme.value}`))
+/**
+ * The control edits shared app state rather than owning it. While this route
+ * owned the theme, the persisted choice only took effect once Settings had been
+ * opened.
+ */
+const selectedTheme = computed<Theme>({
+  get: () => theme.selected.value,
+  set: (value) => setTheme(value)
+})
+
+const managed = useManagedWorkspaces()
+onMounted(() => {
+  void managed.initialize()
+})
+/** Canonical path of the registered settings root, absent until registration. */
+const settingsRootPath = computed(
+  () => managed.orderedRoots.value.find((root) => root.kind === 'settings')?.canonicalPath
+)
 
 const themeOptions = computed<readonly ThemedListboxOption<Theme>[]>(() => [
   { value: 'system', label: t('settings.theme.system') },
@@ -21,8 +37,10 @@ const localeOptions = computed(() =>
   SUPPORTED_LOCALES.map((entry) => ({ value: entry.locale, label: entry.label }))
 )
 
-watch(theme, (value) => {
-  document.documentElement.dataset.theme = value
+/** Writes through to the shared locale state so every surface re-renders at once. */
+const selectedLocale = computed<SupportedLocale>({
+  get: () => locale.value,
+  set: (value) => setLocale(value)
 })
 </script>
 
@@ -39,10 +57,12 @@ watch(theme, (value) => {
       <div class="settings-row">
         <span>
           <strong>{{ t('settings.theme') }}</strong>
-          <small>{{ themeLabel }}</small>
+          <!-- Describes what the setting does; the listbox already shows its
+               own current value, so repeating it said the same thing twice. -->
+          <small>{{ t('settings.theme.hint') }}</small>
         </span>
         <ThemedListbox
-          v-model="theme"
+          v-model="selectedTheme"
           :options="themeOptions"
           :label="t('settings.theme')"
           test-id="settings-theme"
@@ -51,10 +71,10 @@ watch(theme, (value) => {
       <div class="settings-row">
         <span>
           <strong>{{ t('settings.language') }}</strong>
-          <small>{{ SUPPORTED_LOCALES.find((entry) => entry.locale === locale)?.label }}</small>
+          <small>{{ t('settings.language.hint') }}</small>
         </span>
         <ThemedListbox
-          v-model="locale"
+          v-model="selectedLocale"
           :options="localeOptions"
           :label="t('settings.language')"
           test-id="settings-language"
@@ -62,19 +82,20 @@ watch(theme, (value) => {
       </div>
     </div>
 
-    <h3>{{ t('settings.network') }}</h3>
+    <h3>{{ t('settings.storage') }}</h3>
     <div class="settings-list">
-      <label class="settings-row settings-row--toggle">
-        <span>
-          <strong>{{ t('settings.npmMirror') }}</strong>
-          <small>{{ t('settings.npmMirror.description') }}</small>
-        </span>
-        <input v-model="npmMirror" class="toggle-input" type="checkbox" />
-      </label>
       <div class="settings-row">
         <span>
           <strong>{{ t('settings.sourceRoot') }}</strong>
-          <small>{{ t('settings.description') }}</small>
+          <!--
+            Carries the registered path instead of repeating the route
+            description verbatim; an unregistered root says so.
+          -->
+          <span v-if="settingsRootPath" class="settings-row-path-line">
+            <code class="settings-row-path" :title="settingsRootPath">{{ settingsRootPath }}</code>
+            <CopyPathButton :value="settingsRootPath" />
+          </span>
+          <small v-else>{{ t('settings.sourceRoot.unregistered') }}</small>
         </span>
       </div>
     </div>

@@ -16,6 +16,8 @@ export interface BundledHarnessBootstrapOptions {
   readonly pnpmLauncher?: Readonly<{
     readonly executable: string
     readonly prefixArguments: readonly string[]
+    /** PATH required by pnpm's shell entrypoint and its subprocesses. */
+    readonly commandSearchPath: string
   }>
 }
 
@@ -68,11 +70,13 @@ export class BundledHarnessBootstrap {
       ])
       const install = this.#pnpmLaunch(options, ['install', '--frozen-lockfile'])
       await runProcess(this.#spawnProcess, install.executable, install.arguments, {
-        cwd: checkout
+        cwd: checkout,
+        env: this.#pnpmEnvironment(options)
       })
       const build = this.#pnpmLaunch(options, ['run', 'build'])
       await runProcess(this.#spawnProcess, build.executable, build.arguments, {
-        cwd: checkout
+        cwd: checkout,
+        env: this.#pnpmEnvironment(options)
       })
       await rmdir(options.harnessDirectory)
       await rename(checkout, options.harnessDirectory)
@@ -95,6 +99,12 @@ export class BundledHarnessBootstrap {
       executable: launcher.executable,
       arguments: [...launcher.prefixArguments, ...arguments_]
     }
+  }
+
+  /** Supplies the Launcher-resolved command PATH to every packaged pnpm command. */
+  #pnpmEnvironment(options: BundledHarnessBootstrapOptions): NodeJS.ProcessEnv | undefined {
+    const commandSearchPath = options.pnpmLauncher?.commandSearchPath
+    return commandSearchPath === undefined ? undefined : { ...process.env, PATH: commandSearchPath }
   }
 }
 

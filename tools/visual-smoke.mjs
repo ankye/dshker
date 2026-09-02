@@ -15,22 +15,36 @@ function parseArgs(argv) {
   return { json: argv.includes('--json'), help: argv.includes('--help') }
 }
 
+// `app.css` is an aggregate of @import-ed sheets, so the layout assertions below
+// need the concatenated rules rather than the entry file's import list.
+const STYLE_SHEETS = [
+  'src/styles/base-shell.css',
+  'src/styles/routes.css',
+  'src/styles/controls.css',
+  'src/styles/responsive.css'
+]
+
 async function readSources(root) {
   const files = [
     'src/app/shell/AppShell.vue',
+    'src/app/shell/components/ShellSidebar.vue',
     'src/app/shell/components/RuntimeTabsPanel.vue',
     'src/app/shell/components/SettingsPanel.vue',
+    'src/app/shell/components/VersionManagementPanel.vue',
     'src/app/shared/controls/ThemedListbox.vue',
     'src/styles/tokens.css',
-    'src/styles/app.css',
     'src/app/shared/i18n/i18n.ts'
   ]
-  return Promise.all(
-    files.map(async (relativePath) => ({
-      relativePath,
-      source: await readFile(path.join(root, relativePath), 'utf8')
-    }))
-  )
+  const [entries, styleSources] = await Promise.all([
+    Promise.all(
+      files.map(async (relativePath) => ({
+        relativePath,
+        source: await readFile(path.join(root, relativePath), 'utf8')
+      }))
+    ),
+    Promise.all(STYLE_SHEETS.map((sheet) => readFile(path.join(root, sheet), 'utf8')))
+  ])
+  return [...entries, { relativePath: 'src/styles/app.css', source: styleSources.join('\n') }]
 }
 
 function finding(name, ok) {
@@ -40,8 +54,10 @@ function finding(name, ok) {
 function evaluateSources(sources) {
   const sourceByPath = new Map(sources.map((entry) => [entry.relativePath, entry.source]))
   const shell = sourceByPath.get('src/app/shell/AppShell.vue')
+  const sidebar = sourceByPath.get('src/app/shell/components/ShellSidebar.vue')
   const runtimePanel = sourceByPath.get('src/app/shell/components/RuntimeTabsPanel.vue')
   const settingsPanel = sourceByPath.get('src/app/shell/components/SettingsPanel.vue')
+  const versionPanel = sourceByPath.get('src/app/shell/components/VersionManagementPanel.vue')
   const listbox = sourceByPath.get('src/app/shared/controls/ThemedListbox.vue')
   const tokens = sourceByPath.get('src/styles/tokens.css')
   const styles = sourceByPath.get('src/styles/app.css')
@@ -61,8 +77,13 @@ function evaluateSources(sources) {
   const declared = (selector, property, value) => block(selector).includes(`${property}: ${value}`)
 
   return [
-    // Shell chrome: the persistent topbar, sidebar, and statusbar frame.
-    finding('shell.topbar', shell.includes("t('app.title')") && styles.includes('.topbar')),
+    // Shell chrome: the sidebar carries the brand, and a status bar anchors the
+    // bottom. There is deliberately no full-width identity row.
+    finding(
+      'shell.sidebar-brand',
+      sidebar.includes('sidebar-brand') && styles.includes('.sidebar-brand')
+    ),
+    finding('shell.no-full-width-topbar', !styles.includes('.topbar')),
     finding('shell.sidebar-toggle', shell.includes("t('nav.collapse')")),
     finding('shell.route-navigation', shell.includes("t('versions.title')")),
     finding('shell.no-seeded-workspace', !shell.includes('templateShellData')),
@@ -74,15 +95,15 @@ function evaluateSources(sources) {
     // Themed controls replace native select popups that cannot be palette-styled.
     finding('controls.themed-listbox', listbox.includes('role="listbox"')),
     finding('controls.no-native-select', !settingsPanel.includes('<select')),
-    finding('controls.checkbox-state', settingsPanel.includes('type="checkbox"')),
+    finding('controls.checkbox-state', versionPanel.includes('type="checkbox"')),
 
     // Theme and viewport coverage.
     finding('tokens.dark-operational-palette', tokens.includes('--color-bg: #121820')),
     finding('tokens.light-theme', tokens.includes("[data-theme='light']")),
-    finding('tokens.stable-layout', tokens.includes('--layout-topbar-height')),
+    finding('tokens.stable-layout', tokens.includes('--layout-sidebar-width')),
     finding(
       'layout.stable-shell-grid',
-      styles.includes('var(--layout-topbar-height) minmax(0, 1fr)')
+      declared('.app-shell', 'grid-template-rows', 'minmax(0, 1fr) var(--layout-statusbar-height)')
     ),
     finding('layout.compact-viewport', styles.includes('@media (max-width: 980px)')),
     finding('layout.narrow-viewport', styles.includes('@media (max-width: 720px)')),
@@ -98,7 +119,9 @@ function evaluateSources(sources) {
     ),
     finding(
       'layout.console-log-bounded',
-      block('.controller-output').includes('max-height') &&
+      // Fills the stage and scrolls internally; `min-height: 0` is what keeps a
+      // long log from growing the route instead of scrolling.
+      declared('.controller-output', 'flex', '1 1 0') &&
         declared('.controller-output', 'overflow-y', 'auto')
     ),
     finding('layout.no-hand-computed-route-height', !flatStyles.includes('min-height: calc(100vh')),

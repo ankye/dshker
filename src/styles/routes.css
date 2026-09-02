@@ -1,0 +1,954 @@
+/* Per-route surfaces: launch, versions, catalog tables, and console. */
+
+.launch-panel,
+.version-management,
+.controller-panel,
+.settings-panel,
+/* Inherits the height the stage actually has, rather than recomputing it from
+ * `100vh` minus chrome — that arithmetic drifts whenever padding or chrome
+ * heights change, and it ignores the stage's own scroll state. */
+.runtime-tabs-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-5);
+}
+
+.launch-hero {
+  position: relative;
+  display: grid;
+  min-height: 15rem;
+  overflow: hidden;
+  align-items: end;
+  padding: var(--space-6);
+  border: 1px solid color-mix(in srgb, var(--color-accent), var(--color-border) 55%);
+  border-radius: var(--radius-lg);
+  background:
+    #0d0c0b
+      linear-gradient(90deg, rgb(9 9 10 / 94%) 0%, rgb(15 12 8 / 82%) 45%, rgb(18 10 2 / 20%) 100%),
+    var(--launch-hero-art) center / cover no-repeat;
+}
+
+.launch-hero-orbit {
+  position: absolute;
+  top: -7rem;
+  right: 7%;
+  width: 24rem;
+  height: 24rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 40%);
+  border-radius: 50%;
+  transform: rotate(-25deg) scaleY(0.42);
+}
+
+.launch-hero-icon {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 1.25rem;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 25%);
+}
+
+.launch-hero-content {
+  position: relative;
+}
+
+.launch-hero h3 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 3rem);
+  text-wrap: balance;
+}
+
+.launch-hero p:last-child {
+  max-width: 36rem;
+  margin: var(--space-2) 0 0;
+  color: color-mix(in srgb, var(--color-text), transparent 18%);
+  font-size: var(--type-section);
+}
+
+.launch-version-list {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}
+
+.launch-version,
+.controller-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+/* Not interactive: this is the single managed version, not a picker. It carried
+ * `cursor: pointer` while nothing handled a click, promising an affordance the
+ * card does not have. */
+.launch-version {
+  width: 100%;
+  color: var(--color-text);
+  text-align: left;
+}
+
+/* The identity block may hold a long harness path; it must be the part that
+ * shrinks, never the action beside it. */
+.launch-version-identity {
+  min-width: 0;
+}
+
+.launch-version[data-selected='true'] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.launch-version-label,
+.launch-version-meta,
+.controller-row p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.launch-version strong,
+.controller-row strong {
+  display: block;
+  margin-top: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.launch-version-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Sized to stay the route's clear primary action now that it sits inside the
+ * version card rather than in a detached footer. */
+.launch-primary-action {
+  min-width: 9rem;
+  min-height: var(--size-control-lg);
+  font-size: var(--type-body);
+}
+
+.launch-status {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.launch-status[data-running='true'] {
+  color: var(--color-success);
+}
+
+.prototype-button {
+  min-height: var(--size-control-md);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: var(--font-weight-semibold);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    filter var(--motion-fast) var(--ease-standard),
+    transform var(--motion-instant) var(--ease-standard);
+}
+
+/* Filter rather than a hand-picked colour per variant: one rule covers primary,
+ * secondary, and any later variant without re-deriving each palette. */
+.prototype-button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+/* A press must register even when the click starts a slow operation. */
+.prototype-button:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.96);
+}
+
+/* `wait` belongs to an operation in flight, not to every unavailable button;
+ * a disabled control is simply not available. */
+.prototype-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.prototype-button[aria-busy='true'] {
+  cursor: wait;
+}
+
+.prototype-button--primary {
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+.prototype-button--secondary {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+/* The three version tabs are full-height surfaces, not cards that stop at their
+ * content. Without `flex: 1`, a short list left the rest of the stage blank and
+ * the panel border cut across the middle of the window. */
+.source-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+}
+
+.version-tabs-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.version-tabs-row .page-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.version-tabs-row .core-version-tabs {
+  flex: 0 0 auto;
+  align-items: center;
+  align-self: center;
+  margin-bottom: var(--space-2);
+}
+
+.page-tabs,
+.settings-tabs {
+  display: flex;
+  align-items: end;
+  gap: var(--space-1);
+  min-height: 3rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page-tab {
+  position: relative;
+  min-height: var(--size-control-lg);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.page-tab[data-active='true'] {
+  color: var(--color-text);
+}
+
+.page-tab[data-active='true']::after {
+  position: absolute;
+  right: var(--space-4);
+  bottom: -1px;
+  left: var(--space-4);
+  height: 0.1875rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  content: '';
+}
+
+.version-tab-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding-top: var(--space-3);
+}
+
+.version-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.version-action-button {
+  min-height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: var(--type-caption);
+}
+
+.version-action-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 45%);
+}
+
+.version-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.version-action-button--primary {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 40%);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+  color: var(--color-text);
+}
+
+.version-meta-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-meta-line code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-branch-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.core-branch-picker select {
+  min-height: var(--size-row);
+  min-width: 15rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.core-version-tabs {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.core-version-tab {
+  min-width: 5.5rem;
+  min-height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.core-version-tab[data-active='true'] {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 40%);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+  color: var(--color-text);
+}
+
+.source-panel h3,
+.settings-panel h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-section);
+}
+
+.source-panel > p {
+  margin: var(--space-2) 0 0;
+}
+
+.source-path-list {
+  margin: var(--space-4) 0;
+}
+
+.source-path-list div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.source-path-list dt {
+  color: var(--color-text-muted);
+}
+
+.source-path-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-actions {
+  display: flex;
+  justify-content: end;
+  margin-top: var(--space-3);
+}
+
+.catalog-table td {
+  max-width: 32rem;
+}
+
+.catalog-table a {
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+}
+
+/* --- "Install new extension" toolbar ---
+ * Search, result count and category tabs previously had no rules at all, so
+ * they rendered as raw native controls against a dark panel. They are grouped
+ * into one toolbar because they are one task: narrowing thousands of catalog
+ * entries down to the one to install. */
+.catalog-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.catalog-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+/* The label owns the border so the icon sits inside the field and the whole
+ * field shows one focus ring, rather than the icon appearing to float beside a
+ * separately outlined input. */
+.catalog-search-field {
+  position: relative;
+  display: flex;
+  min-width: 12rem;
+  flex: 1 1 22rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.catalog-search-field:focus-within {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 35%, transparent);
+}
+
+.catalog-search-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+/* Native search inputs carry a platform background, inner shadow and a
+ * decoration widget that all ignore the app theme, so each is reset here. */
+.catalog-search-input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--size-control-md);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--type-ui);
+  appearance: none;
+}
+
+.catalog-search-input:focus {
+  outline: none;
+}
+
+.catalog-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.catalog-search-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Tabular figures keep the count from shifting width as the user types. */
+.catalog-result-count {
+  flex: 0 0 auto;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--size-control-sm);
+}
+
+/* Provenance, not a control: it stays legible but never competes with search,
+ * and truncates first when the row runs out of room. */
+.catalog-source-line {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-source-line code {
+  font-family: var(--font-mono);
+}
+
+/* Scrolls sideways rather than wrapping into a tall block that would push the
+ * table off screen; the catalog has dozens of categories. */
+.catalog-category-strip {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding-bottom: var(--space-1);
+  overscroll-behavior-x: contain;
+  scrollbar-width: thin;
+}
+
+.catalog-category-tab {
+  flex: 0 0 auto;
+  min-height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--type-caption);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.catalog-category-tab:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.catalog-category-tab[data-active='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: var(--font-weight-medium);
+}
+
+.catalog-category-tab:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Sits below the scrolling table, so it must not be dragged into the scroll
+ * area or it would be unreachable until the user scrolled to the very end. */
+.catalog-more-button {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: var(--space-3);
+}
+
+/* Checkbox and action are the two columns the user acts on, so they lead the
+ * row and stay at their natural width instead of absorbing slack. */
+.version-action-column {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.version-action-placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Takes the height the panel actually has and scrolls inside itself. The old
+ * `max-height: min(56vh, 30rem)` is why a maximized window showed a table
+ * ending halfway down with dead space beneath it: the cap ignored the space
+ * available. `flex-basis: 0` (not `auto`) keeps a long list from inflating the
+ * panel instead of scrolling within it. */
+.version-table-wrap {
+  overflow: auto;
+  min-height: 6rem;
+  flex: 1 1 0;
+  margin-top: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overscroll-behavior: contain;
+}
+
+.version-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.version-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
+  font-size: 13px;
+}
+
+.version-table th,
+.version-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.version-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  background: var(--color-surface-muted);
+}
+
+.version-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.version-table--core td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.version-current-mark {
+  display: inline-flex;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-accent);
+  border-radius: 50%;
+  color: var(--color-accent);
+  font-size: 0;
+}
+
+.version-current-mark::after {
+  font-size: var(--type-caption);
+  content: '✓';
+}
+
+.version-select-column {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.version-select-check {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.version-select-check:disabled {
+  cursor: default;
+}
+
+.catalog-table {
+  min-width: 860px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.catalog-table th,
+.catalog-table td {
+  padding: 6px 10px;
+}
+
+.catalog-name-cell {
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-category-cell {
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+/* Catalog descriptions run long; three lines fit the common entry without
+ * letting one row dominate the table. */
+.catalog-desc-cell {
+  max-width: 34rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  color: var(--color-text-muted);
+}
+
+.catalog-url-cell {
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-url-cell a {
+  color: var(--color-accent);
+}
+
+.catalog-action-cell,
+.plugin-action-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.plugin-version-cell {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.plugin-origin-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.plugin-origin-badge[data-origin='user'] {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 45%);
+  color: var(--color-accent);
+}
+
+.plugin-origin-badge[data-origin='default'] {
+  color: var(--color-text-muted);
+}
+
+.controller-command {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.controller-command span {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+/* The log file path and its actions. The path is the artifact a user pastes
+ * into a bug report, so it stays visible and selectable rather than living
+ * behind a menu, and the actions sit next to it instead of in a far corner. */
+.controller-log-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+
+.controller-log-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+/* Shrinks before the buttons do: a deep path must not push the actions out of
+ * the window, so the path truncates and keeps its full value in the tooltip. */
+.controller-log-path {
+  overflow: hidden;
+  min-width: 6rem;
+  flex: 1 1 12rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controller-log-hint {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.controller-log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* A transient success state on the action itself, so confirmation appears where
+ * the user just clicked rather than as a separate notification. */
+.controller-log-actions .prototype-button[data-confirmed='true'] {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+/* The log stream scrolls inside a bounded box. Without a max height and its own
+ * overflow, a long-running child's output would keep growing the Console route
+ * and push its controls out of reach. */
+.controller-output {
+  display: grid;
+  gap: var(--space-3);
+  /* Fills the stage instead of stopping at a fixed fraction of the viewport.
+   * `flex-basis: 0` (not `auto`) is what keeps a long log from inflating the
+   * stage's scroll height: the box takes leftover space and scrolls inside
+   * itself, so the route never grows past the window. */
+  min-height: 8rem;
+  flex: 1 1 0;
+  align-content: start;
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: #050709;
+  color: #dce7f5;
+  list-style: none;
+}
+
+.controller-output li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.controller-output li[data-stream='stderr'] {
+  color: #ffaba5;
+}
+
+.controller-output li[data-stream='launcher'] {
+  color: #85d5ff;
+}
+
+.controller-output li[data-stream='command'] {
+  color: #b7d9f4;
+}
+
+.controller-output time,
+.controller-output span {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.controller-output pre {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* The runtime action remains at the bottom of Console while output scrolls in
+ * its own box above it, so starting or stopping does not require returning to
+ * the Launch page. */
+.controller-bottom-action {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.controller-runtime-status {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.controller-runtime-status[data-state='running'] {
+  color: var(--color-success);
+}
+
+.controller-runtime-status[data-state='starting'] {
+  color: var(--color-accent);
+}
+
+.controller-runtime-status[data-state='failed'] {
+  color: var(--color-danger);
+}
+
+.settings-panel h3 {
+  margin-top: var(--space-5);
+}
+
+.settings-list {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.settings-row {
+  display: flex;
+  min-height: 5rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-5);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.settings-row span {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.settings-row small {
+  color: var(--color-text-muted);
+}
+
+/* The path and its copy affordance travel together; the path is the part that
+ * shrinks. */
+.settings-row-path-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Registered filesystem path: selectable, and truncated rather than wrapped
+ * across three lines. The full value stays available via `title` and copy. */
+.settings-row-path {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  user-select: text;
+  white-space: nowrap;
+}

@@ -4,7 +4,11 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
-const styles = readFileSync(path.join(appRoot, 'src/styles/app.css'), 'utf8')
+// `app.css` only aggregates @import-ed sheets, so the rules are read from the
+// sheets themselves in the same order the entry file imports them.
+const styles = ['base-shell', 'routes', 'controls', 'responsive']
+  .map((sheet) => readFileSync(path.join(appRoot, `src/styles/${sheet}.css`), 'utf8'))
+  .join('\n')
 
 /** Returns the declaration block of one exact top-level selector. */
 function ruleBlock(selector: string): string {
@@ -67,7 +71,10 @@ describe('shell scroll and height adaptation', () => {
   it('bounds the console log so a long-running child cannot push controls away', () => {
     const log = ruleBlock('.controller-output')
 
-    expect(log.replace(/\s+/gu, ' ')).toContain('max-height')
+    // The log fills the stage and scrolls inside itself. `min-height: 0` is what
+    // keeps the flex child shrinkable, so a long log scrolls instead of growing
+    // the route and pushing its controls out of reach.
+    expect(hasDeclaration(log, 'flex', '1 1 0')).toBe(true)
     expect(hasDeclaration(log, 'overflow-y', 'auto')).toBe(true)
   })
 

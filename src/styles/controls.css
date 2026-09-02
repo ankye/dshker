@@ -1,0 +1,457 @@
+/* Reusable controls, settings rows, status bar, and the alert card. */
+
+.themed-listbox {
+  position: relative;
+  display: inline-flex;
+}
+
+.themed-listbox-trigger {
+  display: flex;
+  min-height: var(--size-row);
+  min-width: 11rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: start;
+}
+
+.themed-listbox-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.themed-listbox-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.themed-listbox-caret {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+}
+
+.themed-listbox-popup {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  min-width: 100%;
+  max-height: 16rem;
+  margin: 0;
+  padding: var(--space-1);
+  overflow-y: auto;
+  list-style: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+}
+
+.themed-listbox-option {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.themed-listbox-option[data-active='true'] {
+  background: var(--color-surface-muted);
+}
+
+.themed-listbox-option[aria-selected='true'] {
+  color: var(--color-accent);
+}
+
+.themed-listbox-option[aria-disabled='true'] {
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+
+.settings-row select,
+.runtime-url-field input {
+  min-height: var(--size-row);
+  min-width: 11rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.toggle-input {
+  appearance: none;
+  position: relative;
+  width: 2.625rem;
+  /* The painted track stays slim; `::before` widens the pointer target to the
+   * comfortable minimum without inflating the visual switch. `::after` is the
+   * slider knob. */
+  height: 1.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  cursor: pointer;
+}
+
+/* Hit area only: extends the target to --size-control-sm, no visual of its own. */
+.toggle-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  height: var(--size-control-sm);
+  content: '';
+  transform: translateY(-50%);
+}
+
+.toggle-input::after {
+  position: absolute;
+  top: 0.1875rem;
+  left: 0.1875rem;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+  content: '';
+  transition: transform 160ms ease;
+}
+
+.toggle-input:checked {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+/* The knob sits on the accent fill, so it follows the same on-accent token as
+ * any text placed there; a fixed near-black knob disappeared on the light
+ * theme's darker accent. */
+.toggle-input:checked::after {
+  transform: translateX(1.125rem);
+  background: var(--color-on-accent);
+}
+
+.runtime-toolbar {
+  display: flex;
+  min-height: 3.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.runtime-tab-strip {
+  display: flex;
+  min-width: 0;
+  align-self: stretch;
+  overflow-x: auto;
+}
+
+.runtime-tab {
+  min-width: 9rem;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.runtime-tab[data-active='true'] {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+}
+
+/* The run frame fills the height the stage gives it instead of claiming a fixed
+ * one, so shrinking the window shrinks the embedded page rather than pushing it
+ * past the viewport. */
+.runtime-frame-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: var(--space-3);
+  min-height: 0;
+  flex: 1 1 auto;
+  padding-top: var(--space-3);
+}
+
+.runtime-url-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.runtime-url-field input {
+  flex: 1;
+}
+
+.runtime-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 16rem;
+  border: 1px solid var(--color-border);
+  background: #050709;
+}
+
+.setup-panel,
+.identity-list {
+  margin: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+}
+
+.setup-state {
+  margin-top: 0 !important;
+  color: var(--color-warning) !important;
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.blocking-message {
+  color: var(--color-warning) !important;
+}
+
+.next-steps {
+  display: grid;
+  gap: var(--space-2);
+  margin: var(--space-4) 0 0;
+  padding-left: var(--space-4);
+  color: var(--color-text);
+}
+
+/* The one empty/blocked/working surface for every route. See EmptyState.vue. */
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding: var(--space-6) var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  text-align: center;
+}
+
+/* Routes that own their vertical space keep it while idle, so switching to a
+ * populated state does not reflow the whole route. */
+.empty-state[data-fill='true'] {
+  flex: 1 1 0;
+  align-content: center;
+  min-height: 8rem;
+}
+
+.empty-state-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-bottom: var(--space-1);
+  color: var(--color-text-muted);
+}
+
+.empty-state[data-tone='danger'] .empty-state-icon {
+  color: var(--color-danger);
+}
+
+.empty-state[data-tone='progress'] .empty-state-icon {
+  color: var(--color-accent);
+}
+
+.empty-state-title {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-medium);
+}
+
+.empty-state-description {
+  max-width: 32rem;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-ui);
+  line-height: 1.55;
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: center;
+  margin-top: var(--space-2);
+}
+
+.state-icon-track {
+  opacity: 0.25;
+}
+
+.state-icon-arc {
+  transform-origin: 12px 12px;
+  animation: state-icon-spin var(--motion-spin) linear infinite;
+}
+
+@keyframes state-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.identity-list {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.identity-list div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.identity-list dt {
+  color: var(--color-text-muted);
+}
+
+.identity-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.statusbar {
+  display: flex;
+  min-width: 0;
+  min-height: var(--layout-statusbar-height);
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0 var(--space-4);
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.statusbar[data-busy='true'] {
+  background: color-mix(in srgb, var(--color-accent), var(--color-surface) 94%);
+}
+
+.statusbar-progress {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.statusbar-progress-track {
+  position: relative;
+  display: block;
+  flex: 0 1 40%;
+  max-width: 16rem;
+  height: 0.375rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-accent), var(--color-surface) 82%);
+}
+
+.statusbar-progress-bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -40%;
+  width: 40%;
+  border-radius: 999px;
+  background: var(--color-accent);
+  animation: statusbar-progress-slide 1.4s ease-in-out infinite;
+}
+
+@keyframes statusbar-progress-slide {
+  0% {
+    left: -40%;
+  }
+
+  100% {
+    left: 100%;
+  }
+}
+
+.statusbar-progress-text {
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shell-toast {
+  /* A transient card in the stage's second grid row, so it displaces content
+   * instead of covering it. Earlier placements failed because the stage was a
+   * single-row grid: overlay, shell row, and sticky variants all shared one cell
+   * with the route. */
+  display: grid;
+  gap: var(--space-1);
+  margin: var(--space-2) var(--space-4) var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-warning), var(--color-border) 50%);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: 0 0.75rem 1.5rem color-mix(in srgb, #000000, transparent 70%);
+}
+
+.shell-toast-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  color: var(--color-warning);
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.shell-toast-dismiss {
+  display: grid;
+  width: var(--size-control-sm);
+  height: var(--size-control-sm);
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+.shell-toast-dismiss:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.shell-toast-detail {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-size: var(--type-ui);
+}
+
+/* Support detail: present but clearly secondary to the message above it. */
+.shell-toast-code {
+  display: flex;
+  margin: 0;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.shell-toast-code code {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+}

@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import type { DesktopApiErrorCode, ManagedRootKind } from '@/shared/contracts'
-import { INITIAL_LOCALE, createTranslator } from '@/app/shared/i18n/i18n'
+import { computed, ref, watch } from 'vue'
+import {
+  LAUNCHER_HARNESS_MAX_PORT,
+  LAUNCHER_HARNESS_MIN_PORT,
+  type DesktopApiErrorCode,
+  type ManagedRootKind
+} from '@/shared/contracts'
+import { CopyPathButton } from '@/app/shared/controls'
+import { useTranslator } from '@/app/shared/i18n/useLocale'
+import { useLauncherHarness } from '@/app/domains/launcher-harness'
 import ManagedInstallationsPanel from './ManagedInstallationsPanel.vue'
 import { MANAGED_ROOT_SETUP_ITEMS } from '../contracts'
 import { useManagedWorkspaces } from '../state/useManagedWorkspaces'
@@ -13,8 +20,58 @@ const props = withDefaults(
   { showInstallations: true }
 )
 
-const t = createTranslator(INITIAL_LOCALE)
+const t = useTranslator()
 const manager = useManagedWorkspaces()
+const harness = useLauncherHarness()
+
+/**
+ * Draft port field, seeded from main and re-seeded whenever main reports a
+ * different persisted value, so an in-flight edit is never overwritten by the
+ * background state poll.
+ */
+const portMode = ref<'auto' | 'fixed'>('auto')
+const portDraft = ref('')
+const persistedPort = computed(() => harness.state.value?.port)
+
+watch(
+  persistedPort,
+  (value) => {
+    if (!value) return
+    portMode.value = value.mode
+    portDraft.value = value.mode === 'fixed' ? String(value.port) : ''
+  },
+  { immediate: true }
+)
+
+/** Rejects a non-integer or privileged port before any IPC call is attempted. */
+const portError = computed(() => {
+  if (portMode.value === 'auto') return undefined
+  if (!/^\d+$/u.test(portDraft.value)) return t('managed.port.errorFormat')
+  const port = Number(portDraft.value)
+  if (port < LAUNCHER_HARNESS_MIN_PORT || port > LAUNCHER_HARNESS_MAX_PORT) {
+    return t('managed.port.errorRange')
+  }
+  return undefined
+})
+
+/** True only when the draft differs from the persisted setting and is valid. */
+const canApplyPort = computed(() => {
+  if (portError.value !== undefined || harness.loading.value) return false
+  const current = persistedPort.value
+  if (!current) return false
+  if (portMode.value === 'auto') return current.mode !== 'auto'
+  return current.mode !== 'fixed' || current.port !== Number(portDraft.value)
+})
+
+async function applyPort(): Promise<void> {
+  if (!canApplyPort.value) return
+  await harness.setPort({
+    port:
+      portMode.value === 'auto'
+        ? { mode: 'auto' }
+        : { mode: 'fixed', port: Number(portDraft.value) }
+  })
+}
 
 const operationLabel = computed(() => {
   const operation = manager.activeOperation.value
@@ -167,7 +224,6 @@ function errorCode(value: DesktopApiErrorCode): string {
 
     <section v-else class="managed-ready">
       <header class="managed-section-header">
-        <p class="eyebrow">{{ t('managed.ready.rootsTitle') }}</p>
         <h3>{{ t('managed.ready.rootsTitle') }}</h3>
         <p>{{ t('managed.ready.rootsDescription') }}</p>
       </header>
@@ -180,16 +236,25 @@ function errorCode(value: DesktopApiErrorCode): string {
           role="listitem"
         >
           <p class="managed-registered-root-label">{{ t(root.setupItem.labelKey) }}</p>
-          <code class="managed-path">{{ root.canonicalPath }}</code>
+          <!--
+            These paths and IDs exist to be pasted elsewhere, so each carries a
+            copy affordance and truncates instead of spilling a
+            `/private/var/folders/...` string across the row.
+          -->
+          <span class="managed-path-line">
+            <code class="managed-path" :title="root.canonicalPath">{{ root.canonicalPath }}</code>
+            <CopyPathButton :value="root.canonicalPath" />
+          </span>
           <p class="managed-root-id">
-            <span>{{ t('managed.ready.rootId') }}</span> {{ root.rootId }}
+            <span>{{ t('managed.ready.rootId') }}</span>
+            <code :title="root.rootId">{{ root.rootId }}</code>
+            <CopyPathButton :value="root.rootId" />
           </p>
         </article>
       </div>
 
       <section class="managed-workspace-section" :aria-labelledby="'managed-workspaces-heading'">
         <header class="managed-section-header">
-          <p class="eyebrow">{{ t('managed.ready.workspaceTitle') }}</p>
           <h3 id="managed-workspaces-heading">{{ t('managed.ready.workspaceTitle') }}</h3>
           <p>{{ t('managed.ready.workspaceDescription') }}</p>
         </header>
@@ -268,6 +333,58 @@ function errorCode(value: DesktopApiErrorCode): string {
             data-testid="create-workspace"
           >
             {{ t('managed.workspace.createAction') }}
+          </button>
+        </form>
+      </section>
+
+      <section class="managed-workspace-section" aria-labelledby="managed-port-heading">
+        <header class="managed-section-header">
+          <h3 id="managed-port-heading">{{ t('managed.port.title') }}</h3>
+          <p>{{ t('managed.port.description') }}</p>
+        </header>
+
+        <form class="managed-port-form" @submit.prevent="applyPort">
+          <div class="managed-port-modes" role="radiogroup" :aria-label="t('managed.port.title')">
+            <label class="managed-port-mode">
+              <input v-model="portMode" type="radio" value="auto" name="dsh-port-mode" />
+              <span>
+                <strong>{{ t('managed.port.auto') }}</strong>
+                <small>{{ t('managed.port.autoDescription') }}</small>
+              </span>
+            </label>
+            <label class="managed-port-mode">
+              <input v-model="portMode" type="radio" value="fixed" name="dsh-port-mode" />
+              <span>
+                <strong>{{ t('managed.port.fixed') }}</strong>
+                <small>{{ t('managed.port.fixedDescription') }}</small>
+              </span>
+            </label>
+          </div>
+
+          <label class="managed-port-field">
+            <span>{{ t('managed.port.label') }}</span>
+            <input
+              v-model="portDraft"
+              :disabled="portMode === 'auto'"
+              :aria-invalid="portError !== undefined"
+              :placeholder="t('managed.port.placeholder')"
+              autocomplete="off"
+              data-testid="dsh-port-input"
+              inputmode="numeric"
+              name="dsh-port"
+            />
+          </label>
+
+          <p v-if="portError" class="managed-port-error" role="alert">{{ portError }}</p>
+          <p v-else class="managed-port-hint">{{ t('managed.port.restartHint') }}</p>
+
+          <button
+            class="managed-primary-action"
+            type="submit"
+            :disabled="!canApplyPort"
+            data-testid="apply-dsh-port"
+          >
+            {{ t('managed.port.apply') }}
           </button>
         </form>
       </section>
@@ -403,10 +520,27 @@ function errorCode(value: DesktopApiErrorCode): string {
 }
 
 .managed-selection-name,
-.managed-path,
-.managed-workspace-id,
-.managed-root-id {
+.managed-workspace-id {
   overflow-wrap: anywhere;
+}
+
+/* The path shrinks; the copy button never does. */
+.managed-path-line,
+.managed-root-id {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+/* Truncated rather than wrapped: the full value stays reachable through the
+ * tooltip and the copy button beside it. */
+.managed-path,
+.managed-root-id code {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .managed-selection-name {
@@ -571,6 +705,92 @@ function errorCode(value: DesktopApiErrorCode): string {
 }
 
 .managed-create-workspace .managed-primary-action {
+  justify-self: start;
+}
+
+.managed-port-form {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+}
+
+.managed-port-modes {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.managed-port-mode {
+  display: grid;
+  align-items: start;
+  gap: var(--space-3);
+  grid-template-columns: auto 1fr;
+  cursor: pointer;
+}
+
+.managed-port-mode span {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.managed-port-mode strong {
+  color: var(--color-text);
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-medium);
+}
+
+.managed-port-mode small {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.managed-port-field {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--color-text);
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-medium);
+}
+
+.managed-port-field input {
+  width: min(100%, 12rem);
+  min-height: var(--size-control);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  outline: none;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.managed-port-field input:focus-visible {
+  border-color: var(--color-accent);
+  box-shadow: var(--focus-ring);
+}
+
+.managed-port-field input:disabled {
+  border-color: color-mix(in srgb, var(--color-border), transparent 40%);
+  color: var(--color-text-muted);
+}
+
+.managed-port-hint,
+.managed-port-error {
+  margin: 0;
+  font-size: var(--type-caption);
+}
+
+.managed-port-hint {
+  color: var(--color-text-muted);
+}
+
+.managed-port-error {
+  color: var(--color-danger);
+}
+
+.managed-port-form .managed-primary-action {
   justify-self: start;
 }
 

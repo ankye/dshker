@@ -8,6 +8,7 @@ describe('launcher navigation', () => {
       'advanced',
       'versions',
       'controller',
+      'usage',
       'settings',
       'runtime'
     ])

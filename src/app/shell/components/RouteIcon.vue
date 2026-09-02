@@ -51,6 +51,12 @@ defineProps<{
       />
     </template>
 
+    <template v-else-if="icon === 'gauge'">
+      <path d="M12 20a8 8 0 1 1 8-8" />
+      <path d="M12 12l4.5-3.5" />
+      <circle cx="12" cy="12" r="1.4" />
+    </template>
+
     <template v-else-if="icon === 'zap'">
       <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
     </template>

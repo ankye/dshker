@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { useLauncherHarness, usePluginCatalog } from '@/app/domains/launcher-harness'
-import { INITIAL_LOCALE, createTranslator } from '@/app/shared/i18n/i18n'
+import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { versionView } from '../versionViewState'
 
-const t = createTranslator(INITIAL_LOCALE)
+const t = useTranslator()
 const harness = useLauncherHarness()
 const pluginCatalog = usePluginCatalog()
 
@@ -41,6 +41,18 @@ function openBranchPicker(): void {
       @click="harness.update"
     >
       {{ t('versions.core.update') }}
+    </button>
+  </div>
+  <div v-else-if="versionView.activeVersionTab.value === 'plugins'" class="version-toolbar-actions">
+    <button
+      v-if="versionView.selectedPluginCount.value > 0"
+      class="version-action-button version-action-button--primary"
+      type="button"
+      :disabled="harness.loading.value"
+      data-testid="uninstall-selected-plugins"
+      @click="versionView.uninstallSelected"
+    >
+      {{ t('versions.catalog.uninstallSelected') }} ({{ versionView.selectedPluginCount.value }})
     </button>
   </div>
   <div v-else-if="versionView.activeVersionTab.value === 'catalog'" class="version-toolbar-actions">

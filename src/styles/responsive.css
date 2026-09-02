@@ -1,0 +1,25 @@
+/* Width breakpoints for the shell. */
+
+@media (max-width: 980px) {
+  .shell-body {
+    grid-template-columns: var(--layout-sidebar-width) minmax(0, 1fr);
+  }
+
+  .inspector-pane {
+    display: none;
+  }
+}
+
+@media (max-width: 720px) {
+  /* Below the minimum usable width the shell may be panned horizontally, but
+   * vertical scrolling must stay inside the stage so the navigation and status
+   * bar remain visible. */
+  body {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .app-shell {
+    min-width: 43rem;
+  }
+}

@@ -2,7 +2,8 @@
 import { computed, watch } from 'vue'
 import type { ManagedWorkspaceView } from '@/shared/contracts'
 import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
-import { INITIAL_LOCALE, createTranslator, type MessageKey } from '@/app/shared/i18n/i18n'
+import { type MessageKey } from '@/app/shared/i18n/i18n'
+import { useTranslator } from '@/app/shared/i18n/useLocale'
 import {
   MANAGED_EXECUTABLE_KINDS,
   type ManagedExecutableKind,
@@ -14,7 +15,7 @@ const props = defineProps<{
   readonly workspaces: readonly ManagedWorkspaceView[]
 }>()
 
-const t = createTranslator(INITIAL_LOCALE)
+const t = useTranslator()
 const manager = useManagedInstallations()
 
 const EXECUTABLE_LABEL_KEYS: Record<ManagedExecutableKind, MessageKey> = {

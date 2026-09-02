@@ -90,13 +90,16 @@ export async function waitForRendererEvidence(
  * hash-based walk would silently pass without changing the view.
  */
 export async function smokeRoutes(window: ElectronBrowserWindow): Promise<RouteSmokeEvidence> {
-  const cases = [
+  const cases: readonly { id: string; text: string; selector?: string }[] = [
     { id: 'launch', text: '一键启动' },
     { id: 'advanced', text: '高级选项' },
     { id: 'versions', text: '版本管理' },
     { id: 'controller', text: '控制台' },
+    { id: 'usage', text: 'Token 消耗' },
     { id: 'settings', text: '应用设置' },
-    { id: 'runtime', text: '运行' }
+    // The run route carries no stage heading, so its evidence is the browser
+    // surface itself rather than a title string that the sidebar also contains.
+    { id: 'runtime', text: '运行', selector: '.browser-panel' }
   ]
   const routes: RouteSmokeEvidence['routes'] = []
 
@@ -111,7 +114,10 @@ export async function smokeRoutes(window: ElectronBrowserWindow): Promise<RouteS
         control.click();
         setTimeout(() => {
           const active = control.dataset.active === 'true';
-          const shown = document.body?.innerText?.includes(${JSON.stringify(route.text)}) === true;
+          const selector = ${JSON.stringify(route.selector ?? null)};
+          const shown = selector === null
+            ? document.body?.innerText?.includes(${JSON.stringify(route.text)}) === true
+            : document.querySelector(selector) !== null;
           resolve(active && shown);
         }, 160);
       })`
@@ -223,11 +229,14 @@ export async function smokeHeightAdaptation(
             const doc = document.documentElement;
             const shell = document.querySelector('.app-shell');
             const stage = document.querySelector('.workbench-stage');
-            const topbar = document.querySelector('.topbar');
             const rows = document.querySelectorAll('.app-shell > *');
+            // Chrome is whatever the shell puts in its first and last rows. This
+            // app moved its identity into the sidebar and has no '.topbar', so
+            // asserting that specific element would fail a shell that is correct.
+            const first = rows[0];
             const last = rows[rows.length - 1];
             const viewport = window.innerHeight;
-            const top = topbar && topbar.getBoundingClientRect();
+            const top = first && first.getBoundingClientRect();
             const bottom = last && last.getBoundingClientRect();
             let reachable = true;
             if (stage && stage.scrollHeight > stage.clientHeight + 1) {

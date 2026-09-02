@@ -26,11 +26,18 @@
   --color-border: #344556;
   --color-text: #eaf0f7;
   --color-text-muted: #9eacba;
+  /* Semantic colours are theme-owned, not shared: a hue that reads correctly on
+   * a dark surface is far too light on a white one. Every theme below redefines
+   * this whole group, and each value clears 4.5:1 against that theme's own
+   * bg, surface, surface-raised, and surface-muted. */
   --color-accent: #78a7ff;
   --color-success: #43d6a1;
   --color-warning: #f6c962;
   --color-danger: #fa7d73;
   --color-focus: #a5c6ff;
+  /* Text placed on an accent fill. It has to follow the theme: the dark accent
+   * is light enough to need dark text, the light accent needs white. */
+  --color-on-accent: #08101b;
 
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -43,26 +50,85 @@
   --radius-lg: 0.75rem;
   --size-control: 2rem;
   --size-row: 2.25rem;
+  /* Interactive control heights. `sm` is the smallest comfortable pointer
+   * target; anything below it is an icon or a marker, not a control. */
+  --size-control-sm: 1.75rem;
+  --size-control-md: 2.5rem;
+  --size-control-lg: 3rem;
   --layout-topbar-height: 3.75rem;
   --layout-statusbar-height: 1.875rem;
   --layout-sidebar-width: 6.25rem;
   --layout-sidebar-collapsed-width: 3.75rem;
   --focus-ring: 0 0 0 3px rgb(120 167 255 / 42%);
+
+  /* Motion. Durations stay short because this is a dense desktop tool: feedback
+   * should read as immediate, not animated. `--motion-emphasis` is reserved for
+   * surfaces entering the viewport, never for hover feedback. */
+  --motion-instant: 90ms;
+  --motion-fast: 140ms;
+  --motion-emphasis: 220ms;
+  --motion-spin: 900ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0.2, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
+/* Light theme, tuned for long sessions rather than for maximum contrast.
+ *
+ * The previous palette was uncomfortable for two measured reasons, not because
+ * its hues were wrong. First, `--color-surface` was pure `#ffffff`: at 100%
+ * luminance it is the brightest a display can emit, and it covered the widest
+ * areas of the window. Second, body text on that surface measured 15.8:1, more
+ * than twice the 7:1 the WCAG AAA level asks for; that surplus reads as glare
+ * on a dense tool, not as legibility.
+ *
+ * So the whole ramp is shifted down: the brightest surface is now 93% instead
+ * of 100%, and body text lands at 11.8:1 on it. Every pair still clears AAA for
+ * body text and 4.5:1 for muted text and for all five semantic colours on all
+ * four surfaces, so nothing became harder to read — the page just stops
+ * emitting light at full power. Steps stay ~1.09-1.14 apart so raised surfaces
+ * remain distinguishable without a border doing the work.
+ *
+ * Hues are carried over from the earlier palette; only lightness moved, so the
+ * interface is recognisably the same product. `--color-accent` is `#2a5cc4`
+ * rather than the lighter `#2c5fc9` because that lighter value fell to 4.42:1
+ * on `--color-surface-muted`, the one surface where it was still used for text.
+ * Verify any change to these values against all four surfaces, not just one. */
 :root[data-theme='light'] {
   color-scheme: light;
-  --color-bg: #f2f3f5;
-  --color-surface: #ffffff;
-  --color-surface-raised: #fafafa;
-  --color-surface-muted: #edf0f4;
-  --color-border: #d9dde4;
-  --color-text: #1f2329;
-  --color-text-muted: #646a73;
+  --color-bg: #e6e9ef;
+  --color-surface: #f0f2f6;
+  --color-surface-raised: #f6f7fa;
+  --color-surface-muted: #dce0e8;
+  --color-border: #c3cad5;
+  --color-text: #2b3038;
+  --color-text-muted: #5a616b;
+  --color-accent: #2a5cc4;
+  --color-success: #136e4d;
+  --color-warning: #795000;
+  --color-danger: #ad2c26;
+  --color-focus: #2154bd;
+  --color-on-accent: #ffffff;
+  /* Derived from the light accent so the ring stays visible on light surfaces. */
+  --focus-ring: 0 0 0 3px rgb(42 92 196 / 38%);
 }
 
+/* Honouring the preference means actually stopping motion. Collapsing the
+ * duration tokens covers every transition that uses them, and the two rules
+ * below also neutralise animations (including the indeterminate progress bar and
+ * the spinner glyph), which the previous `scroll-behavior`-only block did not. */
 @media (prefers-reduced-motion: reduce) {
   :root {
     scroll-behavior: auto;
+    --motion-instant: 0ms;
+    --motion-fast: 0ms;
+    --motion-emphasis: 0ms;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
   }
 }

@@ -210,6 +210,9 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       startHarness: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       stopHarness: async () => apiFail('managed.missing_registry', 'Not used in this test.')
     },
+    tokenUsage: {
+      getState: async () => apiFail('managed.missing_registry', 'Not used in this test.')
+    },
     launcherHarness: {
       getState: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       start: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
@@ -219,7 +222,10 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       switchVersion: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       switchBranch: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       installPlugin: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
-      uninstallPlugin: async () => apiFail('managed.missing_registry', 'Not used in this test.')
+      uninstallPlugin: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      revealLog: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      exportLog: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      setPort: async () => apiFail('managed.missing_registry', 'Not used in this test.')
     },
     pluginCatalog: {
       getState: async () => apiFail('managed.missing_registry', 'Not used in this test.'),

@@ -1,7 +1,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { getBootstrapInfo } from '@/foundation/appMetadata'
 import type { BootstrapErrorCode, BootstrapInfo } from '@/shared/contracts'
-import { INITIAL_LOCALE, createTranslator } from '../shared/i18n/i18n'
+import { useTranslator } from '../shared/i18n/useLocale'
 import type { AppRouteId } from '../shared/navigation/routes'
 
 export type BootstrapState =
@@ -11,8 +11,11 @@ export type BootstrapState =
 
 /** Owns shell navigation and bootstrap state; managed-directory state stays in its domain. */
 export function useLauncherShell() {
-  const locale = INITIAL_LOCALE
-  const t = createTranslator(locale)
+  // The shell owns the chrome every route renders inside: navigation labels, the
+  // topbar, the status bar, and toasts. Binding a translator to the bootstrap
+  // locale left all of that in Chinese after the user switched language, so only
+  // route bodies actually translated.
+  const t = useTranslator()
   const activeRoute = ref<AppRouteId>('launch')
   const sidebarCollapsed = ref(false)
   const bootstrap = ref<BootstrapState>({ kind: 'loading' })

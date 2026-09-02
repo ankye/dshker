@@ -5,3 +5,4 @@
 
 export { default as ThemedListbox } from './ThemedListbox.vue'
 export type { ThemedListboxOption } from './ThemedListbox.vue'
+export { default as CopyPathButton } from './CopyPathButton.vue'

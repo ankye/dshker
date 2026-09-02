@@ -1,19 +1,45 @@
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
-import { lstat, readFile, realpath } from 'node:fs/promises'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { createWriteStream, type WriteStream } from 'node:fs'
+import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import nodePath from 'node:path'
-import type {
-  LauncherHarnessCommitView,
-  LauncherHarnessConsoleEntry,
-  LauncherHarnessPluginView,
-  LauncherHarnessState,
-  LauncherHarnessVersionView
+import {
+  LAUNCHER_HARNESS_MAX_PORT,
+  LAUNCHER_HARNESS_MIN_PORT,
+  type LauncherHarnessCommitView,
+  type LauncherHarnessConsoleEntry,
+  type LauncherHarnessLogFileView,
+  type LauncherHarnessPluginView,
+  type LauncherHarnessPortSetting,
+  type LauncherHarnessState,
+  type LauncherHarnessVersionView
 } from '../../../src/shared/contracts'
 import { ManagedHarnessRuntimeError } from './runtime-errors'
+import { terminateManagedProcessTree } from './process-tree'
+import { assertDirectDirectory, assertDirectRegularFile, runText } from './process-utils'
+
+const MANAGED_DSH_SHUTDOWN_TIMEOUT_MILLISECONDS = 5_000
 
 /** Inputs for the single Launcher-owned Harness checkout. */
 export interface LauncherHarnessServiceOptions {
   readonly harnessDirectory: string
   readonly dshHomeDirectory: string
+  /**
+   * File holding the Launcher-owned DSH launch preferences (currently the web
+   * port). It sits outside the Harness checkout so switching or re-cloning a
+   * revision never discards the user's selection.
+   */
+  readonly launchPreferencesPath: string
+  /**
+   * File receiving the full stdout and stderr of the launched DSH Web process.
+   *
+   * The in-memory console keeps only the newest 1000 fragments, so a failure
+   * that scrolls past that cap survives only here. It sits beside the launch
+   * preferences, outside the checkout, so switching revisions never removes the
+   * evidence of the launch that just failed.
+   */
+  readonly launchLogPath: string
+  /** Launcher-owned DSH overlay enabling detailed Cordis startup diagnostics for this child only. */
+  readonly diagnosticsPatchPath: string
   readonly gitExecutable: string
   readonly pnpmExecutable: string
   /**
@@ -24,6 +50,8 @@ export interface LauncherHarnessServiceOptions {
   readonly pnpmLauncher?: Readonly<{
     readonly executable: string
     readonly prefixArguments: readonly string[]
+    /** PATH required by pnpm's shell entrypoint and its subprocesses. */
+    readonly commandSearchPath: string
   }>
 }
 
@@ -33,6 +61,11 @@ export class LauncherHarnessService {
   #child: ChildProcess | undefined
   #launch: LauncherHarnessState['launch'] = { kind: 'stopped' }
   #console: LauncherHarnessConsoleEntry[] = []
+  /** Trailing partial line of child output, held until its newline arrives. */
+  #pendingOutput = ''
+  #logStream: WriteStream | undefined
+  #port: LauncherHarnessPortSetting = { mode: 'auto' }
+  #portLoaded = false
   #bootstrap: 'preparing' | { readonly kind: 'failed'; readonly message: string } | undefined
 
   constructor(options: LauncherHarnessServiceOptions) {
@@ -48,16 +81,19 @@ export class LauncherHarnessService {
 
   /** Returns only facts read from the Launcher checkout and the native DSH web profile. */
   async getState(): Promise<LauncherHarnessState> {
+    await this.#loadPort()
     if (this.#bootstrap === 'preparing') {
       return {
         kind: 'preparing',
         harnessDirectory: this.#options.harnessDirectory,
         message: 'The bundled DSH is being prepared.',
         launch: this.#launch,
+        port: this.#port,
         commits: [],
         stableVersions: [],
         plugins: [],
-        console: this.#console
+        console: this.#console,
+        logFile: await this.#logFileView()
       }
     }
     if (this.#bootstrap?.kind === 'failed') {
@@ -66,10 +102,12 @@ export class LauncherHarnessService {
         harnessDirectory: this.#options.harnessDirectory,
         message: this.#bootstrap.message,
         launch: this.#launch,
+        port: this.#port,
         commits: [],
         stableVersions: [],
         plugins: [],
-        console: this.#console
+        console: this.#console,
+        logFile: await this.#logFileView()
       }
     }
     const readiness = await this.#readiness()
@@ -77,10 +115,12 @@ export class LauncherHarnessService {
       return {
         ...readiness,
         launch: this.#launch,
+        port: this.#port,
         commits: [],
         stableVersions: [],
         plugins: [],
-        console: this.#console
+        console: this.#console,
+        logFile: await this.#logFileView()
       }
     }
     const [remoteUrl, currentBranch, branches, revision, commits, stableVersions, plugins] =
@@ -112,11 +152,55 @@ export class LauncherHarnessService {
       branches,
       revision,
       launch: this.#launch,
+      port: this.#port,
       commits,
       stableVersions,
       plugins,
-      console: this.#console
+      console: this.#console,
+      logFile: await this.#logFileView()
     }
+  }
+
+  /** Reports the log path whether or not a launch has created the file yet. */
+  async #logFileView(): Promise<LauncherHarnessLogFileView> {
+    try {
+      const metadata = await stat(this.#options.launchLogPath)
+      return { path: this.#options.launchLogPath, exists: true, byteLength: metadata.size }
+    } catch {
+      // Absent before the first launch: the path is still the answer the user needs.
+      return { path: this.#options.launchLogPath, exists: false, byteLength: 0 }
+    }
+  }
+
+  /**
+   * Reveals the log in the OS file manager.
+   *
+   * The path is service-owned rather than renderer-supplied, so the renderer
+   * cannot ask the main process to reveal an arbitrary location.
+   */
+  async revealLog(showItemInFolder: (target: string) => void): Promise<LauncherHarnessLogFileView> {
+    const view = await this.#logFileView()
+    if (!view.exists) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.not_found',
+        'No launch log exists yet; start DSH Web first.'
+      )
+    }
+    showItemInFolder(view.path)
+    return view
+  }
+
+  /** Copies the log to a caller-chosen destination; the service never picks the path. */
+  async exportLog(destination: string): Promise<LauncherHarnessLogFileView> {
+    const view = await this.#logFileView()
+    if (!view.exists) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.not_found',
+        'No launch log exists yet; start DSH Web first.'
+      )
+    }
+    await copyFile(view.path, destination)
+    return view
   }
 
   /** Fetches only remote refs before rebuilding the visible version candidates. */
@@ -156,7 +240,7 @@ export class LauncherHarnessService {
       )
     }
     await this.#assertReadyForVersionOperation()
-    await this.#runPnpm(['dsh', '--', 'plugin', '--profile', 'web', 'add', source])
+    await this.#runPluginCommand(['dsh', '--', 'plugin', '--profile', 'web', 'add', source])
     return this.getState()
   }
 
@@ -177,8 +261,23 @@ export class LauncherHarnessService {
         'Only a user-installed plugin can be removed.'
       )
     }
-    await this.#runPnpm(['dsh', '--', 'plugin', '--profile', 'web', 'remove', name])
+    await this.#runPluginCommand(['dsh', '--', 'plugin', '--profile', 'web', 'remove', name])
     return this.getState()
+  }
+
+  /**
+   * Runs one DSH plugin CLI command, reporting a CLI refusal as a plugin
+   * failure rather than a launch failure.
+   */
+  async #runPluginCommand(arguments_: readonly string[]): Promise<void> {
+    try {
+      await this.#runPnpm(arguments_)
+    } catch (error) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.plugin_operation_failed',
+        error instanceof Error ? error.message : 'The DSH plugin command failed.'
+      )
+    }
   }
 
   /** Resolves the direct pnpm command, forwarding shim-prefix arguments when present. */
@@ -193,6 +292,12 @@ export class LauncherHarnessService {
       executable: launcher.executable,
       arguments: [...launcher.prefixArguments, ...arguments_]
     }
+  }
+
+  /** Supplies the Launcher-resolved command PATH to every pnpm invocation. */
+  #pnpmEnvironment(): NodeJS.ProcessEnv | undefined {
+    const commandSearchPath = this.#options.pnpmLauncher?.commandSearchPath
+    return commandSearchPath === undefined ? undefined : { ...process.env, PATH: commandSearchPath }
   }
 
   /** Materializes an explicitly selected commit from origin/master. */
@@ -228,7 +333,8 @@ export class LauncherHarnessService {
   async #runPnpm(arguments_: readonly string[]): Promise<void> {
     const launch = this.#pnpmLaunch(arguments_)
     await runText(launch.executable, launch.arguments, {
-      cwd: this.#options.harnessDirectory
+      cwd: this.#options.harnessDirectory,
+      env: this.#pnpmEnvironment()
     })
   }
 
@@ -259,12 +365,14 @@ export class LauncherHarnessService {
     return this.switchVersion(commit)
   }
 
-  /** Starts exactly `pnpm dsh -- web --no-open` from the bundled Harness checkout. */
+  /**
+   * Starts `pnpm dsh -- web --no-open` from the bundled Harness checkout,
+   * adding `--port` only for an explicit fixed selection.
+   */
   async start(): Promise<LauncherHarnessState> {
-    const readiness = await this.#readiness()
-    if (readiness.kind !== 'ready') {
-      throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)
-    }
+    // The slot is claimed before the first await: readiness checks are async, so
+    // two quick activations would both pass a check placed after them and spawn
+    // two children on the same port.
     if (this.#launch.kind === 'running' || this.#launch.kind === 'starting') {
       throw new ManagedHarnessRuntimeError(
         'runtime.operation_in_progress',
@@ -272,17 +380,43 @@ export class LauncherHarnessService {
       )
     }
     this.#launch = { kind: 'starting' }
+    this.#pendingOutput = ''
+    this.#console = []
+    await this.#openLogStream()
+    this.#appendLauncherEvent('Checking the selected Harness checkout and launch settings.')
+    try {
+      await this.#loadPort()
+      const readiness = await this.#readiness()
+      if (readiness.kind !== 'ready') {
+        throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)
+      }
+    } catch (error) {
+      // A failed precondition must release the slot it just claimed.
+      this.#appendLauncherEvent(
+        `Launch preflight failed: ${error instanceof Error ? error.message : 'unknown error'}`
+      )
+      this.#closeLogStream()
+      this.#launch = { kind: 'stopped' }
+      throw error
+    }
     let child: ChildProcess
     try {
-      const launch = this.#pnpmLaunch(['dsh', '--', 'web', '--no-open'])
+      const launch = this.#pnpmLaunch([
+        ...launcherWebStartArguments(this.#options.diagnosticsPatchPath, this.#port)
+      ])
       child = spawn(launch.executable, launch.arguments, {
         cwd: this.#options.harnessDirectory,
-        env: { ...process.env },
+        env: this.#pnpmEnvironment(),
         shell: false,
+        detached: process.platform !== 'win32',
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe']
       })
     } catch (error) {
+      this.#appendLauncherEvent(
+        `DSH Web process could not be created: ${error instanceof Error ? error.message : 'unknown error'}`
+      )
+      this.#closeLogStream()
       this.#launch = {
         kind: 'failed',
         message: error instanceof Error ? error.message : 'DSH Web could not start.'
@@ -293,14 +427,28 @@ export class LauncherHarnessService {
       )
     }
     this.#child = child
-    this.#console = []
+    if (child.pid === undefined) {
+      this.#appendLauncherEvent('DSH Web child creation is pending its spawn result.')
+    } else {
+      this.#appendLauncherEvent(
+        `Started DSH Web child (pid=${String(child.pid)}); waiting for its URL announcement.`
+      )
+    }
     this.#launch = { kind: 'starting' }
     child.stdout?.on('data', (chunk: unknown) => this.#appendConsole('stdout', chunk))
     child.stderr?.on('data', (chunk: unknown) => this.#appendConsole('stderr', chunk))
     child.once('error', (error) => {
+      this.#appendLauncherEvent(`DSH Web child error: ${error.message}`)
       this.#launch = { kind: 'failed', message: error.message }
     })
     child.once('exit', (code, signal) => {
+      // The exit reason is the single most useful line when a launch fails, and
+      // it is not part of the child's own output, so the log records it too.
+      this.#appendLauncherEvent(
+        `DSH Web process exited (code=${String(code ?? 'none')} signal=${String(signal ?? 'none')}).`
+      )
+      this.#closeLogStream()
+      this.#child = undefined
       if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
         this.#launch = { kind: 'stopped' }
         return
@@ -310,12 +458,89 @@ export class LauncherHarnessService {
     return this.getState()
   }
 
-  #appendConsole(stream: LauncherHarnessConsoleEntry['stream'], chunk: unknown): void {
-    const text = String(chunk)
-    if (text.length === 0) return
+  /**
+   * Records the port the next launch will request.
+   *
+   * A running child keeps its current port: the setting takes effect on the
+   * next start, because `dsh web` binds its port at startup.
+   */
+  async setPort(port: LauncherHarnessPortSetting): Promise<LauncherHarnessState> {
+    await this.#loadPort()
+    this.#port = assertPortSetting(port)
+    await mkdir(nodePath.dirname(this.#options.launchPreferencesPath), { recursive: true })
+    await writeFile(
+      this.#options.launchPreferencesPath,
+      `${JSON.stringify({ format: LAUNCH_PREFERENCES_FORMAT, port: this.#port }, undefined, 2)}\n`,
+      'utf8'
+    )
+    return this.getState()
+  }
+
+  /** Reads the persisted port exactly once; an unreadable file keeps the automatic default. */
+  async #loadPort(): Promise<void> {
+    if (this.#portLoaded) return
+    this.#portLoaded = true
+    let text: string
+    try {
+      text = await readFile(this.#options.launchPreferencesPath, 'utf8')
+    } catch {
+      return
+    }
+    this.#port = parseLaunchPreferencesPort(text)
+  }
+
+  /**
+   * Starts a fresh log for each launch, so the file always describes the run the
+   * user is looking at rather than an accumulation of every past attempt.
+   */
+  async #openLogStream(): Promise<void> {
+    this.#closeLogStream()
+    await mkdir(nodePath.dirname(this.#options.launchLogPath), { recursive: true })
+    const stream = createWriteStream(this.#options.launchLogPath, { flags: 'w' })
+    // An unwritable log must not take down the launch it was meant to explain.
+    stream.on('error', () => {
+      this.#logStream = undefined
+    })
+    this.#logStream = stream
+    this.#appendLog(`[launcher] ${new Date().toISOString()} starting dsh web\n`)
+  }
+
+  #closeLogStream(): void {
+    this.#logStream?.end()
+    this.#logStream = undefined
+  }
+
+  #appendLog(text: string): void {
+    this.#logStream?.write(text)
+  }
+
+  /** Records one lifecycle event generated by the Launcher rather than the child process. */
+  #appendLauncherEvent(message: string): void {
+    const text = formatLauncherLifecycleEvent(message)
+    this.#appendLog(text)
+    this.#appendConsoleEntry('launcher', text)
+  }
+
+  /** Keeps the in-memory diagnostics bounded independently of the on-disk log. */
+  #appendConsoleEntry(stream: LauncherHarnessConsoleEntry['stream'], text: string): void {
     this.#console.push({ stream, occurredAt: Date.now(), text })
     if (this.#console.length > 1_000) this.#console.splice(0, this.#console.length - 1_000)
-    this.#observeAnnouncedUrl(text)
+  }
+
+  #appendConsole(stream: 'stdout' | 'stderr', chunk: unknown): void {
+    const text = String(chunk)
+    if (text.length === 0) return
+    // Written before the in-memory cap applies, so the file keeps what the
+    // console view discards.
+    this.#appendLog(text)
+    this.#appendConsoleEntry(classifyChildConsoleStream(stream, text), text)
+    // Child stdout arrives in arbitrary chunks that can split a line mid-URL, so
+    // the announcement is only read from lines known to be complete. Adopting a
+    // truncated URL would drop the session credential DSH puts in its query.
+    this.#pendingOutput += text
+    const lines = this.#pendingOutput.split('\n')
+    this.#pendingOutput = lines.pop() ?? ''
+    for (const line of lines) this.#observeAnnouncedUrl(line)
   }
 
   /**
@@ -328,9 +553,10 @@ export class LauncherHarnessService {
     const url = parseAnnouncedWebUrl(text)
     if (url === undefined) return
     this.#launch = { kind: 'running', url }
+    this.#appendLauncherEvent('DSH Web announced its loopback URL; runtime is ready.')
   }
 
-  /** Stops only the process this service created. */
+  /** Stops the exact DSH process tree this service created. */
   async stop(): Promise<LauncherHarnessState> {
     if (
       this.#child === undefined ||
@@ -338,14 +564,39 @@ export class LauncherHarnessService {
     ) {
       throw new ManagedHarnessRuntimeError('runtime.not_found', 'DSH Web is not running.')
     }
-    if (!this.#child.kill('SIGTERM')) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.child_unavailable',
-        'DSH Web process could not be stopped.'
-      )
-    }
+    this.#appendLauncherEvent('Stopping the managed DSH Web process tree.')
+    await this.#terminateChild(this.#child)
     this.#launch = { kind: 'stopped' }
     return this.getState()
+  }
+
+  /** Stops the active DSH tree before Electron relinquishes main-process ownership. */
+  async shutdown(): Promise<void> {
+    if (this.#child === undefined) return
+    if (this.#launch.kind !== 'running' && this.#launch.kind !== 'starting') return
+    this.#appendLauncherEvent('Launcher is shutting down the managed DSH Web process tree.')
+    await this.#terminateChild(this.#child)
+  }
+
+  /** Signals the owned pnpm process group and waits for its root child to exit. */
+  async #terminateChild(child: ChildProcess): Promise<void> {
+    const exited = waitForChildExit(child)
+    try {
+      terminateManagedProcessTree(child.pid, process.platform)
+    } catch (error) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.child_unavailable',
+        error instanceof Error ? error.message : 'Managed DSH process could not be stopped.'
+      )
+    }
+    try {
+      await exited
+    } catch (error) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.shutdown_timeout',
+        error instanceof Error ? error.message : 'Managed DSH process did not exit after SIGTERM.'
+      )
+    }
   }
 
   async #readiness(): Promise<
@@ -471,8 +722,8 @@ export class LauncherHarnessService {
     await this.#assertReadyCheckout()
     if (this.#launch.kind === 'running' || this.#launch.kind === 'starting') {
       throw new ManagedHarnessRuntimeError(
-        'runtime.operation_in_progress',
-        'Stop DSH Web before changing its version.'
+        'runtime.busy_running',
+        'Stop DSH Web before changing its version or plugins.'
       )
     }
   }
@@ -498,7 +749,33 @@ export class LauncherHarnessService {
       throw new Error('The native DSH web profile package record is invalid.')
     }
     const content = await readFile(packagePath, 'utf8')
-    return parseProfilePluginRecords(JSON.parse(content))
+    const views = parseProfilePluginRecords(JSON.parse(content))
+    // A `file:` dependency carries no git source in the manifest, so the remote
+    // is read from the checkout it points at. Resolution is best-effort: a
+    // plugin whose checkout is gone still lists with its name and version.
+    return Promise.all(views.map(async (view) => this.#withResolvedSource(view)))
+  }
+
+  /** Adds the git remote and local path for a `file:` dependency, when readable. */
+  async #withResolvedSource(view: LauncherHarnessPluginView): Promise<LauncherHarnessPluginView> {
+    const localPath = localPathOf(view.version)
+    if (localPath === undefined) {
+      const direct = gitUrlOf(view.version)
+      return direct === undefined ? view : { ...view, sourceUrl: direct }
+    }
+    try {
+      const remote = (
+        await runText(this.#options.gitExecutable, ['-C', localPath, 'remote', 'get-url', 'origin'])
+      ).trim()
+      const normalized = normalizeGitRemote(remote)
+      return {
+        ...view,
+        localPath,
+        ...(normalized === undefined ? {} : { sourceUrl: normalized })
+      }
+    } catch {
+      return { ...view, localPath }
+    }
   }
 }
 
@@ -509,6 +786,52 @@ export class LauncherHarnessService {
  * not dependencies are in-box defaults, while every dependency is a
  * user-installed plugin. A name that is both stays one user entry.
  */
+/** Persisted document identity for the Launcher-owned DSH launch preferences. */
+export const LAUNCH_PREFERENCES_FORMAT = 'dsh-launcher.launch-preferences' as const
+
+/**
+ * Admits only an automatic selection or an unprivileged integer port.
+ *
+ * The renderer is untrusted, so a rejected value never reaches the spawn
+ * arguments of the DSH child process.
+ */
+export function assertPortSetting(value: LauncherHarnessPortSetting): LauncherHarnessPortSetting {
+  if (value.mode === 'auto') return { mode: 'auto' }
+  if (
+    !Number.isSafeInteger(value.port) ||
+    value.port < LAUNCHER_HARNESS_MIN_PORT ||
+    value.port > LAUNCHER_HARNESS_MAX_PORT
+  ) {
+    throw new ManagedHarnessRuntimeError(
+      'runtime.input_invalid',
+      `A fixed DSH web port must be an integer between ${LAUNCHER_HARNESS_MIN_PORT} and ${LAUNCHER_HARNESS_MAX_PORT}.`
+    )
+  }
+  return { mode: 'fixed', port: value.port }
+}
+
+/** Reads a persisted port, falling back to automatic for any unusable document. */
+export function parseLaunchPreferencesPort(text: string): LauncherHarnessPortSetting {
+  let document: unknown
+  try {
+    document = JSON.parse(text)
+  } catch {
+    return { mode: 'auto' }
+  }
+  if (typeof document !== 'object' || document === null) return { mode: 'auto' }
+  const record = document as Record<string, unknown>
+  if (record.format !== LAUNCH_PREFERENCES_FORMAT) return { mode: 'auto' }
+  const port = record.port
+  if (typeof port !== 'object' || port === null) return { mode: 'auto' }
+  const candidate = port as Record<string, unknown>
+  if (candidate.mode !== 'fixed') return { mode: 'auto' }
+  try {
+    return assertPortSetting({ mode: 'fixed', port: candidate.port as number })
+  } catch {
+    return { mode: 'auto' }
+  }
+}
+
 export function parseProfilePluginRecords(value: unknown): readonly LauncherHarnessPluginView[] {
   if (!isRecord(value)) throw new Error('The native DSH web profile package record is invalid.')
   const dependencies = value.dependencies ?? {}
@@ -579,59 +902,58 @@ export function parseAnnouncedWebUrl(text: string): string | undefined {
   return parsed.toString()
 }
 
-async function assertDirectDirectory(directory: string): Promise<void> {
-  const metadata = await lstat(directory)
-  if (
-    metadata.isSymbolicLink() ||
-    !metadata.isDirectory() ||
-    (await realpath(directory)) !== directory
-  ) {
-    throw new Error('A direct directory is required.')
-  }
-}
-
-async function assertDirectRegularFile(filePath: string): Promise<void> {
-  const metadata = await lstat(filePath)
-  if (metadata.isSymbolicLink() || !metadata.isFile() || (await realpath(filePath)) !== filePath) {
-    throw new Error('A direct regular file is required.')
-  }
-}
-
-function runText(
-  executable: string,
-  arguments_: readonly string[],
-  options: SpawnOptions = {}
-): Promise<string> {
+/** Waits until one signalled child has definitely relinquished its listening sockets. */
+function waitForChildExit(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
   return new Promise((resolve, reject) => {
-    let child: ChildProcess
-    try {
-      child = spawn(executable, arguments_, {
-        ...options,
-        shell: false,
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe']
-      })
-    } catch (error) {
-      reject(error)
-      return
+    const timer = setTimeout(() => {
+      cleanup()
+      reject(new Error('Managed DSH process did not exit before the shutdown deadline.'))
+    }, MANAGED_DSH_SHUTDOWN_TIMEOUT_MILLISECONDS)
+    const cleanup = () => {
+      clearTimeout(timer)
+      child.removeListener('exit', onExit)
+      child.removeListener('error', onError)
     }
-    let stdout = ''
-    let stderr = ''
-    child.stdout?.on('data', (chunk: unknown) => {
-      stdout += String(chunk)
-    })
-    child.stderr?.on('data', (chunk: unknown) => {
-      stderr += String(chunk)
-    })
-    child.once('error', reject)
-    child.once('exit', (code, signal) => {
-      if (code === 0 && signal === null) {
-        resolve(stdout)
-        return
-      }
-      reject(new Error(stderr.slice(-4096)))
-    })
+    const onExit = () => {
+      cleanup()
+      resolve()
+    }
+    const onError = (error: Error) => {
+      cleanup()
+      reject(error)
+    }
+    child.once('exit', onExit)
+    child.once('error', onError)
   })
+}
+
+/** Formats one Launcher-owned lifecycle event for both the durable log and live Console view. */
+export function formatLauncherLifecycleEvent(message: string): string {
+  return `[launcher] ${message}\n`
+}
+
+/** Builds the exact DSH command, including Launcher-owned verbose logging for this child. */
+export function launcherWebStartArguments(
+  diagnosticsPatchPath: string,
+  port: LauncherHarnessPortSetting
+): readonly string[] {
+  return [
+    'dsh',
+    'web',
+    '--patch',
+    diagnosticsPatchPath,
+    '--no-open',
+    ...(port.mode === 'fixed' ? ['--port', String(port.port)] : [])
+  ]
+}
+
+/** Separates pnpm's one-line script echo from diagnostics written to standard error. */
+export function classifyChildConsoleStream(
+  stream: 'stdout' | 'stderr',
+  text: string
+): LauncherHarnessConsoleEntry['stream'] {
+  return stream === 'stderr' && /^\$\s+\S[^\r\n]*(?:\r?\n)?$/u.test(text) ? 'command' : stream
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -640,4 +962,36 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isMissing(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
+}
+
+/** Reads the local checkout path of a `file:` dependency specifier. */
+export function localPathOf(version: string): string | undefined {
+  if (!version.startsWith('file:')) return undefined
+  const value = version.slice('file:'.length)
+  return value.length === 0 ? undefined : value
+}
+
+/** Reads a git specifier that already names a remote directly. */
+export function gitUrlOf(version: string): string | undefined {
+  if (/^(?:git\+)?(?:https?|ssh):\/\//u.test(version) || version.startsWith('git@')) {
+    return normalizeGitRemote(version)
+  }
+  return undefined
+}
+
+/**
+ * Normalizes a git remote into a comparable, displayable form.
+ *
+ * SSH and HTTPS forms of the same GitHub repository must compare equal so an
+ * installed plugin can be matched against a catalog entry, whose records are
+ * always HTTPS.
+ */
+export function normalizeGitRemote(remote: string): string | undefined {
+  const trimmed = remote.trim().replace(/^git\+/u, '')
+  if (trimmed.length === 0) return undefined
+  const sshMatch = /^(?:ssh:\/\/)?git@([^:/]+)(?::\d+)?[:/](.+?)(?:\.git)?$/u.exec(trimmed)
+  if (sshMatch !== null) return `https://${sshMatch[1]}/${sshMatch[2]}`
+  const httpMatch = /^(https?:\/\/[^/]+\/.+?)(?:\.git)?$/u.exec(trimmed)
+  if (httpMatch !== null) return httpMatch[1].replace(/^http:/u, 'https:')
+  return undefined
 }

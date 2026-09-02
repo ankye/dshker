@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import launcherLogo from '../../../../resources/dsh-launcher-logo-launcher.png'
 import type { AppRouteId, NavIconId } from '../../shared/navigation/routes'
 import RouteIcon from './RouteIcon.vue'
 
@@ -26,7 +27,16 @@ const emit = defineEmits<{
 <template>
   <aside class="sidebar" :data-collapsed="collapsed" aria-label="Launcher navigation">
     <div class="sidebar-heading">
-      <p class="nav-group-label">{{ collapsed ? '' : title }}</p>
+      <!--
+        The product identity lives here rather than in a full-width bar, so the
+        whole area right of the navigation belongs to the active route.
+      -->
+      <p class="sidebar-brand" :title="title">
+        <span class="sidebar-brand-mark" aria-hidden="true">
+          <img :src="launcherLogo" alt="" />
+        </span>
+        <span v-if="!collapsed" class="sidebar-brand-text">{{ title }}</span>
+      </p>
       <button
         class="sidebar-toggle"
         type="button"
