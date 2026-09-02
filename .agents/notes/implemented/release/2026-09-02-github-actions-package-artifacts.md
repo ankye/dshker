@@ -22,6 +22,10 @@ the selected Git executable is available. Later packaging verifies the staged
 manifest and resource hashes only; it must not hard-code a POSIX Git path, so
 the same tagged workflow can build on Windows.
 
+Each installer build records its complete command output. A failed build emits
+its final diagnostics as a check annotation and uploads the complete log with
+the workflow artifacts, so a hosted-runner difference remains diagnosable.
+
 ## Consequences
 
 The workflow never creates a GitHub Release from an unsigned package. Code

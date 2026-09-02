@@ -61,7 +61,7 @@ jobs:
         include:
           - name: macOS arm64
             os: macos-14
-            command: npm run dist:mac-arm64
+            script: dist:mac-arm64
             artifact: dsh-launcher-macos-arm64
             pattern: |
               release/*.dmg
@@ -69,7 +69,7 @@ jobs:
               release/checksums.txt
           - name: Windows x64
             os: windows-latest
-            command: npm run dist:win-x64
+            script: dist:win-x64
             artifact: dsh-launcher-windows-x64
             pattern: |
               release/*.exe
@@ -103,10 +103,30 @@ jobs:
           npm run seed:verify
 
       - name: Build unsigned installer
-        run: ${{ matrix.command }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $logPath = Join-Path $PWD 'release/ci-build.log'
+          npm run ${{ matrix.script }} *>&1 | Tee-Object -FilePath $logPath
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            $tail = (Get-Content -LiteralPath $logPath -Tail 80) -join "`n"
+            $escapedTail = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Installer build output::$escapedTail"
+            exit $exitCode
+          }
 
       - name: Verify generated metadata
         run: npm run release:verify
+
+      - name: Upload build diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-diagnostics
+          path: release/ci-build.log
+          if-no-files-found: error
+          retention-days: 14
 
       # A repository without signing and notarization credentials must not
       # publish a GitHub Release. These are traceable build artifacts only.
