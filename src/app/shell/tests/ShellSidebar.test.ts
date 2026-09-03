@@ -15,7 +15,7 @@ function mountSidebar() {
       items,
       activeRoute: 'launch',
       collapsed: false,
-      title: 'DSH Launcher',
+      title: 'DSHKer Launcher',
       collapseLabel: 'Collapse',
       expandLabel: 'Expand'
     }

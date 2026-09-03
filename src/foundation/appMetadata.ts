@@ -16,7 +16,7 @@ export async function getBootstrapInfo(
   if (!desktopApi) {
     return apiFail(
       'bootstrap.bridge_unavailable',
-      'The DSH Launcher desktop bridge is unavailable.'
+      'The DSHKer Launcher desktop bridge is unavailable.'
     )
   }
 

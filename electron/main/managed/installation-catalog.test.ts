@@ -89,7 +89,7 @@ function tagInstallationCatalog(): ManagedInstallationCatalog {
         installationId: 'installation_main',
         workspaceId: 'workspace_main',
         toolchainId: 'toolchain_main',
-        remote: createGitNamedRemote('origin', 'https://github.com/ankye/dsh-launcher.git'),
+        remote: createGitNamedRemote('origin', 'https://github.com/ankye/dshker.git'),
         selection: selectGitTag('v1.0.0'),
         commit,
         observedReference: 'refs/tags/v1.0.0',

@@ -8,7 +8,7 @@ describe('launcher locales', () => {
   it('has a complete Chinese bootstrap catalog', () => {
     const t = createTranslator(INITIAL_LOCALE)
 
-    expect(t('app.title')).toBe('DSH Launcher')
+    expect(t('app.title')).toBe('DSHKer Launcher')
     expect(t('bootstrap.title')).toContain('目录')
   })
 

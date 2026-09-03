@@ -1,4 +1,4 @@
-/** The four mutually exclusive filesystem ownership roles of DSH Launcher. */
+/** The four mutually exclusive filesystem ownership roles of DSHKer Launcher. */
 export const MANAGED_ROOT_KINDS = ['harness', 'plugins', 'presets', 'settings'] as const
 
 /** One independently registered root role. */

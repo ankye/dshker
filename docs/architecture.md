@@ -1,6 +1,6 @@
 # Architecture
 
-DSH Launcher is the desktop owner of DeepSeek Harness installations. Its application package contains only the launcher; managed Harness source, plugins, configuration, and Launcher settings are registered as separate roots. The existing Harness-owned `$DSH_HOME` or `~/.dsh` is not a Launcher root and remains stable across worktree revisions.
+DSHKer Launcher is the desktop owner of DeepSeek Harness installations. Its application package contains only the launcher; managed Harness source, plugins, configuration, and Launcher settings are registered as separate roots. The existing Harness-owned `$DSH_HOME` or `~/.dsh` is not a Launcher root and remains stable across worktree revisions.
 
 ## Process split
 

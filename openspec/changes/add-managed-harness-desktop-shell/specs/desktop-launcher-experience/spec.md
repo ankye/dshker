@@ -64,7 +64,7 @@ The Launch page SHALL show the Launcher splash region, the selected launch revis
 
 ### Requirement: Launch page explains the selected product version and trusted source links
 
-The Launch page SHALL identify the compiled Launcher version, explain that the selected DSH commit below is the launchable core identity, and state that native `~/.dsh` remains DSH-owned. It SHALL provide named actions for only the fixed DSH Launcher and DeepSeek Harness GitHub repositories. The Renderer SHALL NOT submit an arbitrary URL to Electron or open an unapproved destination.
+The Launch page SHALL identify the compiled Launcher version, explain that the selected DSH commit below is the launchable core identity, and state that native `~/.dsh` remains DSH-owned. It SHALL provide named actions for only the fixed DSHKer Launcher and DeepSeek Harness GitHub repositories. The Renderer SHALL NOT submit an arbitrary URL to Electron or open an unapproved destination.
 
 #### Scenario: User opens a source repository
 
@@ -77,6 +77,16 @@ The Launch page SHALL identify the compiled Launcher version, explain that the s
 - **WHEN** the operating system refuses the selected fixed source URL
 - **THEN** the Launch page reports the failed action
 - **AND** it does not substitute another URL or browser surface
+
+### Requirement: Product display name preserves persistent Launcher identities
+
+The desktop window, packaged application, release artifact names, product documentation, and fixed source action SHALL identify the product as DSHKer Launcher and use the `ankye/dshker` repository. The existing `dsh-launcher` application id, bundle id, IPC namespace, preference keys, resource names, and `~/.dshlauncher` directory SHALL remain unchanged.
+
+#### Scenario: Existing Launcher user installs the renamed application
+
+- **WHEN** an existing user starts DSHKer Launcher
+- **THEN** the window and product pages show DSHKer Launcher
+- **AND** the application continues to use the existing Launcher-owned state and native DSH ownership boundary
 
 ### Requirement: Version management uses three distinct tabs
 

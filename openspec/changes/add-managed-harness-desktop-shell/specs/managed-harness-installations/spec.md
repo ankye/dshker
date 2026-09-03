@@ -66,7 +66,7 @@ The Core version view SHALL show the HTTPS origin, current branch, current compl
 #### Scenario: User activates a listed version
 
 - **WHEN** the user selects Update, a branch, or a version row while DSH Web is stopped
-- **THEN** the Launcher checks out the selected fetched commit, installs its locked dependencies, and builds its DSH CLI before marking it launchable
+- **THEN** the Launcher runs `git clean -xdf` in the verified Launcher-owned Harness checkout, checks out the selected fetched commit, installs its locked dependencies, and builds its DSH CLI before marking it launchable
 - **AND** the selected row becomes the current version only after those operations complete
 
 ### Requirement: Curated plugin catalog is a parsed Launcher-owned source checkout
@@ -81,7 +81,7 @@ The Install extension view SHALL use `https://github.com/awesome-dsh-plugin/awes
 
 ### Requirement: Managed worktrees are retained and mutation-protected
 
-The launcher SHALL block switching, updating, deleting, or retargeting a worktree that is active, starting, stopping, unresolved after a crash, dirty, tampered with, or still referenced by a retained rollback record. Explicit deletion of an inactive worktree SHALL require proof of exact target containment and absence of all active references.
+The launcher SHALL block switching, updating, deleting, or retargeting a worktree that is active, starting, stopping, unresolved after a crash, tampered with, or still referenced by a retained rollback record. Before an explicit switch or update rebuilds a verified Launcher-owned Harness checkout, it SHALL run `git clean -xdf` in that checkout to remove untracked and ignored dependency and build residue. It SHALL NOT reset tracked files or run cleanup in an unmanaged repository, native DSH home, plugin directory, preset directory, or settings directory. Explicit deletion of an inactive worktree SHALL require proof of exact target containment and absence of all active references.
 
 #### Scenario: User attempts to switch while a runtime is active
 
@@ -91,9 +91,9 @@ The launcher SHALL block switching, updating, deleting, or retargeting a worktre
 
 #### Scenario: Worktree has unexpected changes
 
-- **WHEN** verification detects a dirty or tampered managed worktree
-- **THEN** the launcher blocks activation and destructive cleanup
-- **AND** it does not reset, clean, rebase, stash, or repair the worktree automatically
+- **WHEN** a user activates a listed version in a verified Launcher-owned checkout with untracked or ignored build residue
+- **THEN** the launcher runs `git clean -xdf` before checkout and dependency installation
+- **AND** tracked files remain untouched and no cleanup occurs outside that checkout
 
 ### Requirement: Git, Node.js, and pnpm are explicit registered executables
 

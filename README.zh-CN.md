@@ -1,12 +1,12 @@
-# DSH Launcher
+# DSHKer Launcher
 
-[English](README.md) · [使用说明](docs/usage.zh-CN.md) · [产品截图](docs/screenshots.md) · [GitHub Actions 构建](https://github.com/ankye/dsh-launcher/actions/workflows/package.yml)
+[English](README.md) · [使用说明](docs/usage.zh-CN.md) · [产品截图](docs/screenshots.md) · [GitHub Actions 构建](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
-DSH Launcher 是面向 macOS 与 Windows 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面启动器。它负责准备 Launcher 自己管理的 Harness 内核目录、查看与切换 Git 提交、通过 DSH 原生命令管理扩展、启动 DSH Web，并将启动日志集中展示。
+DSHKer Launcher 是面向 macOS 与 Windows 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面启动器。它负责准备 Launcher 自己管理的 Harness 内核目录、查看与切换 Git 提交、通过 DSH 原生命令管理扩展、启动 DSH Web，并将启动日志集中展示。
 
 Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HOME` 或 `~/.dsh` 始终归 DeepSeek Harness 所有；切换内核版本时会继续沿用。
 
-![DSH Launcher 启动页](docs/assets/screenshots/launch.png)
+![DSHKer Launcher 启动页](docs/assets/screenshots/launch.png)
 
 ## 可以做什么
 
@@ -20,11 +20,11 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 
 ## 安装
 
-1. 打开最新一次成功的 [打包工作流](https://github.com/ankye/dsh-launcher/actions/workflows/package.yml)。
+1. 打开最新一次成功的 [打包工作流](https://github.com/ankye/dshker/actions/workflows/package.yml)。
 2. 下载对应平台的 Artifact：
-   - **macOS Apple Silicon**：`dsh-launcher-macos-arm64`（`.dmg`）
-   - **Windows x64**：`dsh-launcher-windows-x64`（`.exe`）
-3. 安装后启动 **DSH Launcher**。
+   - **macOS Apple Silicon**：`dshker-launcher-macos-arm64`（`.dmg`）
+   - **Windows x64**：`dshker-launcher-windows-x64`（`.exe`）
+3. 安装后启动 **DSHKer Launcher**。
 
 GitHub Actions 当前提供的是未签名构建产物，保留 14 天。macOS 可能需要在 Finder 中右键选择“打开”，Windows 可能显示 SmartScreen 提示。请只安装来自本仓库、且已核对 `checksums.txt` 的产物；签名与 macOS 公证属于独立发布流程。
 
@@ -82,5 +82,5 @@ npm run build:electron
 
 ## 开源地址
 
-- [DSH Launcher](https://github.com/ankye/dsh-launcher)
+- [DSHKer Launcher](https://github.com/ankye/dshker)
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)

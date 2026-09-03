@@ -1,6 +1,6 @@
 ## Context
 
-See [proposal.md](proposal.md) for the motivation. `dsh-launcher` is an independent Electron, Vite, Vue, and TypeScript product. It manages DeepSeek Harness source revisions but does not embed Harness source or load Harness packages inside Electron's main or renderer processes.
+See [proposal.md](proposal.md) for the motivation. DSHKer Launcher (repository `dsh-launcher`) is an independent Electron, Vite, Vue, and TypeScript product. It manages DeepSeek Harness source revisions but does not embed Harness source or load Harness packages inside Electron's main or renderer processes.
 
 DeepSeek Harness already resolves its native home from an inherited non-empty `DSH_HOME` or, otherwise, `~/.dsh`. That location contains Harness-owned durable state and must remain stable when the launcher selects a different Git revision. The launcher therefore cannot make a per-worktree `.dsh`, derive a replacement home, or migrate native Harness state.
 
@@ -42,6 +42,10 @@ The platform bootstrap locator contains only the Launcher Settings location. Rel
 
 Alternative considered: derive an additional runtime root and put `.dsh` beneath it. Rejected because version changes would create divergent Harness identities and contradict normal `DSH_HOME` resolution.
 
+### Decision: Display name changes without changing persistent identities
+
+The product is displayed as DSHKer Launcher in the application window, installer, documentation, release artifacts, and fixed source link. The existing `dsh-launcher` app id, bundle id, IPC channel namespace, local preference keys, resource names, and `~/.dshlauncher` directory remain stable. Renaming any of those persistent identifiers would split existing user state or require an explicit migration, which is outside this display-name change.
+
 ### Decision: Native Harness home remains external and unchanged
 
 At child spawn, the launcher passes no private descriptor input. It does not set, clear, override, translate, inspect, or migrate `DSH_HOME`. The child inherits normal Harness resolution: a valid inherited `DSH_HOME`, otherwise `~/.dsh`.
@@ -55,6 +59,8 @@ Alternative considered: use one home per worktree. Rejected because it would for
 For a selected remote, the launcher creates its own managed mirror under the Harness root. A user-selected branch, tag, or commit is resolved from that mirror to one exact SHA. The launcher materializes a detached worktree for that SHA and records the observed ref separately as display and update metadata.
 
 Ref updates never rewrite an active worktree. A rewritten branch or tag remains a visible observation; moving to its new SHA requires explicit selection. Unmanaged repositories can be inspected only through a separately granted read-only capability and are never checked out, reset, cleaned, rebased, stashed, pulled, or used as launcher mirror storage.
+
+Before an explicit version activation rebuilds the Launcher-owned Harness checkout, the launcher runs `git clean -xdf` in that verified checkout. This removes untracked and ignored dependency and build residue that can make the next selected revision fail its locked install or build. It does not reset tracked files, and it never runs in an unmanaged repository, native DSH home, plugin directory, preset directory, or settings directory.
 
 Alternative considered: maintain a mutable clone and switch branches in place. Rejected because a branch update can alter the running source and makes rollback and ownership hard to prove.
 

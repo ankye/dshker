@@ -14,6 +14,10 @@ import {
   type LauncherHarnessVersionView
 } from '../../../src/shared/contracts'
 import { ManagedHarnessRuntimeError } from './runtime-errors'
+import {
+  cleanLauncherHarnessCheckout,
+  launcherProfilePluginArguments
+} from './launcher-harness-commands'
 import { terminateManagedProcessTree } from './process-tree'
 import { assertDirectDirectory, assertDirectRegularFile, runText } from './process-utils'
 
@@ -240,7 +244,7 @@ export class LauncherHarnessService {
       )
     }
     await this.#assertReadyForVersionOperation()
-    await this.#runPluginCommand(['dsh', '--', 'plugin', '--profile', 'web', 'add', source])
+    await this.#runPluginCommand(launcherProfilePluginArguments('add', source))
     return this.getState()
   }
 
@@ -261,7 +265,7 @@ export class LauncherHarnessService {
         'Only a user-installed plugin can be removed.'
       )
     }
-    await this.#runPluginCommand(['dsh', '--', 'plugin', '--profile', 'web', 'remove', name])
+    await this.#runPluginCommand(launcherProfilePluginArguments('remove', name))
     return this.getState()
   }
 
@@ -317,6 +321,7 @@ export class LauncherHarnessService {
       commit,
       'origin/master'
     ])
+    await cleanLauncherHarnessCheckout(this.#options.gitExecutable, this.#options.harnessDirectory)
     await runText(this.#options.gitExecutable, [
       '-C',
       this.#options.harnessDirectory,
@@ -326,6 +331,7 @@ export class LauncherHarnessService {
     ])
     await this.#runPnpm(['install', '--frozen-lockfile'])
     await this.#runPnpm(['run', 'build'])
+    await this.#runPluginCommand(launcherProfilePluginArguments('update'))
     return this.getState()
   }
 
@@ -779,13 +785,6 @@ export class LauncherHarnessService {
   }
 }
 
-/**
- * Derives the plugin-layer view from one parsed DSH `web` profile manifest.
- *
- * `dsh.profile.bundles` names every active layer; template bundles that are
- * not dependencies are in-box defaults, while every dependency is a
- * user-installed plugin. A name that is both stays one user entry.
- */
 /** Persisted document identity for the Launcher-owned DSH launch preferences. */
 export const LAUNCH_PREFERENCES_FORMAT = 'dsh-launcher.launch-preferences' as const
 
@@ -832,6 +831,7 @@ export function parseLaunchPreferencesPort(text: string): LauncherHarnessPortSet
   }
 }
 
+/** Derives the plugin-layer view from one parsed native DSH web-profile manifest. */
 export function parseProfilePluginRecords(value: unknown): readonly LauncherHarnessPluginView[] {
   if (!isRecord(value)) throw new Error('The native DSH web profile package record is invalid.')
   const dependencies = value.dependencies ?? {}

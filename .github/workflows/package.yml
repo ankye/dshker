@@ -62,7 +62,7 @@ jobs:
           - name: macOS arm64
             os: macos-14
             script: dist:mac-arm64
-            artifact: dsh-launcher-macos-arm64
+            artifact: dshker-launcher-macos-arm64
             pattern: |
               release/*.dmg
               release/release-manifest.json
@@ -70,7 +70,7 @@ jobs:
           - name: Windows x64
             os: windows-latest
             script: dist:win-x64
-            artifact: dsh-launcher-windows-x64
+            artifact: dshker-launcher-windows-x64
             pattern: |
               release/*.exe
               release/release-manifest.json

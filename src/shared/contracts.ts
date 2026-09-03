@@ -41,7 +41,7 @@ export const DESKTOP_IPC_CHANNELS = {
 export const APP_METADATA = {
   appId: 'dsh-launcher',
   bundleId: 'com.ankye.dsh-launcher',
-  name: 'DSH Launcher',
+  name: 'DSHKer Launcher',
   version: '0.1.5'
 } as const
 

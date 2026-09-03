@@ -100,7 +100,7 @@ async function createDshSourceFixture(sourceDirectory) {
   }
   await git(sourceDirectory, ['init', '--quiet'])
   await git(sourceDirectory, ['config', 'user.email', 'seed-test@example.invalid'])
-  await git(sourceDirectory, ['config', 'user.name', 'DSH Launcher Seed Test'])
+  await git(sourceDirectory, ['config', 'user.name', 'DSHKer Launcher Seed Test'])
   await git(sourceDirectory, [
     'remote',
     'add',

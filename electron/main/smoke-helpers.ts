@@ -60,7 +60,7 @@ export async function waitForRendererEvidence(
         `(() => ({
           shellMounted: document.documentElement.dataset.appShellMounted === 'true',
           shellElement: Boolean(document.querySelector('.app-shell')),
-          rendererText: document.body?.innerText?.includes('DSH Launcher') === true,
+          rendererText: document.body?.innerText?.includes('DSHKer Launcher') === true,
           preload: typeof window.dshLauncher === 'object' && window.dshLauncher !== null,
           errors: []
         }))()`

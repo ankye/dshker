@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ankye.github.io/dsh-launcher/schemas/bundled-seed.schema.json",
-  "title": "DSH Launcher bundled seed",
+  "title": "DSHKer Launcher bundled seed",
   "type": "object",
   "additionalProperties": false,
   "required": ["format", "version", "remoteUrl", "harness", "pluginGeneration", "resources"],

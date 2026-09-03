@@ -234,7 +234,7 @@ describe('managed bare-mirror publication', () => {
     await mkdir(namespacePath)
     await hostGit(sourcePath, ['init'])
     await hostGit(sourcePath, ['config', 'user.email', 'launcher-test@example.test'])
-    await hostGit(sourcePath, ['config', 'user.name', 'DSH Launcher Test'])
+    await hostGit(sourcePath, ['config', 'user.name', 'DSHKer Launcher Test'])
     await writeFile(nodePath.join(sourcePath, 'README.md'), 'bundled commit\n')
     await hostGit(sourcePath, ['add', 'README.md'])
     await hostGit(sourcePath, ['commit', '-m', 'initial'])

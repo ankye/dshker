@@ -29,6 +29,6 @@ None.
 
 ## Impact
 
-- Primary repository: `dsh-launcher`, which owns Electron UI, typed preload IPC, root registration, Git worktrees, external-tool registration, source download records, runtime supervision, and release packaging.
+- Primary repository: `dsh-launcher`, which owns the DSHKer Launcher Electron UI, typed preload IPC, root registration, Git worktrees, external-tool registration, source download records, runtime supervision, and release packaging.
 - DeepSeek Harness remains an unmodified externally managed application.
 - The renderer never receives arbitrary filesystem, shell, process, executable, or secret authority. Main-process operations require explicit registered identities and fail closed when identity or readiness cannot be proven.

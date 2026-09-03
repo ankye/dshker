@@ -1,6 +1,6 @@
 # Design
 
-DSH Launcher uses a dense, dark operational presentation derived from the
+DSHKer Launcher uses a dense, dark operational presentation derived from the
 supplied reference hierarchy, not its screenshots or product semantics.
 
 The token system owns color, spacing, typography, layout dimensions, focus, and

@@ -1,3 +1,8 @@
+import { execFile } from 'node:child_process'
+import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import nodePath from 'node:path'
+import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import {
   LAUNCH_PREFERENCES_FORMAT,
@@ -12,6 +17,16 @@ import {
   classifyChildConsoleStream,
   launcherWebStartArguments
 } from './launcher-harness-service'
+import {
+  cleanLauncherHarnessCheckout,
+  launcherProfilePluginArguments
+} from './launcher-harness-commands'
+
+const execFileAsync = promisify(execFile)
+
+async function hostGit(cwd: string, arguments_: readonly string[]): Promise<void> {
+  await execFileAsync('git', [...arguments_], { cwd, encoding: 'utf8' })
+}
 
 describe('formatLauncherLifecycleEvent', () => {
   it('marks Launcher lifecycle diagnostics separately from child output', () => {
@@ -49,6 +64,46 @@ describe('launcherWebStartArguments', () => {
       '--port',
       '3088'
     ])
+  })
+})
+
+describe('launcherProfilePluginArguments', () => {
+  it('uses the DSH profile forwarder without a pnpm argument separator', () => {
+    expect(launcherProfilePluginArguments('update')).toEqual([
+      'dsh',
+      'plugin',
+      '--profile',
+      'web',
+      'update'
+    ])
+  })
+})
+
+describe('cleanLauncherHarnessCheckout', () => {
+  it('removes ignored and untracked build residue while preserving tracked source', async () => {
+    const root = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-clean-'))
+    try {
+      await hostGit(root, ['init'])
+      await hostGit(root, ['config', 'user.email', 'launcher-test@example.test'])
+      await hostGit(root, ['config', 'user.name', 'DSHKer Launcher Test'])
+      await writeFile(nodePath.join(root, '.gitignore'), 'node_modules/\n', 'utf8')
+      await writeFile(nodePath.join(root, 'tracked-source.txt'), 'source\n', 'utf8')
+      await hostGit(root, ['add', '.gitignore', 'tracked-source.txt'])
+      await hostGit(root, ['commit', '-m', 'initial'])
+      await mkdir(nodePath.join(root, 'node_modules'))
+      await writeFile(nodePath.join(root, 'node_modules', 'stale.txt'), 'stale\n', 'utf8')
+      await writeFile(nodePath.join(root, 'generated.txt'), 'generated\n', 'utf8')
+
+      await cleanLauncherHarnessCheckout('git', root)
+
+      await expect(access(nodePath.join(root, 'node_modules'))).rejects.toThrow()
+      await expect(access(nodePath.join(root, 'generated.txt'))).rejects.toThrow()
+      await expect(readFile(nodePath.join(root, 'tracked-source.txt'), 'utf8')).resolves.toBe(
+        'source\n'
+      )
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })
 

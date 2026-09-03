@@ -4,7 +4,7 @@
 
 - Adopted the Electron, Vite, Vue, and TypeScript desktop foundation.
 - Replaced template identity, seeded content, and VFS service composition with
-  the DSH Launcher bootstrap shell.
+  the DSHKer Launcher bootstrap shell.
 - Added explicit Git, Node.js, and pnpm executable registration with shell-free
   identity probes.
 - Added managed Git mirrors, exact-SHA detached worktrees, and explicit branch,

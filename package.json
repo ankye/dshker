@@ -1,5 +1,5 @@
 {
-  "name": "@ankye/dsh-launcher",
+  "name": "@ankye/dshker-launcher",
   "version": "0.1.5",
   "description": "Managed desktop shell for DeepSeek Harness.",
   "author": "ankye",
@@ -82,7 +82,7 @@
   },
   "build": {
     "appId": "com.ankye.dsh-launcher",
-    "productName": "DSH Launcher",
+    "productName": "DSHKer Launcher",
     "icon": "resources/dsh-launcher-logo-launcher.png",
     "asar": true,
     "directories": {
@@ -116,7 +116,7 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "dsh-launcher-${version}-${os}-${arch}.${ext}"
+      "artifactName": "dshker-launcher-${version}-${os}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,

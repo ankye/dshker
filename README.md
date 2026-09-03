@@ -1,12 +1,12 @@
-# DSH Launcher
+# DSHKer Launcher
 
-[简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [GitHub Actions builds](https://github.com/ankye/dsh-launcher/actions/workflows/package.yml)
+[简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [GitHub Actions builds](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
-DSH Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows. It prepares a Launcher-owned Harness checkout, lets you inspect and switch Git commits, manages DSH extensions through the ordinary DSH CLI, starts DSH Web, and keeps the launch log in one place.
+DSHKer Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows. It prepares a Launcher-owned Harness checkout, lets you inspect and switch Git commits, manages DSH extensions through the ordinary DSH CLI, starts DSH Web, and keeps the launch log in one place.
 
 The Launcher never replaces, moves, or resets native DSH state. Your existing `$DSH_HOME` or `~/.dsh` remains owned by DeepSeek Harness and is reused when you change the selected core version.
 
-![DSH Launcher launch screen](docs/assets/screenshots/launch.png)
+![DSHKer Launcher launch screen](docs/assets/screenshots/launch.png)
 
 ## What you can do
 
@@ -20,11 +20,11 @@ The Launcher never replaces, moves, or resets native DSH state. Your existing `$
 
 ## Install
 
-1. Open the [latest successful package workflow](https://github.com/ankye/dsh-launcher/actions/workflows/package.yml).
+1. Open the [latest successful package workflow](https://github.com/ankye/dshker/actions/workflows/package.yml).
 2. Download the artifact for your platform:
-   - **macOS Apple Silicon**: `dsh-launcher-macos-arm64` (`.dmg`)
-   - **Windows x64**: `dsh-launcher-windows-x64` (`.exe`)
-3. Install the application and start **DSH Launcher**.
+   - **macOS Apple Silicon**: `dshker-launcher-macos-arm64` (`.dmg`)
+   - **Windows x64**: `dshker-launcher-windows-x64` (`.exe`)
+3. Install the application and start **DSHKer Launcher**.
 
 Current GitHub Actions artifacts are unsigned build artifacts and expire after 14 days. macOS may require **Open** from Finder's context menu, and Windows may show SmartScreen. Install only an artifact you obtained from this repository and verified against its included checksum. Signed and notarized public releases are a separate delivery step.
 
@@ -90,5 +90,5 @@ See [docs/release.md](docs/release.md) for the release handoff and [docs/ci.md](
 
 ## Open source
 
-- [DSH Launcher](https://github.com/ankye/dsh-launcher)
+- [DSHKer Launcher](https://github.com/ankye/dshker)
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)

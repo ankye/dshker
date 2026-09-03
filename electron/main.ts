@@ -106,7 +106,7 @@ function registerHarnessShutdown(service: LauncherHarnessService): void {
       app.quit()
     } catch (error) {
       shutdownInProgress = false
-      console.error('DSH Launcher could not stop its managed DSH process tree.', error)
+      console.error('DSHKer Launcher could not stop its managed DSH process tree.', error)
     }
   }
   app.on('before-quit', (event) => {
@@ -254,13 +254,13 @@ if (IS_SMOKE_TEST) {
       app.exit(0)
     })
     .catch(async (error: unknown) => {
-      console.error('DSH Launcher smoke test failed.', error)
+      console.error('DSHKer Launcher smoke test failed.', error)
       await writeSmokeFailure(error)
       app.exit(1)
     })
 } else {
   void start().catch((error: unknown) => {
-    console.error('DSH Launcher could not start.', error)
+    console.error('DSHKer Launcher could not start.', error)
     app.exit(1)
   })
 }

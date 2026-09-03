@@ -1,14 +1,14 @@
-# DSH Launcher usage guide
+# DSHKer Launcher usage guide
 
 ## Before you begin
 
 Install a macOS arm64 or Windows x64 artifact from the repository's GitHub Actions package workflow. The current artifacts are unsigned build evidence, not a signed public release. Verify `checksums.txt` before opening an installer and keep your native DSH data backed up as you normally would.
 
-DSH Launcher does not take ownership of `$DSH_HOME` or `~/.dsh`. Do not move that directory into `~/.dshlauncher`, and do not delete it when switching versions.
+DSHKer Launcher does not take ownership of `$DSH_HOME` or `~/.dsh`. Do not move that directory into `~/.dshlauncher`, and do not delete it when switching versions.
 
 ## Start DSH for the first time
 
-1. Open **DSH Launcher**.
+1. Open **DSHKer Launcher**.
 2. Stay on **Launch** while the packaged Harness seed prepares in the background. The splash page remains interactive and the start button stays disabled until the core is ready.
 3. When the selected version card appears, review its DSH commit and choose **Launch**.
 4. The application changes to **Console** so you can follow the exact command and its real-time output.
@@ -50,5 +50,5 @@ Run contains browser-like tabs for the DSH Web address announced by the managed 
 
 Use the source controls on Launch or these links:
 
-- [DSH Launcher issues and source](https://github.com/ankye/dsh-launcher)
+- [DSHKer Launcher issues and source](https://github.com/ankye/dshker)
 - [DeepSeek Harness source](https://github.com/deepseek-ai/deepseek-harness)

@@ -1,7 +1,7 @@
 schema: spec-driven
 
 context: |
-  dsh-launcher is an independent macOS and Windows desktop product registered under
+  DSHKer Launcher is an independent macOS and Windows desktop product registered under
   desktop_workspace/apps/dsh-launcher. Its reference scaffold is the workspace-owned
   Electron, Vite, Vue 3, and TypeScript desktop template.
   The product manages DeepSeek Harness installations without embedding Harness source in

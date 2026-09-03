@@ -1,6 +1,6 @@
-# DSH Launcher
+# DSHKer Launcher
 
-DSH Launcher is an independent Electron application registered as the
+DSHKer Launcher is an independent Electron application registered as the
 \`desktop_workspace/apps/dsh-launcher\` submodule. It manages DeepSeek Harness
 installations without embedding a Harness checkout in the application package.
 

@@ -2,12 +2,12 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import App from './App.vue'
 
-describe('DSH Launcher shell', () => {
+describe('DSHKer Launcher shell', () => {
   it('renders the operational shell without inheriting template sample content', async () => {
     const wrapper = mount(App)
     await flushPromises()
 
-    expect(wrapper.text()).toContain('DSH Launcher')
+    expect(wrapper.text()).toContain('DSHKer Launcher')
     expect(wrapper.text()).not.toContain('Atlas paintover set')
   })
 

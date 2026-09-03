@@ -1,14 +1,14 @@
-# DSH Launcher 使用说明
+# DSHKer Launcher 使用说明
 
 ## 开始前
 
 请从仓库的 GitHub Actions 打包工作流下载 macOS arm64 或 Windows x64 Artifact。当前 Artifact 是未签名构建证据，不是已签名的公开发行包；打开安装程序前请核对 `checksums.txt`，并按自己的常规方式备份 DSH 原生数据。
 
-DSH Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.dshlauncher`，也不要通过删除它来切换版本。
+DSHKer Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.dshlauncher`，也不要通过删除它来切换版本。
 
 ## 第一次启动 DSH
 
-1. 打开 **DSH Launcher**。
+1. 打开 **DSHKer Launcher**。
 2. 保持在**启动**页，等待内置 Harness 在后台准备完成。开屏页仍可操作，准备完成前启动按钮保持不可用。
 3. 出现启动版本卡片后，确认 DSH 提交并点击**一键启动**。
 4. 应用会切换到**控制台**，实时展示精确启动命令与输出。
@@ -50,5 +50,5 @@ DSH Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.dshl
 
 可在启动页直接打开源码，或访问：
 
-- [DSH Launcher 源码与问题反馈](https://github.com/ankye/dsh-launcher)
+- [DSHKer Launcher 源码与问题反馈](https://github.com/ankye/dshker)
 - [DeepSeek Harness 源码](https://github.com/deepseek-ai/deepseek-harness)

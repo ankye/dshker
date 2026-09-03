@@ -8,7 +8,7 @@ export const SUPPORTED_LOCALES = [
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number]['locale']
 
 const zhCN = {
-  'app.title': 'DSH Launcher',
+  'app.title': 'DSHKer Launcher',
   'nav.application': '应用',
   'nav.launch': '一键启动',
   'nav.advanced': '高级选项',
@@ -86,7 +86,7 @@ const zhCN = {
     '注册 Harness、插件、配置和设置四个独立目录；Harness 保持使用原有的 ~/.dsh。',
   'bootstrap.next.installation': '显式选择 Git、Node、pnpm 和 Harness 精确提交。',
   'bootstrap.next.runtime': '仅通过精确 worktree 的 desktop profile 启动 Harness。',
-  'about.title': '关于 DSH Launcher',
+  'about.title': '关于 DSHKer Launcher',
   'about.description': '应用标识、桌面桥接版本和发布范围。',
   'about.app': '应用',
   'about.version': '版本',
@@ -103,7 +103,7 @@ const zhCN = {
   'launch.title': '启动',
   'launch.description': '选择一个已受管的 DSH 版本后启动标准 Web 服务。',
   'launch.hero.kicker': 'DEEPSEEK HARNESS',
-  'launch.hero.title': 'DSH - 启动器',
+  'launch.hero.title': 'DSHKer Launcher',
   'launch.hero.description': '管理版本，保留你的原生 `.dsh` 身份与设置。',
   'launch.introduction.kicker': 'DESKTOP WORKBENCH',
   'launch.introduction.title': '一个入口，管理并启动 DSH',
@@ -116,7 +116,7 @@ const zhCN = {
   'launch.introduction.nativeHomeValue': '保留 ~/.dsh',
   'launch.openSource.title': '开源项目',
   'launch.openSource.description': '在 GitHub 查看发行记录、问题反馈与完整源代码。',
-  'launch.openSource.launcher': 'DSH Launcher 源码',
+  'launch.openSource.launcher': 'DSHKer Launcher 源码',
   'launch.openSource.harness': 'DeepSeek Harness 源码',
   'launch.openSource.failure': '无法在系统浏览器中打开开源地址。',
   'launch.version': '启动版本',
@@ -435,7 +435,7 @@ const zhCN = {
 export type MessageKey = keyof typeof zhCN
 
 const enUS: Record<MessageKey, string> = {
-  'app.title': 'DSH Launcher',
+  'app.title': 'DSHKer Launcher',
   'nav.application': 'Application',
   'nav.launch': 'Launch',
   'nav.advanced': 'Advanced',
@@ -517,7 +517,7 @@ const enUS: Record<MessageKey, string> = {
     'Register separate Harness, plugin, configuration, and settings roots; Harness keeps its existing ~/.dsh.',
   'bootstrap.next.installation': 'Select Git, Node, pnpm, and an exact Harness commit explicitly.',
   'bootstrap.next.runtime': 'Start Harness only through the exact worktree desktop profile.',
-  'about.title': 'About DSH Launcher',
+  'about.title': 'About DSHKer Launcher',
   'about.description': 'Application identity, desktop bridge version, and release scope.',
   'about.app': 'Application',
   'about.version': 'Version',
@@ -535,7 +535,7 @@ const enUS: Record<MessageKey, string> = {
   'launch.title': 'Launch',
   'launch.description': 'Start the standard DSH Web service from a managed DSH version.',
   'launch.hero.kicker': 'DEEPSEEK HARNESS',
-  'launch.hero.title': 'DSH Launcher',
+  'launch.hero.title': 'DSHKer Launcher',
   'launch.hero.description':
     'Manage versions while keeping your native `.dsh` identity and settings.',
   'launch.introduction.kicker': 'DESKTOP WORKBENCH',
@@ -550,7 +550,7 @@ const enUS: Record<MessageKey, string> = {
   'launch.openSource.title': 'Open source',
   'launch.openSource.description':
     'Visit GitHub for releases, issue tracking, and the complete source code.',
-  'launch.openSource.launcher': 'DSH Launcher source',
+  'launch.openSource.launcher': 'DSHKer Launcher source',
   'launch.openSource.harness': 'DeepSeek Harness source',
   'launch.openSource.failure': 'The source link could not be opened in the system browser.',
   'launch.version': 'Launch version',

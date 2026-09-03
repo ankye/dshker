@@ -1,7 +1,7 @@
 import { LAUNCHER_EXTERNAL_LINK_IDS, type LauncherExternalLinkId } from '../../src/shared/contracts'
 
 const EXTERNAL_LINK_URLS: Readonly<Record<LauncherExternalLinkId, string>> = {
-  'launcher-repository': 'https://github.com/ankye/dsh-launcher',
+  'launcher-repository': 'https://github.com/ankye/dshker',
   'harness-repository': 'https://github.com/deepseek-ai/deepseek-harness'
 }
 
