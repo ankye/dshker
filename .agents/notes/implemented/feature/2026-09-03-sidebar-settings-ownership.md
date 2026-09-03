@@ -1,0 +1,5 @@
+# Sidebar sequence and settings ownership
+
+The persistent navigation now follows the operating sequence: Launch, Controller, Version management, Token usage, Settings, and Run. Launch hands users to Controller when a child process starts, so Controller immediately follows Launch. Run uses a browser-window-plus-globe icon because it is the tabbed DSH Web surface, not an execution command. Expanded navigation uses compact square icon-and-label cards; collapsed navigation is an icon rail whose buttons retain accessible names. A larger floating lower-left chevron cycles expanded cards, the icon rail, and a hidden sidebar. It remains visible in the hidden state, so no shortcut or implicit recovery path is required.
+
+The standalone Advanced route was removed. Settings now separates DSH settings from Launcher settings. DSH settings own the Web port the Launcher forwards at the next `dsh web` launch and explicitly preserve native `~/.dsh`. Launcher settings own appearance, language, and Launcher-managed roots and workspaces. This rearranges ownership views without moving, recreating, or modifying native DSH data.

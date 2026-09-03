@@ -2,6 +2,7 @@ import { readdir, readFile, stat, writeFile } from 'node:fs/promises'
 import nodePath from 'node:path'
 import { createZstdDecompress } from 'node:zlib'
 import type {
+  DailyModelTokenUsage,
   SessionTokenUsage,
   TokenUsageRequest,
   TokenUsageState
@@ -71,7 +72,7 @@ export interface SessionUsageReaderOptions {
 }
 
 /** Persisted document identity for the folded-session cache. */
-export const SESSION_USAGE_CACHE_FORMAT = 'dsh-launcher.session-usage-cache' as const
+export const SESSION_USAGE_CACHE_FORMAT = 'dsh-launcher.session-usage-cache.v2' as const
 
 /** One cached session, keyed by the log facts that change when it grows. */
 interface CachedSession {
@@ -80,6 +81,10 @@ interface CachedSession {
   /** Compressed byte offset already folded, so a grown log resumes from here. */
   readonly consumedBytes: number
   readonly folded: FoldedSession
+  /** Per-day/model totals already folded from this session log. */
+  readonly dailyByModel: readonly DailyModelTokenUsage[]
+  /** Most recent model header, carried when an append contains the next usage report. */
+  readonly currentModel?: string
   /** Carry-over needed to continue the replacement rule across a resume. */
   readonly last: LastReport | null
 }
@@ -89,6 +94,14 @@ interface LastReport {
   readonly turn: number
   readonly step: number
   readonly buckets: UsageBuckets
+  /** Original daily group, needed when a final message replaces its stream report. */
+  readonly dailyGroup?: DailyModelGroup
+}
+
+/** Internal key for a daily token bucket. */
+interface DailyModelGroup {
+  readonly date: string
+  readonly model: string
 }
 
 /** The four disjoint billing buckets DSH's token meter records. */
@@ -105,6 +118,52 @@ const zeroBuckets = (): UsageBuckets => ({
   cacheReadTokens: 0,
   cacheWriteTokens: 0
 })
+
+/** Adds one set of buckets to a map keyed by the local day and exact model. */
+function addDailyBuckets(
+  buckets: Map<string, DailyModelTokenUsage>,
+  group: DailyModelGroup,
+  change: UsageBuckets,
+  direction: 1 | -1
+): void {
+  const key = `${group.date}\u0000${group.model}`
+  const previous = buckets.get(key) ?? { ...group, ...zeroBuckets() }
+  const next = {
+    ...previous,
+    uncachedInputTokens: previous.uncachedInputTokens + direction * change.uncachedInputTokens,
+    outputTokens: previous.outputTokens + direction * change.outputTokens,
+    cacheReadTokens: previous.cacheReadTokens + direction * change.cacheReadTokens,
+    cacheWriteTokens: previous.cacheWriteTokens + direction * change.cacheWriteTokens
+  }
+  if (
+    next.uncachedInputTokens === 0 &&
+    next.outputTokens === 0 &&
+    next.cacheReadTokens === 0 &&
+    next.cacheWriteTokens === 0
+  ) {
+    buckets.delete(key)
+    return
+  }
+  buckets.set(key, next)
+}
+
+/** Normalizes a persisted daily group into the exact public aggregate fields. */
+function admitDailyModelUsage(value: unknown): DailyModelTokenUsage | undefined {
+  if (!isRecord(value)) return undefined
+  const { date, model, uncachedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens } =
+    value
+  if (
+    typeof date !== 'string' ||
+    typeof model !== 'string' ||
+    !isUsageCount(uncachedInputTokens) ||
+    !isUsageCount(outputTokens) ||
+    !isUsageCount(cacheReadTokens) ||
+    !isUsageCount(cacheWriteTokens)
+  ) {
+    return undefined
+  }
+  return { date, model, uncachedInputTokens, outputTokens, cacheReadTokens, cacheWriteTokens }
+}
 
 /**
  * Reads DSH's persisted session logs and reports token usage per session.
@@ -151,10 +210,13 @@ export class SessionUsageReader {
           ) {
             nextCache.set(entry.filePath, cached)
             return {
-              ...cached.folded,
-              project: entry.project,
-              updatedAt: stats.mtimeMs,
-              sizeBytes: stats.size
+              session: {
+                ...cached.folded,
+                project: entry.project,
+                updatedAt: stats.mtimeMs,
+                sizeBytes: stats.size
+              },
+              dailyByModel: cached.dailyByModel
             }
           }
           // A grown log resumes at the offset already folded; anything else
@@ -166,22 +228,34 @@ export class SessionUsageReader {
             compressed,
             resumable?.consumedBytes ?? 0
           )
-          const { folded, last } = foldSessionLog(
+          const { folded, last, dailyByModel, currentModel } = foldSessionLog(
             text,
-            resumable === undefined ? undefined : { folded: resumable.folded, last: resumable.last }
+            resumable === undefined
+              ? undefined
+              : {
+                  folded: resumable.folded,
+                  dailyByModel: resumable.dailyByModel,
+                  currentModel: resumable.currentModel,
+                  last: resumable.last
+                }
           )
           nextCache.set(entry.filePath, {
             sizeBytes: stats.size,
             updatedAt: stats.mtimeMs,
             consumedBytes,
             folded,
+            dailyByModel,
+            ...(currentModel === undefined ? {} : { currentModel }),
             last
           })
           return {
-            ...folded,
-            project: entry.project,
-            updatedAt: stats.mtimeMs,
-            sizeBytes: stats.size
+            session: {
+              ...folded,
+              project: entry.project,
+              updatedAt: stats.mtimeMs,
+              sizeBytes: stats.size
+            },
+            dailyByModel
           }
         } catch {
           // One corrupt or partially written log must not hide the others.
@@ -190,7 +264,15 @@ export class SessionUsageReader {
       })
     )
 
-    const sessions = results.filter((entry): entry is SessionTokenUsage => entry !== undefined)
+    const readable = results.filter(
+      (
+        entry
+      ): entry is {
+        readonly session: SessionTokenUsage
+        readonly dailyByModel: readonly DailyModelTokenUsage[]
+      } => entry !== undefined
+    )
+    const sessions = readable.map((entry) => entry.session)
     sessions.sort((left, right) => right.updatedAt - left.updatedAt)
     const totals = sessions.reduce<UsageBuckets>(
       (accumulated, session) => ({
@@ -201,12 +283,22 @@ export class SessionUsageReader {
       }),
       zeroBuckets()
     )
+    const dailyBuckets = new Map<string, DailyModelTokenUsage>()
+    for (const entry of readable) {
+      for (const daily of entry.dailyByModel) {
+        addDailyBuckets(dailyBuckets, daily, daily, 1)
+      }
+    }
+    const dailyByModel = [...dailyBuckets.values()].sort(
+      (left, right) => right.date.localeCompare(left.date) || left.model.localeCompare(right.model)
+    )
     await this.#writeCache(nextCache)
     return {
       kind: 'ready',
       sessions: sessions.slice(0, limit),
       totalSessions: sessions.length,
       totals,
+      dailyByModel,
       unreadableSessions: results.length - sessions.length
     }
   }
@@ -280,7 +372,7 @@ export class SessionUsageReader {
 /** Admits one cached session record, rejecting any malformed shape. */
 function admitCachedSession(value: unknown): CachedSession | undefined {
   if (!isRecord(value)) return undefined
-  const { sizeBytes, updatedAt, consumedBytes, folded, last } = value
+  const { sizeBytes, updatedAt, consumedBytes, folded, dailyByModel, currentModel, last } = value
   if (
     typeof sizeBytes !== 'number' ||
     typeof updatedAt !== 'number' ||
@@ -293,15 +385,25 @@ function admitCachedSession(value: unknown): CachedSession | undefined {
     typeof folded.cacheWriteTokens !== 'number' ||
     typeof folded.turns !== 'number' ||
     typeof folded.steps !== 'number' ||
-    typeof folded.createdAt !== 'number'
+    typeof folded.createdAt !== 'number' ||
+    !Array.isArray(dailyByModel) ||
+    (currentModel !== undefined && typeof currentModel !== 'string')
   ) {
     return undefined
+  }
+  const admittedDailyByModel: DailyModelTokenUsage[] = []
+  for (const entry of dailyByModel) {
+    const admitted = admitDailyModelUsage(entry)
+    if (admitted === undefined) return undefined
+    admittedDailyByModel.push(admitted)
   }
   return {
     sizeBytes,
     updatedAt,
     consumedBytes,
     folded: folded as unknown as FoldedSession,
+    dailyByModel: admittedDailyByModel,
+    ...(typeof currentModel === 'string' ? { currentModel } : {}),
     last: isRecord(last) ? (last as unknown as LastReport) : null
   }
 }
@@ -325,8 +427,18 @@ export type FoldedSession = Omit<SessionTokenUsage, 'project' | 'updatedAt' | 's
  */
 export function foldSessionLog(
   text: string,
-  seed?: { readonly folded: FoldedSession; readonly last: LastReport | null }
-): { folded: FoldedSession; last: LastReport | null } {
+  seed?: {
+    readonly folded: FoldedSession
+    readonly dailyByModel: readonly DailyModelTokenUsage[]
+    readonly currentModel?: string
+    readonly last: LastReport | null
+  }
+): {
+  folded: FoldedSession
+  dailyByModel: readonly DailyModelTokenUsage[]
+  currentModel?: string
+  last: LastReport | null
+} {
   const totals =
     seed === undefined
       ? zeroBuckets()
@@ -340,10 +452,15 @@ export function foldSessionLog(
   let sessionId = seed?.folded.sessionId ?? ''
   let createdAt = seed?.folded.createdAt ?? 0
   let model: string | undefined = seed?.folded.model
+  let currentModel = seed?.currentModel ?? model
   let provider: string | undefined = seed?.folded.provider
   let firstPrompt: string | undefined = seed?.folded.firstPrompt
   let turns = seed?.folded.turns ?? 0
   let steps = seed?.folded.steps ?? 0
+  const dailyBuckets = new Map<string, DailyModelTokenUsage>()
+  for (const daily of seed?.dailyByModel ?? []) {
+    addDailyBuckets(dailyBuckets, daily, daily, 1)
+  }
 
   for (const line of text.split('\n')) {
     if (line.length === 0) continue
@@ -369,11 +486,14 @@ export function foldSessionLog(
       steps += 1
       continue
     }
-    if (type === 'request/header' && model === undefined) {
+    if (type === 'request/header') {
       const config = ((data.header ?? {}) as Record<string, unknown>).config
       if (typeof config === 'object' && config !== null) {
         const record = config as Record<string, unknown>
-        if (typeof record.model === 'string') model = record.model
+        if (typeof record.model === 'string') {
+          model ??= record.model
+          currentModel = record.model
+        }
         if (typeof record.provider === 'string') provider = record.provider
       }
       continue
@@ -401,12 +521,19 @@ export function foldSessionLog(
       totals.outputTokens -= previous.outputTokens
       totals.cacheReadTokens -= previous.cacheReadTokens
       totals.cacheWriteTokens -= previous.cacheWriteTokens
+      if (last?.dailyGroup !== undefined) {
+        addDailyBuckets(dailyBuckets, last.dailyGroup, previous, -1)
+      }
     }
     totals.uncachedInputTokens += report.buckets.uncachedInputTokens
     totals.outputTokens += report.buckets.outputTokens
     totals.cacheReadTokens += report.buckets.cacheReadTokens
     totals.cacheWriteTokens += report.buckets.cacheWriteTokens
-    last = { turn: report.turn, step: report.step, buckets: report.buckets }
+    const dailyGroup = usageDailyGroup(event.time, currentModel)
+    if (dailyGroup !== undefined) {
+      addDailyBuckets(dailyBuckets, dailyGroup, report.buckets, 1)
+    }
+    last = { turn: report.turn, step: report.step, buckets: report.buckets, dailyGroup }
   }
 
   return {
@@ -420,7 +547,27 @@ export function foldSessionLog(
       ...(firstPrompt === undefined ? {} : { firstPrompt }),
       ...totals
     },
+    dailyByModel: [...dailyBuckets.values()].sort(
+      (left, right) => right.date.localeCompare(left.date) || left.model.localeCompare(right.model)
+    ),
+    ...(currentModel === undefined ? {} : { currentModel }),
     last: last ?? null
+  }
+}
+
+/** Returns the local day and active model for one timestamped DSH usage event. */
+function usageDailyGroup(
+  time: unknown,
+  currentModel: string | undefined
+): DailyModelGroup | undefined {
+  if (typeof time !== 'number' || !Number.isFinite(time) || time < 0) return undefined
+  const date = new Date(time)
+  const year = date.getFullYear()
+  const month = date.getMonth() + 1
+  const day = date.getDate()
+  return {
+    date: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    model: currentModel ?? 'unknown'
   }
 }
 
@@ -457,6 +604,10 @@ function usageReport(
 /** Admits only a finite non-negative count; anything else contributes zero. */
 function countOf(value: unknown): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0
+}
+
+function isUsageCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0
 }
 
 function bucketsEqual(left: UsageBuckets, right: UsageBuckets): boolean {

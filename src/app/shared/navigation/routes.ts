@@ -1,11 +1,10 @@
 export const APPLICATION_ROUTES = [
   { id: 'launch', labelKey: 'nav.launch', icon: 'play' },
-  { id: 'advanced', labelKey: 'nav.advanced', icon: 'sliders' },
-  { id: 'versions', labelKey: 'nav.versions', icon: 'layers' },
   { id: 'controller', labelKey: 'nav.controller', icon: 'terminal' },
+  { id: 'versions', labelKey: 'nav.versions', icon: 'layers' },
   { id: 'usage', labelKey: 'nav.usage', icon: 'gauge' },
   { id: 'settings', labelKey: 'nav.settings', icon: 'gear' },
-  { id: 'runtime', labelKey: 'nav.runtime', icon: 'zap' }
+  { id: 'runtime', labelKey: 'nav.runtime', icon: 'browser' }
 ] as const
 
 export type AppRouteId = (typeof APPLICATION_ROUTES)[number]['id']

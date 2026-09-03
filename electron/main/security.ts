@@ -1,4 +1,5 @@
-import { BrowserWindow, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { app, BrowserWindow, Menu, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { runtimeContextMenuTemplate, type RuntimeContextMenuLocale } from './runtime-context-menu'
 
 function devRendererOrigin(): string | undefined {
   const url = process.env.ELECTRON_RENDERER_URL
@@ -36,6 +37,11 @@ function isLoopbackRuntimeUrl(rawUrl: string): boolean {
   return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]'
 }
 
+/** Matches the native menu language to the operating-system locale when available. */
+function runtimeContextMenuLocale(): RuntimeContextMenuLocale {
+  return app.getLocale().toLowerCase().startsWith('zh') ? 'zh-CN' : 'en-US'
+}
+
 /**
  * Constrains every <webview> the run page attaches.
  *
@@ -57,6 +63,14 @@ export function installWebviewPolicy(contents: WebContents): void {
     guest.setWindowOpenHandler(() => ({ action: 'deny' }))
     guest.on('will-navigate', (event, targetUrl) => {
       if (!isLoopbackRuntimeUrl(targetUrl)) event.preventDefault()
+    })
+    guest.on('context-menu', (event, params) => {
+      event.preventDefault()
+      Menu.buildFromTemplate(runtimeContextMenuTemplate(guest, runtimeContextMenuLocale())).popup({
+        window: BrowserWindow.fromWebContents(contents) ?? undefined,
+        x: params.x,
+        y: params.y
+      })
     })
   })
 }

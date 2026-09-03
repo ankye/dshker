@@ -9,6 +9,8 @@ import {
   assertPortSetting,
   parseAnnouncedWebUrl,
   parseLaunchPreferencesPort,
+  parseManagedGitSource,
+  githubTreePluginUrl,
   parseProfilePluginRecords,
   normalizeGitRemote,
   localPathOf,
@@ -75,6 +77,18 @@ describe('launcherProfilePluginArguments', () => {
       '--profile',
       'web',
       'update'
+    ])
+  })
+
+  it('removes installed packages offline so removal never waits for a registry request', () => {
+    expect(launcherProfilePluginArguments('remove', 'dsh-example')).toEqual([
+      'dsh',
+      'plugin',
+      '--profile',
+      'web',
+      'remove',
+      'dsh-example',
+      '--config.offline=true'
     ])
   })
 })
@@ -176,6 +190,51 @@ describe('parseProfilePluginRecords', () => {
     expect(() => parseProfilePluginRecords({ dependencies: ['nope'] })).toThrow()
     expect(() => parseProfilePluginRecords({ dsh: { profile: { bundles: [42] } } })).toThrow()
     expect(() => parseProfilePluginRecords('nope')).toThrow()
+  })
+})
+
+describe('parseManagedGitSource', () => {
+  it('clones a direct HTTPS repository and installs its root package', () => {
+    expect(parseManagedGitSource('https://github.com/ankye/dsh-client-vision.git')).toEqual({
+      cloneUrl: 'https://github.com/ankye/dsh-client-vision.git',
+      branch: undefined,
+      packagePath: []
+    })
+  })
+
+  it('turns a curated GitHub package directory into one clone and child package path', () => {
+    expect(
+      parseManagedGitSource(
+        'https://github.com/ankye/dsh-client-vision/tree/main/packages/tool-vision'
+      )
+    ).toEqual({
+      cloneUrl: 'https://github.com/ankye/dsh-client-vision.git',
+      branch: 'main',
+      packagePath: ['packages', 'tool-vision']
+    })
+  })
+
+  it('rejects a GitHub tree URL that does not name a package directory', () => {
+    expect(() =>
+      parseManagedGitSource('https://github.com/ankye/dsh-client-vision/tree/main')
+    ).toThrow('GitHub plugin source must name a package directory')
+  })
+})
+
+describe('githubTreePluginUrl', () => {
+  it('derives a package tree URL from a local checkout remote and child path', () => {
+    expect(
+      githubTreePluginUrl('https://github.com/ankye/dsh-client-vision', 'main', [
+        'packages',
+        'tool-vision'
+      ])
+    ).toBe('https://github.com/ankye/dsh-client-vision/tree/main/packages/tool-vision')
+  })
+
+  it('rejects a repository-root plugin because adoption cannot invent its package location', () => {
+    expect(() =>
+      githubTreePluginUrl('https://github.com/ankye/dsh-client-vision', 'main', [])
+    ).toThrow('Only a GitHub HTTPS plugin source')
   })
 })
 

@@ -68,15 +68,13 @@
   font-size: var(--type-section);
 }
 
-.launch-version-list {
-  display: grid;
-  gap: var(--space-3);
+.launch-workbench {
   margin-top: var(--space-4);
 }
 
 .launch-introduction {
   display: grid;
-  grid-template-columns: minmax(13rem, 1fr) minmax(17rem, 1.35fr) minmax(17rem, 1.15fr);
+  grid-template-columns: minmax(13rem, 1fr) minmax(14rem, 1fr) minmax(17rem, 1.15fr);
   gap: var(--space-4);
   align-items: start;
   margin-top: var(--space-4);
@@ -166,6 +164,8 @@
  * card does not have. */
 .launch-version {
   width: 100%;
+  min-height: 14rem;
+  align-items: flex-start;
   color: var(--color-text);
   text-align: left;
 }
@@ -176,13 +176,18 @@
   min-width: 0;
 }
 
+.launch-version-identity h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-section);
+}
+
 .launch-version[data-selected='true'] {
   border-color: var(--color-accent);
   box-shadow: inset 0 0 0 1px var(--color-accent);
 }
 
 .launch-version-label,
-.launch-version-meta,
 .controller-row p {
   margin: 0;
   color: var(--color-text-muted);
@@ -196,19 +201,70 @@
   overflow-wrap: anywhere;
 }
 
-.launch-version-actions {
-  display: flex;
+.launch-version-manage {
   flex: 0 0 auto;
+}
+
+.launch-footer-action {
+  display: flex;
+  width: 100%;
+  min-width: 0;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-3);
 }
 
-/* Sized to stay the route's clear primary action now that it sits inside the
- * version card rather than in a detached footer. */
+.launch-footer-context {
+  display: grid;
+  max-width: min(24rem, 36vw);
+  margin-right: auto;
+  gap: 0.125rem;
+}
+
+.launch-footer-context strong {
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-semibold);
+}
+
+.launch-footer-context span {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .launch-primary-action {
-  min-width: 9rem;
-  min-height: var(--size-control-lg);
-  font-size: var(--type-body);
+  display: inline-flex;
+  min-width: 12rem;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-text) 18%);
+  border-radius: var(--radius);
+  box-shadow: 0 0.75rem 1.75rem color-mix(in srgb, var(--color-accent), transparent 78%);
+  font-size: var(--type-section);
+  letter-spacing: 0.02em;
+}
+
+.launch-primary-action:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+/* The same primary control becomes a healthy-process control once it owns a
+ * running child. The stop glyph keeps the next action explicit. */
+.launch-primary-action[data-running='true'] {
+  background: var(--color-success);
+}
+
+.launch-primary-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.launch-source-action {
+  background: transparent;
 }
 
 .launch-status {
@@ -295,9 +351,8 @@
   min-width: 0;
 }
 
-.version-tabs-row .core-version-tabs {
+.version-tabs-row .version-toolbar-actions {
   flex: 0 0 auto;
-  align-items: center;
   align-self: center;
   margin-bottom: var(--space-2);
 }
@@ -346,6 +401,10 @@
   padding-top: var(--space-3);
 }
 
+.catalog-tab-panel {
+  padding-top: var(--space-4);
+}
+
 .version-toolbar-actions {
   display: flex;
   flex: 0 0 auto;
@@ -354,7 +413,21 @@
   gap: var(--space-2);
 }
 
+.version-toolbar-group {
+  display: flex;
+  align-items: center;
+}
+
+.version-toolbar-group + .version-toolbar-group {
+  margin-left: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-border);
+}
+
 .version-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-height: var(--size-control-sm);
   padding: 0 var(--space-3);
   border: 1px solid var(--color-border);
@@ -363,6 +436,20 @@
   color: var(--color-text);
   cursor: pointer;
   font-size: var(--type-caption);
+}
+
+.version-action-button--icon {
+  gap: var(--space-2);
+}
+
+.version-action-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
 }
 
 .version-action-button:hover:not(:disabled) {
@@ -400,6 +487,44 @@
   white-space: nowrap;
 }
 
+.version-scope-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.version-scope-row .version-meta-line {
+  flex: 1 1 auto;
+}
+
+.core-scope-actions {
+  flex: 0 0 auto;
+  margin-top: var(--space-2);
+}
+
+.version-tab-summary {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.version-tab-summary strong {
+  flex: 0 0 auto;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.version-tab-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .core-branch-picker {
   display: flex;
   align-items: center;
@@ -422,6 +547,10 @@
   gap: var(--space-1);
 }
 
+.core-version-tabs--content {
+  margin-top: var(--space-3);
+}
+
 .core-version-tab {
   min-width: 5.5rem;
   min-height: var(--size-control-sm);
@@ -442,6 +571,7 @@
   color: var(--color-text);
 }
 
+.source-panel h3,
 .source-panel h3,
 .settings-panel h3 {
   margin: 0;
@@ -592,27 +722,60 @@
   font-family: var(--font-mono);
 }
 
-/* Scrolls sideways rather than wrapping into a tall block that would push the
- * table off screen; the catalog has dozens of categories. */
-.catalog-category-strip {
+/* Categories are a persistent vertical rail: browsing a long plugin catalog
+ * should not require horizontal tag scrolling. */
+.catalog-workspace {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.catalog-category-sidebar {
   display: flex;
-  gap: var(--space-2);
-  overflow-x: auto;
-  padding-bottom: var(--space-1);
-  overscroll-behavior-x: contain;
-  scrollbar-width: thin;
+  min-height: 0;
+  flex-direction: column;
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--color-border);
+}
+
+.catalog-category-heading {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+}
+
+.catalog-category-list {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.catalog-results-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .catalog-category-tab {
-  flex: 0 0 auto;
+  width: 100%;
   min-height: var(--size-control-sm);
   padding: 0 var(--space-3);
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
   background: transparent;
   color: var(--color-text-muted);
   font-family: inherit;
   font-size: var(--type-caption);
+  text-align: left;
   white-space: nowrap;
   cursor: pointer;
 }
@@ -623,9 +786,9 @@
 }
 
 .catalog-category-tab[data-active='true'] {
-  border-color: var(--color-accent);
-  background: var(--color-accent);
-  color: var(--color-on-accent);
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 35%);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+  color: var(--color-text);
   font-weight: var(--font-weight-medium);
 }
 
@@ -763,15 +926,13 @@
   color: var(--color-text-muted);
 }
 
-/* Catalog descriptions run long; three lines fit the common entry without
- * letting one row dominate the table. */
+/* Catalog descriptions remain readable in place; the user must not infer a
+ * plugin's purpose from a clipped summary. */
 .catalog-desc-cell {
   max-width: 34rem;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
   color: var(--color-text-muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .catalog-url-cell {
@@ -976,14 +1137,230 @@
   color: var(--color-danger);
 }
 
-.settings-panel h3 {
-  margin-top: var(--space-5);
+/* Settings route: a constrained content column of grouped sections. */
+
+.settings-panel {
+  max-width: 56rem;
 }
 
+.settings-tab-panel {
+  display: grid;
+  gap: var(--space-5);
+  margin-top: var(--space-3);
+}
+
+/* A settings section pairs a titled header (title + optional description and a
+ * right-hand meta chip) with a body of controls. It mirrors the statistics
+ * header pattern rather than inventing a new surface. */
+.settings-section {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-section-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.settings-section-title {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.settings-section-title h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-semibold);
+}
+
+.settings-section-title p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.settings-section-meta {
+  flex: 0 0 auto;
+  margin-bottom: 0.25rem;
+  padding: 0.2rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--type-label);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.settings-section-body {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.settings-dsh-port-form {
+  gap: var(--space-4);
+}
+
+.settings-section-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* Port mode choice: two selectable cards; the chosen one is marked by both an
+ * accent border and a custom radio dot, so selection is never colour-only. */
+.settings-port-modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.settings-port-mode {
+  display: flex;
+  min-height: 5rem;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  cursor: pointer;
+  transition:
+    border-color var(--motion-instant) var(--ease-standard),
+    background var(--motion-instant) var(--ease-standard);
+}
+
+.settings-port-mode:hover {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 45%);
+}
+
+.settings-port-mode[data-selected='true'] {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent), var(--color-surface) 92%);
+}
+
+.settings-port-mode:has(input:focus-visible) {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.settings-port-mode input {
+  position: absolute;
+  opacity: 0;
+}
+
+/* Custom radio dot replaces the native control but stays a labelled control. */
+.settings-port-mode::before {
+  flex: 0 0 auto;
+  width: 0.875rem;
+  height: 0.875rem;
+  margin-top: 0.2rem;
+  border: 1.5px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  content: '';
+}
+
+.settings-port-mode[data-selected='true']::before {
+  border-color: var(--color-accent);
+  background: radial-gradient(circle, var(--color-accent) 0 35%, transparent 45%);
+}
+
+.settings-port-mode-copy {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.settings-port-mode-copy strong {
+  color: var(--color-text);
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-port-mode-copy small {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  line-height: 1.45;
+}
+
+.settings-port-mode[data-selected='true'] .settings-port-mode-copy strong {
+  color: var(--color-accent);
+}
+
+/* Port field and its helper text; the whole detail block recedes in auto mode. */
+.settings-port-detail {
+  display: grid;
+  gap: var(--space-2);
+  transition: opacity var(--motion-instant) var(--ease-standard);
+}
+
+.settings-port-detail[data-inactive='true'] {
+  opacity: 0.55;
+}
+
+.settings-port-field {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 18rem;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.settings-port-field input {
+  min-height: var(--size-control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-port-field input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.settings-port-field input:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.settings-port-error {
+  margin: 0;
+  color: var(--color-danger);
+  font-size: var(--type-caption);
+}
+
+.settings-port-hint,
+.settings-dsh-unavailable {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+/* Governance note sits below the section as a quiet callout. */
+.settings-dsh-ownership {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-left: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+
+/* Appearance and management rows. */
 .settings-list {
   display: grid;
   gap: var(--space-2);
-  margin-top: var(--space-3);
 }
 
 .settings-row {
@@ -994,36 +1371,20 @@
   gap: var(--space-5);
   padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   background: var(--color-surface-raised);
 }
 
-.settings-row span {
+.settings-row-copy {
   display: grid;
-  gap: var(--space-1);
-}
-
-.settings-row small {
-  color: var(--color-text-muted);
-}
-
-/* The path and its copy affordance travel together; the path is the part that
- * shrinks. */
-.settings-row-path-line {
-  display: flex;
   min-width: 0;
-  align-items: center;
   gap: var(--space-1);
 }
 
-/* Registered filesystem path: selectable, and truncated rather than wrapped
- * across three lines. The full value stays available via `title` and copy. */
-.settings-row-path {
-  overflow: hidden;
+.settings-row-copy strong {
+  color: var(--color-text);
+}
+
+.settings-row-copy small {
   color: var(--color-text-muted);
-  font-family: var(--font-mono);
-  font-size: var(--type-caption);
-  text-overflow: ellipsis;
-  user-select: text;
-  white-space: nowrap;
 }

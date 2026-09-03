@@ -70,14 +70,14 @@ describe('motion and interaction feedback', () => {
     expect(styles.includes('.nav-item:active:not(:disabled)')).toBe(true)
   })
 
-  /** Every route animates on entry, including the one that skips RouteStage. */
-  it('animates route entry on both the staged routes and the run route', () => {
-    expect(styles.includes('@keyframes route-enter')).toBe(true)
+  /** Route changes preserve dense data without fading a complete table in again. */
+  it('keeps staged routes and the run route free of entrance animations', () => {
+    expect(styles.includes('@keyframes route-enter')).toBe(false)
     for (const selector of ['.route-stage {', '.runtime-route {']) {
       const start = styles.indexOf(selector)
       expect(start, `${selector} must exist`).toBeGreaterThan(-1)
       const block = styles.slice(start + selector.length, styles.indexOf('}', start))
-      expect(block.includes('route-enter'), `${selector} must animate on entry`).toBe(true)
+      expect(block.includes('animation')).toBe(false)
     }
   })
 })

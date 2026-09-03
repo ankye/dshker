@@ -12,6 +12,8 @@ import {
   type DirectorySelectionPurpose,
   type InstallBundledHarnessSeedRequest,
   type InstallLauncherHarnessPluginRequest,
+  type AdoptLauncherHarnessPluginRequest,
+  type UpdateLauncherHarnessPluginRequest,
   type LauncherHarnessLogExportResult,
   type LauncherHarnessLogFileView,
   type LauncherHarnessState,
@@ -296,7 +298,67 @@ export function registerIpc(options: LauncherIpcOptions): void {
       if (args.length !== 0) return invalidManagedPayload()
       return launcherHarnessResult(() =>
         options.launcherHarnessService.installPlugin(
-          parseInstallLauncherHarnessPluginRequest(payload).source
+          resolvePluginInstallSource(
+            parseInstallLauncherHarnessPluginRequest(payload).source,
+            options.managedWorkspaceService
+          )
+        )
+      )
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessInstallPluginArchive,
+    async (event, ...args): Promise<ApiResult<LauncherHarnessState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      const selection = await dialog.showOpenDialog({
+        title: '选择插件 ZIP 安装包',
+        buttonLabel: '安装插件',
+        properties: ['openFile'],
+        filters: [{ name: 'ZIP', extensions: ['zip'] }]
+      })
+      if (selection.canceled) {
+        return launcherHarnessResult(() => options.launcherHarnessService.getState())
+      }
+      if (selection.filePaths.length !== 1) {
+        return apiFail(
+          'managed.selection_invalid',
+          'Native plugin archive selection must contain one file.'
+        )
+      }
+      return launcherHarnessResult(() =>
+        options.launcherHarnessService.installPluginArchive(selection.filePaths[0])
+      )
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessRefreshPlugins,
+    async (event, ...args): Promise<ApiResult<LauncherHarnessState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      return launcherHarnessResult(() => options.launcherHarnessService.refreshPlugins())
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessUpdatePlugin,
+    async (event, payload: unknown, ...args): Promise<ApiResult<LauncherHarnessState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      return launcherHarnessResult(() =>
+        options.launcherHarnessService.updatePlugin(
+          parseUpdateLauncherHarnessPluginRequest(payload).name
+        )
+      )
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.launcherHarnessAdoptPlugin,
+    async (event, payload: unknown, ...args): Promise<ApiResult<LauncherHarnessState>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (args.length !== 0) return invalidManagedPayload()
+      return launcherHarnessResult(() =>
+        options.launcherHarnessService.adoptPlugin(
+          parseAdoptLauncherHarnessPluginRequest(payload).name
         )
       )
     }
@@ -635,13 +697,53 @@ function parseInstallLauncherHarnessPluginRequest(
   payload: unknown
 ): InstallLauncherHarnessPluginRequest {
   const record = exactRecord(payload, ['source'])
-  if (
-    typeof record.source !== 'string' ||
-    !/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+/u.test(record.source)
-  ) {
+  if (typeof record.source !== 'object' || record.source === null) {
     throw new ManagedRootError('managed.selection_invalid', 'Plugin source selection is invalid.')
   }
-  return { source: record.source }
+  const source = record.source as Record<string, unknown>
+  if (source.kind === 'git') {
+    exactRecord(source, ['kind', 'url'])
+    if (typeof source.url !== 'string' || !/^https:\/\/[^/\s]+\/[^\s]+/u.test(source.url)) {
+      throw new ManagedRootError('managed.selection_invalid', 'Plugin Git source is invalid.')
+    }
+    return { source: { kind: 'git', url: source.url } }
+  }
+  if (source.kind === 'local') {
+    exactRecord(source, ['kind', 'capabilityId'])
+    if (typeof source.capabilityId !== 'string') {
+      throw new ManagedRootError('managed.selection_invalid', 'Plugin local source is invalid.')
+    }
+    return { source: { kind: 'local', capabilityId: source.capabilityId } }
+  }
+  throw new ManagedRootError('managed.selection_invalid', 'Plugin source selection is invalid.')
+}
+
+function resolvePluginInstallSource(
+  source: InstallLauncherHarnessPluginRequest['source'],
+  workspaceService: ManagedWorkspaceService
+): Parameters<LauncherHarnessService['installPlugin']>[0] {
+  if (source.kind === 'git') return source
+  return { kind: 'local', path: workspaceService.consumePluginSourceDirectory(source.capabilityId) }
+}
+
+function parseUpdateLauncherHarnessPluginRequest(
+  payload: unknown
+): UpdateLauncherHarnessPluginRequest {
+  const record = exactRecord(payload, ['name'])
+  if (typeof record.name !== 'string' || !/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(record.name)) {
+    throw new ManagedRootError('managed.selection_invalid', 'Plugin name selection is invalid.')
+  }
+  return { name: record.name }
+}
+
+function parseAdoptLauncherHarnessPluginRequest(
+  payload: unknown
+): AdoptLauncherHarnessPluginRequest {
+  const record = exactRecord(payload, ['name'])
+  if (typeof record.name !== 'string' || !/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(record.name)) {
+    throw new ManagedRootError('managed.selection_invalid', 'Plugin name selection is invalid.')
+  }
+  return { name: record.name }
 }
 
 function parseUninstallLauncherHarnessPluginRequest(

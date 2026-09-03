@@ -1,0 +1,7 @@
+# Launch-home hierarchy and version notice
+
+The Launch page now uses one selected-core region after the product hero. It shows the current branch and exact selected Harness revision, with a secondary route to Version management. The start control owns the persistent action footer.
+
+The Launch state has no authoritative remote-update observation, so it does not reserve an empty update-notice card or claim that an update is available. A future update notice must be driven by an observed update state, not by the selected commit duplicated from the core card.
+
+The primary launch action has a familiar play glyph, a dedicated size and emphasis treatment, and a distinct Starting label while its existing state owner reports `starting`. Once DSH Web is running, the same control remains enabled, changes to a green stop action with a stop glyph, and stops only the Launcher-created child. The Controller footer uses the same state colour. On desktop it lives in the bottom-right of a persistent Launch footer outside the content scroll plane, with the page name and concise launch explanation alongside it. Launch omits the generic bridge-status header, leaving the selected-version card for identity and state only. The footer remains stable while content scrolls above it, so the action neither overlays information nor manufactures a spacer region. The former product context and open-source links remain available after the task-critical region as secondary information.

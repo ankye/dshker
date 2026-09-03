@@ -34,7 +34,7 @@ The Launcher creates its private roots under the platform application-data direc
 | Root | Launcher-owned contents | Excluded contents |
 | --- | --- | --- |
 | Harness | managed mirrors, exact-SHA worktrees, build artifacts, operation records | configuration, plugins, Launcher settings, native Harness home |
-| Plugins | none; DSH owns `$DSH_HOME/profiles/web` and `dsh plugin --profile web` | Harness source, Launcher settings |
+| Plugins | Launcher-managed plugin source copies, Git clones, and their package-to-source records | Harness source, Launcher settings |
 | Configuration | non-secret launch policy | source, Launcher settings, native Harness home |
 | Settings | Launcher registry, installation catalog, preferences, diagnostic references | source, plugins, configuration, native Harness home |
 
@@ -75,6 +75,8 @@ Alternative considered: use `PATH`, Electron's Node runtime, Corepack, npm, or a
 ### Decision: DSH owns desktop plugins and Agent presets
 
 Because the launcher starts the ordinary `web` profile, the profile it reads is the normal `$DSH_HOME/profiles/web` profile. `dsh plugin --profile web add <package>` remains the only plugin installation route, so the same profile manifest and `node_modules` are visible to terminal and Launcher-started runs. Authored Agent presets remain in `$DSH_HOME/.agent-presets`.
+
+Before invoking that command, the Launcher copies a native-selected local directory or clones an HTTPS Git source below `~/.dshlauncher/plugins/managed-sources`. GitHub catalog tree URLs clone their repository and select the named package child directory. `sources.json` in that directory maps an installed package name to its exact owned source root. Git entries also record the declared clone URL, branch, package path, checked-out commit, and the result of their latest explicit source refresh. The Extensions list reads only `$DSH_HOME/profiles/web` for installed entries; the Launcher source cache is never a second installed-plugin list. It groups companion runtime and settings packages from one source as one extension, and shows the two mandatory standard Web bundles separately without uninstall controls. The Refresh action fetches managed source branches and disables Update when no newer commit exists. For an old `file:` dependency that resolves to a local GitHub checkout, a separate explicit Manage action derives its current branch and package-relative path, clones that exact source into the managed root, and forwards `dsh plugin --profile web add` before recording it. Before that succeeds, Update is not shown; Manage disappears after management succeeds. Later updates fetch the recorded branch, detach to the fetched commit, persist that revision, and forward `pnpm update <package>` through DSH. The profile therefore contains only a managed `file:` path, and successful DSH removal precedes removal of that mapped root. A source-map failure after DSH has accepted a path retains the source rather than leaving the native profile with a dangling dependency.
 
 The Harness root contains the selected exact worktree, while the Settings root keeps Launcher catalog and preference records. A plugin or configuration generation is bound to the SHA it was prepared for. The launcher switches generations only after the child has stopped and preflight succeeds; it never lets one revision silently write another revision's generation.
 

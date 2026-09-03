@@ -10,12 +10,14 @@ describe('terminateManagedProcessTree', () => {
     expect(sendSignal).toHaveBeenCalledWith(-42, 'SIGTERM')
   })
 
-  it('signals the direct child on Windows', () => {
+  it('terminates the full tree through taskkill on Windows', () => {
     const sendSignal = vi.fn()
+    const terminateWindowsTree = vi.fn()
 
-    terminateManagedProcessTree(42, 'win32', sendSignal)
+    terminateManagedProcessTree(42, 'win32', sendSignal, terminateWindowsTree)
 
-    expect(sendSignal).toHaveBeenCalledWith(42, 'SIGTERM')
+    expect(terminateWindowsTree).toHaveBeenCalledWith(42)
+    expect(sendSignal).not.toHaveBeenCalled()
   })
 
   it('rejects a missing child process identifier', () => {

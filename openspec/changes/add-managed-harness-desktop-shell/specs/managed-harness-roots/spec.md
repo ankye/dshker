@@ -38,13 +38,39 @@ The Harness home resolved by the selected child process from inherited `DSH_HOME
 
 ### Requirement: Launcher owns downloaded plugin and preset sources
 
-The Launcher SHALL keep downloaded plugin sources below `~/.dshlauncher/plugins` and downloaded Agent preset sources below `~/.dshlauncher/presets`. Its desktop selections and source records SHALL remain below Launcher Settings. The Launcher SHALL NOT write a DSH profile, plugin root, Agent preset root, or other native Harness state.
+The Launcher SHALL keep downloaded plugin sources below `~/.dshlauncher/plugins` and downloaded Agent preset sources below `~/.dshlauncher/presets`. Its desktop selections and source records SHALL remain below their corresponding Launcher-controlled roots. The Launcher SHALL NOT write a DSH profile, plugin root, Agent preset root, or other native Harness state.
 
 #### Scenario: Launcher records a downloaded extension source
 
 - **WHEN** a user downloads a plugin or Agent preset repository through the Launcher
 - **THEN** the Launcher stores that source below its matching `.dshlauncher` root
 - **AND** it leaves all native DSH paths unchanged
+
+### Requirement: Plugin installation materializes a Launcher-owned source
+
+Before DSH installs a plugin, the Launcher SHALL materialize one source under its managed plugins
+directory. A local source SHALL be copied into a new Launcher-owned directory. An HTTPS Git source
+SHALL be cloned into a new Launcher-owned directory. The Launcher SHALL invoke the DSH profile
+plugin command only with that managed local source. It SHALL persist the installed package name and
+managed source identity so uninstall can remove both the DSH dependency and that exact source copy.
+
+#### Scenario: User installs a local plugin directory
+
+- **WHEN** the user selects one local plugin directory through the native directory picker
+- **THEN** the Launcher copies it into the managed plugins root before invoking DSH with its managed path
+- **AND** the original local directory remains unchanged
+
+#### Scenario: User installs a Git plugin source
+
+- **WHEN** the user supplies one valid HTTPS Git source
+- **THEN** the Launcher clones it into the managed plugins root before invoking DSH with its managed path
+- **AND** it does not add the remote URL directly to the native profile
+
+#### Scenario: User uninstalls a managed plugin
+
+- **WHEN** DSH successfully removes a user-installed package recorded by the Launcher
+- **THEN** the Launcher deletes only its mapped managed source directory and record
+- **AND** it does not delete an unrecorded catalog checkout or user-selected original directory
 
 ### Requirement: Root selection proves containment and native-home separation
 

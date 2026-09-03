@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useLauncherHarness } from '@/app/domains/launcher-harness'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { CopyPathButton } from '@/app/shared/controls'
@@ -16,37 +16,13 @@ const logFile = computed(() => harness.state.value?.logFile)
 const consoleEntries = computed(() =>
   harness.state.value?.kind === 'ready' ? harness.state.value.console : []
 )
-const launch = computed(() =>
-  harness.state.value?.kind === 'ready' ? harness.state.value.launch : undefined
-)
-const launchStatus = computed(() => {
-  switch (launch.value?.kind) {
-    case 'running':
-      return t('controller.status.running')
-    case 'starting':
-      return t('controller.status.starting')
-    case 'failed':
-      return t('controller.status.failed')
-    case 'stopped':
-    case undefined:
-      return t('controller.status.stopped')
-  }
-})
-const launchAction = computed(() =>
-  launch.value?.kind === 'running'
-    ? t('controller.stop')
-    : launch.value?.kind === 'starting'
-      ? t('controller.status.starting')
-      : t('controller.oneClickStart')
-)
-const launchActionDisabled = computed(
-  () => harness.loading.value || launch.value?.kind === 'starting'
-)
-
 const copiedOutput = ref(false)
+const copiedLine = ref(false)
 const exported = ref(false)
 let copyTimer: ReturnType<typeof setTimeout> | undefined
+let copyLineTimer: ReturnType<typeof setTimeout> | undefined
 let exportTimer: ReturnType<typeof setTimeout> | undefined
+const copyMenu = ref<Readonly<{ text: string; x: number; y: number }>>()
 
 /**
  * Copies the visible output as plain text.
@@ -76,6 +52,54 @@ async function copyOutput(): Promise<void> {
   }
 }
 
+/** Opens an explicit log-only copy action without exposing a global web context menu. */
+function openCopyMenu(event: MouseEvent): void {
+  const output = event.currentTarget
+  if (!(output instanceof HTMLElement)) return
+  const selection = window.getSelection()
+  const selected =
+    selection !== null &&
+    selection.anchorNode !== null &&
+    selection.focusNode !== null &&
+    output.contains(selection.anchorNode) &&
+    output.contains(selection.focusNode)
+      ? selection.toString().trim()
+      : ''
+  const row = event.target instanceof HTMLElement ? event.target.closest('li') : null
+  const text = selected.length > 0 ? selected : (row?.textContent?.trim() ?? '')
+  if (text.length === 0) return
+  event.preventDefault()
+  copyMenu.value = { text, x: event.clientX, y: event.clientY }
+}
+
+/** Copies the selected log text, or the row that opened the contextual action. */
+async function copyContextText(): Promise<void> {
+  const text = copyMenu.value?.text
+  copyMenu.value = undefined
+  if (text === undefined) return
+  try {
+    await navigator.clipboard.writeText(text)
+    copiedLine.value = true
+    if (copyLineTimer !== undefined) clearTimeout(copyLineTimer)
+    copyLineTimer = setTimeout(() => {
+      copiedLine.value = false
+    }, CONFIRMATION_MILLISECONDS)
+  } catch {
+    // Clipboard permission can be denied by the host; the log remains selectable.
+  }
+}
+
+/** Removes the contextual action when it loses focus. */
+function dismissCopyMenu(): void {
+  copyMenu.value = undefined
+}
+
+/** Lets Escape cancel the contextual action without changing other key behavior. */
+function dismissCopyMenuOnEscape(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return
+  dismissCopyMenu()
+}
+
 async function exportLog(): Promise<void> {
   const saved = await harness.exportLog()
   if (!saved) return
@@ -86,39 +110,22 @@ async function exportLog(): Promise<void> {
   }, CONFIRMATION_MILLISECONDS)
 }
 
-/** Starts the selected DSH version, or stops the exact child this Launcher created. */
-async function toggleLaunch(): Promise<void> {
-  if (launch.value?.kind === 'running') {
-    await harness.stop()
-    return
-  }
-  await harness.start()
-}
+onMounted(() => {
+  window.addEventListener('click', dismissCopyMenu)
+  window.addEventListener('keydown', dismissCopyMenuOnEscape)
+})
 
 onUnmounted(() => {
   if (copyTimer !== undefined) clearTimeout(copyTimer)
+  if (copyLineTimer !== undefined) clearTimeout(copyLineTimer)
   if (exportTimer !== undefined) clearTimeout(exportTimer)
+  window.removeEventListener('click', dismissCopyMenu)
+  window.removeEventListener('keydown', dismissCopyMenuOnEscape)
 })
 </script>
 
 <template>
   <section class="controller-panel" :aria-busy="harness.loading.value">
-    <div class="controller-command">
-      <span>{{ t('controller.command') }}</span>
-      <code>pnpm dsh web --patch &lt;launcher-diagnostics&gt; --no-open</code>
-      <button
-        v-if="
-          harness.state.value?.kind === 'ready' && harness.state.value.launch.kind === 'running'
-        "
-        class="prototype-button prototype-button--secondary"
-        type="button"
-        :disabled="harness.loading.value"
-        @click="harness.stop"
-      >
-        {{ t('controller.stop') }}
-      </button>
-    </div>
-
     <!--
       The log path is the thing a user pastes into a bug report, so it is shown
       as selectable text with copy beside it rather than hidden behind a menu.
@@ -188,7 +195,7 @@ onUnmounted(() => {
         </button>
       </template>
     </EmptyState>
-    <ol v-else class="controller-output" aria-live="polite">
+    <ol v-else class="controller-output" aria-live="polite" @contextmenu="openCopyMenu">
       <li
         v-for="(entry, index) in harness.state.value.console"
         :key="`${entry.occurredAt}-${index}`"
@@ -212,18 +219,14 @@ onUnmounted(() => {
       </li>
     </ol>
 
-    <footer v-if="launch" class="controller-bottom-action">
-      <span class="controller-runtime-status" :data-state="launch.kind">
-        {{ launchStatus }}
-      </span>
-      <button
-        type="button"
-        class="prototype-button prototype-button--primary"
-        :disabled="launchActionDisabled"
-        @click="toggleLaunch"
-      >
-        {{ launchAction }}
-      </button>
-    </footer>
+    <button
+      v-if="copyMenu"
+      class="controller-copy-menu prototype-button prototype-button--secondary"
+      type="button"
+      :style="{ left: `${copyMenu.x}px`, top: `${copyMenu.y}px` }"
+      @click="copyContextText"
+    >
+      {{ copiedLine ? t('common.copied') : t('controller.log.copyContext') }}
+    </button>
   </section>
 </template>

@@ -10,6 +10,8 @@ import {
   type DirectorySelectionPurpose,
   type InstallBundledHarnessSeedRequest,
   type InstallLauncherHarnessPluginRequest,
+  type AdoptLauncherHarnessPluginRequest,
+  type UpdateLauncherHarnessPluginRequest,
   type LauncherHarnessLogExportResult,
   type LauncherHarnessLogFileView,
   type LauncherHarnessState,
@@ -113,6 +115,18 @@ const desktopApi: DesktopApi = Object.freeze({
       request: InstallLauncherHarnessPluginRequest
     ): Promise<ApiResult<LauncherHarnessState>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessInstallPlugin, request),
+    installPluginArchive: (): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessInstallPluginArchive),
+    refreshPlugins: (): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessRefreshPlugins),
+    updatePlugin: (
+      request: UpdateLauncherHarnessPluginRequest
+    ): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessUpdatePlugin, request),
+    adoptPlugin: (
+      request: AdoptLauncherHarnessPluginRequest
+    ): Promise<ApiResult<LauncherHarnessState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessAdoptPlugin, request),
     uninstallPlugin: (
       request: UninstallLauncherHarnessPluginRequest
     ): Promise<ApiResult<LauncherHarnessState>> =>

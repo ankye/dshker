@@ -9,6 +9,9 @@ export type BootstrapState =
   | { readonly kind: 'ready'; readonly info: BootstrapInfo }
   | { readonly kind: 'blocked'; readonly code: BootstrapErrorCode }
 
+/** The Launcher sidebar can retain labels, become an icon rail, or leave only its restore control. */
+export type SidebarState = 'expanded' | 'collapsed' | 'hidden'
+
 /** Owns shell navigation and bootstrap state; managed-directory state stays in its domain. */
 export function useLauncherShell() {
   // The shell owns the chrome every route renders inside: navigation labels, the
@@ -17,7 +20,7 @@ export function useLauncherShell() {
   // route bodies actually translated.
   const t = useTranslator()
   const activeRoute = ref<AppRouteId>('launch')
-  const sidebarCollapsed = ref(false)
+  const sidebarState = ref<SidebarState>('expanded')
   const bootstrap = ref<BootstrapState>({ kind: 'loading' })
 
   const bootstrapStatus = computed(() => {
@@ -37,8 +40,17 @@ export function useLauncherShell() {
     activeRoute.value = route
   }
 
-  function toggleSidebar(): void {
-    sidebarCollapsed.value = !sidebarCollapsed.value
+  function advanceSidebar(): void {
+    switch (sidebarState.value) {
+      case 'expanded':
+        sidebarState.value = 'collapsed'
+        return
+      case 'collapsed':
+        sidebarState.value = 'hidden'
+        return
+      case 'hidden':
+        sidebarState.value = 'expanded'
+    }
   }
 
   onMounted(() => {
@@ -50,8 +62,8 @@ export function useLauncherShell() {
     bootstrap,
     bootstrapStatus,
     selectRoute,
-    sidebarCollapsed,
+    sidebarState,
     t,
-    toggleSidebar
+    advanceSidebar
   }
 }

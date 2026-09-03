@@ -7,6 +7,7 @@ import { assertOpaqueId } from './validation'
 export type DirectorySelectionPurpose =
   | `managed-root:${ManagedRootKind}`
   | 'workspace-working-directory'
+  | 'plugin-source'
 
 /** Opaque one-time authority to use a native-selected directory for one declared purpose. */
 export interface DirectorySelectionCapability {
@@ -98,6 +99,7 @@ export function assertDirectorySelectionPurpose(
 ): asserts value is DirectorySelectionPurpose {
   if (
     value !== 'workspace-working-directory' &&
+    value !== 'plugin-source' &&
     (typeof value !== 'string' ||
       !value.startsWith('managed-root:') ||
       !isManagedRootPurpose(value))

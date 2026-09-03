@@ -108,14 +108,16 @@ function evaluateSources(sources) {
     finding('layout.compact-viewport', styles.includes('@media (max-width: 980px)')),
     finding('layout.narrow-viewport', styles.includes('@media (max-width: 720px)')),
 
-    // Window-height adaptation: the shell is pinned to the viewport and route
-    // content scrolls inside the stage, so resizing never hides the topbar,
-    // statusbar, or a route's own controls.
+    // Window-height adaptation: the shell is pinned to the viewport. A route
+    // owns its scrollable content plane, so its header and optional footer
+    // remain reachable while the route body grows.
     finding('layout.shell-pinned-to-viewport', declared('.app-shell', 'height', '100vh')),
     finding(
-      'layout.stage-scrolls',
+      'layout.route-content-scrolls',
       declared('.workbench-stage', 'min-height', '0') &&
-        declared('.workbench-stage', 'overflow-y', 'auto')
+        declared('.workbench-stage', 'overflow', 'hidden') &&
+        declared('.route-stage-content', 'min-height', '0') &&
+        declared('.route-stage-content', 'overflow-y', 'auto')
     ),
     finding(
       'layout.console-log-bounded',

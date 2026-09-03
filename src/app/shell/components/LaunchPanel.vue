@@ -4,7 +4,7 @@ import launcherIcon from '../../../../resources/dsh-launcher-logo-launcher.png'
 import launcherSplash from '../../../../resources/dsh-launcher-splash-orange.png'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { useLauncherHarness } from '@/app/domains/launcher-harness'
-import { APP_METADATA, type LauncherExternalLinkId } from '@/shared/contracts'
+import { type LauncherExternalLinkId } from '@/shared/contracts'
 import EmptyState from './EmptyState.vue'
 
 const t = useTranslator()
@@ -17,7 +17,7 @@ const sourceLinkFailed = ref(false)
  * instead. Without this, "import a version in Versions" would be advice the
  * user cannot act on from where they are standing.
  */
-const emit = defineEmits<{ navigate: ['versions' | 'advanced'] }>()
+const emit = defineEmits<{ navigate: ['versions' | 'settings'] }>()
 
 /** Opens one product-controlled source page through the typed main-process capability. */
 async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
@@ -47,55 +47,6 @@ async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
       </div>
     </header>
 
-    <section class="launch-introduction" :aria-label="t('launch.introduction.title')">
-      <div class="launch-introduction-copy">
-        <p class="eyebrow">{{ t('launch.introduction.kicker') }}</p>
-        <h4>{{ t('launch.introduction.title') }}</h4>
-        <p>{{ t('launch.introduction.description') }}</p>
-      </div>
-      <dl class="launch-introduction-facts">
-        <div>
-          <dt>{{ t('launch.introduction.launcherVersion') }}</dt>
-          <dd>v{{ APP_METADATA.version }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('launch.introduction.coreVersion') }}</dt>
-          <dd>{{ t('launch.introduction.coreVersionValue') }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('launch.introduction.nativeHome') }}</dt>
-          <dd>{{ t('launch.introduction.nativeHomeValue') }}</dd>
-        </div>
-      </dl>
-      <div class="launch-open-source">
-        <div>
-          <strong>{{ t('launch.openSource.title') }}</strong>
-          <p>{{ t('launch.openSource.description') }}</p>
-        </div>
-        <div class="launch-open-source-actions">
-          <button
-            type="button"
-            class="prototype-button prototype-button--secondary"
-            :disabled="openingLink !== undefined"
-            @click="openSourceLink('launcher-repository')"
-          >
-            {{ t('launch.openSource.launcher') }}
-          </button>
-          <button
-            type="button"
-            class="prototype-button prototype-button--secondary"
-            :disabled="openingLink !== undefined"
-            @click="openSourceLink('harness-repository')"
-          >
-            {{ t('launch.openSource.harness') }}
-          </button>
-        </div>
-        <p v-if="sourceLinkFailed" class="launch-open-source-error" role="status">
-          {{ t('launch.openSource.failure') }}
-        </p>
-      </div>
-    </section>
-
     <EmptyState
       v-if="
         (harness.loading.value && !harness.state.value) || harness.state.value?.kind === 'preparing'
@@ -124,9 +75,9 @@ async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
         <button
           type="button"
           class="prototype-button prototype-button--secondary"
-          @click="emit('navigate', 'advanced')"
+          @click="emit('navigate', 'settings')"
         >
-          {{ t('launch.unavailable.advanced') }}
+          {{ t('launch.unavailable.settings') }}
         </button>
       </template>
     </EmptyState>
@@ -147,37 +98,67 @@ async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
       </template>
     </EmptyState>
 
-    <!--
-      When a version exists, the launch button belongs to the version it acts on
-      rather than to a detached corner of the route, so the card owns it.
-    -->
-    <div v-else class="launch-version-list">
+    <div v-else class="launch-workbench">
       <article class="launch-version" data-selected="true">
         <div class="launch-version-identity">
-          <p class="launch-version-label">{{ t('launch.version') }}</p>
+          <p class="eyebrow">{{ t('launch.version') }}</p>
+          <h4>{{ harness.state.value.currentBranch }}</h4>
+          <p class="launch-version-label">{{ t('launch.commit') }}</p>
           <strong>{{ harness.state.value.revision }}</strong>
-          <p class="launch-version-meta" :title="harness.state.value.harnessDirectory">
-            {{ t('launch.commit') }} · {{ harness.state.value.harnessDirectory }}
-          </p>
         </div>
-        <div class="launch-version-actions">
-          <span class="launch-status" :data-running="harness.state.value.launch.kind === 'running'">
-            {{
-              harness.state.value.launch.kind === 'running'
-                ? t('launch.running')
-                : t('launch.stopped')
-            }}
-          </span>
-          <button
-            class="prototype-button prototype-button--primary launch-primary-action"
-            type="button"
-            :disabled="!harness.canStart.value"
-            @click="harness.start"
-          >
-            {{ t('launch.start') }}
-          </button>
-        </div>
+        <button
+          type="button"
+          class="prototype-button prototype-button--secondary launch-version-manage"
+          @click="emit('navigate', 'versions')"
+        >
+          {{ t('launch.version.manage') }}
+        </button>
       </article>
     </div>
+
+    <section class="launch-introduction" :aria-label="t('launch.introduction.title')">
+      <div class="launch-introduction-copy">
+        <p class="eyebrow">{{ t('launch.introduction.kicker') }}</p>
+        <h4>{{ t('launch.introduction.title') }}</h4>
+        <p>{{ t('launch.introduction.description') }}</p>
+      </div>
+      <dl class="launch-introduction-facts">
+        <div>
+          <dt>{{ t('launch.introduction.coreVersion') }}</dt>
+          <dd>{{ t('launch.introduction.coreVersionValue') }}</dd>
+        </div>
+        <div>
+          <dt>{{ t('launch.introduction.nativeHome') }}</dt>
+          <dd>{{ t('launch.introduction.nativeHomeValue') }}</dd>
+        </div>
+      </dl>
+      <div class="launch-open-source">
+        <div>
+          <strong>{{ t('launch.openSource.title') }}</strong>
+          <p>{{ t('launch.openSource.description') }}</p>
+        </div>
+        <div class="launch-open-source-actions">
+          <button
+            type="button"
+            class="prototype-button prototype-button--secondary launch-source-action"
+            :disabled="openingLink !== undefined"
+            @click="openSourceLink('launcher-repository')"
+          >
+            {{ t('launch.openSource.launcher') }}
+          </button>
+          <button
+            type="button"
+            class="prototype-button prototype-button--secondary launch-source-action"
+            :disabled="openingLink !== undefined"
+            @click="openSourceLink('harness-repository')"
+          >
+            {{ t('launch.openSource.harness') }}
+          </button>
+        </div>
+        <p v-if="sourceLinkFailed" class="launch-open-source-error" role="status">
+          {{ t('launch.openSource.failure') }}
+        </p>
+      </div>
+    </section>
   </section>
 </template>

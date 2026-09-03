@@ -1,8 +1,11 @@
 import { computed, reactive, ref } from 'vue'
+import type { LauncherHarnessPluginView } from '@/shared/contracts'
 import {
   harnessState,
+  adoptPlugin,
   installPlugin,
-  uninstallPlugin
+  uninstallPlugin,
+  updatePlugin
 } from '@/app/domains/launcher-harness/useLauncherHarness'
 import { pluginCatalogState } from '@/app/domains/launcher-harness/usePluginCatalog'
 
@@ -20,12 +23,84 @@ export type CoreVersionTab = 'stable' | 'development'
 const activeVersionTab = ref<VersionTab>('core')
 const activeCoreVersionTab = ref<CoreVersionTab>('stable')
 const branchPickerOpen = ref(false)
+const gitInstallOpen = ref(false)
 const selectedCatalogIds = reactive(new Set<string>())
 const selectedCatalogCount = computed(() => selectedCatalogIds.size)
 const selectedPluginNames = reactive(new Set<string>())
-const selectedPluginCount = computed(() => selectedPluginNames.size)
 const catalogSearch = ref('')
 const catalogCategory = ref<string>(ALL_CATEGORIES)
+
+/** One user-facing extension assembled from the packages installed from one source. */
+export interface InstalledExtensionGroup {
+  readonly key: string
+  readonly primaryPlugin: LauncherHarnessPluginView
+  readonly packages: readonly LauncherHarnessPluginView[]
+  readonly sourceUrl?: string
+  readonly localPath?: string
+  readonly managedGitPackages: readonly LauncherHarnessPluginView[]
+}
+
+/** The only update operation that can change every package in one extension together. */
+export type ExtensionUpdateMode = 'managed' | 'adopt'
+
+/** Groups companion runtime and settings packages from the same explicit extension source. */
+export function installedExtensionGroupsOf(
+  plugins: readonly LauncherHarnessPluginView[]
+): readonly InstalledExtensionGroup[] {
+  const grouped = new Map<string, LauncherHarnessPluginView[]>()
+  for (const plugin of plugins) {
+    if (plugin.origin !== 'user') continue
+    const key = extensionSourceKey(plugin)
+    const entries = grouped.get(key) ?? []
+    entries.push(plugin)
+    grouped.set(key, entries)
+  }
+  return [...grouped.entries()]
+    .map(([key, packages]) => {
+      const primaryPlugin = packages.find((plugin) => !isSettingsUiPackage(plugin)) ?? packages[0]
+      if (primaryPlugin === undefined)
+        throw new Error('An installed extension must contain a package.')
+      return {
+        key,
+        primaryPlugin,
+        packages,
+        ...(primaryPlugin.sourceUrl === undefined ? {} : { sourceUrl: primaryPlugin.sourceUrl }),
+        ...(primaryPlugin.localPath === undefined ? {} : { localPath: primaryPlugin.localPath }),
+        managedGitPackages: packages.filter((plugin) => plugin.managedGitSource !== undefined)
+      }
+    })
+    .sort((left, right) => left.primaryPlugin.name.localeCompare(right.primaryPlugin.name))
+}
+
+/** The DSH client package is a settings surface paired with its runtime tool package. */
+export function isSettingsUiPackage(plugin: LauncherHarnessPluginView): boolean {
+  return plugin.name.includes('/dsh-client-ui-')
+}
+
+function extensionSourceKey(plugin: LauncherHarnessPluginView): string {
+  if (plugin.sourceUrl !== undefined) return `source:${comparableSource(plugin.sourceUrl)}`
+  if (plugin.localPath !== undefined) return `local:${plugin.localPath}`
+  return `package:${plugin.name}`
+}
+
+/** User-installed extension groups currently projected from the native DSH profile. */
+const installedExtensionGroups = computed(() => {
+  const state = harnessState.value
+  return state?.kind === 'ready' ? installedExtensionGroupsOf(state.plugins) : []
+})
+
+/** In-box packages required for the ordinary DSH Web profile. */
+const bundledPlugins = computed(() => {
+  const state = harnessState.value
+  return state?.kind === 'ready'
+    ? state.plugins.filter((plugin) => plugin.origin === 'default')
+    : []
+})
+
+/** Count extensions rather than individual companion packages in the toolbar. */
+const selectedPluginCount = computed(
+  () => installedExtensionGroups.value.filter((group) => isExtensionGroupSelected(group)).length
+)
 
 /**
  * Normalizes a git remote for comparison.
@@ -92,12 +167,43 @@ function isCatalogEntryInstalled(url: string): boolean {
   return installedSources.value.has(comparableSource(url))
 }
 
-function togglePluginSelection(name: string): void {
-  if (selectedPluginNames.has(name)) {
-    selectedPluginNames.delete(name)
-    return
+/** Whether every package that comprises this extension is selected for removal. */
+function isExtensionGroupSelected(group: InstalledExtensionGroup): boolean {
+  return group.packages.every((plugin) => selectedPluginNames.has(plugin.name))
+}
+
+/**
+ * A direct local checkout is migrated only on the user's explicit update
+ * action. A managed Git extension updates in place; partial groups are not
+ * offered a misleading partial update.
+ */
+function extensionUpdateMode(group: InstalledExtensionGroup): ExtensionUpdateMode | undefined {
+  if (group.packages.every((plugin) => plugin.managedGitSource !== undefined)) return 'managed'
+  if (
+    group.packages.every(
+      (plugin) =>
+        plugin.managedGitSource === undefined &&
+        plugin.localPath !== undefined &&
+        plugin.sourceUrl?.startsWith('https://github.com/') === true
+    )
+  ) {
+    return 'adopt'
   }
-  selectedPluginNames.add(name)
+  return undefined
+}
+
+/** Whether at least one managed package in this extension has a fetched newer commit. */
+function hasExtensionUpdate(group: InstalledExtensionGroup): boolean {
+  return group.packages.some((plugin) => plugin.managedGitSource?.updateAvailable === true)
+}
+
+/** Selects or clears every package belonging to one user-facing extension. */
+function toggleExtensionGroupSelection(group: InstalledExtensionGroup): void {
+  const selected = isExtensionGroupSelected(group)
+  for (const plugin of group.packages) {
+    if (selected) selectedPluginNames.delete(plugin.name)
+    else selectedPluginNames.add(plugin.name)
+  }
 }
 
 /** Checks or clears every visible catalog row that is not already installed. */
@@ -117,12 +223,14 @@ function toggleAllVisibleCatalog(): void {
 function toggleAllPlugins(): void {
   const state = harnessState.value
   if (state?.kind !== 'ready') return
-  const removable = state.plugins.filter((plugin) => plugin.origin === 'user')
+  const removable = installedExtensionGroups.value
   const allSelected =
-    removable.length > 0 && removable.every((plugin) => selectedPluginNames.has(plugin.name))
-  for (const plugin of removable) {
-    if (allSelected) selectedPluginNames.delete(plugin.name)
-    else selectedPluginNames.add(plugin.name)
+    removable.length > 0 && removable.every((group) => isExtensionGroupSelected(group))
+  for (const group of removable) {
+    for (const plugin of group.packages) {
+      if (allSelected) selectedPluginNames.delete(plugin.name)
+      else selectedPluginNames.add(plugin.name)
+    }
   }
 }
 
@@ -132,6 +240,30 @@ async function uninstallSelected(): Promise<void> {
     await uninstallPlugin({ name })
   }
   selectedPluginNames.clear()
+}
+
+/** Removes every package owned by one displayed extension source. */
+async function uninstallExtensionGroup(group: InstalledExtensionGroup): Promise<void> {
+  for (const plugin of group.packages) {
+    await uninstallPlugin({ name: plugin.name })
+  }
+  for (const plugin of group.packages) selectedPluginNames.delete(plugin.name)
+}
+
+/** Updates a Git-managed extension or explicitly adopts its legacy local source first. */
+async function updateExtensionGroup(group: InstalledExtensionGroup): Promise<void> {
+  const mode = extensionUpdateMode(group)
+  if (mode === 'managed') {
+    for (const plugin of group.packages) {
+      await updatePlugin({ name: plugin.name })
+    }
+    return
+  }
+  if (mode === 'adopt') {
+    for (const plugin of group.packages) {
+      await adoptPlugin({ name: plugin.name })
+    }
+  }
 }
 
 function toggleCatalogSelection(pluginId: string): void {
@@ -148,7 +280,7 @@ async function installSelected(): Promise<void> {
   if (catalog?.kind !== 'ready') return
   const sources = catalog.entries
     .filter((entry) => selectedCatalogIds.has(entry.id))
-    .map((entry) => entry.url)
+    .map((entry) => ({ kind: 'git' as const, url: entry.url }))
   for (const source of sources) {
     await installPlugin({ source })
   }
@@ -160,19 +292,27 @@ export const versionView = {
   activeVersionTab,
   activeCoreVersionTab,
   branchPickerOpen,
+  gitInstallOpen,
   selectedCatalogIds,
   selectedCatalogCount,
   selectedPluginNames,
   selectedPluginCount,
+  installedExtensionGroups,
+  bundledPlugins,
   catalogSearch,
   catalogCategory,
   catalogCategories,
   filteredCatalogEntries,
   isCatalogEntryInstalled,
+  isExtensionGroupSelected,
+  extensionUpdateMode,
+  hasExtensionUpdate,
   toggleCatalogSelection,
-  togglePluginSelection,
+  toggleExtensionGroupSelection,
   toggleAllVisibleCatalog,
   toggleAllPlugins,
   installSelected,
-  uninstallSelected
+  uninstallSelected,
+  uninstallExtensionGroup,
+  updateExtensionGroup
 }

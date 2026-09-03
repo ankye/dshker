@@ -24,6 +24,7 @@ describe('launch log file', () => {
     const logPath = nodePath.join(root, 'logs', 'dsh-web.log')
     const service = new LauncherHarnessService({
       harnessDirectory: nodePath.join(root, 'harness'),
+      pluginSourcesDirectory: nodePath.join(root, 'plugins'),
       dshHomeDirectory: nodePath.join(root, 'dsh-home'),
       launchPreferencesPath: nodePath.join(root, 'launch-preferences.json'),
       launchLogPath: logPath,

@@ -6,11 +6,6 @@ import { versionView } from '../versionViewState'
 const t = useTranslator()
 const harness = useLauncherHarness()
 const pluginCatalog = usePluginCatalog()
-
-function openBranchPicker(): void {
-  if (harness.state.value?.kind !== 'ready') return
-  versionView.branchPickerOpen.value = true
-}
 </script>
 
 <template>
@@ -18,61 +13,82 @@ function openBranchPicker(): void {
     v-if="versionView.activeVersionTab.value === 'core' && harness.state.value?.kind === 'ready'"
     class="version-toolbar-actions"
   >
-    <button
-      class="version-action-button"
-      type="button"
-      :disabled="harness.loading.value || harness.state.value.launch.kind === 'running'"
-      @click="openBranchPicker"
-    >
-      {{ t('versions.core.switchBranch') }}
-    </button>
-    <button
-      class="version-action-button"
-      type="button"
-      :disabled="harness.loading.value"
-      @click="harness.refreshVersions"
-    >
-      {{ t('versions.core.refresh') }}
-    </button>
-    <button
-      class="version-action-button version-action-button--primary"
-      type="button"
-      :disabled="harness.loading.value || harness.state.value.launch.kind === 'running'"
-      @click="harness.update"
-    >
-      {{ t('versions.core.update') }}
-    </button>
+    <div class="version-toolbar-group">
+      <button
+        class="version-action-button version-action-button--icon"
+        type="button"
+        :disabled="harness.loading.value"
+        data-testid="refresh-core-versions"
+        @click="harness.refreshVersions"
+      >
+        <svg class="version-action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20 11a8 8 0 1 0 2.1 5.4" />
+          <path d="M20 4v7h-7" />
+        </svg>
+        {{ t('versions.core.refresh') }}
+      </button>
+    </div>
+    <div class="version-toolbar-group">
+      <button
+        class="version-action-button version-action-button--primary"
+        type="button"
+        :disabled="harness.loading.value || harness.state.value.launch.kind === 'running'"
+        @click="harness.update"
+      >
+        {{ t('versions.core.update') }}
+      </button>
+    </div>
   </div>
   <div v-else-if="versionView.activeVersionTab.value === 'plugins'" class="version-toolbar-actions">
     <button
-      v-if="versionView.selectedPluginCount.value > 0"
-      class="version-action-button version-action-button--primary"
+      class="version-action-button version-action-button--icon"
       type="button"
       :disabled="harness.loading.value"
-      data-testid="uninstall-selected-plugins"
-      @click="versionView.uninstallSelected"
+      data-testid="refresh-installed-plugins"
+      @click="harness.refreshPlugins"
     >
-      {{ t('versions.catalog.uninstallSelected') }} ({{ versionView.selectedPluginCount.value }})
+      <svg class="version-action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M20 11a8 8 0 1 0 2.1 5.4" />
+        <path d="M20 4v7h-7" />
+      </svg>
+      {{ t('versions.plugins.refresh') }}
     </button>
   </div>
   <div v-else-if="versionView.activeVersionTab.value === 'catalog'" class="version-toolbar-actions">
-    <button
-      class="version-action-button"
-      type="button"
-      :disabled="pluginCatalog.loading.value"
-      @click="pluginCatalog.refresh"
-    >
-      {{ t('versions.catalog.refresh') }}
-    </button>
-    <button
-      v-if="versionView.selectedCatalogCount.value > 0"
-      class="version-action-button version-action-button--primary"
-      type="button"
-      :disabled="harness.loading.value"
-      data-testid="install-selected-plugins"
-      @click="versionView.installSelected"
-    >
-      {{ t('versions.catalog.installSelected') }} ({{ versionView.selectedCatalogCount.value }})
-    </button>
+    <div class="version-toolbar-group">
+      <button
+        class="version-action-button version-action-button--icon"
+        type="button"
+        :disabled="pluginCatalog.loading.value"
+        data-testid="refresh-plugin-catalog"
+        @click="pluginCatalog.refresh"
+      >
+        <svg class="version-action-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M20 11a8 8 0 1 0 2.1 5.4" />
+          <path d="M20 4v7h-7" />
+        </svg>
+        {{ t('versions.catalog.refresh') }}
+      </button>
+    </div>
+    <div class="version-toolbar-group">
+      <button
+        class="version-action-button"
+        type="button"
+        :disabled="harness.loading.value"
+        data-testid="open-git-plugin-install"
+        @click="versionView.gitInstallOpen.value = true"
+      >
+        {{ t('versions.catalog.installGit') }}
+      </button>
+      <button
+        class="version-action-button"
+        type="button"
+        :disabled="harness.loading.value"
+        data-testid="install-plugin-archive"
+        @click="harness.installPluginArchive"
+      >
+        {{ t('versions.catalog.installLocal') }}
+      </button>
+    </div>
   </div>
 </template>

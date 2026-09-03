@@ -1,6 +1,8 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import type {
   InstallLauncherHarnessPluginRequest,
+  AdoptLauncherHarnessPluginRequest,
+  UpdateLauncherHarnessPluginRequest,
   LauncherHarnessState,
   SetLauncherHarnessPortRequest,
   SwitchLauncherHarnessBranchRequest,
@@ -16,6 +18,10 @@ export type LauncherHarnessOperation =
   | 'stop'
   | 'refresh'
   | 'installPlugin'
+  | 'installPluginArchive'
+  | 'refreshPlugins'
+  | 'updatePlugin'
+  | 'adoptPlugin'
   | 'uninstallPlugin'
   | 'setPort'
 
@@ -27,6 +33,7 @@ const state = harnessState
 const loading = ref(false)
 const error = ref<string>()
 const activeOperation = ref<LauncherHarnessOperation>()
+let silentRefreshInFlight = false
 
 /**
  * Counts launches the user actually initiated from this window.
@@ -47,23 +54,39 @@ const canStart = computed(
     !loading.value
 )
 
-/** Refreshes state from the restricted Electron bridge only. */
-async function refresh(): Promise<void> {
+/** Reads one authoritative Launcher state without publishing a user-operation busy state. */
+async function readState(): Promise<void> {
   if (!window.dshLauncher) {
     error.value = 'bridge'
     return
   }
+  const result = await window.dshLauncher.launcherHarness.getState()
+  if (!result.ok) {
+    error.value = result.code
+    return
+  }
+  state.value = result.data
+  error.value = undefined
+}
+
+/** Refreshes state from the restricted Electron bridge and marks initial/manual loading. */
+async function refresh(): Promise<void> {
   loading.value = true
   try {
-    const result = await window.dshLauncher.launcherHarness.getState()
-    if (!result.ok) {
-      error.value = result.code
-      return
-    }
-    state.value = result.data
-    error.value = undefined
+    await readState()
   } finally {
     loading.value = false
+  }
+}
+
+/** Updates runtime output and child state without disabling unrelated page controls. */
+async function refreshSilently(): Promise<void> {
+  if (silentRefreshInFlight || loading.value) return
+  silentRefreshInFlight = true
+  try {
+    await readState()
+  } finally {
+    silentRefreshInFlight = false
   }
 }
 
@@ -137,6 +160,39 @@ export async function installPlugin(request: InstallLauncherHarnessPluginRequest
   )
 }
 
+/** Opens the native ZIP picker and installs its package through the standard DSH CLI forwarder. */
+export async function installPluginArchive(): Promise<void> {
+  if (!window.dshLauncher || loading.value) return
+  await applyOperation('installPluginArchive', () =>
+    window.dshLauncher!.launcherHarness.installPluginArchive()
+  )
+}
+
+/** Fetches managed plugin sources and refreshes their update availability. */
+export async function refreshPlugins(): Promise<void> {
+  if (!window.dshLauncher || loading.value) return
+  await applyOperation('refreshPlugins', () => window.dshLauncher!.launcherHarness.refreshPlugins())
+}
+
+/** Refreshes one Launcher-managed Git plugin and reconciles it through the DSH CLI. */
+export async function updatePlugin(request: UpdateLauncherHarnessPluginRequest): Promise<void> {
+  if (!window.dshLauncher || loading.value) return
+  await applyOperation('updatePlugin', () =>
+    window.dshLauncher!.launcherHarness.updatePlugin(request)
+  )
+}
+
+/** Moves one legacy local Git plugin to a Launcher-owned source before updating it. */
+export async function adoptPlugin(request: AdoptLauncherHarnessPluginRequest): Promise<void> {
+  const launcherHarness = window.dshLauncher?.launcherHarness
+  if (launcherHarness === undefined || typeof launcherHarness.adoptPlugin !== 'function') {
+    error.value = 'bridge'
+    return
+  }
+  if (loading.value) return
+  await applyOperation('adoptPlugin', () => launcherHarness.adoptPlugin(request))
+}
+
 /** Removes exactly one user-installed plugin through the standard DSH CLI forwarder. */
 export async function uninstallPlugin(
   request: UninstallLauncherHarnessPluginRequest
@@ -182,11 +238,12 @@ export function useLauncherHarness() {
     void refresh()
     polling = setInterval(() => {
       if (
-        state.value?.kind === 'preparing' ||
-        state.value?.launch.kind === 'running' ||
-        state.value?.launch.kind === 'starting'
+        !loading.value &&
+        (state.value?.kind === 'preparing' ||
+          state.value?.launch.kind === 'running' ||
+          state.value?.launch.kind === 'starting')
       ) {
-        void refresh()
+        void refreshSilently()
       }
     }, 1_500)
   })
@@ -211,6 +268,10 @@ export function useLauncherHarness() {
     switchVersion,
     switchBranch,
     installPlugin,
+    installPluginArchive,
+    refreshPlugins,
+    updatePlugin,
+    adoptPlugin,
     uninstallPlugin,
     setPort
   }

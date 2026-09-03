@@ -3,8 +3,6 @@ import { createWriteStream, type WriteStream } from 'node:fs'
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import nodePath from 'node:path'
 import {
-  LAUNCHER_HARNESS_MAX_PORT,
-  LAUNCHER_HARNESS_MIN_PORT,
   type LauncherHarnessCommitView,
   type LauncherHarnessConsoleEntry,
   type LauncherHarnessLogFileView,
@@ -20,18 +18,50 @@ import {
 } from './launcher-harness-commands'
 import { terminateManagedProcessTree } from './process-tree'
 import { assertDirectDirectory, assertDirectRegularFile, runText } from './process-utils'
+import { localGitHubPluginSource } from './legacy-plugin-source'
+import { parseAnnouncedWebUrl } from './announced-web-url'
+import { waitForChildExit } from './child-exit'
+import { ManagedPluginSources, type ManagedPluginInstallSource } from './managed-plugin-sources'
+import {
+  assertPortSetting,
+  LAUNCH_PREFERENCES_FORMAT,
+  parseLaunchPreferencesPort
+} from './launch-preferences'
+import {
+  gitUrlOf,
+  localPathOf,
+  normalizeGitRemote,
+  parseProfilePluginRecords
+} from './profile-plugins'
 
-const MANAGED_DSH_SHUTDOWN_TIMEOUT_MILLISECONDS = 5_000
+/** A plugin command may resolve locally, but must never leave the UI busy indefinitely. */
+const PLUGIN_COMMAND_TIMEOUT_MILLISECONDS = 120_000
+
+export {
+  githubTreePluginUrl,
+  parseManagedGitSource,
+  type ManagedPluginInstallSource
+} from './managed-plugin-sources'
+export { parseAnnouncedWebUrl } from './announced-web-url'
+export {
+  assertPortSetting,
+  LAUNCH_PREFERENCES_FORMAT,
+  parseLaunchPreferencesPort
+} from './launch-preferences'
+export {
+  gitUrlOf,
+  localPathOf,
+  normalizeGitRemote,
+  parseProfilePluginRecords
+} from './profile-plugins'
 
 /** Inputs for the single Launcher-owned Harness checkout. */
 export interface LauncherHarnessServiceOptions {
   readonly harnessDirectory: string
+  /** Launcher-owned root for cloned and copied plugin sources. */
+  readonly pluginSourcesDirectory: string
   readonly dshHomeDirectory: string
-  /**
-   * File holding the Launcher-owned DSH launch preferences (currently the web
-   * port). It sits outside the Harness checkout so switching or re-cloning a
-   * revision never discards the user's selection.
-   */
+  /** Launcher-owned preferences outside the checkout, retained across revision switches. */
   readonly launchPreferencesPath: string
   /**
    * File receiving the full stdout and stderr of the launched DSH Web process.
@@ -46,11 +76,7 @@ export interface LauncherHarnessServiceOptions {
   readonly diagnosticsPatchPath: string
   readonly gitExecutable: string
   readonly pnpmExecutable: string
-  /**
-   * Optional direct pnpm launch command for platforms whose registered pnpm is
-   * a shell shim. Windows pnpm is a `.CMD` wrapper, so the launcher runs the
-   * underlying Node script through `node` instead of spawning the shim.
-   */
+  /** Direct pnpm command for platforms whose registered pnpm is a shell shim. */
   readonly pnpmLauncher?: Readonly<{
     readonly executable: string
     readonly prefixArguments: readonly string[]
@@ -62,6 +88,7 @@ export interface LauncherHarnessServiceOptions {
 /** Starts the packaged checkout without changing its native DSH configuration. */
 export class LauncherHarnessService {
   readonly #options: LauncherHarnessServiceOptions
+  readonly #pluginSources: ManagedPluginSources
   #child: ChildProcess | undefined
   #launch: LauncherHarnessState['launch'] = { kind: 'stopped' }
   #console: LauncherHarnessConsoleEntry[] = []
@@ -74,6 +101,10 @@ export class LauncherHarnessService {
 
   constructor(options: LauncherHarnessServiceOptions) {
     this.#options = options
+    this.#pluginSources = new ManagedPluginSources({
+      pluginsDirectory: options.pluginSourcesDirectory,
+      gitExecutable: options.gitExecutable
+    })
   }
 
   /** Records package initialization progress without changing the Harness checkout. */
@@ -235,16 +266,49 @@ export class LauncherHarnessService {
     return this.switchVersion(commit)
   }
 
-  /** Installs one curated plugin source into the native web profile via the DSH CLI. */
-  async installPlugin(source: string): Promise<LauncherHarnessState> {
-    if (!/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+/u.test(source)) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'A GitHub HTTPS plugin source is required.'
-      )
-    }
+  /** Copies or clones a source under Launcher control, then installs that copy through DSH. */
+  async installPlugin(source: ManagedPluginInstallSource): Promise<LauncherHarnessState> {
     await this.#assertReadyForVersionOperation()
-    await this.#runPluginCommand(launcherProfilePluginArguments('add', source))
+    const before = await this.#readPlugins()
+    const materialized = await this.#pluginSources.materialize(source)
+    let pluginCommandSucceeded = false
+    try {
+      await this.#runPluginCommand(
+        launcherProfilePluginArguments('add', `file:${materialized.installDirectory}`)
+      )
+      pluginCommandSucceeded = true
+      const after = await this.#readPlugins()
+      const installed = after.filter(
+        (plugin) =>
+          plugin.origin === 'user' && !before.some((previous) => previous.name === plugin.name)
+      )
+      if (installed.length !== 1) {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.plugin_operation_failed',
+          'DSH did not report exactly one newly installed plugin.'
+        )
+      }
+      await this.#pluginSources.record(installed[0].name, materialized)
+      return this.getState()
+    } catch (error) {
+      // Once DSH accepted the source, its native profile can reference it. Do
+      // not remove the directory if a later profile inspection or source-map
+      // write fails, or that profile would be left pointing at a missing path.
+      if (!pluginCommandSucceeded) {
+        await this.#pluginSources.discard(materialized.managedDirectory)
+      }
+      throw error
+    }
+  }
+
+  /** Extracts one native-selected plugin ZIP into Launcher ownership, then installs it through DSH. */
+  async installPluginArchive(archivePath: string): Promise<LauncherHarnessState> {
+    return this.installPlugin({ kind: 'archive', path: archivePath })
+  }
+
+  /** Fetches managed Git sources to calculate update availability without changing DSH's profile. */
+  async refreshPlugins(): Promise<LauncherHarnessState> {
+    await this.#pluginSources.refreshGitSourceStatus()
     return this.getState()
   }
 
@@ -266,7 +330,81 @@ export class LauncherHarnessService {
       )
     }
     await this.#runPluginCommand(launcherProfilePluginArguments('remove', name))
+    await this.#pluginSources.remove(name)
     return this.getState()
+  }
+
+  /** Updates exactly one Git-managed plugin source, then lets DSH reconcile that package. */
+  async updatePlugin(name: string): Promise<LauncherHarnessState> {
+    if (!/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) || name.length === 0) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.input_invalid',
+        'A valid plugin package name is required.'
+      )
+    }
+    await this.#assertReadyForVersionOperation()
+    const plugins = await this.#readPlugins()
+    const target = plugins.find((plugin) => plugin.name === name)
+    if (target === undefined || target.origin !== 'user') {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.input_invalid',
+        'Only a user-installed plugin can be updated.'
+      )
+    }
+    await this.#pluginSources.update(name)
+    await this.#runPluginCommand(launcherProfilePluginArguments('update', name))
+    return this.getState()
+  }
+
+  /**
+   * Moves one legacy local Git plugin into a Launcher-owned clone, then asks
+   * DSH to use that clone as its installed source. The native profile remains
+   * the only installation authority.
+   */
+  async adoptPlugin(name: string): Promise<LauncherHarnessState> {
+    this.#assertPluginName(name)
+    await this.#assertReadyForVersionOperation()
+    const plugins = await this.#readPlugins()
+    const target = plugins.find((plugin) => plugin.name === name)
+    if (target === undefined || target.origin !== 'user') {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.input_invalid',
+        'Only a user-installed plugin can be moved under DSHKer management.'
+      )
+    }
+    if (target.managedGitSource !== undefined) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.input_invalid',
+        'This plugin is already managed by DSHKer. Use update instead.'
+      )
+    }
+
+    const materialized = await this.#pluginSources.materialize({
+      kind: 'git',
+      url: await localGitHubPluginSource(this.#options.gitExecutable, target)
+    })
+    let pluginCommandSucceeded = false
+    try {
+      await this.#runPluginCommand(
+        launcherProfilePluginArguments('add', `file:${materialized.installDirectory}`)
+      )
+      pluginCommandSucceeded = true
+      const after = await this.#readPlugins()
+      const installed = after.find((plugin) => plugin.name === name && plugin.origin === 'user')
+      if (installed === undefined) {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.plugin_operation_failed',
+          'DSH did not retain the moved plugin in its native profile.'
+        )
+      }
+      await this.#pluginSources.record(name, materialized)
+      return this.getState()
+    } catch (error) {
+      if (!pluginCommandSucceeded) {
+        await this.#pluginSources.discard(materialized.managedDirectory)
+      }
+      throw error
+    }
   }
 
   /**
@@ -275,13 +413,26 @@ export class LauncherHarnessService {
    */
   async #runPluginCommand(arguments_: readonly string[]): Promise<void> {
     try {
-      await this.#runPnpm(arguments_)
+      await this.#runPnpm(arguments_, {
+        detached: process.platform !== 'win32',
+        timeoutMilliseconds: PLUGIN_COMMAND_TIMEOUT_MILLISECONDS,
+        onTimeout: (processId) => terminateManagedProcessTree(processId, process.platform)
+      })
     } catch (error) {
       throw new ManagedHarnessRuntimeError(
         'runtime.plugin_operation_failed',
         error instanceof Error ? error.message : 'The DSH plugin command failed.'
       )
     }
+  }
+
+  /** Rejects an invalid package identifier before it becomes a DSH CLI argument. */
+  #assertPluginName(name: string): void {
+    if (/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) && name.length > 0) return
+    throw new ManagedHarnessRuntimeError(
+      'runtime.input_invalid',
+      'A valid plugin package name is required.'
+    )
   }
 
   /** Resolves the direct pnpm command, forwarding shim-prefix arguments when present. */
@@ -336,11 +487,19 @@ export class LauncherHarnessService {
   }
 
   /** Runs one pnpm command inside the Launcher-owned Harness checkout. */
-  async #runPnpm(arguments_: readonly string[]): Promise<void> {
+  async #runPnpm(
+    arguments_: readonly string[],
+    execution: Readonly<{
+      readonly detached?: boolean
+      readonly timeoutMilliseconds?: number
+      readonly onTimeout?: (processId: number | undefined) => void
+    }> = {}
+  ): Promise<void> {
     const launch = this.#pnpmLaunch(arguments_)
     await runText(launch.executable, launch.arguments, {
       cwd: this.#options.harnessDirectory,
-      env: this.#pnpmEnvironment()
+      env: this.#pnpmEnvironment(),
+      ...execution
     })
   }
 
@@ -755,11 +914,31 @@ export class LauncherHarnessService {
       throw new Error('The native DSH web profile package record is invalid.')
     }
     const content = await readFile(packagePath, 'utf8')
-    const views = parseProfilePluginRecords(JSON.parse(content))
+    const [views, managedGitSources] = await Promise.all([
+      Promise.resolve(parseProfilePluginRecords(JSON.parse(content))),
+      this.#pluginSources.gitSources()
+    ])
     // A `file:` dependency carries no git source in the manifest, so the remote
     // is read from the checkout it points at. Resolution is best-effort: a
     // plugin whose checkout is gone still lists with its name and version.
-    return Promise.all(views.map(async (view) => this.#withResolvedSource(view)))
+    return Promise.all(
+      views.map(async (view) => {
+        const resolved = await this.#withResolvedSource(view)
+        const managedGitSource = managedGitSources.get(view.name)
+        return managedGitSource === undefined
+          ? resolved
+          : {
+              ...resolved,
+              managedGitSource: {
+                revision: managedGitSource.revision,
+                updateAvailable: managedGitSource.updateAvailable,
+                ...(managedGitSource.branch === undefined
+                  ? {}
+                  : { branch: managedGitSource.branch })
+              }
+            }
+      })
+    )
   }
 
   /** Adds the git remote and local path for a `file:` dependency, when readable. */
@@ -783,149 +962,6 @@ export class LauncherHarnessService {
       return { ...view, localPath }
     }
   }
-}
-
-/** Persisted document identity for the Launcher-owned DSH launch preferences. */
-export const LAUNCH_PREFERENCES_FORMAT = 'dsh-launcher.launch-preferences' as const
-
-/**
- * Admits only an automatic selection or an unprivileged integer port.
- *
- * The renderer is untrusted, so a rejected value never reaches the spawn
- * arguments of the DSH child process.
- */
-export function assertPortSetting(value: LauncherHarnessPortSetting): LauncherHarnessPortSetting {
-  if (value.mode === 'auto') return { mode: 'auto' }
-  if (
-    !Number.isSafeInteger(value.port) ||
-    value.port < LAUNCHER_HARNESS_MIN_PORT ||
-    value.port > LAUNCHER_HARNESS_MAX_PORT
-  ) {
-    throw new ManagedHarnessRuntimeError(
-      'runtime.input_invalid',
-      `A fixed DSH web port must be an integer between ${LAUNCHER_HARNESS_MIN_PORT} and ${LAUNCHER_HARNESS_MAX_PORT}.`
-    )
-  }
-  return { mode: 'fixed', port: value.port }
-}
-
-/** Reads a persisted port, falling back to automatic for any unusable document. */
-export function parseLaunchPreferencesPort(text: string): LauncherHarnessPortSetting {
-  let document: unknown
-  try {
-    document = JSON.parse(text)
-  } catch {
-    return { mode: 'auto' }
-  }
-  if (typeof document !== 'object' || document === null) return { mode: 'auto' }
-  const record = document as Record<string, unknown>
-  if (record.format !== LAUNCH_PREFERENCES_FORMAT) return { mode: 'auto' }
-  const port = record.port
-  if (typeof port !== 'object' || port === null) return { mode: 'auto' }
-  const candidate = port as Record<string, unknown>
-  if (candidate.mode !== 'fixed') return { mode: 'auto' }
-  try {
-    return assertPortSetting({ mode: 'fixed', port: candidate.port as number })
-  } catch {
-    return { mode: 'auto' }
-  }
-}
-
-/** Derives the plugin-layer view from one parsed native DSH web-profile manifest. */
-export function parseProfilePluginRecords(value: unknown): readonly LauncherHarnessPluginView[] {
-  if (!isRecord(value)) throw new Error('The native DSH web profile package record is invalid.')
-  const dependencies = value.dependencies ?? {}
-  if (!isRecord(dependencies)) {
-    throw new Error('The native DSH web profile package record is invalid.')
-  }
-  const bundles = readProfileBundles(value.dsh)
-  const views = new Map<string, LauncherHarnessPluginView>()
-  for (const [name, version] of Object.entries(dependencies)) {
-    if (typeof version !== 'string') {
-      throw new Error('The native DSH web profile package record is invalid.')
-    }
-    views.set(name, { name, version, origin: 'user' })
-  }
-  for (const name of bundles) {
-    if (views.has(name)) continue
-    views.set(name, { name, version: '', origin: 'default' })
-  }
-  return [...views.values()].sort(
-    (left, right) =>
-      Number(left.origin === 'default') - Number(right.origin === 'default') ||
-      left.name.localeCompare(right.name)
-  )
-}
-
-function readProfileBundles(value: unknown): readonly string[] {
-  if (value === undefined) return []
-  if (!isRecord(value) || !isRecord(value.profile)) {
-    throw new Error('The native DSH web profile package record is invalid.')
-  }
-  const bundles = value.profile.bundles
-  if (bundles === undefined) return []
-  if (!Array.isArray(bundles) || bundles.some((entry) => typeof entry !== 'string')) {
-    throw new Error('The native DSH web profile package record is invalid.')
-  }
-  return bundles
-}
-
-/** Loopback host DSH uses for its own announced Web URL. */
-const ANNOUNCED_URL_LINE = /^dsh web:\s*(\S+)/mu
-
-/**
- * Reads the exact URL from DSH's own `dsh web: <url>` startup line.
- *
- * Only a loopback http(s) origin is accepted, so a log line quoting some other
- * address can never redirect the Launcher's runtime view. The query and fragment
- * are preserved because DSH may place a session credential there.
- */
-export function parseAnnouncedWebUrl(text: string): string | undefined {
-  const matched = ANNOUNCED_URL_LINE.exec(text)
-  if (matched === null) return undefined
-  const candidate = matched[1]
-  if (candidate === undefined) return undefined
-  let parsed: URL
-  try {
-    parsed = new URL(candidate)
-  } catch {
-    return undefined
-  }
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined
-  if (
-    parsed.hostname !== '127.0.0.1' &&
-    parsed.hostname !== 'localhost' &&
-    parsed.hostname !== '[::1]'
-  ) {
-    return undefined
-  }
-  return parsed.toString()
-}
-
-/** Waits until one signalled child has definitely relinquished its listening sockets. */
-function waitForChildExit(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve()
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      cleanup()
-      reject(new Error('Managed DSH process did not exit before the shutdown deadline.'))
-    }, MANAGED_DSH_SHUTDOWN_TIMEOUT_MILLISECONDS)
-    const cleanup = () => {
-      clearTimeout(timer)
-      child.removeListener('exit', onExit)
-      child.removeListener('error', onError)
-    }
-    const onExit = () => {
-      cleanup()
-      resolve()
-    }
-    const onError = (error: Error) => {
-      cleanup()
-      reject(error)
-    }
-    child.once('exit', onExit)
-    child.once('error', onError)
-  })
 }
 
 /** Formats one Launcher-owned lifecycle event for both the durable log and live Console view. */
@@ -956,42 +992,6 @@ export function classifyChildConsoleStream(
   return stream === 'stderr' && /^\$\s+\S[^\r\n]*(?:\r?\n)?$/u.test(text) ? 'command' : stream
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-}
-
 function isMissing(error: unknown): boolean {
   return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
-}
-
-/** Reads the local checkout path of a `file:` dependency specifier. */
-export function localPathOf(version: string): string | undefined {
-  if (!version.startsWith('file:')) return undefined
-  const value = version.slice('file:'.length)
-  return value.length === 0 ? undefined : value
-}
-
-/** Reads a git specifier that already names a remote directly. */
-export function gitUrlOf(version: string): string | undefined {
-  if (/^(?:git\+)?(?:https?|ssh):\/\//u.test(version) || version.startsWith('git@')) {
-    return normalizeGitRemote(version)
-  }
-  return undefined
-}
-
-/**
- * Normalizes a git remote into a comparable, displayable form.
- *
- * SSH and HTTPS forms of the same GitHub repository must compare equal so an
- * installed plugin can be matched against a catalog entry, whose records are
- * always HTTPS.
- */
-export function normalizeGitRemote(remote: string): string | undefined {
-  const trimmed = remote.trim().replace(/^git\+/u, '')
-  if (trimmed.length === 0) return undefined
-  const sshMatch = /^(?:ssh:\/\/)?git@([^:/]+)(?::\d+)?[:/](.+?)(?:\.git)?$/u.exec(trimmed)
-  if (sshMatch !== null) return `https://${sshMatch[1]}/${sshMatch[2]}`
-  const httpMatch = /^(https?:\/\/[^/]+\/.+?)(?:\.git)?$/u.exec(trimmed)
-  if (httpMatch !== null) return httpMatch[1].replace(/^http:/u, 'https:')
-  return undefined
 }

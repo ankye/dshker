@@ -1,8 +1,5 @@
-import { readFileSync } from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { INITIAL_LOCALE, SUPPORTED_LOCALES, createTranslator } from './i18n'
+import { INITIAL_LOCALE, SUPPORTED_LOCALES, createTranslator, enUS, zhCN } from './i18n'
 
 describe('launcher locales', () => {
   it('has a complete Chinese bootstrap catalog', () => {
@@ -27,24 +24,8 @@ describe('launcher locales', () => {
  * text to a Chinese user or the reverse.
  */
 describe('locale catalog parity', () => {
-  const source = readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), 'i18n.ts'),
-    'utf8'
-  )
-  const catalogs = source.slice(source.indexOf('const zhCN = {'))
-  const boundary = catalogs.indexOf('const enUS')
-
-  /** Message keys and values of one catalog literal, in source order. */
-  function entries(block: string): ReadonlyMap<string, string> {
-    const found = new Map<string, string>()
-    for (const match of block.matchAll(/^ {2}'([^']+)':\s*\n?\s*'((?:[^'\\]|\\.)*)'/gmu)) {
-      found.set(match[1], match[2])
-    }
-    return found
-  }
-
-  const zh = entries(catalogs.slice(0, boundary))
-  const en = entries(catalogs.slice(boundary))
+  const zh = new Map(Object.entries(zhCN))
+  const en = new Map(Object.entries(enUS))
 
   it('defines the same message keys in every catalog', () => {
     const localeLabels = new Set<string>(SUPPORTED_LOCALES.map((entry) => entry.locale))

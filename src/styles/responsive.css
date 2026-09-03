@@ -20,6 +20,31 @@
     border-top: 1px solid var(--color-border);
     border-left: 0;
   }
+
+  .settings-port-modes {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* The supported compact desktop height must show the selected core and the
+ * persistent action together. The artwork keeps its identity role but stops
+ * consuming the decision space reserved for launch state. */
+@media (max-height: 42rem) {
+  .launch-hero {
+    min-height: 10rem;
+    padding: var(--space-4);
+  }
+
+  .launch-hero-icon {
+    top: var(--space-4);
+    right: var(--space-4);
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .launch-version {
+    min-height: 8.75rem;
+  }
 }
 
 @media (max-width: 720px) {

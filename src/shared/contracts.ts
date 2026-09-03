@@ -27,6 +27,10 @@ export const DESKTOP_IPC_CHANNELS = {
   launcherHarnessSwitchVersion: 'dsh-launcher:launcher-harness:switch-version',
   launcherHarnessSwitchBranch: 'dsh-launcher:launcher-harness:switch-branch',
   launcherHarnessInstallPlugin: 'dsh-launcher:launcher-harness:install-plugin',
+  launcherHarnessInstallPluginArchive: 'dsh-launcher:launcher-harness:install-plugin-archive',
+  launcherHarnessRefreshPlugins: 'dsh-launcher:launcher-harness:refresh-plugins',
+  launcherHarnessUpdatePlugin: 'dsh-launcher:launcher-harness:update-plugin',
+  launcherHarnessAdoptPlugin: 'dsh-launcher:launcher-harness:adopt-plugin',
   launcherHarnessUninstallPlugin: 'dsh-launcher:launcher-harness:uninstall-plugin',
   launcherHarnessSetPort: 'dsh-launcher:launcher-harness:set-port',
   launcherHarnessRevealLog: 'dsh-launcher:launcher-harness:reveal-log',
@@ -143,6 +147,7 @@ export type ManagedRootKind = 'harness' | 'plugins' | 'presets' | 'settings'
 export type DirectorySelectionPurpose =
   | `managed-root:${ManagedRootKind}`
   | 'workspace-working-directory'
+  | 'plugin-source'
 
 /** An opaque capability returned after one native directory selection. */
 export interface ManagedDirectorySelection {
@@ -270,6 +275,13 @@ export interface LauncherHarnessPluginView {
   readonly sourceUrl?: string
   /** Local checkout a `file:` dependency resolves to. */
   readonly localPath?: string
+  /** Launcher-owned Git source metadata for an individually updateable plugin. */
+  readonly managedGitSource?: Readonly<{
+    readonly revision: string
+    readonly branch?: string
+    /** Whether a user-triggered source refresh found a newer declared branch commit. */
+    readonly updateAvailable: boolean
+  }>
 }
 
 /** Whether a catalog entry is already installed, matched by git source. */
@@ -425,9 +437,24 @@ export interface SwitchLauncherHarnessBranchRequest {
   readonly branch: string
 }
 
-/** A plugin install source admitted only as an HTTPS GitHub repository URL. */
+/** One plugin source selected for materialization below the Launcher plugins root. */
+export type LauncherHarnessPluginSource =
+  | { readonly kind: 'git'; readonly url: string }
+  | { readonly kind: 'local'; readonly capabilityId: string }
+
+/** A plugin install source admitted through typed Git or native-picker selection. */
 export interface InstallLauncherHarnessPluginRequest {
-  readonly source: string
+  readonly source: LauncherHarnessPluginSource
+}
+
+/** Identifies one Git-managed plugin to update through its native DSH profile. */
+export interface UpdateLauncherHarnessPluginRequest {
+  readonly name: string
+}
+
+/** Identifies a legacy local Git plugin that DSHKer should move under its update management. */
+export interface AdoptLauncherHarnessPluginRequest {
+  readonly name: string
 }
 
 /**
@@ -505,6 +532,15 @@ export interface DesktopApi {
     installPlugin(
       request: InstallLauncherHarnessPluginRequest
     ): Promise<ApiResult<LauncherHarnessState>>
+    /** Opens the native ZIP picker and installs the selected plugin archive. */
+    installPluginArchive(): Promise<ApiResult<LauncherHarnessState>>
+    refreshPlugins(): Promise<ApiResult<LauncherHarnessState>>
+    updatePlugin(
+      request: UpdateLauncherHarnessPluginRequest
+    ): Promise<ApiResult<LauncherHarnessState>>
+    adoptPlugin(
+      request: AdoptLauncherHarnessPluginRequest
+    ): Promise<ApiResult<LauncherHarnessState>>
     uninstallPlugin(
       request: UninstallLauncherHarnessPluginRequest
     ): Promise<ApiResult<LauncherHarnessState>>
@@ -556,6 +592,14 @@ export interface TokenUsageTotals {
   readonly cacheWriteTokens: number
 }
 
+/** One local-calendar day and model pair, aggregated from DSH usage reports. */
+export interface DailyModelTokenUsage extends TokenUsageTotals {
+  /** Local calendar day in `YYYY-MM-DD`, derived from the recorded event time. */
+  readonly date: string
+  /** Exact model identifier DSH recorded, or `unknown` when it was absent. */
+  readonly model: string
+}
+
 /** How many detailed session rows the renderer wants; totals always cover all. */
 export interface TokenUsageRequest {
   readonly limit?: number
@@ -570,6 +614,8 @@ export interface TokenUsageState {
   readonly totalSessions: number
   /** Summed over every readable session, never only the returned page. */
   readonly totals: TokenUsageTotals
+  /** Exact per-day, per-model totals for the statistics tab. */
+  readonly dailyByModel: readonly DailyModelTokenUsage[]
   /** Sessions whose log could not be read, reported instead of silently dropped. */
   readonly unreadableSessions: number
 }

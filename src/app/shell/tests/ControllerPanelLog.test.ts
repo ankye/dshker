@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LauncherHarnessState } from '@/shared/contracts'
 import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
 import ControllerPanel from '../components/ControllerPanel.vue'
+import ControllerPrimaryAction from '../components/ControllerPrimaryAction.vue'
 
 /**
  * The console is where a failed launch explains itself, so its log controls are
@@ -44,6 +45,7 @@ describe('ControllerPanel log controls', () => {
     harnessState.value = readyState([])
     const wrapper = mount(ControllerPanel)
 
+    expect(wrapper.find('.controller-command').exists()).toBe(false)
     const path = wrapper.get('.controller-log-path')
     expect(path.text()).toBe(logFile.path)
     // Truncation is visual only; the full value must remain recoverable.
@@ -81,6 +83,23 @@ describe('ControllerPanel log controls', () => {
     expect(copied).toContain(new Date(1_700_000_000_000).toISOString())
   })
 
+  it('copies the right-clicked log row without requiring a prior text selection', async () => {
+    const writeText = vi.fn(async (_text: string) => undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    harnessState.value = readyState([
+      { stream: 'launcher', occurredAt: 1_700_000_000_000, text: 'child started\n' }
+    ])
+    const wrapper = mount(ControllerPanel)
+
+    await wrapper.get('.controller-output li').trigger('contextmenu', { clientX: 40, clientY: 60 })
+    const copy = wrapper.get('.controller-copy-menu')
+    expect(copy.text()).toBe('复制')
+    await copy.trigger('click')
+
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('child started'))
+    expect(wrapper.find('.controller-copy-menu').exists()).toBe(false)
+  })
+
   it('cannot copy output that does not exist', () => {
     harnessState.value = readyState([])
     const wrapper = mount(ControllerPanel)
@@ -108,11 +127,11 @@ describe('ControllerPanel log controls', () => {
     expect(wrapper.get('.controller-log-path').text()).toBe(logFile.path)
   })
 
-  it('keeps a one-click launch action and exact runtime status at the Console bottom', () => {
+  it('uses the same primary action treatment as Launch at the Console bottom', () => {
     harnessState.value = readyState([])
-    const wrapper = mount(ControllerPanel)
+    const wrapper = mount(ControllerPrimaryAction)
 
-    const action = wrapper.get('.controller-bottom-action .prototype-button')
+    const action = wrapper.get('.launch-primary-action')
     expect(wrapper.get('.controller-runtime-status').text()).toBe('未启动')
     expect(action.text()).toBe('一键启动')
   })
@@ -122,9 +141,11 @@ describe('ControllerPanel log controls', () => {
       ...readyState([]),
       launch: { kind: 'running', url: 'http://127.0.0.1:3088/?token=launcher' }
     }
-    const wrapper = mount(ControllerPanel)
+    const wrapper = mount(ControllerPrimaryAction)
 
     expect(wrapper.get('.controller-runtime-status').text()).toBe('运行中')
-    expect(wrapper.get('.controller-bottom-action .prototype-button').text()).toBe('终止进程')
+    const action = wrapper.get('.launch-primary-action')
+    expect(action.text()).toBe('终止进程')
+    expect(action.attributes('data-running')).toBe('true')
   })
 })

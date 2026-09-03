@@ -133,6 +133,11 @@ export class ManagedWorkspaceService {
     return projectSelection(capability)
   }
 
+  /** Consumes one native-selected source directory for the plugin materializer. */
+  consumePluginSourceDirectory(capabilityId: string): string {
+    return this.#capabilities.consume(capabilityId, 'plugin-source').canonicalPath
+  }
+
   /** Commits the exactly four selected roots after all filesystem and topology checks succeed. */
   async registerRoots(request: RegisterManagedRootsRequest): Promise<ManagedLauncherState> {
     return this.#runExclusive(async () => {
@@ -348,7 +353,6 @@ export class ManagedWorkspaceService {
         })
       )
       assertManagedRootLayout(roots, this.#pathStyle, this.#nativeDshHomePath)
-      await Promise.all(roots.map((root) => assertEmptyManagedRoot(root.canonicalPath)))
       const settingsRoot = roots.find((root) => root.kind === 'settings')
       if (!settingsRoot) {
         throw new ManagedRootError('managed.invalid_record', 'Default Settings root is missing.')

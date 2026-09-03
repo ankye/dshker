@@ -16,8 +16,10 @@ import { useManagedWorkspaces } from '../state/useManagedWorkspaces'
 const props = withDefaults(
   defineProps<{
     readonly showInstallations?: boolean
+    /** DSH Web runtime settings belong to the DSH tab, not Launcher ownership settings. */
+    readonly showPort?: boolean
   }>(),
-  { showInstallations: true }
+  { showInstallations: true, showPort: true }
 )
 
 const t = useTranslator()
@@ -337,7 +339,11 @@ function errorCode(value: DesktopApiErrorCode): string {
         </form>
       </section>
 
-      <section class="managed-workspace-section" aria-labelledby="managed-port-heading">
+      <section
+        v-if="props.showPort"
+        class="managed-workspace-section"
+        aria-labelledby="managed-port-heading"
+      >
         <header class="managed-section-header">
           <h3 id="managed-port-heading">{{ t('managed.port.title') }}</h3>
           <p>{{ t('managed.port.description') }}</p>

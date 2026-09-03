@@ -17,7 +17,7 @@ describe('visual smoke', () => {
     // Resizing the window must not hide chrome or a route's own controls.
     for (const name of [
       'layout.shell-pinned-to-viewport',
-      'layout.stage-scrolls',
+      'layout.route-content-scrolls',
       'layout.console-log-bounded',
       'layout.no-hand-computed-route-height'
     ]) {

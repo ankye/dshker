@@ -55,13 +55,14 @@ describe('shell scroll and height adaptation', () => {
     expect(hasDeclaration(root, 'min-height', '100%')).toBe(false)
   })
 
-  it('makes the route stage the single vertical scroll container', () => {
+  it('keeps the stage clipped while route content becomes the vertical scroll container', () => {
     const stage = ruleBlock('.workbench-stage')
+    const content = ruleBlock('.route-stage-content')
 
-    expect(hasDeclaration(stage, 'overflow-y', 'auto')).toBe(true)
-    // Without this the stage cannot shrink inside its grid row, so no scrollbar
-    // ever appears and the shell grows instead.
+    expect(hasDeclaration(stage, 'overflow', 'hidden')).toBe(true)
     expect(hasDeclaration(stage, 'min-height', '0')).toBe(true)
+    expect(hasDeclaration(content, 'overflow-y', 'auto')).toBe(true)
+    expect(hasDeclaration(content, 'min-height', '0')).toBe(true)
   })
 
   it('keeps each route header fixed while its body scrolls', () => {

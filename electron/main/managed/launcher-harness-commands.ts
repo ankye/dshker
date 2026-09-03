@@ -13,5 +13,15 @@ export function launcherProfilePluginArguments(
   operation: 'add' | 'remove' | 'update',
   target?: string
 ): readonly string[] {
-  return ['dsh', 'plugin', '--profile', 'web', operation, ...(target === undefined ? [] : [target])]
+  return [
+    'dsh',
+    'plugin',
+    '--profile',
+    'web',
+    operation,
+    ...(target === undefined ? [] : [target]),
+    // Removing an installed package must not wait for the registry. Every
+    // artifact needed to unlink it is already present in this profile.
+    ...(operation === 'remove' ? ['--config.offline=true'] : [])
+  ]
 }

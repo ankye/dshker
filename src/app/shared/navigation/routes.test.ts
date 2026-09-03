@@ -5,9 +5,8 @@ describe('launcher navigation', () => {
   it('keeps the primary launcher workflow in sidebar order', () => {
     expect(APPLICATION_ROUTES.map((route) => route.id)).toEqual([
       'launch',
-      'advanced',
-      'versions',
       'controller',
+      'versions',
       'usage',
       'settings',
       'runtime'

@@ -43,6 +43,18 @@ const BUNDLED_HARNESS_REMOTE_URL = 'https://github.com/deepseek-ai/deepseek-harn
 const IS_SMOKE_TEST =
   process.env.DESKTOP_APP_SMOKE_TEST === '1' || process.env.ELECTRON_SMOKE_TEST === '1'
 
+const remoteDebuggingPort = process.env.ELECTRON_REMOTE_DEBUGGING_PORT
+if (remoteDebuggingPort !== undefined) {
+  if (!/^\d+$/u.test(remoteDebuggingPort)) {
+    throw new Error('ELECTRON_REMOTE_DEBUGGING_PORT must be a TCP port number.')
+  }
+  const port = Number(remoteDebuggingPort)
+  if (!Number.isInteger(port) || port < 1024 || port > 65_535) {
+    throw new Error('ELECTRON_REMOTE_DEBUGGING_PORT must be between 1024 and 65535.')
+  }
+  app.commandLine.appendSwitch('remote-debugging-port', remoteDebuggingPort)
+}
+
 const GIT_EXECUTABLE = resolveGitExecutable()
 const PNPM_LAUNCHER = resolvePnpmLauncher()
 
@@ -132,6 +144,7 @@ async function registerLauncherServices(
   await managedWorkspaceService.initializeDefaultRoots()
   const launcherHarnessService = new LauncherHarnessService({
     harnessDirectory: path.join(launcherRoot, 'harness'),
+    pluginSourcesDirectory: path.join(launcherRoot, 'plugins'),
     dshHomeDirectory: path.join(homedir(), '.dsh'),
     launchPreferencesPath: path.join(launcherRoot, 'launch-preferences.json'),
     launchLogPath: path.join(launcherRoot, 'logs', 'dsh-web.log'),

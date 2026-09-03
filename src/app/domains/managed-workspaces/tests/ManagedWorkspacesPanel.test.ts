@@ -223,6 +223,11 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       switchVersion: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       switchBranch: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       installPlugin: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      installPluginArchive: async () =>
+        apiFail('managed.missing_registry', 'Not used in this test.'),
+      refreshPlugins: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      updatePlugin: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      adoptPlugin: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       uninstallPlugin: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       revealLog: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       exportLog: async () => apiFail('managed.missing_registry', 'Not used in this test.'),

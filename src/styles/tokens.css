@@ -60,6 +60,7 @@
   --layout-sidebar-width: 6.25rem;
   --layout-sidebar-collapsed-width: 3.75rem;
   --focus-ring: 0 0 0 3px rgb(120 167 255 / 42%);
+  --shadow-float: 0 0.5rem 1.25rem rgb(0 0 0 / 22%);
 
   /* Motion. Durations stay short because this is a dense desktop tool: feedback
    * should read as immediate, not animated. `--motion-emphasis` is reserved for

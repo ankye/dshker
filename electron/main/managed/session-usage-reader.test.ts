@@ -10,6 +10,19 @@ function usageChunk(turn: number, step: number, usage: Record<string, number>): 
   return line({ type: 'assistant/chunk', data: { turn, step, chunk: { type: 'usage', usage } } })
 }
 
+function timedUsageChunk(
+  turn: number,
+  step: number,
+  time: number,
+  usage: Record<string, number>
+): string {
+  return line({
+    type: 'assistant/chunk',
+    time,
+    data: { turn, step, chunk: { type: 'usage', usage } }
+  })
+}
+
 describe('foldSessionLog', () => {
   it('reads session identity, model, and the first prompt', () => {
     const text = [
@@ -90,6 +103,53 @@ describe('foldSessionLog', () => {
     expect(folded.cacheWriteTokens).toBe(20)
   })
 
+  it('groups timestamped usage by its local day and active model', () => {
+    const day = new Date(2026, 8, 3, 10, 0, 0).getTime()
+    const text = [
+      line({
+        type: 'request/header',
+        data: { header: { config: { model: 'deepseek-v4' } } }
+      }),
+      timedUsageChunk(1, 1, day, { inputTokens: 100, outputTokens: 10 })
+    ].join('\n')
+
+    expect(foldSessionLog(text).dailyByModel).toEqual([
+      {
+        date: '2026-09-03',
+        model: 'deepseek-v4',
+        uncachedInputTokens: 100,
+        outputTokens: 10,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0
+      }
+    ])
+  })
+
+  it('moves a replacement report out of its original daily model group', () => {
+    const day = new Date(2026, 8, 3, 10, 0, 0).getTime()
+    const text = [
+      line({ type: 'request/header', data: { header: { config: { model: 'model-a' } } } }),
+      timedUsageChunk(1, 1, day, { inputTokens: 10, outputTokens: 1 }),
+      line({ type: 'request/header', data: { header: { config: { model: 'model-b' } } } }),
+      line({
+        type: 'assistant/message',
+        time: day,
+        data: { turn: 1, step: 1, usage: { inputTokens: 20, outputTokens: 2 } }
+      })
+    ].join('\n')
+
+    expect(foldSessionLog(text).dailyByModel).toEqual([
+      {
+        date: '2026-09-03',
+        model: 'model-b',
+        uncachedInputTokens: 20,
+        outputTokens: 2,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0
+      }
+    ])
+  })
+
   it('counts turns and steps', () => {
     const text = [
       line({ type: 'turn/start', data: { turn: 1 } }),
@@ -168,6 +228,16 @@ describe('foldSessionLog resume', () => {
     expect(resumed.folded.sessionId).toBe('session-9')
     expect(resumed.folded.createdAt).toBe(42)
     expect(resumed.folded.firstPrompt).toBe('first ask')
+  })
+
+  it('uses the most recent model header after an append resumes', () => {
+    const day = new Date(2026, 8, 3, 10, 0, 0).getTime()
+    const first = foldSessionLog(
+      line({ type: 'request/header', data: { header: { config: { model: 'latest-model' } } } })
+    )
+    const resumed = foldSessionLog(timedUsageChunk(1, 1, day, { inputTokens: 10 }), first)
+
+    expect(resumed.dailyByModel[0]?.model).toBe('latest-model')
   })
 })
 

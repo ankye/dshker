@@ -34,5 +34,7 @@ function titleFor(purpose: DirectorySelectionPurpose): string {
       return '选择设置根目录'
     case 'workspace-working-directory':
       return '选择工作目录'
+    case 'plugin-source':
+      return '选择本地插件目录'
   }
 }

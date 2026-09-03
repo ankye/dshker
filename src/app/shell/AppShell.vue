@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
 import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
-import { ManagedWorkspacesPanel } from '../domains/managed-workspaces'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
 import ControllerPanel from './components/ControllerPanel.vue'
+import ControllerPrimaryAction from './components/ControllerPrimaryAction.vue'
 import UsagePanel from './components/UsagePanel.vue'
 import LaunchPanel from './components/LaunchPanel.vue'
+import LaunchPrimaryAction from './components/LaunchPrimaryAction.vue'
 import RouteStage from './components/RouteStage.vue'
 import RuntimeTabsPanel from './components/RuntimeTabsPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
@@ -13,7 +14,6 @@ import ShellSidebar, { type NavigationItem } from './components/ShellSidebar.vue
 import ShellStatusbar from './components/ShellStatusbar.vue'
 import ShellToast from './components/ShellToast.vue'
 import VersionManagementPanel from './components/VersionManagementPanel.vue'
-import VersionStageActions from './components/VersionStageActions.vue'
 import { startLocale } from '../shared/i18n/useLocale'
 import { startTheme } from '../shared/theme/useTheme'
 import { useLauncherShell } from './useLauncherShell'
@@ -30,21 +30,34 @@ const pluginCatalog = usePluginCatalog()
 
 const statusbarOperationLabel = computed(() => {
   const operation = harness.activeOperation.value
-  if (operation === undefined || operation === 'refresh') return undefined
-  switch (operation) {
-    case 'switch':
-      return shell.t('status.operation.switch')
-    case 'update':
-      return shell.t('status.operation.update')
-    case 'start':
-      return shell.t('status.operation.start')
-    case 'stop':
-      return shell.t('status.operation.stop')
-    case 'installPlugin':
-      return shell.t('status.operation.installPlugin')
-    case 'uninstallPlugin':
-      return shell.t('status.operation.uninstallPlugin')
+  if (operation !== undefined) {
+    switch (operation) {
+      case 'switch':
+        return shell.t('status.operation.switch')
+      case 'update':
+        return shell.t('status.operation.update')
+      case 'start':
+        return shell.t('status.operation.start')
+      case 'stop':
+        return shell.t('status.operation.stop')
+      case 'refresh':
+        return shell.t('status.operation.refreshVersions')
+      case 'installPlugin':
+        return shell.t('status.operation.installPlugin')
+      case 'installPluginArchive':
+        return shell.t('status.operation.installPluginArchive')
+      case 'refreshPlugins':
+        return shell.t('status.operation.refreshPlugins')
+      case 'updatePlugin':
+        return shell.t('status.operation.updatePlugin')
+      case 'adoptPlugin':
+        return shell.t('status.operation.adoptPlugin')
+      case 'uninstallPlugin':
+        return shell.t('status.operation.uninstallPlugin')
+    }
   }
+  if (pluginCatalog.loading.value) return shell.t('status.operation.refreshCatalog')
+  return undefined
 })
 
 const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.t>[0]>> = {
@@ -124,16 +137,17 @@ const protocolVersion = computed(() =>
 
 <template>
   <div class="app-shell">
-    <div class="shell-body" :data-sidebar-collapsed="shell.sidebarCollapsed.value">
+    <div class="shell-body" :data-sidebar-state="shell.sidebarState.value">
       <ShellSidebar
         :title="shell.t('app.title')"
         :items="applicationItems"
         :active-route="shell.activeRoute.value"
-        :collapsed="shell.sidebarCollapsed.value"
+        :state="shell.sidebarState.value"
         :collapse-label="shell.t('nav.collapse')"
+        :hide-label="shell.t('nav.hide')"
         :expand-label="shell.t('nav.expand')"
         @select="shell.selectRoute"
-        @toggle="shell.toggleSidebar"
+        @advance="shell.advanceSidebar"
       />
 
       <main class="workbench-stage">
@@ -143,18 +157,13 @@ const protocolVersion = computed(() =>
           :description="shell.t('launch.description')"
           :status="shell.bootstrapStatus.value"
           :status-kind="statusKind"
+          :header-visible="false"
+          :footer-visible="harness.state.value?.kind === 'ready'"
         >
           <LaunchPanel @navigate="shell.selectRoute" />
-        </RouteStage>
-
-        <RouteStage
-          v-else-if="shell.activeRoute.value === 'advanced'"
-          :title="shell.t('advanced.title')"
-          :description="shell.t('advanced.description')"
-          :status="shell.bootstrapStatus.value"
-          :status-kind="statusKind"
-        >
-          <ManagedWorkspacesPanel :show-installations="false" />
+          <template #footer>
+            <LaunchPrimaryAction />
+          </template>
         </RouteStage>
 
         <RouteStage
@@ -164,9 +173,6 @@ const protocolVersion = computed(() =>
           :status="shell.bootstrapStatus.value"
           :status-kind="statusKind"
         >
-          <template #actions>
-            <VersionStageActions />
-          </template>
           <VersionManagementPanel />
         </RouteStage>
 
@@ -176,8 +182,12 @@ const protocolVersion = computed(() =>
           :description="shell.t('controller.description')"
           :status="shell.bootstrapStatus.value"
           :status-kind="statusKind"
+          :footer-visible="harness.state.value?.kind === 'ready'"
         >
           <ControllerPanel @navigate="shell.selectRoute" />
+          <template #footer>
+            <ControllerPrimaryAction />
+          </template>
         </RouteStage>
 
         <RouteStage
