@@ -130,12 +130,16 @@ async function launchSmoke(executablePath) {
   let exitCode = 0
 
   try {
-    const result = await execFileAsync(executablePath, [], {
-      cwd: path.dirname(executablePath),
-      env: launchEnv,
-      timeout: 20000,
-      windowsHide: true
-    })
+    const result = await execFileAsync(
+      executablePath,
+      ['--dshker-smoke', '--dshker-smoke-output', outputPath],
+      {
+        cwd: path.dirname(executablePath),
+        env: launchEnv,
+        timeout: 20000,
+        windowsHide: true
+      }
+    )
     stdout = result.stdout || ''
     stderr = result.stderr || ''
   } catch (error) {

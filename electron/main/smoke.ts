@@ -19,7 +19,13 @@ import {
 } from './smoke-helpers'
 
 function smokeOutputPath(): string | undefined {
-  return process.env.DESKTOP_APP_SMOKE_OUTPUT ?? process.env.ELECTRON_SMOKE_OUTPUT
+  const environmentPath = process.env.DESKTOP_APP_SMOKE_OUTPUT ?? process.env.ELECTRON_SMOKE_OUTPUT
+  if (environmentPath !== undefined) return environmentPath
+  const markerIndex = process.argv.indexOf('--dshker-smoke-output')
+  const argumentPath = process.argv[markerIndex + 1]
+  return markerIndex >= 0 && argumentPath !== undefined && argumentPath.trim().length > 0
+    ? argumentPath
+    : undefined
 }
 
 /**

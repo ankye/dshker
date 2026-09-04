@@ -49,7 +49,9 @@ const DIRECTORY_SELECTION_TTL_MILLISECONDS = 5 * 60 * 1_000
 const EXECUTABLE_SELECTION_TTL_MILLISECONDS = 5 * 60 * 1_000
 const BUNDLED_HARNESS_REMOTE_URL = 'https://github.com/deepseek-ai/deepseek-harness.git'
 const IS_SMOKE_TEST =
-  process.env.DESKTOP_APP_SMOKE_TEST === '1' || process.env.ELECTRON_SMOKE_TEST === '1'
+  process.env.DESKTOP_APP_SMOKE_TEST === '1' ||
+  process.env.ELECTRON_SMOKE_TEST === '1' ||
+  process.argv.includes('--dshker-smoke')
 
 const remoteDebuggingPort = process.env.ELECTRON_REMOTE_DEBUGGING_PORT
 if (remoteDebuggingPort !== undefined) {
