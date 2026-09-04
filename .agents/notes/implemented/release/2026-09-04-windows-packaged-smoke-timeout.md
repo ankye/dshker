@@ -23,9 +23,15 @@ launch payload. The smoke now records native startup stages and BrowserWindow
 load events in `packaged-launch.json.trace`, which the workflow copies into its
 diagnostic artifact.
 
+The `0.1.9` trace showed that Windows completed renderer load, route smoke, and
+height adaptation, then stalled waiting for the first animation frame after a
+resize. The smoke window was fully outside the virtual desktop at negative
+coordinates; `0.1.10` keeps it at `(0, 0)` and records the paint/capture
+boundaries so the compositor can continue producing evidence.
+
 ## Verification target
 
-The `0.1.9` tag must produce successful macOS arm64 and Windows x64 packaged
+The `0.1.10` tag must produce successful macOS arm64 and Windows x64 packaged
 smoke evidence, followed by one public latest GitHub Release. A failed smoke
 still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.

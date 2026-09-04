@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.10 — 2026-09-04
+
+- Keep the Windows packaged smoke window on-screen so resize-triggered frame
+  evidence cannot stall on a compositor-suspended off-screen window.
+- Record explicit renderer-paint and first-frame capture stages in packaged
+  smoke diagnostics.
+
 ## 0.1.9 — 2026-09-04
 
 - Hardened the Windows packaged-app release smoke gate with an explicit startup

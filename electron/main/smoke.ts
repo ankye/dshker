@@ -93,8 +93,11 @@ async function captureRouteScreenshots(
  */
 export async function runSmokeTest(mainDirectory: string): Promise<void> {
   const smokeWindow = new BrowserWindow({
-    x: -10000,
-    y: -10000,
+    // Windows may suspend requestAnimationFrame for a fully off-virtual-screen
+    // window after a resize. Keep the smoke window in the desktop work area so
+    // the compositor continues producing the frame evidence we are checking.
+    x: 0,
+    y: 0,
     width: 1240,
     height: 820,
     minWidth: 760,
@@ -158,8 +161,12 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
       routeEvidence.routes.map((entry) => entry.id)
     )
     await writeSmokeTrace('runSmokeTest:after-height-adaptation')
+    await writeSmokeTrace('runSmokeTest:before-renderer-paint')
     await waitForRendererPaint(smokeWindow)
+    await writeSmokeTrace('runSmokeTest:after-renderer-paint')
+    await writeSmokeTrace('runSmokeTest:before-first-frame-capture')
     firstFrame = analyzeFirstFrame(await captureFirstFrame(smokeWindow))
+    await writeSmokeTrace('runSmokeTest:after-first-frame-capture')
     // Opt-in visual evidence. The packaged smoke is the only path that renders
     // with the real preload and custom protocol, so design review reads its
     // screenshots rather than a separately launched window.
