@@ -7,6 +7,14 @@ export interface RunTextOptions extends SpawnOptions {
   readonly timeoutMilliseconds?: number
   /** Receives the spawned process id when {@link timeoutMilliseconds} expires. */
   readonly onTimeout?: (processId: number | undefined) => void
+  /**
+   * Receives each stdout and stderr fragment as it arrives.
+   *
+   * Result collection is unchanged: the promise still resolves with complete
+   * stdout and rejects with stderr. Callers use this to mirror long-running
+   * commands (pnpm install, git fetch) into the visible console while they run.
+   */
+  readonly onOutput?: (stream: 'stdout' | 'stderr', text: string) => void
 }
 
 /** Identifies a command that exceeded the caller-owned operation limit. */
@@ -44,7 +52,7 @@ export function runText(
   options: RunTextOptions = {}
 ): Promise<string> {
   return new Promise((resolve, reject) => {
-    const { timeoutMilliseconds, onTimeout, ...spawnOptions } = options
+    const { timeoutMilliseconds, onTimeout, onOutput, ...spawnOptions } = options
     let child: ChildProcess
     try {
       child = spawn(executable, arguments_, {
@@ -64,10 +72,14 @@ export function runText(
       if (timeout !== undefined) clearTimeout(timeout)
     }
     child.stdout?.on('data', (chunk: unknown) => {
-      stdout += String(chunk)
+      const text = String(chunk)
+      stdout += text
+      onOutput?.('stdout', text)
     })
     child.stderr?.on('data', (chunk: unknown) => {
-      stderr += String(chunk)
+      const text = String(chunk)
+      stderr += text
+      onOutput?.('stderr', text)
     })
     child.once('error', (error) => {
       clearTimeoutIfScheduled()

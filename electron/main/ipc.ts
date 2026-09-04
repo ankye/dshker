@@ -1,4 +1,4 @@
-import { dialog, ipcMain, shell } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import {
   APP_METADATA,
   DESKTOP_API_VERSION,
@@ -61,6 +61,17 @@ export interface LauncherIpcOptions {
 
 /** Registers only named, sender-validated, runtime-validated Launcher IPC methods. */
 export function registerIpc(options: LauncherIpcOptions): void {
+  // The one main-to-renderer push channel: appended console records reach every
+  // launcher window immediately, so operation and launch output no longer wait
+  // for the renderer's periodic state read. Entry payloads are service-owned.
+  options.launcherHarnessService.onConsoleAppend((entry) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      if (!window.isDestroyed()) {
+        window.webContents.send(DESKTOP_IPC_CHANNELS.launcherHarnessConsoleAppended, [entry])
+      }
+    }
+  })
+
   ipcMain.handle(DESKTOP_IPC_CHANNELS.bootstrapInfo, (event, ...args): ApiResult<BootstrapInfo> => {
     if (!isTrustedRenderer(event)) return invalidSender()
     if (args.length !== 0) return invalidManagedPayload()

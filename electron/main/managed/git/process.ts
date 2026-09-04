@@ -380,6 +380,9 @@ function deterministicGitArguments(arguments_: readonly string[]): readonly stri
     'credential.helper=',
     '-c',
     `core.hooksPath=${nullDevice}`,
+    // Windows caps paths at 260 characters unless git uses its long-path file
+    // APIs; a staging mirror path plus a pack file name already exceeds that.
+    ...(process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : []),
     ...arguments_
   ]
 }

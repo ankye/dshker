@@ -18,7 +18,11 @@ function mountSidebar() {
       title: 'DSHKer Launcher',
       collapseLabel: 'Collapse to icon rail',
       hideLabel: 'Hide',
-      expandLabel: 'Expand'
+      expandLabel: 'Expand',
+      consoleLabel: 'Live output',
+      consoleUnreadLabel: 'New output',
+      consoleOpen: false,
+      consoleUnread: false
     }
   })
 }
@@ -44,7 +48,7 @@ describe('ShellSidebar', () => {
 
   it('keeps the floating sidebar control accessible and advances the state cycle', async () => {
     const wrapper = mountSidebar()
-    const toggle = wrapper.get('.sidebar-toggle')
+    const toggle = wrapper.get('.sidebar-state-toggle')
 
     expect(toggle.attributes('aria-label')).toBe('Collapse to icon rail')
     expect(toggle.find('svg').exists()).toBe(true)
@@ -56,11 +60,34 @@ describe('ShellSidebar', () => {
     const wrapper = mountSidebar()
 
     await wrapper.setProps({ state: 'collapsed' })
-    expect(wrapper.get('.sidebar-toggle').attributes('aria-label')).toBe('Hide')
+    expect(wrapper.get('.sidebar-state-toggle').attributes('aria-label')).toBe('Hide')
     expect(wrapper.find('.sidebar').attributes('data-collapsed')).toBe('true')
 
     await wrapper.setProps({ state: 'hidden' })
-    expect(wrapper.get('.sidebar-toggle').attributes('aria-label')).toBe('Expand')
+    expect(wrapper.get('.sidebar-state-toggle').attributes('aria-label')).toBe('Expand')
     expect(wrapper.find('.sidebar').exists()).toBe(false)
+  })
+
+  it('rides the console tail control on the same floating rail', async () => {
+    const wrapper = mountSidebar()
+    const consoleToggle = wrapper.get('.sidebar-console-toggle')
+
+    expect(consoleToggle.attributes('aria-expanded')).toBe('false')
+    expect(consoleToggle.attributes('aria-label')).toBe('Live output')
+    expect(wrapper.find('.sidebar-console-badge').exists()).toBe(false)
+
+    await consoleToggle.trigger('click')
+    expect(wrapper.emitted('toggleConsole')).toEqual([[]])
+  })
+
+  it('advertises unread output and its expanded state on the control', async () => {
+    const wrapper = mountSidebar()
+
+    await wrapper.setProps({ consoleUnread: true, consoleOpen: true })
+    const consoleToggle = wrapper.get('.sidebar-console-toggle')
+
+    expect(consoleToggle.attributes('aria-expanded')).toBe('true')
+    expect(consoleToggle.attributes('aria-label')).toBe('Live output · New output')
+    expect(wrapper.find('.sidebar-console-badge').exists()).toBe(true)
   })
 })

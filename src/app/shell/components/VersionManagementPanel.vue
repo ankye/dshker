@@ -35,16 +35,23 @@ watch(activeTab, () => {
 })
 
 watch(branchPickerOpen, (open) => {
-  if (open && harness.state.value?.kind === 'ready') {
+  if (open && harness.state.value?.currentBranch !== undefined) {
     selectedBranch.value = harness.state.value.currentBranch
   }
 })
 
+/** The core list renders whenever main-repository history is readable. */
+const coreListVisible = computed(() => {
+  const state = harness.state.value
+  return state !== undefined && (state.kind === 'ready' || state.commits.length > 0)
+})
+
 const visibleVersions = computed(() => {
-  if (harness.state.value?.kind !== 'ready') return []
+  const state = harness.state.value
+  if (state === undefined || (state.kind !== 'ready' && state.commits.length === 0)) return []
   return activeCoreTab.value === 'stable'
-    ? harness.state.value.stableVersions.map((version) => ({ ...version, versionId: version.tag }))
-    : harness.state.value.commits.map((version) => ({
+    ? state.stableVersions.map((version) => ({ ...version, versionId: version.tag }))
+    : state.commits.map((version) => ({
         ...version,
         versionId: version.hash.slice(0, 7)
       }))
@@ -56,11 +63,11 @@ const branchOptions = computed<readonly ThemedListboxOption<string>[]>(() => {
     label: t('versions.core.branchPlaceholder'),
     disabled: true
   }
-  if (harness.state.value?.kind !== 'ready') return [placeholder]
-  return [
-    placeholder,
-    ...harness.state.value.branches.map((branch) => ({ value: branch, label: branch }))
-  ]
+  const state = harness.state.value
+  if (state === undefined || (state.kind !== 'ready' && state.branches.length === 0)) {
+    return [placeholder]
+  }
+  return [placeholder, ...state.branches.map((branch) => ({ value: branch, label: branch }))]
 })
 
 async function switchBranch(): Promise<void> {
@@ -75,7 +82,7 @@ function openBranchPicker(): void {
 }
 
 function isCurrentVersion(version: { readonly hash: string }): boolean {
-  return harness.state.value?.kind === 'ready' && harness.state.value.revision === version.hash
+  return harness.state.value?.revision === version.hash
 }
 
 async function switchFromCheckbox(commit: string): Promise<void> {
@@ -127,20 +134,32 @@ function bundledPluginDescription(name: string): string {
     </div>
 
     <section v-if="activeTab === 'core'" class="version-tab-panel" role="tabpanel">
-      <template v-if="harness.state.value?.kind === 'ready'">
+      <!--
+        The list renders whenever the Git history is readable, even if the
+        active version is not built: an interrupted switch must leave the user
+        able to recover by switching again, not staring at an empty list.
+      -->
+      <template v-if="coreListVisible">
+        <p
+          v-if="harness.state.value?.kind !== 'ready'"
+          class="version-meta-line core-not-built-notice"
+          role="status"
+        >
+          {{ t('versions.core.notBuiltNotice') }} {{ harness.state.value?.message }}
+        </p>
         <div class="version-scope-row">
-          <p class="version-meta-line" :title="harness.state.value.revision">
-            <code>{{ harness.state.value.remoteUrl }}</code>
+          <p class="version-meta-line" :title="harness.state.value?.revision">
+            <code>{{ harness.state.value?.remoteUrl ?? '—' }}</code>
             <span aria-hidden="true">·</span>
-            <code>{{ harness.state.value.currentBranch }}</code>
+            <code>{{ harness.state.value?.currentBranch ?? '—' }}</code>
             <span aria-hidden="true">·</span>
-            <code>{{ harness.state.value.revision?.slice(0, 7) }}</code>
+            <code>{{ harness.state.value?.revision?.slice(0, 7) }}</code>
           </p>
           <div class="core-scope-actions">
             <button
               class="version-action-button"
               type="button"
-              :disabled="harness.loading.value || harness.state.value.launch.kind === 'running'"
+              :disabled="harness.loading.value || harness.state.value?.launch.kind === 'running'"
               @click="openBranchPicker"
             >
               {{ t('versions.core.switchBranch') }}
@@ -212,11 +231,11 @@ function bundledPluginDescription(name: string): string {
                 </td>
                 <td class="version-action-column">
                   <button
-                    v-if="version.hash !== harness.state.value.revision"
+                    v-if="version.hash !== harness.state.value?.revision"
                     class="version-action-button version-switch-action"
                     type="button"
                     :disabled="
-                      harness.loading.value || harness.state.value.launch.kind === 'running'
+                      harness.loading.value || harness.state.value?.launch.kind === 'running'
                     "
                     @click="harness.switchVersion({ commit: version.hash })"
                   >

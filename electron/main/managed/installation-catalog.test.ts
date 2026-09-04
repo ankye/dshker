@@ -24,14 +24,21 @@ afterEach(async () => {
 
 function tagInstallationCatalog(): ManagedInstallationCatalog {
   const commit = parseGitCommitSha('a'.repeat(40))
+  // Persisted toolchain paths are validated by the platform's own path API, so
+  // the fixture derives its absolute directory from this process at runtime.
+  const registeredDirectory =
+    process.platform === 'win32'
+      ? nodePath.win32.join(nodePath.parse(process.cwd()).root, 'registered')
+      : '/usr/local/bin'
+  const registered = (name: string): string => nodePath.join(registeredDirectory, name)
   return {
     ...createEmptyManagedInstallationCatalog(),
     toolchains: [
       {
         toolchainId: 'toolchain_main',
         git: {
-          requestedPath: '/usr/bin/git',
-          canonicalPath: '/usr/bin/git',
+          requestedPath: registered('git'),
+          canonicalPath: registered('git'),
           fingerprint: {
             device: 1,
             inode: 2,
@@ -46,8 +53,8 @@ function tagInstallationCatalog(): ManagedInstallationCatalog {
           }
         },
         node: {
-          requestedPath: '/usr/local/bin/node',
-          canonicalPath: '/usr/local/bin/node',
+          requestedPath: registered('node'),
+          canonicalPath: registered('node'),
           fingerprint: {
             device: 5,
             inode: 6,
@@ -64,8 +71,8 @@ function tagInstallationCatalog(): ManagedInstallationCatalog {
           }
         },
         pnpm: {
-          requestedPath: '/usr/local/bin/pnpm',
-          canonicalPath: '/usr/local/bin/pnpm',
+          requestedPath: registered('pnpm'),
+          canonicalPath: registered('pnpm'),
           fingerprint: {
             device: 10,
             inode: 11,
@@ -106,9 +113,11 @@ describe('managed installation catalog', () => {
     temporaryDirectories.push(base)
     const settingsRoot = nodePath.join(base, 'settings')
     await mkdir(nodePath.join(settingsRoot, 'dsh-launcher'), { recursive: true })
+    // Native temp paths require the platform's own path spelling.
+    const pathStyle = process.platform === 'win32' ? ('win32' as const) : ('posix' as const)
     const store = new ManagedInstallationCatalogStore({
-      filePath: managedInstallationCatalogFilePath(settingsRoot, 'posix'),
-      pathStyle: 'posix'
+      filePath: managedInstallationCatalogFilePath(settingsRoot, pathStyle),
+      pathStyle
     })
     const catalog = tagInstallationCatalog()
 

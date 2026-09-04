@@ -19,6 +19,11 @@ export interface BundledHarnessBootstrapOptions {
     /** PATH required by pnpm's shell entrypoint and its subprocesses. */
     readonly commandSearchPath: string
   }>
+  /**
+   * Receives one line per preparation step, so the Launcher console can show
+   * first-run install progress instead of an empty output area.
+   */
+  readonly onActivity?: (message: string) => void
 }
 
 /** Direct child-process seam for package bootstrap tests. */
@@ -41,7 +46,7 @@ export class BundledHarnessBootstrap {
     this.#spawnProcess = spawnProcess
   }
 
-  /** Returns whether this call created the bundled DSH checkout. */
+  /** Returns whether this call created the bundled DSH repository. */
   async initialize(options: BundledHarnessBootstrapOptions): Promise<boolean> {
     await assertEmptyDirectDirectory(options.harnessDirectory)
     const entries = await readdir(options.harnessDirectory)
@@ -52,6 +57,7 @@ export class BundledHarnessBootstrap {
     const stagingRoot = await mkdtemp(nodePath.join(parent, '.dsh-launcher-seed-'))
     const checkout = nodePath.join(stagingRoot, 'harness')
     try {
+      options.onActivity?.('Importing the bundled DSH Git history.')
       await runProcess(this.#spawnProcess, options.gitExecutable, [
         'clone',
         '--branch',
@@ -60,6 +66,7 @@ export class BundledHarnessBootstrap {
         options.bundlePath,
         checkout
       ])
+      options.onActivity?.('Pointing the repository at the official DSH remote.')
       await runProcess(this.#spawnProcess, options.gitExecutable, [
         '-C',
         checkout,
@@ -68,43 +75,15 @@ export class BundledHarnessBootstrap {
         'origin',
         options.remoteUrl
       ])
-      const install = this.#pnpmLaunch(options, ['install', '--frozen-lockfile'])
-      await runProcess(this.#spawnProcess, install.executable, install.arguments, {
-        cwd: checkout,
-        env: this.#pnpmEnvironment(options)
-      })
-      const build = this.#pnpmLaunch(options, ['run', 'build'])
-      await runProcess(this.#spawnProcess, build.executable, build.arguments, {
-        cwd: checkout,
-        env: this.#pnpmEnvironment(options)
-      })
+      // Dependencies and build artifacts live in per-version directories; the
+      // repository published here is history only, so nothing is installed or
+      // built at seed time.
       await rmdir(options.harnessDirectory)
       await rename(checkout, options.harnessDirectory)
       return true
     } finally {
       await rmdir(stagingRoot).catch(() => undefined)
     }
-  }
-
-  /** Resolves the direct pnpm command, forwarding shim-prefix arguments when present. */
-  #pnpmLaunch(
-    options: BundledHarnessBootstrapOptions,
-    arguments_: readonly string[]
-  ): Readonly<{ executable: string; arguments: readonly string[] }> {
-    const launcher = options.pnpmLauncher
-    if (launcher === undefined) {
-      return { executable: options.pnpmExecutable, arguments: arguments_ }
-    }
-    return {
-      executable: launcher.executable,
-      arguments: [...launcher.prefixArguments, ...arguments_]
-    }
-  }
-
-  /** Supplies the Launcher-resolved command PATH to every packaged pnpm command. */
-  #pnpmEnvironment(options: BundledHarnessBootstrapOptions): NodeJS.ProcessEnv | undefined {
-    const commandSearchPath = options.pnpmLauncher?.commandSearchPath
-    return commandSearchPath === undefined ? undefined : { ...process.env, PATH: commandSearchPath }
   }
 }
 

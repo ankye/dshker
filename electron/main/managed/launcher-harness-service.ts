@@ -3,36 +3,50 @@ import { createWriteStream, type WriteStream } from 'node:fs'
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises'
 import nodePath from 'node:path'
 import {
-  type LauncherHarnessCommitView,
   type LauncherHarnessConsoleEntry,
   type LauncherHarnessLogFileView,
   type LauncherHarnessPluginView,
   type LauncherHarnessPortSetting,
-  type LauncherHarnessState,
-  type LauncherHarnessVersionView
+  type LauncherHarnessState
 } from '../../../src/shared/contracts'
 import { ManagedHarnessRuntimeError } from './runtime-errors'
 import {
-  cleanLauncherHarnessCheckout,
-  launcherProfilePluginArguments
+  launcherProfilePluginArguments,
+  pnpmCommandEnvironment,
+  resolvePnpmCommand,
+  launcherGitArguments
 } from './launcher-harness-commands'
+import {
+  classifyChildConsoleStream,
+  describePluginInstallSource,
+  formatLauncherLifecycleEvent,
+  launcherWebStartArguments
+} from './launcher-console-format'
+import {
+  readHarnessReadiness,
+  assertLauncherGitRepository,
+  readLauncherBranches,
+  readProfilePluginViews,
+  tryReadLauncherCheckoutMetadata
+} from './launcher-harness-views'
+import { LauncherOperationReporter } from './launcher-operation-reporter'
+import {
+  materializeLauncherVersion,
+  pruneInactiveVersions,
+  readCurrentVersionPointer,
+  versionDirectory
+} from './launcher-version-store'
 import { terminateManagedProcessTree } from './process-tree'
-import { assertDirectDirectory, assertDirectRegularFile, runText } from './process-utils'
+import { runText } from './process-utils'
 import { localGitHubPluginSource } from './legacy-plugin-source'
-import { parseAnnouncedWebUrl } from './announced-web-url'
-import { waitForChildExit } from './child-exit'
+import { ChildOutputObserver } from './child-output-observer'
+import { terminateManagedChild } from './child-termination'
 import { ManagedPluginSources, type ManagedPluginInstallSource } from './managed-plugin-sources'
 import {
   assertPortSetting,
   LAUNCH_PREFERENCES_FORMAT,
   parseLaunchPreferencesPort
 } from './launch-preferences'
-import {
-  gitUrlOf,
-  localPathOf,
-  normalizeGitRemote,
-  parseProfilePluginRecords
-} from './profile-plugins'
 
 /** A plugin command may resolve locally, but must never leave the UI busy indefinitely. */
 const PLUGIN_COMMAND_TIMEOUT_MILLISECONDS = 120_000
@@ -54,10 +68,24 @@ export {
   normalizeGitRemote,
   parseProfilePluginRecords
 } from './profile-plugins'
+export {
+  classifyChildConsoleStream,
+  describePluginInstallSource,
+  formatLauncherLifecycleEvent,
+  formatLauncherOperationFailure,
+  formatLauncherStepCompletion,
+  formatLauncherStepHeartbeat,
+  launcherWebStartArguments
+} from './launcher-console-format'
 
 /** Inputs for the single Launcher-owned Harness checkout. */
 export interface LauncherHarnessServiceOptions {
+  /** Main Git repository: history, refs, and fetch target; never built in place. */
   readonly harnessDirectory: string
+  /** Per-version worktrees: one directory per exact commit, built in isolation. */
+  readonly versionsDirectory: string
+  /** Atomically-flipped pointer naming the active version's commit. */
+  readonly currentVersionPointerPath: string
   /** Launcher-owned root for cloned and copied plugin sources. */
   readonly pluginSourcesDirectory: string
   readonly dshHomeDirectory: string
@@ -89,11 +117,28 @@ export interface LauncherHarnessServiceOptions {
 export class LauncherHarnessService {
   readonly #options: LauncherHarnessServiceOptions
   readonly #pluginSources: ManagedPluginSources
+  /** Operation start/step/failure records on the console feed and durable log. */
+  readonly #operations: LauncherOperationReporter
   #child: ChildProcess | undefined
   #launch: LauncherHarnessState['launch'] = { kind: 'stopped' }
+  /** Buffers launch-child output and reads the announced URL from complete lines. */
+  readonly #childOutput = new ChildOutputObserver({
+    onText: (stream, text) => {
+      // Written before the in-memory cap applies, so the file keeps what the
+      // console view discards.
+      this.#appendLog(text)
+      this.#appendConsoleEntry(classifyChildConsoleStream(stream, text), text)
+    },
+    onAnnouncedUrl: (url) => this.#announceRunning(url)
+  })
+  /** Bounded activity feed: Launcher operations, their child output, and the DSH Web launch. */
   #console: LauncherHarnessConsoleEntry[] = []
-  /** Trailing partial line of child output, held until its newline arrives. */
-  #pendingOutput = ''
+  /** Monotonic console sequence; append events and snapshots are unioned by it. */
+  #consoleSeq = 0
+  /** Timestamp of the newest console entry; heartbeat steps read it to stay quiet. */
+  #lastConsoleAppendAt = 0
+  /** Listeners notified once per appended entry; Electron IPC wiring is the only subscriber. */
+  readonly #consoleListeners = new Set<(entry: LauncherHarnessConsoleEntry) => void>()
   #logStream: WriteStream | undefined
   #port: LauncherHarnessPortSetting = { mode: 'auto' }
   #portLoaded = false
@@ -105,97 +150,138 @@ export class LauncherHarnessService {
       pluginsDirectory: options.pluginSourcesDirectory,
       gitExecutable: options.gitExecutable
     })
+    this.#operations = new LauncherOperationReporter({
+      launchLogPath: options.launchLogPath,
+      emit: (message) =>
+        this.#appendConsoleEntry('launcher', formatLauncherLifecycleEvent(message)),
+      lastConsoleAppendAt: () => this.#lastConsoleAppendAt
+    })
   }
-
   /** Records package initialization progress without changing the Harness checkout. */
   setBootstrapState(
     state: 'preparing' | { readonly kind: 'failed'; readonly message: string } | undefined
   ): void {
     this.#bootstrap = state
+    // Bootstrap runs before any checkout exists, so these events are often the
+    // only thing the Console can show while the first DSH install is working.
+    if (state === 'preparing') {
+      this.#appendLauncherEvent('Preparing the bundled DSH (first-run package installation).')
+      return
+    }
+    if (state === undefined) {
+      this.#appendLauncherEvent('Bundled DSH preparation completed.')
+      return
+    }
+    this.#appendLauncherEvent(`Bundled DSH preparation failed: ${state.message}`)
   }
-
+  /** Records one step performed outside this service, such as bundled-seed preparation. */
+  recordOperationActivity(message: string): void {
+    this.#appendLauncherEvent(message)
+  }
+  /**
+   * Subscribes to every console entry appended after subscription.
+   *
+   * Returns the unsubscribe function. The service stays Electron-free; the IPC
+   * layer forwards these entries as the main-to-renderer push channel.
+   */
+  onConsoleAppend(listener: (entry: LauncherHarnessConsoleEntry) => void): () => void {
+    this.#consoleListeners.add(listener)
+    return () => {
+      this.#consoleListeners.delete(listener)
+    }
+  }
   /** Returns only facts read from the Launcher checkout and the native DSH web profile. */
   async getState(): Promise<LauncherHarnessState> {
     await this.#loadPort()
-    if (this.#bootstrap === 'preparing') {
+    if (this.#bootstrap !== undefined) {
+      const preparing = this.#bootstrap === 'preparing'
       return {
-        kind: 'preparing',
-        harnessDirectory: this.#options.harnessDirectory,
-        message: 'The bundled DSH is being prepared.',
-        launch: this.#launch,
-        port: this.#port,
-        commits: [],
-        stableVersions: [],
-        plugins: [],
-        console: this.#console,
-        logFile: await this.#logFileView()
+        ...(await this.#stateTail()),
+        kind: preparing ? 'preparing' : 'invalid',
+        message: preparing
+          ? 'The bundled DSH is being prepared.'
+          : (this.#bootstrap as { readonly message: string }).message
       }
     }
-    if (this.#bootstrap?.kind === 'failed') {
-      return {
-        kind: 'invalid',
-        harnessDirectory: this.#options.harnessDirectory,
-        message: this.#bootstrap.message,
-        launch: this.#launch,
-        port: this.#port,
-        commits: [],
-        stableVersions: [],
-        plugins: [],
-        console: this.#console,
-        logFile: await this.#logFileView()
+    const active = await this.#activeVersion()
+    if (active === undefined) {
+      // No active version yet: distinguish a repository that was never created
+      // (fresh install before the seed) from one awaiting its first version.
+      let repositoryExists = false
+      try {
+        await assertLauncherGitRepository(this.#options.harnessDirectory)
+        repositoryExists = true
+      } catch {
+        repositoryExists = false
       }
+      const base = {
+        ...(await this.#stateTail()),
+        kind: (repositoryExists ? 'invalid' : 'missing') as 'invalid' | 'missing'
+      }
+      return repositoryExists
+        ? {
+            ...base,
+            message: 'The active DSH version has not been prepared yet.'
+          }
+        : {
+            ...base,
+            message: 'The Launcher Harness directory has not been initialized.'
+          }
     }
-    const readiness = await this.#readiness()
+    const readiness = await readHarnessReadiness(active.directory)
     if (readiness.kind !== 'ready') {
       return {
-        ...readiness,
-        launch: this.#launch,
-        port: this.#port,
-        commits: [],
-        stableVersions: [],
-        plugins: [],
-        console: this.#console,
-        logFile: await this.#logFileView()
+        ...(await this.#stateTail()),
+        ...readiness
       }
     }
-    const [remoteUrl, currentBranch, branches, revision, commits, stableVersions, plugins] =
-      await Promise.all([
-        runText(this.#options.gitExecutable, [
-          '-C',
-          this.#options.harnessDirectory,
-          'remote',
-          'get-url',
-          'origin'
-        ]).then((value) => value.trim()),
-        this.#readCurrentBranch(),
-        this.#readBranches(),
-        runText(this.#options.gitExecutable, [
-          '-C',
-          this.#options.harnessDirectory,
-          'rev-parse',
-          'HEAD'
-        ]).then((value) => value.trim()),
-        this.#readCommits('origin/master'),
-        this.#readStableVersions(),
-        this.#readPlugins()
-      ])
+    // Version history comes from the main repository; the active worktree names
+    // the revision the pointer selected, which is what the UI marks as current.
+    const [metadata, plugins] = await Promise.all([
+      tryReadLauncherCheckoutMetadata(this.#options.gitExecutable, this.#options.harnessDirectory),
+      readProfilePluginViews(
+        this.#options.gitExecutable,
+        this.#options.dshHomeDirectory,
+        this.#pluginSources
+      )
+    ])
     return {
       kind: 'ready',
-      harnessDirectory: this.#options.harnessDirectory,
-      remoteUrl,
-      currentBranch,
-      branches,
-      revision,
+      harnessDirectory: active.directory,
+      remoteUrl: metadata.remoteUrl ?? '',
+      currentBranch: metadata.currentBranch ?? 'master',
+      branches: metadata.branches,
+      revision: active.commit,
       launch: this.#launch,
       port: this.#port,
-      commits,
-      stableVersions,
+      commits: metadata.commits,
+      stableVersions: metadata.stableVersions,
       plugins,
       console: this.#console,
       logFile: await this.#logFileView()
     }
   }
-
+  /** Shared tail for every non-ready state: recovery metadata keeps the version list usable. */
+  async #stateTail() {
+    const metadata = await tryReadLauncherCheckoutMetadata(
+      this.#options.gitExecutable,
+      this.#options.harnessDirectory
+    )
+    return {
+      harnessDirectory: this.#options.harnessDirectory,
+      launch: this.#launch,
+      port: this.#port,
+      remoteUrl: metadata.remoteUrl,
+      currentBranch: metadata.currentBranch,
+      branches: metadata.branches,
+      revision: metadata.revision,
+      commits: metadata.commits,
+      stableVersions: metadata.stableVersions,
+      plugins: [] as const,
+      console: this.#console,
+      logFile: await this.#logFileView()
+    }
+  }
   /** Reports the log path whether or not a launch has created the file yet. */
   async #logFileView(): Promise<LauncherHarnessLogFileView> {
     try {
@@ -206,7 +292,6 @@ export class LauncherHarnessService {
       return { path: this.#options.launchLogPath, exists: false, byteLength: 0 }
     }
   }
-
   /**
    * Reveals the log in the OS file manager.
    *
@@ -224,7 +309,6 @@ export class LauncherHarnessService {
     showItemInFolder(view.path)
     return view
   }
-
   /** Copies the log to a caller-chosen destination; the service never picks the path. */
   async exportLog(destination: string): Promise<LauncherHarnessLogFileView> {
     const view = await this.#logFileView()
@@ -237,186 +321,231 @@ export class LauncherHarnessService {
     await copyFile(view.path, destination)
     return view
   }
-
   /** Fetches only remote refs before rebuilding the visible version candidates. */
   async refreshVersions(): Promise<LauncherHarnessState> {
-    await this.#assertReadyCheckout()
-    await runText(this.#options.gitExecutable, [
-      '-C',
-      this.#options.harnessDirectory,
-      'fetch',
-      '--prune',
-      '--tags',
-      'origin'
-    ])
-    return this.getState()
+    return this.#operations.reportOperation('Refreshing the DSH version list', async () => {
+      await this.#assertSwitchableRepository()
+      await this.#fetchOrigin()
+      return this.getState()
+    })
   }
-
-  /** Switches the Launcher-owned checkout to the newest fetched master commit. */
+  /** Switches the active version to the newest fetched master commit. */
   async update(): Promise<LauncherHarnessState> {
-    await this.refreshVersions()
-    const commit = (
-      await runText(this.#options.gitExecutable, [
-        '-C',
-        this.#options.harnessDirectory,
-        'rev-parse',
-        'origin/master'
-      ])
-    ).trim()
-    return this.switchVersion(commit)
+    return this.#operations.reportOperation(
+      'Updating DSH to the newest origin/master commit',
+      async () => {
+        await this.#assertSwitchableRepository()
+        await this.#fetchOrigin()
+        const commit = (
+          await runText(
+            this.#options.gitExecutable,
+            launcherGitArguments([
+              '-C',
+              this.#options.harnessDirectory,
+              'rev-parse',
+              'origin/master'
+            ])
+          )
+        ).trim()
+        await this.#materializeVersion(commit)
+        return this.getState()
+      }
+    )
   }
-
+  /**
+   * Materializes the main repository's current commit as the first version.
+   *
+   * Migration path for checkouts created before per-version directories: the
+   * existing repository stays the history source and its working tree is left
+   * untouched; the active version simply becomes a worktree of its HEAD.
+   */
+  async prepareCurrentVersion(): Promise<LauncherHarnessState> {
+    return this.#operations.reportOperation(
+      'Preparing the active DSH version from the existing repository',
+      async () => {
+        await this.#assertSwitchableRepository()
+        if (
+          (await readCurrentVersionPointer(this.#options.currentVersionPointerPath)) !== undefined
+        ) {
+          return this.getState()
+        }
+        const commit = (
+          await runText(
+            this.#options.gitExecutable,
+            launcherGitArguments(['-C', this.#options.harnessDirectory, 'rev-parse', 'HEAD'])
+          )
+        ).trim()
+        await this.#materializeVersion(commit)
+        return this.getState()
+      }
+    )
+  }
   /** Copies or clones a source under Launcher control, then installs that copy through DSH. */
   async installPlugin(source: ManagedPluginInstallSource): Promise<LauncherHarnessState> {
-    await this.#assertReadyForVersionOperation()
-    const before = await this.#readPlugins()
-    const materialized = await this.#pluginSources.materialize(source)
-    let pluginCommandSucceeded = false
-    try {
-      await this.#runPluginCommand(
-        launcherProfilePluginArguments('add', `file:${materialized.installDirectory}`)
-      )
-      pluginCommandSucceeded = true
-      const after = await this.#readPlugins()
-      const installed = after.filter(
-        (plugin) =>
-          plugin.origin === 'user' && !before.some((previous) => previous.name === plugin.name)
-      )
-      if (installed.length !== 1) {
-        throw new ManagedHarnessRuntimeError(
-          'runtime.plugin_operation_failed',
-          'DSH did not report exactly one newly installed plugin.'
-        )
+    return this.#operations.reportOperation(
+      `Installing ${describePluginInstallSource(source)}`,
+      async () => {
+        await this.#assertReadyForVersionOperation()
+        const before = await this.#pluginViews()
+        const materialized = await this.#pluginSources.materialize(source)
+        let pluginCommandSucceeded = false
+        try {
+          await this.#runPluginCommand(
+            launcherProfilePluginArguments('add', `file:${materialized.installDirectory}`)
+          )
+          pluginCommandSucceeded = true
+          const after = await this.#pluginViews()
+          const installed = after.filter(
+            (plugin) =>
+              plugin.origin === 'user' && !before.some((previous) => previous.name === plugin.name)
+          )
+          if (installed.length !== 1) {
+            throw new ManagedHarnessRuntimeError(
+              'runtime.plugin_operation_failed',
+              'DSH did not report exactly one newly installed plugin.'
+            )
+          }
+          await this.#pluginSources.record(installed[0].name, materialized)
+          return this.getState()
+        } catch (error) {
+          // Once DSH accepted the source, its native profile can reference it. Do
+          // not remove the directory if a later profile inspection or source-map
+          // write fails, or that profile would be left pointing at a missing path.
+          if (!pluginCommandSucceeded) {
+            await this.#pluginSources.discard(materialized.managedDirectory)
+          }
+          throw error
+        }
       }
-      await this.#pluginSources.record(installed[0].name, materialized)
-      return this.getState()
-    } catch (error) {
-      // Once DSH accepted the source, its native profile can reference it. Do
-      // not remove the directory if a later profile inspection or source-map
-      // write fails, or that profile would be left pointing at a missing path.
-      if (!pluginCommandSucceeded) {
-        await this.#pluginSources.discard(materialized.managedDirectory)
-      }
-      throw error
-    }
+    )
   }
-
   /** Extracts one native-selected plugin ZIP into Launcher ownership, then installs it through DSH. */
   async installPluginArchive(archivePath: string): Promise<LauncherHarnessState> {
     return this.installPlugin({ kind: 'archive', path: archivePath })
   }
-
   /** Fetches managed Git sources to calculate update availability without changing DSH's profile. */
   async refreshPlugins(): Promise<LauncherHarnessState> {
-    await this.#pluginSources.refreshGitSourceStatus()
-    return this.getState()
+    return this.#operations.reportOperation(
+      'Checking managed plugin sources for updates',
+      async () => {
+        await this.#pluginSources.refreshGitSourceStatus()
+        return this.getState()
+      }
+    )
   }
-
   /** Removes exactly one user-installed plugin from the native web profile via the DSH CLI. */
   async uninstallPlugin(name: string): Promise<LauncherHarnessState> {
-    if (!/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) || name.length === 0) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'A valid plugin package name is required.'
-      )
-    }
-    await this.#assertReadyForVersionOperation()
-    const plugins = await this.#readPlugins()
-    const target = plugins.find((plugin) => plugin.name === name)
-    if (target === undefined || target.origin !== 'user') {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'Only a user-installed plugin can be removed.'
-      )
-    }
-    await this.#runPluginCommand(launcherProfilePluginArguments('remove', name))
-    await this.#pluginSources.remove(name)
-    return this.getState()
+    return this.#operations.reportOperation(`Removing plugin ${name}`, async () => {
+      if (!/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) || name.length === 0) {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.input_invalid',
+          'A valid plugin package name is required.'
+        )
+      }
+      await this.#assertReadyForVersionOperation()
+      const plugins = await this.#pluginViews()
+      const target = plugins.find((plugin) => plugin.name === name)
+      if (target === undefined || target.origin !== 'user') {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.input_invalid',
+          'Only a user-installed plugin can be removed.'
+        )
+      }
+      await this.#runPluginCommand(launcherProfilePluginArguments('remove', name))
+      await this.#pluginSources.remove(name)
+      return this.getState()
+    })
   }
-
   /** Updates exactly one Git-managed plugin source, then lets DSH reconcile that package. */
   async updatePlugin(name: string): Promise<LauncherHarnessState> {
-    if (!/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) || name.length === 0) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'A valid plugin package name is required.'
-      )
-    }
-    await this.#assertReadyForVersionOperation()
-    const plugins = await this.#readPlugins()
-    const target = plugins.find((plugin) => plugin.name === name)
-    if (target === undefined || target.origin !== 'user') {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'Only a user-installed plugin can be updated.'
-      )
-    }
-    await this.#pluginSources.update(name)
-    await this.#runPluginCommand(launcherProfilePluginArguments('update', name))
-    return this.getState()
+    return this.#operations.reportOperation(`Updating plugin ${name}`, async () => {
+      if (!/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) || name.length === 0) {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.input_invalid',
+          'A valid plugin package name is required.'
+        )
+      }
+      await this.#assertReadyForVersionOperation()
+      const plugins = await this.#pluginViews()
+      const target = plugins.find((plugin) => plugin.name === name)
+      if (target === undefined || target.origin !== 'user') {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.input_invalid',
+          'Only a user-installed plugin can be updated.'
+        )
+      }
+      await this.#pluginSources.update(name)
+      await this.#runPluginCommand(launcherProfilePluginArguments('update', name))
+      return this.getState()
+    })
   }
-
   /**
    * Moves one legacy local Git plugin into a Launcher-owned clone, then asks
    * DSH to use that clone as its installed source. The native profile remains
    * the only installation authority.
    */
   async adoptPlugin(name: string): Promise<LauncherHarnessState> {
-    this.#assertPluginName(name)
-    await this.#assertReadyForVersionOperation()
-    const plugins = await this.#readPlugins()
-    const target = plugins.find((plugin) => plugin.name === name)
-    if (target === undefined || target.origin !== 'user') {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'Only a user-installed plugin can be moved under DSHKer management.'
-      )
-    }
-    if (target.managedGitSource !== undefined) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'This plugin is already managed by DSHKer. Use update instead.'
-      )
-    }
+    return this.#operations.reportOperation(
+      `Moving plugin ${name} under DSHKer management`,
+      async () => {
+        this.#assertPluginName(name)
+        await this.#assertReadyForVersionOperation()
+        const plugins = await this.#pluginViews()
+        const target = plugins.find((plugin) => plugin.name === name)
+        if (target === undefined || target.origin !== 'user') {
+          throw new ManagedHarnessRuntimeError(
+            'runtime.input_invalid',
+            'Only a user-installed plugin can be moved under DSHKer management.'
+          )
+        }
+        if (target.managedGitSource !== undefined) {
+          throw new ManagedHarnessRuntimeError(
+            'runtime.input_invalid',
+            'This plugin is already managed by DSHKer. Use update instead.'
+          )
+        }
 
-    const materialized = await this.#pluginSources.materialize({
-      kind: 'git',
-      url: await localGitHubPluginSource(this.#options.gitExecutable, target)
-    })
-    let pluginCommandSucceeded = false
-    try {
-      await this.#runPluginCommand(
-        launcherProfilePluginArguments('add', `file:${materialized.installDirectory}`)
-      )
-      pluginCommandSucceeded = true
-      const after = await this.#readPlugins()
-      const installed = after.find((plugin) => plugin.name === name && plugin.origin === 'user')
-      if (installed === undefined) {
-        throw new ManagedHarnessRuntimeError(
-          'runtime.plugin_operation_failed',
-          'DSH did not retain the moved plugin in its native profile.'
-        )
+        const materialized = await this.#pluginSources.materialize({
+          kind: 'git',
+          url: await localGitHubPluginSource(this.#options.gitExecutable, target)
+        })
+        let pluginCommandSucceeded = false
+        try {
+          await this.#runPluginCommand(
+            launcherProfilePluginArguments('add', `file:${materialized.installDirectory}`)
+          )
+          pluginCommandSucceeded = true
+          const after = await this.#pluginViews()
+          const installed = after.find((plugin) => plugin.name === name && plugin.origin === 'user')
+          if (installed === undefined) {
+            throw new ManagedHarnessRuntimeError(
+              'runtime.plugin_operation_failed',
+              'DSH did not retain the moved plugin in its native profile.'
+            )
+          }
+          await this.#pluginSources.record(name, materialized)
+          return this.getState()
+        } catch (error) {
+          if (!pluginCommandSucceeded) {
+            await this.#pluginSources.discard(materialized.managedDirectory)
+          }
+          throw error
+        }
       }
-      await this.#pluginSources.record(name, materialized)
-      return this.getState()
-    } catch (error) {
-      if (!pluginCommandSucceeded) {
-        await this.#pluginSources.discard(materialized.managedDirectory)
-      }
-      throw error
-    }
+    )
   }
-
   /**
    * Runs one DSH plugin CLI command, reporting a CLI refusal as a plugin
    * failure rather than a launch failure.
    */
-  async #runPluginCommand(arguments_: readonly string[]): Promise<void> {
+  async #runPluginCommand(arguments_: readonly string[], workingDirectory?: string): Promise<void> {
     try {
       await this.#runPnpm(arguments_, {
+        workingDirectory,
         detached: process.platform !== 'win32',
         timeoutMilliseconds: PLUGIN_COMMAND_TIMEOUT_MILLISECONDS,
-        onTimeout: (processId) => terminateManagedProcessTree(processId, process.platform)
+        onTimeout: (processId: number | undefined) =>
+          terminateManagedProcessTree(processId, process.platform)
       })
     } catch (error) {
       throw new ManagedHarnessRuntimeError(
@@ -425,7 +554,6 @@ export class LauncherHarnessService {
       )
     }
   }
-
   /** Rejects an invalid package identifier before it becomes a DSH CLI argument. */
   #assertPluginName(name: string): void {
     if (/^(?:@[^/@\s]+\/)?[^/@\s]+$/u.test(name) && name.length > 0) return
@@ -434,102 +562,137 @@ export class LauncherHarnessService {
       'A valid plugin package name is required.'
     )
   }
-
-  /** Resolves the direct pnpm command, forwarding shim-prefix arguments when present. */
-  #pnpmLaunch(
-    arguments_: readonly string[]
-  ): Readonly<{ executable: string; arguments: readonly string[] }> {
-    const launcher = this.#options.pnpmLauncher
-    if (launcher === undefined) {
-      return { executable: this.#options.pnpmExecutable, arguments: arguments_ }
-    }
-    return {
-      executable: launcher.executable,
-      arguments: [...launcher.prefixArguments, ...arguments_]
-    }
-  }
-
-  /** Supplies the Launcher-resolved command PATH to every pnpm invocation. */
-  #pnpmEnvironment(): NodeJS.ProcessEnv | undefined {
-    const commandSearchPath = this.#options.pnpmLauncher?.commandSearchPath
-    return commandSearchPath === undefined ? undefined : { ...process.env, PATH: commandSearchPath }
-  }
-
   /** Materializes an explicitly selected commit from origin/master. */
   async switchVersion(commit: string): Promise<LauncherHarnessState> {
-    if (!/^[0-9a-f]{40}$/u.test(commit)) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'A complete DSH commit SHA is required.'
-      )
-    }
-    await this.#assertReadyForVersionOperation()
-    await runText(this.#options.gitExecutable, [
-      '-C',
-      this.#options.harnessDirectory,
-      'merge-base',
-      '--is-ancestor',
-      commit,
-      'origin/master'
-    ])
-    await cleanLauncherHarnessCheckout(this.#options.gitExecutable, this.#options.harnessDirectory)
-    await runText(this.#options.gitExecutable, [
-      '-C',
-      this.#options.harnessDirectory,
-      'checkout',
-      '--detach',
-      commit
-    ])
-    await this.#runPnpm(['install', '--frozen-lockfile'])
-    await this.#runPnpm(['run', 'build'])
-    await this.#runPluginCommand(launcherProfilePluginArguments('update'))
-    return this.getState()
+    return this.#operations.reportOperation(`Switching DSH to commit ${commit}`, async () => {
+      if (!/^[0-9a-f]{40}$/u.test(commit)) {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.input_invalid',
+          'A complete DSH commit SHA is required.'
+        )
+      }
+      await this.#assertSwitchableRepository()
+      await this.#materializeVersion(commit)
+      return this.getState()
+    })
   }
-
-  /** Runs one pnpm command inside the Launcher-owned Harness checkout. */
+  /**
+   * Builds one exact commit in its own directory and only then flips the
+   * active-version pointer; the orchestration lives in the version store.
+   */
+  async #materializeVersion(commit: string): Promise<void> {
+    await materializeLauncherVersion(
+      this.#options.gitExecutable,
+      this.#options.harnessDirectory,
+      this.#options.versionsDirectory,
+      this.#options.currentVersionPointerPath,
+      commit,
+      {
+        loggedStep: (description, step) => this.#operations.loggedStep(description, step),
+        install: (directory) =>
+          this.#runPnpm(['install', '--frozen-lockfile'], { workingDirectory: directory }),
+        build: (directory) => this.#runPnpm(['run', 'build'], { workingDirectory: directory }),
+        reconcilePlugins: (directory) =>
+          this.#runPluginCommand(launcherProfilePluginArguments('update'), directory),
+        event: (message) => this.recordOperationActivity(message)
+      }
+    )
+    // Off the critical path: the new version is already active, so old version
+    // directories are deleted in the background and retried on the next switch.
+    void pruneInactiveVersions(
+      this.#options.gitExecutable,
+      this.#options.harnessDirectory,
+      this.#options.versionsDirectory,
+      commit,
+      (message) => this.recordOperationActivity(message)
+    ).catch((error: unknown) => {
+      this.recordOperationActivity(
+        `Version cleanup could not start: ${error instanceof Error ? error.message : 'unknown error'}`
+      )
+    })
+  }
+  /** Fetches origin refs while streaming git's own progress into the console. */
+  async #fetchOrigin(): Promise<void> {
+    await this.#operations.loggedStep(
+      'Fetching DSH updates from origin (git fetch --prune --tags origin)',
+      () =>
+        runText(
+          this.#options.gitExecutable,
+          // --progress forces git's "Receiving objects: X%" onto piped stderr;
+          // without it a slow fetch looks identical to a hung one.
+          launcherGitArguments([
+            '-C',
+            this.#options.harnessDirectory,
+            'fetch',
+            '--progress',
+            '--prune',
+            '--tags',
+            'origin'
+          ]),
+          { onOutput: (stream, text) => this.#appendProcessOutput(stream, text) }
+        )
+    )
+  }
+  /** Runs one pnpm command inside one version directory (the active one by default). */
   async #runPnpm(
     arguments_: readonly string[],
     execution: Readonly<{
+      readonly workingDirectory?: string
       readonly detached?: boolean
       readonly timeoutMilliseconds?: number
       readonly onTimeout?: (processId: number | undefined) => void
     }> = {}
   ): Promise<void> {
-    const launch = this.#pnpmLaunch(arguments_)
+    const { workingDirectory, ...childExecution } = execution
+    const directory = workingDirectory ?? (await this.#requireActiveDirectory())
+    const launch = resolvePnpmCommand(
+      this.#options.pnpmExecutable,
+      this.#options.pnpmLauncher,
+      arguments_
+    )
     await runText(launch.executable, launch.arguments, {
-      cwd: this.#options.harnessDirectory,
-      env: this.#pnpmEnvironment(),
-      ...execution
+      cwd: directory,
+      env: pnpmCommandEnvironment(this.#options.pnpmLauncher),
+      onOutput: (stream, text) => this.#appendProcessOutput(stream, text),
+      ...childExecution
     })
   }
-
   /** Resolves and switches to one branch from the fetched origin branch list. */
   async switchBranch(branch: string): Promise<LauncherHarnessState> {
-    if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/u.test(branch)) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'A valid DSH branch is required.'
+    return this.#operations.reportOperation(`Switching DSH to branch ${branch}`, async () => {
+      if (!/^[A-Za-z0-9][A-Za-z0-9._/-]{0,127}$/u.test(branch)) {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.input_invalid',
+          'A valid DSH branch is required.'
+        )
+      }
+      await this.#assertSwitchableRepository()
+      await this.#fetchOrigin()
+      const branches = await readLauncherBranches(
+        this.#options.gitExecutable,
+        this.#options.harnessDirectory
       )
-    }
-    await this.refreshVersions()
-    const branches = await this.#readBranches()
-    if (!branches.includes(branch)) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.input_invalid',
-        'The selected DSH branch is unavailable.'
-      )
-    }
-    const commit = (
-      await runText(this.#options.gitExecutable, [
-        '-C',
-        this.#options.harnessDirectory,
-        'rev-parse',
-        `origin/${branch}`
-      ])
-    ).trim()
-    return this.switchVersion(commit)
+      if (!branches.includes(branch)) {
+        throw new ManagedHarnessRuntimeError(
+          'runtime.input_invalid',
+          'The selected DSH branch is unavailable.'
+        )
+      }
+      const commit = (
+        await runText(
+          this.#options.gitExecutable,
+          launcherGitArguments([
+            '-C',
+            this.#options.harnessDirectory,
+            'rev-parse',
+            `origin/${branch}`
+          ])
+        )
+      ).trim()
+      await this.#materializeVersion(commit)
+      return this.getState()
+    })
   }
-
   /**
    * Starts `pnpm dsh -- web --no-open` from the bundled Harness checkout,
    * adding `--port` only for an explicit fixed selection.
@@ -545,13 +708,17 @@ export class LauncherHarnessService {
       )
     }
     this.#launch = { kind: 'starting' }
-    this.#pendingOutput = ''
-    this.#console = []
+    this.#childOutput.reset()
     await this.#openLogStream()
+    // The console is deliberately not cleared here: the install, update, or
+    // switch that prepared this launch is the context a failed launch needs,
+    // and a running DSH Web is never a reason to erase what came before it.
+    this.#appendLauncherEvent('--- New DSH Web launch ---')
     this.#appendLauncherEvent('Checking the selected Harness checkout and launch settings.')
     try {
       await this.#loadPort()
-      const readiness = await this.#readiness()
+      const active = await this.#requireActiveVersion()
+      const readiness = await readHarnessReadiness(active.directory)
       if (readiness.kind !== 'ready') {
         throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)
       }
@@ -566,12 +733,13 @@ export class LauncherHarnessService {
     }
     let child: ChildProcess
     try {
-      const launch = this.#pnpmLaunch([
+      const active = await this.#requireActiveVersion()
+      const launch = resolvePnpmCommand(this.#options.pnpmExecutable, this.#options.pnpmLauncher, [
         ...launcherWebStartArguments(this.#options.diagnosticsPatchPath, this.#port)
       ])
       child = spawn(launch.executable, launch.arguments, {
-        cwd: this.#options.harnessDirectory,
-        env: this.#pnpmEnvironment(),
+        cwd: active.directory,
+        env: pnpmCommandEnvironment(this.#options.pnpmLauncher),
         shell: false,
         detached: process.platform !== 'win32',
         windowsHide: true,
@@ -600,8 +768,7 @@ export class LauncherHarnessService {
       )
     }
     this.#launch = { kind: 'starting' }
-    child.stdout?.on('data', (chunk: unknown) => this.#appendConsole('stdout', chunk))
-    child.stderr?.on('data', (chunk: unknown) => this.#appendConsole('stderr', chunk))
+    this.#childOutput.attach(child)
     child.once('error', (error) => {
       this.#appendLauncherEvent(`DSH Web child error: ${error.message}`)
       this.#launch = { kind: 'failed', message: error.message }
@@ -622,7 +789,6 @@ export class LauncherHarnessService {
     })
     return this.getState()
   }
-
   /**
    * Records the port the next launch will request.
    *
@@ -640,7 +806,6 @@ export class LauncherHarnessService {
     )
     return this.getState()
   }
-
   /** Reads the persisted port exactly once; an unreadable file keeps the automatic default. */
   async #loadPort(): Promise<void> {
     if (this.#portLoaded) return
@@ -653,7 +818,6 @@ export class LauncherHarnessService {
     }
     this.#port = parseLaunchPreferencesPort(text)
   }
-
   /**
    * Starts a fresh log for each launch, so the file always describes the run the
    * user is looking at rather than an accumulation of every past attempt.
@@ -678,49 +842,43 @@ export class LauncherHarnessService {
   #appendLog(text: string): void {
     this.#logStream?.write(text)
   }
-
   /** Records one lifecycle event generated by the Launcher rather than the child process. */
   #appendLauncherEvent(message: string): void {
     const text = formatLauncherLifecycleEvent(message)
     this.#appendLog(text)
     this.#appendConsoleEntry('launcher', text)
   }
-
+  /** Mirrors one operation child's output fragment into the log and live console. */
+  #appendProcessOutput(stream: 'stdout' | 'stderr', text: string): void {
+    if (text.length === 0) return
+    this.#appendLog(text)
+    // The same classification as the launch child: pnpm's `$ command` echoes
+    // stay recognizable as commands even though pnpm writes them to stderr.
+    this.#appendConsoleEntry(classifyChildConsoleStream(stream, text), text)
+  }
   /** Keeps the in-memory diagnostics bounded independently of the on-disk log. */
   #appendConsoleEntry(stream: LauncherHarnessConsoleEntry['stream'], text: string): void {
-    this.#console.push({ stream, occurredAt: Date.now(), text })
+    const entry: LauncherHarnessConsoleEntry = {
+      stream,
+      occurredAt: Date.now(),
+      text,
+      seq: ++this.#consoleSeq
+    }
+    this.#lastConsoleAppendAt = entry.occurredAt
+    this.#console.push(entry)
     if (this.#console.length > 1_000) this.#console.splice(0, this.#console.length - 1_000)
+    for (const listener of this.#consoleListeners) listener(entry)
   }
-
-  #appendConsole(stream: 'stdout' | 'stderr', chunk: unknown): void {
-    const text = String(chunk)
-    if (text.length === 0) return
-    // Written before the in-memory cap applies, so the file keeps what the
-    // console view discards.
-    this.#appendLog(text)
-    this.#appendConsoleEntry(classifyChildConsoleStream(stream, text), text)
-    // Child stdout arrives in arbitrary chunks that can split a line mid-URL, so
-    // the announcement is only read from lines known to be complete. Adopting a
-    // truncated URL would drop the session credential DSH puts in its query.
-    this.#pendingOutput += text
-    const lines = this.#pendingOutput.split('\n')
-    this.#pendingOutput = lines.pop() ?? ''
-    for (const line of lines) this.#observeAnnouncedUrl(line)
-  }
-
   /**
    * Promotes `starting` to `running` only when the child announces its own URL.
    * The Launcher cannot infer this address: the port is chosen by DSH and the
    * announced URL may carry a session credential.
    */
-  #observeAnnouncedUrl(text: string): void {
+  #announceRunning(url: string): void {
     if (this.#launch.kind !== 'starting') return
-    const url = parseAnnouncedWebUrl(text)
-    if (url === undefined) return
     this.#launch = { kind: 'running', url }
     this.#appendLauncherEvent('DSH Web announced its loopback URL; runtime is ready.')
   }
-
   /** Stops the exact DSH process tree this service created. */
   async stop(): Promise<LauncherHarnessState> {
     if (
@@ -730,268 +888,74 @@ export class LauncherHarnessService {
       throw new ManagedHarnessRuntimeError('runtime.not_found', 'DSH Web is not running.')
     }
     this.#appendLauncherEvent('Stopping the managed DSH Web process tree.')
-    await this.#terminateChild(this.#child)
+    await terminateManagedChild(this.#child)
     this.#launch = { kind: 'stopped' }
     return this.getState()
   }
-
   /** Stops the active DSH tree before Electron relinquishes main-process ownership. */
   async shutdown(): Promise<void> {
     if (this.#child === undefined) return
     if (this.#launch.kind !== 'running' && this.#launch.kind !== 'starting') return
     this.#appendLauncherEvent('Launcher is shutting down the managed DSH Web process tree.')
-    await this.#terminateChild(this.#child)
+    await terminateManagedChild(this.#child)
   }
-
-  /** Signals the owned pnpm process group and waits for its root child to exit. */
-  async #terminateChild(child: ChildProcess): Promise<void> {
-    const exited = waitForChildExit(child)
-    try {
-      terminateManagedProcessTree(child.pid, process.platform)
-    } catch (error) {
+  /** The active version's commit and directory, or undefined before the first switch. */
+  async #activeVersion(): Promise<Readonly<{ commit: string; directory: string }> | undefined> {
+    const commit = await readCurrentVersionPointer(this.#options.currentVersionPointerPath)
+    if (commit === undefined) return undefined
+    return { commit, directory: versionDirectory(this.#options.versionsDirectory, commit) }
+  }
+  /** The active version's directory; a missing pointer is a typed failure. */
+  async #requireActiveVersion(): Promise<Readonly<{ commit: string; directory: string }>> {
+    const active = await this.#activeVersion()
+    if (active === undefined) {
       throw new ManagedHarnessRuntimeError(
-        'runtime.child_unavailable',
-        error instanceof Error ? error.message : 'Managed DSH process could not be stopped.'
+        'runtime.worktree_invalid',
+        'The active DSH version has not been prepared yet.'
       )
     }
-    try {
-      await exited
-    } catch (error) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.shutdown_timeout',
-        error instanceof Error ? error.message : 'Managed DSH process did not exit after SIGTERM.'
-      )
-    }
+    return active
   }
 
-  async #readiness(): Promise<
-    | { readonly kind: 'ready' }
-    | {
-        readonly kind: 'missing' | 'invalid'
-        readonly harnessDirectory: string
-        readonly message: string
-      }
-  > {
-    try {
-      await assertDirectDirectory(this.#options.harnessDirectory)
-    } catch (error) {
-      if (isMissing(error)) {
-        return {
-          kind: 'missing',
-          harnessDirectory: this.#options.harnessDirectory,
-          message: 'The Launcher Harness directory has not been initialized.'
-        }
-      }
-      return {
-        kind: 'invalid',
-        harnessDirectory: this.#options.harnessDirectory,
-        message: 'The Launcher Harness directory is not a direct directory.'
-      }
-    }
-    try {
-      await Promise.all([
-        assertDirectRegularFile(nodePath.join(this.#options.harnessDirectory, 'package.json')),
-        assertDirectRegularFile(
-          nodePath.join(this.#options.harnessDirectory, 'apps', 'cli', 'lib', 'bin.js')
-        ),
-        assertDirectDirectory(nodePath.join(this.#options.harnessDirectory, '.git'))
-      ])
-      return { kind: 'ready' }
-    } catch {
-      return {
-        kind: 'invalid',
-        harnessDirectory: this.#options.harnessDirectory,
-        message: 'The Launcher Harness directory is missing its built DSH checkout.'
-      }
-    }
+  async #requireActiveDirectory(): Promise<string> {
+    return (await this.#requireActiveVersion()).directory
   }
-
-  async #readCommits(reference: string): Promise<readonly LauncherHarnessCommitView[]> {
-    const output = await runText(this.#options.gitExecutable, [
-      '-C',
-      this.#options.harnessDirectory,
-      'log',
-      '--max-count=100',
-      '--format=%H%x1f%ct%x1f%s',
-      reference
-    ])
-    return output
-      .trim()
-      .split('\n')
-      .filter((line) => line.length > 0)
-      .map((line) => {
-        const [hash, committedAt, subject] = line.split('\u001f')
-        if (!hash || !committedAt || subject === undefined || !/^[0-9a-f]{40}$/u.test(hash)) {
-          throw new Error('The bundled Harness Git history is invalid.')
-        }
-        const milliseconds = Number(committedAt) * 1000
-        if (!Number.isSafeInteger(milliseconds))
-          throw new Error('The bundled Harness Git history is invalid.')
-        return { hash, subject, committedAt: milliseconds }
-      })
-  }
-
-  async #readStableVersions(): Promise<readonly LauncherHarnessVersionView[]> {
-    const tags = (
-      await runText(this.#options.gitExecutable, [
-        '-C',
-        this.#options.harnessDirectory,
-        'tag',
-        '--merged',
-        'origin/master',
-        '--sort=-creatordate'
-      ])
-    )
-      .trim()
-      .split('\n')
-      .filter((tag) => tag.length > 0)
-      .slice(0, 100)
-    return Promise.all(
-      tags.map(async (tag) => {
-        const [commit] = await this.#readCommits(tag)
-        if (commit === undefined) throw new Error('The bundled Harness release tag is invalid.')
-        return { ...commit, tag }
-      })
-    )
-  }
-
-  async #readCurrentBranch(): Promise<string> {
-    const branch = (
-      await runText(this.#options.gitExecutable, [
-        '-C',
-        this.#options.harnessDirectory,
-        'branch',
-        '--show-current'
-      ])
-    ).trim()
-    return branch.length === 0 ? 'master' : branch
-  }
-
-  async #readBranches(): Promise<readonly string[]> {
-    const output = await runText(this.#options.gitExecutable, [
-      '-C',
-      this.#options.harnessDirectory,
-      'for-each-ref',
-      '--format=%(refname:short)',
-      'refs/remotes/origin'
-    ])
-    return output
-      .trim()
-      .split('\n')
-      .filter((reference) => reference.startsWith('origin/') && reference !== 'origin/HEAD')
-      .map((reference) => reference.slice('origin/'.length))
-      .sort((left, right) => left.localeCompare(right))
-  }
-
-  async #assertReadyForVersionOperation(): Promise<void> {
-    await this.#assertReadyCheckout()
+  /**
+   * Version operations need the main Git repository and a stopped child — the
+   * built artifact belongs to per-version directories, not to the main
+   * repository, so an unbuilt active version can be repaired by switching.
+   */
+  async #assertSwitchableRepository(): Promise<void> {
     if (this.#launch.kind === 'running' || this.#launch.kind === 'starting') {
       throw new ManagedHarnessRuntimeError(
         'runtime.busy_running',
         'Stop DSH Web before changing its version or plugins.'
       )
     }
+    try {
+      await assertLauncherGitRepository(this.#options.harnessDirectory)
+    } catch (error) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.worktree_invalid',
+        error instanceof Error ? error.message : 'The Launcher Harness directory is unavailable.'
+      )
+    }
   }
-
-  async #assertReadyCheckout(): Promise<void> {
-    const readiness = await this.#readiness()
+  /** Plugin operations run the DSH CLI, which needs the built active version. */
+  async #assertReadyForVersionOperation(): Promise<void> {
+    await this.#assertSwitchableRepository()
+    const active = await this.#requireActiveVersion()
+    const readiness = await readHarnessReadiness(active.directory)
     if (readiness.kind !== 'ready') {
       throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)
     }
   }
-
-  async #readPlugins(): Promise<readonly LauncherHarnessPluginView[]> {
-    const packagePath = nodePath.join(
+  /** Reads the native profile's plugin views joined with Launcher-managed sources. */
+  #pluginViews(): Promise<readonly LauncherHarnessPluginView[]> {
+    return readProfilePluginViews(
+      this.#options.gitExecutable,
       this.#options.dshHomeDirectory,
-      'profiles',
-      'web',
-      'package.json'
-    )
-    try {
-      await assertDirectRegularFile(packagePath)
-    } catch (error) {
-      if (isMissing(error)) return []
-      throw new Error('The native DSH web profile package record is invalid.')
-    }
-    const content = await readFile(packagePath, 'utf8')
-    const [views, managedGitSources] = await Promise.all([
-      Promise.resolve(parseProfilePluginRecords(JSON.parse(content))),
-      this.#pluginSources.gitSources()
-    ])
-    // A `file:` dependency carries no git source in the manifest, so the remote
-    // is read from the checkout it points at. Resolution is best-effort: a
-    // plugin whose checkout is gone still lists with its name and version.
-    return Promise.all(
-      views.map(async (view) => {
-        const resolved = await this.#withResolvedSource(view)
-        const managedGitSource = managedGitSources.get(view.name)
-        return managedGitSource === undefined
-          ? resolved
-          : {
-              ...resolved,
-              managedGitSource: {
-                revision: managedGitSource.revision,
-                updateAvailable: managedGitSource.updateAvailable,
-                ...(managedGitSource.branch === undefined
-                  ? {}
-                  : { branch: managedGitSource.branch })
-              }
-            }
-      })
+      this.#pluginSources
     )
   }
-
-  /** Adds the git remote and local path for a `file:` dependency, when readable. */
-  async #withResolvedSource(view: LauncherHarnessPluginView): Promise<LauncherHarnessPluginView> {
-    const localPath = localPathOf(view.version)
-    if (localPath === undefined) {
-      const direct = gitUrlOf(view.version)
-      return direct === undefined ? view : { ...view, sourceUrl: direct }
-    }
-    try {
-      const remote = (
-        await runText(this.#options.gitExecutable, ['-C', localPath, 'remote', 'get-url', 'origin'])
-      ).trim()
-      const normalized = normalizeGitRemote(remote)
-      return {
-        ...view,
-        localPath,
-        ...(normalized === undefined ? {} : { sourceUrl: normalized })
-      }
-    } catch {
-      return { ...view, localPath }
-    }
-  }
-}
-
-/** Formats one Launcher-owned lifecycle event for both the durable log and live Console view. */
-export function formatLauncherLifecycleEvent(message: string): string {
-  return `[launcher] ${message}\n`
-}
-
-/** Builds the exact DSH command, including Launcher-owned verbose logging for this child. */
-export function launcherWebStartArguments(
-  diagnosticsPatchPath: string,
-  port: LauncherHarnessPortSetting
-): readonly string[] {
-  return [
-    'dsh',
-    'web',
-    '--patch',
-    diagnosticsPatchPath,
-    '--no-open',
-    ...(port.mode === 'fixed' ? ['--port', String(port.port)] : [])
-  ]
-}
-
-/** Separates pnpm's one-line script echo from diagnostics written to standard error. */
-export function classifyChildConsoleStream(
-  stream: 'stdout' | 'stderr',
-  text: string
-): LauncherHarnessConsoleEntry['stream'] {
-  return stream === 'stderr' && /^\$\s+\S[^\r\n]*(?:\r?\n)?$/u.test(text) ? 'command' : stream
-}
-
-function isMissing(error: unknown): boolean {
-  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT')
 }

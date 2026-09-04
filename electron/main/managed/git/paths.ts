@@ -6,6 +6,22 @@ import type { ManagedGitInstallationPaths } from './types'
 
 const INSTALLATION_ID = /^[a-z][a-z0-9_-]{2,127}$/
 
+/**
+ * Compares a git-reported path with its registered spelling.
+ *
+ * Git for Windows reports `rev-parse` paths with forward slashes, and Windows
+ * path matching is case-insensitive; both spellings name the same directory
+ * the Launcher registered, so neither difference is a mismatch.
+ */
+export function isSameRegisteredPath(observed: string, registered: string): boolean {
+  const normalizedObserved = nodePath.resolve(observed)
+  const normalizedRegistered = nodePath.resolve(registered)
+  if (process.platform === 'win32') {
+    return normalizedObserved.toLowerCase() === normalizedRegistered.toLowerCase()
+  }
+  return normalizedObserved === normalizedRegistered
+}
+
 /** Builds the fixed, launcher-owned Git layout below an already-validated Harness namespace. */
 export function createManagedGitInstallationPaths(
   namespacePath: string,

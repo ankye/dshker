@@ -20,6 +20,12 @@ The renderer SHALL run with context isolation and sandboxing and receive only na
 - **THEN** main rejects it as an invalid sender
 - **AND** no managed service method runs
 
+#### Scenario: Console activity is pushed to the renderer
+
+- **WHEN** the Launcher appends a console record for an operation, a preparation step, or the DSH Web child
+- **THEN** main pushes exactly the appended service-owned entries on the one named main-to-renderer console channel
+- **AND** the channel accepts no renderer-supplied payload and grants no filesystem, process, or dialog authority
+
 ### Requirement: Local resources are confined to declared desktop assets
 
 The launcher SHALL serve renderer resources through its trusted local application protocol and only from declared immutable Launcher resources. It SHALL reject traversal, encoded path escapes, undeclared files, and navigation to arbitrary local files.

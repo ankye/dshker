@@ -14,6 +14,7 @@ import {
   LauncherHarnessService,
   ManagedBootstrapLocatorStore,
   ManagedHarnessWebRuntimeSupervisor,
+  ManagedHarnessRuntimeError,
   ManagedInstallationService,
   ManagedWorkspaceService,
   type ManagedPathStyle
@@ -98,7 +99,7 @@ async function start(): Promise<void> {
   )
   registerHarnessShutdown(launcherHarnessService)
   createWindow(mainDirectory)
-  initializeBundledHarnessInBackground(launcherHarnessService)
+  void initializeActiveVersion(launcherHarnessService)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow(mainDirectory)
@@ -144,6 +145,8 @@ async function registerLauncherServices(
   await managedWorkspaceService.initializeDefaultRoots()
   const launcherHarnessService = new LauncherHarnessService({
     harnessDirectory: path.join(launcherRoot, 'harness'),
+    versionsDirectory: path.join(launcherRoot, 'versions'),
+    currentVersionPointerPath: path.join(launcherRoot, 'harness-current.json'),
     pluginSourcesDirectory: path.join(launcherRoot, 'plugins'),
     dshHomeDirectory: path.join(homedir(), '.dsh'),
     launchPreferencesPath: path.join(launcherRoot, 'launch-preferences.json'),
@@ -179,33 +182,55 @@ async function registerLauncherServices(
   return launcherHarnessService
 }
 
-/** Creates the packaged initial checkout only when the Launcher-owned Harness root is empty. */
-function initializeBundledHarnessInBackground(service: LauncherHarnessService): void {
-  if (!app.isPackaged) return
+/**
+ * Guarantees an active version exists before the shell settles.
+ *
+ * Fresh installs get theirs from the bundled seed; an existing single-checkout
+ * installation (pre per-version directories) is migrated by materializing its
+ * current commit as the first version directory. The repository's own working
+ * tree is deliberately left untouched.
+ */
+async function initializeActiveVersion(service: LauncherHarnessService): Promise<void> {
   service.setBootstrapState('preparing')
-  void new BundledHarnessBootstrap()
-    .initialize({
-      harnessDirectory: path.join(homedir(), '.dshlauncher', 'harness'),
-      // One canonical staged layout: the Git bundle lives under `harness/`
-      // beside the seed manifest and plugin generation.
-      bundlePath: path.join(
-        process.resourcesPath,
-        'bundled-seed',
-        'harness',
-        'deepseek-harness.git.bundle'
-      ),
-      remoteUrl: BUNDLED_HARNESS_REMOTE_URL,
-      gitExecutable: GIT_EXECUTABLE,
-      pnpmExecutable: PNPM_LAUNCHER.executable,
-      pnpmLauncher: PNPM_LAUNCHER
+  try {
+    await createBundledRepository(service)
+    await service.prepareCurrentVersion()
+    service.setBootstrapState(undefined)
+  } catch (error) {
+    if (error instanceof ManagedHarnessRuntimeError && error.code === 'runtime.worktree_invalid') {
+      // No repository exists yet and the seed could not create one; getState
+      // reports the missing checkout without a failed-preparation banner.
+      service.setBootstrapState(undefined)
+      return
+    }
+    service.setBootstrapState({
+      kind: 'failed',
+      message: error instanceof Error ? error.message : 'The active DSH version failed to prepare.'
     })
-    .then(() => service.setBootstrapState(undefined))
-    .catch((error: unknown) => {
-      service.setBootstrapState({
-        kind: 'failed',
-        message: error instanceof Error ? error.message : 'The bundled DSH could not be prepared.'
-      })
-    })
+  }
+}
+
+/** Creates the packaged initial repository only when the Launcher-owned root is empty. */
+async function createBundledRepository(service: LauncherHarnessService): Promise<void> {
+  if (!app.isPackaged) return
+  await new BundledHarnessBootstrap().initialize({
+    harnessDirectory: path.join(homedir(), '.dshlauncher', 'harness'),
+    // One canonical staged layout: the Git bundle lives under `harness/`
+    // beside the seed manifest and plugin generation.
+    bundlePath: path.join(
+      process.resourcesPath,
+      'bundled-seed',
+      'harness',
+      'deepseek-harness.git.bundle'
+    ),
+    remoteUrl: BUNDLED_HARNESS_REMOTE_URL,
+    gitExecutable: GIT_EXECUTABLE,
+    pnpmExecutable: PNPM_LAUNCHER.executable,
+    pnpmLauncher: PNPM_LAUNCHER,
+    // First-run preparation is the one DSH install that happens with no
+    // checkout and no launch, so its steps are streamed into the Console.
+    onActivity: (message) => service.recordOperationActivity(message)
+  })
 }
 
 async function createManagedWorkspaceService(

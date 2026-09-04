@@ -18,8 +18,10 @@ const props = withDefaults(
     readonly showInstallations?: boolean
     /** DSH Web runtime settings belong to the DSH tab, not Launcher ownership settings. */
     readonly showPort?: boolean
+    /** Compact layout for embedding in the Settings page; hides workspace management. */
+    readonly embedded?: boolean
   }>(),
-  { showInstallations: true, showPort: true }
+  { showInstallations: true, showPort: true, embedded: false }
 )
 
 const t = useTranslator()
@@ -224,8 +226,8 @@ function errorCode(value: DesktopApiErrorCode): string {
       </button>
     </section>
 
-    <section v-else class="managed-ready">
-      <header class="managed-section-header">
+    <section v-else class="managed-ready" :data-embedded="props.embedded">
+      <header v-if="!props.embedded" class="managed-section-header">
         <h3>{{ t('managed.ready.rootsTitle') }}</h3>
         <p>{{ t('managed.ready.rootsDescription') }}</p>
       </header>
@@ -255,7 +257,11 @@ function errorCode(value: DesktopApiErrorCode): string {
         </article>
       </div>
 
-      <section class="managed-workspace-section" :aria-labelledby="'managed-workspaces-heading'">
+      <section
+        v-if="!props.embedded"
+        class="managed-workspace-section"
+        :aria-labelledby="'managed-workspaces-heading'"
+      >
         <header class="managed-section-header">
           <h3 id="managed-workspaces-heading">{{ t('managed.ready.workspaceTitle') }}</h3>
           <p>{{ t('managed.ready.workspaceDescription') }}</p>
@@ -606,6 +612,22 @@ function errorCode(value: DesktopApiErrorCode): string {
   grid-template-columns: minmax(9rem, 0.5fr) minmax(0, 2fr);
   gap: var(--space-2) var(--space-4);
   align-items: baseline;
+}
+
+/* When embedded in the Settings page, the section header is external and the
+ * root list lives without a surrounding card or extra chrome. */
+.managed-ready[data-embedded='true'] .managed-registered-root {
+  grid-template-columns: minmax(6rem, 0.3fr) 1fr;
+  gap: var(--space-1) var(--space-3);
+}
+
+.managed-ready[data-embedded='true'] .managed-registered-root-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.managed-ready[data-embedded='true'] .managed-root-id {
+  display: none;
 }
 
 .managed-registered-root-label,

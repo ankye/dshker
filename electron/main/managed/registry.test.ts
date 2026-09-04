@@ -50,7 +50,9 @@ describe('managed root registry', () => {
     const registry = registryAt(base)
     const store = new ManagedRootRegistryStore({
       filePath: nodePath.join(settings, 'registry.json'),
-      pathStyle: 'posix',
+      // The fixture uses native temp paths, so the platform's own spelling
+      // must validate them.
+      pathStyle: process.platform === 'win32' ? ('win32' as const) : ('posix' as const),
       nativeDshHomePath: nodePath.join(base, 'native-dsh-home')
     })
 

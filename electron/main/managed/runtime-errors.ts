@@ -18,6 +18,8 @@ export type ManagedHarnessRuntimeErrorCode =
   | 'runtime.busy_running'
   /** The DSH CLI refused a plugin install or uninstall. */
   | 'runtime.plugin_operation_failed'
+  /** The persisted active-version pointer exists but is not a valid record. */
+  | 'runtime.version_pointer_invalid'
   | 'runtime.not_found'
 
 /** A non-secret error that identifies why one managed Harness generation cannot run. */

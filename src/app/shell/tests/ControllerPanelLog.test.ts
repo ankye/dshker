@@ -1,18 +1,30 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LauncherHarnessState } from '@/shared/contracts'
-import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
+import { harnessConsole, harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
 import ControllerPanel from '../components/ControllerPanel.vue'
 import ControllerPrimaryAction from '../components/ControllerPrimaryAction.vue'
 
 /**
- * The console is where a failed launch explains itself, so its log controls are
- * part of that diagnosis rather than decoration. These tests pin the parts that
- * were previously impossible: the log path was not shown at all, and the only
- * way to keep the output was to select hundreds of rows by hand.
+ * The console is where a failed launch — or a failed update, switch, or plugin
+ * install that never started DSH Web — explains itself. These tests pin the
+ * parts that were previously impossible: the log path was not shown at all, the
+ * only way to keep the output was to select hundreds of rows by hand, and a
+ * not-ready harness hid the retained output behind an empty state.
  */
 describe('ControllerPanel log controls', () => {
   const logFile = { path: '/tmp/dsh/logs/dsh-web.log', exists: true, byteLength: 2048 }
+
+  /** Builds one console entry with the sequence the push feed merges by. */
+  function entry(seq: number, stream: 'launcher' | 'stdout' | 'stderr', text: string) {
+    return { stream, occurredAt: 1_700_000_000_000 + seq, text, seq }
+  }
+
+  /** Publishes one state and its console snapshot the way a state read would. */
+  function seedState(next: LauncherHarnessState): void {
+    harnessState.value = next
+    harnessConsole.value = [...next.console]
+  }
 
   /** Builds a ready state carrying the given console entries. */
   function readyState(
@@ -38,11 +50,12 @@ describe('ControllerPanel log controls', () => {
 
   afterEach(() => {
     harnessState.value = undefined
+    harnessConsole.value = []
     vi.unstubAllGlobals()
   })
 
   it('shows the log path as copyable text so it can be pasted into a report', () => {
-    harnessState.value = readyState([])
+    seedState(readyState([]))
     const wrapper = mount(ControllerPanel)
 
     expect(wrapper.find('.controller-command').exists()).toBe(false)
@@ -54,7 +67,7 @@ describe('ControllerPanel log controls', () => {
   })
 
   it('disables reveal and export before a launch has written the file', () => {
-    harnessState.value = readyState([], { path: logFile.path, exists: false, byteLength: 0 })
+    seedState(readyState([], { path: logFile.path, exists: false, byteLength: 0 }))
     const wrapper = mount(ControllerPanel)
 
     const buttons = wrapper.findAll('.controller-log-actions button')
@@ -67,10 +80,7 @@ describe('ControllerPanel log controls', () => {
   it('copies the whole output with timestamps and stream markers preserved', async () => {
     const writeText = vi.fn(async (_text: string) => undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
-    harnessState.value = readyState([
-      { stream: 'stdout', occurredAt: 1_700_000_000_000, text: 'compiling\n' },
-      { stream: 'stderr', occurredAt: 1_700_000_001_000, text: 'EADDRINUSE\n' }
-    ])
+    seedState(readyState([entry(1, 'stdout', 'compiling\n'), entry(2, 'stderr', 'EADDRINUSE\n')]))
     const wrapper = mount(ControllerPanel)
 
     const copyButton = wrapper.findAll('.controller-log-actions button')[2]
@@ -80,15 +90,13 @@ describe('ControllerPanel log controls', () => {
     expect(copied).toContain('stdout: compiling')
     expect(copied).toContain('stderr: EADDRINUSE')
     // A pasted excerpt is useless without knowing when each line arrived.
-    expect(copied).toContain(new Date(1_700_000_000_000).toISOString())
+    expect(copied).toContain(new Date(1_700_000_000_002).toISOString())
   })
 
   it('copies the right-clicked log row without requiring a prior text selection', async () => {
     const writeText = vi.fn(async (_text: string) => undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })
-    harnessState.value = readyState([
-      { stream: 'launcher', occurredAt: 1_700_000_000_000, text: 'child started\n' }
-    ])
+    seedState(readyState([entry(1, 'launcher', 'child started\n')]))
     const wrapper = mount(ControllerPanel)
 
     await wrapper.get('.controller-output li').trigger('contextmenu', { clientX: 40, clientY: 60 })
@@ -101,7 +109,7 @@ describe('ControllerPanel log controls', () => {
   })
 
   it('cannot copy output that does not exist', () => {
-    harnessState.value = readyState([])
+    seedState(readyState([]))
     const wrapper = mount(ControllerPanel)
 
     const copyButton = wrapper.findAll('.controller-log-actions button')[2]
@@ -110,25 +118,83 @@ describe('ControllerPanel log controls', () => {
 
   it('still offers the log path while the harness is not ready', () => {
     // The path matters most when nothing works, so it is not gated on readiness.
-    harnessState.value = {
+    seedState({
       kind: 'invalid',
       harnessDirectory: '/tmp/dsh/harness',
       message: 'broken',
       launch: { kind: 'stopped' },
       port: { mode: 'auto' },
+      branches: [],
+      revision: undefined,
       commits: [],
       stableVersions: [],
       plugins: [],
       console: [],
       logFile
-    }
+    })
     const wrapper = mount(ControllerPanel)
 
     expect(wrapper.get('.controller-log-path').text()).toBe(logFile.path)
+    // With nothing ever observed, the not-ready empty state stays honest.
+    expect(wrapper.find('.controller-output').exists()).toBe(false)
+    expect(wrapper.find('.empty-state').exists()).toBe(true)
+  })
+
+  it('shows retained operation output while the harness is invalid', () => {
+    // A failed switch explains itself in the console; hiding it behind the
+    // invalid-state empty state is how "nothing is displayed" used to happen.
+    seedState({
+      kind: 'invalid',
+      harnessDirectory: '/tmp/dsh/harness',
+      message: 'The Launcher Harness directory is missing its built DSH checkout.',
+      launch: { kind: 'stopped' },
+      port: { mode: 'auto' },
+      branches: [],
+      revision: undefined,
+      commits: [],
+      stableVersions: [],
+      plugins: [],
+      console: [
+        entry(1, 'launcher', 'Switching DSH to commit a1b2c3…\n'),
+        entry(2, 'launcher', 'Switching DSH to commit a1b2c3 failed: fetch declined.\n')
+      ],
+      logFile
+    })
+    const wrapper = mount(ControllerPanel)
+
+    const rows = wrapper.findAll('.controller-output li')
+    expect(rows).toHaveLength(2)
+    expect(wrapper.find('.empty-state').exists()).toBe(false)
+    // The readiness reason stays visible beside the output that explains it.
+    const notice = wrapper.get('.controller-state-notice')
+    expect(notice.text()).toContain('missing its built DSH checkout')
+  })
+
+  it('shows first-run preparation output while the harness is preparing', () => {
+    seedState({
+      kind: 'preparing',
+      harnessDirectory: '/tmp/dsh/harness',
+      message: 'The bundled DSH is being prepared.',
+      launch: { kind: 'stopped' },
+      port: { mode: 'auto' },
+      branches: [],
+      revision: undefined,
+      commits: [],
+      stableVersions: [],
+      plugins: [],
+      console: [
+        entry(1, 'launcher', 'Installing DSH dependencies (pnpm install --frozen-lockfile).\n')
+      ],
+      logFile
+    })
+    const wrapper = mount(ControllerPanel)
+
+    expect(wrapper.findAll('.controller-output li')).toHaveLength(1)
+    expect(wrapper.get('.controller-state-notice').text()).toContain('being prepared')
   })
 
   it('uses the same primary action treatment as Launch at the Console bottom', () => {
-    harnessState.value = readyState([])
+    seedState(readyState([]))
     const wrapper = mount(ControllerPrimaryAction)
 
     const action = wrapper.get('.launch-primary-action')
@@ -137,10 +203,10 @@ describe('ControllerPanel log controls', () => {
   })
 
   it('turns the Console action into stop when its managed child is running', () => {
-    harnessState.value = {
+    seedState({
       ...readyState([]),
       launch: { kind: 'running', url: 'http://127.0.0.1:3088/?token=launcher' }
-    }
+    })
     const wrapper = mount(ControllerPrimaryAction)
 
     expect(wrapper.get('.controller-runtime-status').text()).toBe('运行中')

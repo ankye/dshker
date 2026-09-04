@@ -18,4 +18,23 @@ describe('runText', () => {
 
     expect(terminatedProcessId).toEqual(expect.any(Number))
   })
+
+  it('streams each stdout and stderr fragment while still resolving with stdout', async () => {
+    const fragments: string[] = []
+
+    const output = await runText(
+      process.execPath,
+      ['-e', 'console.log("out line"); console.error("err line")'],
+      {
+        onOutput: (stream, text) => {
+          fragments.push(`${stream}:${text.trim()}`)
+        }
+      }
+    )
+
+    // Result collection is unchanged: the caller still receives stdout only.
+    expect(output).toContain('out line')
+    expect(fragments).toContain('stdout:out line')
+    expect(fragments).toContain('stderr:err line')
+  })
 })

@@ -3,6 +3,7 @@ import type {
   InstallLauncherHarnessPluginRequest,
   AdoptLauncherHarnessPluginRequest,
   UpdateLauncherHarnessPluginRequest,
+  LauncherHarnessConsoleEntry,
   LauncherHarnessState,
   SetLauncherHarnessPortRequest,
   SwitchLauncherHarnessBranchRequest,
@@ -30,10 +31,69 @@ export type LauncherHarnessOperation =
 // Module-level: every surface observes one Launcher-owned harness state.
 export const harnessState = ref<LauncherHarnessState>()
 const state = harnessState
+/**
+ * Live console feed, unioned from state snapshots and push events.
+ *
+ * Append events and `getState` responses can overtake each other, so entries
+ * are merged by sequence rather than replaced; the feed stays event-driven
+ * instead of waiting for the next periodic state read.
+ */
+export const harnessConsole = ref<readonly LauncherHarnessConsoleEntry[]>([])
+const consoleFeed = harnessConsole
 const loading = ref(false)
 const error = ref<string>()
 const activeOperation = ref<LauncherHarnessOperation>()
+/** Wall clock and feed position of the running operation, for step progress. */
+let operationStartedAtMs = 0
+let operationStartIndex = 0
 let silentRefreshInFlight = false
+let consoleSubscribed = false
+
+/**
+ * Live step progress for the running operation, or undefined while idle.
+ *
+ * Recomputed on every pushed console entry, so silent steps still refresh it
+ * through their heartbeats and busy steps through their streamed output.
+ */
+const operationProgress = computed<LauncherOperationProgress | undefined>(() => {
+  const operation = activeOperation.value
+  if (operation === undefined || operationStartedAtMs === 0) return undefined
+  const entries = consoleFeed.value.slice(operationStartIndex)
+  return computeOperationStepProgress(operation, entries, operationStartedAtMs, Date.now())
+})
+
+/** Mirrors the in-memory console cap, so the feed never outgrows the service. */
+const CONSOLE_FEED_LIMIT = 1_000
+
+/**
+ * Unions console entries by sequence, keeping the newest slice.
+ *
+ * A snapshot taken before an append event can arrive after it; replacing the
+ * feed with that snapshot would drop the appended entries, and appending the
+ * snapshot blindly would duplicate them. Union-by-`seq` is order-independent.
+ */
+export function mergeConsoleEntries(
+  current: readonly LauncherHarnessConsoleEntry[],
+  incoming: readonly LauncherHarnessConsoleEntry[]
+): readonly LauncherHarnessConsoleEntry[] {
+  if (incoming.length === 0) return current
+  const bySequence = new Map(current.map((entry) => [entry.seq, entry]))
+  for (const entry of incoming) bySequence.set(entry.seq, entry)
+  return [...bySequence.values()]
+    .sort((left, right) => left.seq - right.seq)
+    .slice(-CONSOLE_FEED_LIMIT)
+}
+
+/** Subscribes once per window to the main-process console push channel. */
+function subscribeConsoleAppend(): void {
+  const launcherHarness = window.dshLauncher?.launcherHarness
+  if (consoleSubscribed || launcherHarness === undefined) return
+  if (typeof launcherHarness.onConsoleAppend !== 'function') return
+  consoleSubscribed = true
+  launcherHarness.onConsoleAppend((entries) => {
+    consoleFeed.value = mergeConsoleEntries(consoleFeed.value, entries)
+  })
+}
 
 /**
  * Counts launches the user actually initiated from this window.
@@ -66,6 +126,9 @@ async function readState(): Promise<void> {
     return
   }
   state.value = result.data
+  // Snapshots and push events are merged, never replaced, so a slow getState
+  // reply cannot roll the live feed back past already-appended entries.
+  consoleFeed.value = mergeConsoleEntries(consoleFeed.value, result.data.console)
   error.value = undefined
 }
 
@@ -209,6 +272,51 @@ async function setPort(request: SetLauncherHarnessPortRequest): Promise<void> {
   await applyOperation('setPort', () => window.dshLauncher!.launcherHarness.setPort(request))
 }
 
+/** Step-position progress the statusbar renders as a determinate fill. */
+export interface LauncherOperationProgress {
+  /** One-based position of the step currently running. */
+  readonly stepPosition: number
+  readonly totalSteps: number
+  readonly elapsedSeconds: number
+}
+
+/** A completed step's console record; the format is owned by the main process. */
+const COMPLETED_STEP_PATTERN = /finished in \d+s\./u
+/** The fetch step only update and branch switches run before the six build steps. */
+const FETCH_STEP_PATTERN = /^Fetching DSH updates from origin/u
+/** The switch pipeline's fixed step count; mirrors `#switchCheckout` in main. */
+const SWITCH_CHECKOUT_STEP_COUNT = 6
+
+/**
+ * Derives step-position progress from the live console feed.
+ *
+ * The statusbar's indeterminate bar cannot show progress, and its animation is
+ * neutralized under reduced-motion preferences; a determinate fill from real
+ * step completions moves without any animation at all.
+ */
+export function computeOperationStepProgress(
+  operation: LauncherHarnessOperation,
+  entries: readonly LauncherHarnessConsoleEntry[],
+  startedAtMilliseconds: number,
+  nowMilliseconds: number
+): LauncherOperationProgress | undefined {
+  if (operation !== 'switch' && operation !== 'update' && operation !== 'refresh') return undefined
+  let completedSteps = 0
+  let sawFetchStep = false
+  for (const entry of entries) {
+    if (entry.stream !== 'launcher') continue
+    if (FETCH_STEP_PATTERN.test(entry.text)) sawFetchStep = true
+    if (COMPLETED_STEP_PATTERN.test(entry.text)) completedSteps += 1
+  }
+  const totalSteps =
+    operation === 'refresh' ? 1 : SWITCH_CHECKOUT_STEP_COUNT + (sawFetchStep ? 1 : 0)
+  return {
+    stepPosition: Math.min(completedSteps + 1, totalSteps),
+    totalSteps,
+    elapsedSeconds: Math.max(0, Math.round((nowMilliseconds - startedAtMilliseconds) / 1000))
+  }
+}
+
 async function applyOperation(
   operation: LauncherHarnessOperation,
   ipcOperation: () => ReturnType<
@@ -217,13 +325,20 @@ async function applyOperation(
 ): Promise<void> {
   loading.value = true
   activeOperation.value = operation
+  operationStartedAtMs = Date.now()
+  operationStartIndex = consoleFeed.value.length
   try {
     const result = await ipcOperation()
     if (!result.ok) {
       error.value = result.code
+      // A rejected operation still leaves its failure record in the console,
+      // so the state is re-read before the busy flag clears.
+      await readState()
+      error.value = result.code
       return
     }
     state.value = result.data
+    consoleFeed.value = mergeConsoleEntries(consoleFeed.value, result.data.console)
     error.value = undefined
   } finally {
     loading.value = false
@@ -235,7 +350,12 @@ async function applyOperation(
 export function useLauncherHarness() {
   let polling: ReturnType<typeof setInterval> | undefined
   onMounted(() => {
+    // Console output arrives by push; this subscription is idempotent and
+    // outlives every component because the feed state is module-level.
+    subscribeConsoleAppend()
     void refresh()
+    // State transitions (preparing, starting, running) stay on the periodic
+    // read: they are low-frequency facts, unlike the streamed console feed.
     polling = setInterval(() => {
       if (
         !loading.value &&
@@ -252,9 +372,11 @@ export function useLauncherHarness() {
   })
   return {
     state,
+    consoleFeed,
     loading,
     error,
     activeOperation,
+    operationProgress,
     launchAttempts,
     revealLog,
     exportLog,

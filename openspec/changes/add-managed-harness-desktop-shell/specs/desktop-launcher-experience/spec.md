@@ -211,7 +211,38 @@ The launcher SHALL not expose an Advanced options route. Settings SHALL provide 
 
 ### Requirement: Controller and Run remain separate surfaces
 
-The Launch and Controller footers SHALL show valid start or stop controls for the Launcher-created DSH Web child. A running child SHALL leave both controls enabled and change the action to stop. The Controller view SHALL show live DSH Web output and durable log-file controls. It SHALL provide a log-only contextual copy action that copies a selected excerpt or the invoked log row. It SHALL not expose Launcher-internal command-line arguments as a separate summary card. Its action SHALL use the same persistent footer treatment as the Launch action. Runtime observation refreshes SHALL not assert the user-action busy state or animate the active route. The Run view SHALL provide a tab strip that can add and switch independent local DSH Web pages. Its loopback Web guests SHALL offer a native contextual menu limited to back, forward, reload, cut, copy, paste, and select-all; it SHALL not offer developer tools, external navigation, or unrestricted guest capabilities. It SHALL not treat a browser tab as proof that the DSH child process is ready.
+The Launch and Controller footers SHALL show valid start or stop controls for the Launcher-created DSH Web child. A running child SHALL leave both controls enabled and change the action to stop. The Controller view SHALL show live DSH Web output and durable log-file controls. It SHALL also record Launcher-driven activity — core update, version switch, plugin install/update/remove/manage, and bundled first-run preparation — as launcher-marked console steps beside the streamed output of the Git and pnpm children those steps run, and SHALL record each operation's failure reason. Long-running Git steps SHALL request Git's own progress (`--progress`) so percentage output streams even while piped, and a step that stays silent on the console SHALL re-assert itself with an elapsed heartbeat rather than an unchanging feed. While a version update or switch runs, the statusbar SHALL render a determinate step-position fill that advances at real step boundaries, with the step position and elapsed time in its text, so progress remains visible when animation is disabled by reduced-motion preferences. Console entries SHALL be pushed to the renderer as they are appended rather than waiting for a periodic state read. Retained console output SHALL stay visible while the Harness checkout is preparing, missing, or invalid, presented beside the readiness reason instead of being replaced by an empty state, and a new launch SHALL not clear earlier operation output. It SHALL provide a log-only contextual copy action that copies a selected excerpt or the invoked log row. It SHALL not expose Launcher-internal command-line arguments as a separate summary card. Its action SHALL use the same persistent footer treatment as the Launch action. Runtime observation refreshes SHALL not assert the user-action busy state or animate the active route. The Run view SHALL provide a tab strip that can add and switch independent local DSH Web pages. Its loopback Web guests SHALL offer a native contextual menu limited to back, forward, reload, cut, copy, paste, and select-all; it SHALL not offer developer tools, external navigation, or unrestricted guest capabilities. It SHALL not treat a browser tab as proof that the DSH child process is ready.
+
+#### Scenario: User runs an update or plugin operation without starting DSH Web
+
+- **WHEN** the user updates, switches, or installs the core or a plugin while DSH Web is not running
+- **THEN** the Console records each Launcher operation step and its child process output as it happens
+- **AND** a failed operation leaves its failure reason in the Console beside the steps that preceded it
+
+#### Scenario: Harness is not ready while Console output exists
+
+- **WHEN** the Console holds retained output and the Harness checkout reports preparing, missing, or invalid
+- **THEN** the Console keeps rendering that output beside the readiness reason
+- **AND** it does not replace the output with a not-ready empty state
+
+#### Scenario: User watches operation output from another route
+
+- **WHEN** the user is on any route while an operation or launch appends console entries
+- **THEN** a shell-level read-only console tail can be opened from a control on the sidebar's floating rail beside the sidebar state control, and from the statusbar's busy strip
+- **AND** its control advertises unseen output with a badge instead of opening by itself
+- **AND** the tail renders only the newest bounded slice, hands off to the full Console route, collapses on Escape, and stays below transient error toasts
+
+### Requirement: Version switching builds each revision in isolation
+
+The Launcher SHALL materialise each version in its own directory (a `git worktree` of the main repository) rather than swapping the single checkout in place. The main repository SHALL retain its history and refs and SHALL never be built or cleaned. The active-version pointer SHALL be written atomically through a same-directory temporary rename only after the new version's install, build, and profile reconciliation succeed, so a failed or interrupted switch never leaves the one usable version in a broken state. Deletion of replaced version directories SHALL run off the critical path after the pointer flip and SHALL be retried on the next switch when interrupted. The version list SHALL render from the main repository's Git history even when the active version is not built, so the user can recover by switching again.
+
+#### Scenario: User switches to a new commit
+
+- **WHEN** the user selects a commit, branch, or the latest origin/master update
+- **THEN** the Launcher asserts the commit is on origin/master, prepares a fresh worktree in the versions directory, installs dependencies, builds, and reconciles the web profile — all in the new directory
+- **AND** it writes the pointer only after every step succeeds
+- **AND** it replaces the previous version directory in the background
+- **AND** a previously prepared commit is reused instantly without rebuilding
 
 #### Scenario: User starts the controller process
 
@@ -221,8 +252,9 @@ The Launch and Controller footers SHALL show valid start or stop controls for th
 
 #### Scenario: User opens a Run page
 
-- **WHEN** the user adds a Run tab
-- **THEN** the launcher opens the declared loopback DSH Web address in that tab
+- **WHEN** the user navigates to the Run route after Launcher has started DSH Web
+- **THEN** the view opens a tab at the announced loopback address immediately
+- **AND** a new tab is auto-opened at the same address when the runtime starts, so the Run route is never empty while the child is running
 - **AND** a failed page load does not alter controller lifecycle state or substitute another version
 
 #### Scenario: User opens a Run-page context menu

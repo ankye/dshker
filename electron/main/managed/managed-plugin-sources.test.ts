@@ -35,7 +35,8 @@ describe('ManagedPluginSources', () => {
 
       const materialized = await sources.materialize({ kind: 'archive', path: archivePath })
 
-      expect(materialized.installDirectory).toMatch(/managed-sources\/plugin-/u)
+      // The managed layout uses the platform separator in real paths.
+      expect(materialized.installDirectory).toMatch(/managed-sources[/\\]plugin-/u)
       await expect(
         readFile(nodePath.join(materialized.installDirectory, 'package.json'), 'utf8')
       ).resolves.toContain('dsh-test-plugin')

@@ -12,6 +12,7 @@ import {
   type InstallLauncherHarnessPluginRequest,
   type AdoptLauncherHarnessPluginRequest,
   type UpdateLauncherHarnessPluginRequest,
+  type LauncherHarnessConsoleEntry,
   type LauncherHarnessLogExportResult,
   type LauncherHarnessLogFileView,
   type LauncherHarnessState,
@@ -95,6 +96,22 @@ const desktopApi: DesktopApi = Object.freeze({
   launcherHarness: Object.freeze({
     getState: (): Promise<ApiResult<LauncherHarnessState>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessGetState),
+    // The only push channel on the frozen bridge: main appends console entries,
+    // the renderer receives exactly what it appended and can stop listening.
+    onConsoleAppend: (
+      listener: (entries: readonly LauncherHarnessConsoleEntry[]) => void
+    ): (() => void) => {
+      const onAppended = (
+        _event: unknown,
+        entries: readonly LauncherHarnessConsoleEntry[]
+      ): void => {
+        listener(entries)
+      }
+      ipcRenderer.on(DESKTOP_IPC_CHANNELS.launcherHarnessConsoleAppended, onAppended)
+      return () => {
+        ipcRenderer.removeListener(DESKTOP_IPC_CHANNELS.launcherHarnessConsoleAppended, onAppended)
+      }
+    },
     start: (): Promise<ApiResult<LauncherHarnessState>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherHarnessStart),
     stop: (): Promise<ApiResult<LauncherHarnessState>> =>

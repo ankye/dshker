@@ -18,11 +18,16 @@ defineProps<{
   readonly collapseLabel: string
   readonly hideLabel: string
   readonly expandLabel: string
+  readonly consoleLabel: string
+  readonly consoleUnreadLabel: string
+  readonly consoleOpen: boolean
+  readonly consoleUnread: boolean
 }>()
 
 const emit = defineEmits<{
   select: [route: AppRouteId]
   advance: []
+  toggleConsole: []
 }>()
 </script>
 
@@ -66,8 +71,27 @@ const emit = defineEmits<{
         </nav>
       </div>
     </aside>
+    <!--
+      The console tail control rides the same floating rail as the sidebar
+      state control, so shell-level chrome has exactly one home in every
+      sidebar state. The badge advertises new output without opening anything.
+    -->
     <button
-      class="sidebar-toggle"
+      class="sidebar-toggle sidebar-console-toggle"
+      type="button"
+      :aria-expanded="consoleOpen"
+      :aria-label="consoleUnread ? `${consoleLabel} · ${consoleUnreadLabel}` : consoleLabel"
+      :title="consoleUnread ? `${consoleLabel} · ${consoleUnreadLabel}` : consoleLabel"
+      @click="emit('toggleConsole')"
+    >
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+        <path d="m5 7 4 4-4 4" />
+        <path d="M12 17h7" />
+      </svg>
+      <span v-if="consoleUnread" class="sidebar-console-badge" aria-hidden="true" />
+    </button>
+    <button
+      class="sidebar-toggle sidebar-state-toggle"
       type="button"
       :aria-label="
         state === 'expanded' ? collapseLabel : state === 'collapsed' ? hideLabel : expandLabel

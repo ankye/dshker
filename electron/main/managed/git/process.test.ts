@@ -95,6 +95,7 @@ describe('managed Git process runner', () => {
         'credential.helper=',
         '-c',
         `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`,
+        ...(process.platform === 'win32' ? ['-c', 'core.longpaths=true'] : []),
         'remote',
         'https://token:secret@example.test/owner/repo.git'
       ],

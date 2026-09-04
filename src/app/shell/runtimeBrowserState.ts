@@ -1,4 +1,4 @@
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
 
 /** One run-view browser tab. */
@@ -68,6 +68,18 @@ function resetTabs(): void {
   tabs.splice(0, tabs.length)
   activeTabId.value = undefined
 }
+
+// The Run view is where the launched DSH Web gets browsed, so a fresh launch
+// opens its first page automatically; the tab survives route changes because
+// this state is module-level. Closing every tab does not reopen anything —
+// only an actual stop/start transition does.
+watch(runtimeUrl, (url) => {
+  if (url === undefined) {
+    resetTabs()
+    return
+  }
+  if (tabs.length === 0) openTab(url)
+})
 
 /** Shared run-view browser state, preserved across route changes. */
 export const runtimeBrowser = {

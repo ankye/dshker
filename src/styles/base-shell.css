@@ -208,7 +208,10 @@ button:focus-visible,
   height: 2.5rem;
   place-items: center;
   border: 1px solid color-mix(in srgb, var(--color-border), var(--color-accent) 14%);
-  border-radius: var(--radius-md);
+  /* Circular like the rest of the floating chrome (pills, tracks, badges):
+   * the rail controls are single-glyph dots, and the unread badge nests on a
+   * circular rim most naturally. Rectangular buttons stay on the radius scale. */
+  border-radius: 999px;
   background: color-mix(in srgb, var(--color-surface-raised), var(--color-bg) 20%);
   box-shadow: var(--shadow-float);
   color: var(--color-text-muted);
@@ -350,6 +353,28 @@ button:focus-visible,
   pointer-events: auto;
 }
 
+/* The console tail control stacks directly above the sidebar state control on
+ * the same floating rail, so both remain reachable in every sidebar state. */
+.sidebar-console-toggle {
+  bottom: calc(var(--space-3) + 2.5rem + var(--space-2));
+}
+
+.sidebar-console-toggle[aria-expanded='true'] {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 40%);
+  color: var(--color-accent);
+}
+
+.sidebar-console-badge {
+  position: absolute;
+  top: -0.2rem;
+  right: -0.2rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border: 1px solid var(--color-surface-raised);
+  border-radius: 999px;
+  background: var(--color-accent);
+}
+
 .nav-item:disabled {
   cursor: not-allowed;
   opacity: 0.46;
@@ -357,8 +382,10 @@ button:focus-visible,
 
 /* The one vertical scroll container for route content. `min-height: 0` lets it
  * shrink below its content inside the grid row, which is what makes the
- * scrollbar appear here instead of stretching the shell. */
+ * scrollbar appear here instead of stretching the shell. It also anchors the
+ * console tail drawer overlay without joining the grid rows. */
 .workbench-stage {
+  position: relative;
   display: grid;
   min-width: 0;
   min-height: 0;

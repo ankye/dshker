@@ -60,15 +60,17 @@ async function fixture(): Promise<{
   const picker = new FixtureDirectoryPicker(
     new Map([...rootEntries, ['workspace-working-directory', workingDirectory]])
   )
+  // Native temp paths must be validated by the matching platform spelling.
+  const pathStyle = process.platform === 'win32' ? ('win32' as const) : ('posix' as const)
   const service = new ManagedWorkspaceService({
     locator: new ManagedBootstrapLocatorStore({
       filePath: nodePath.join(base, 'platform-state', 'bootstrap.json'),
-      pathStyle: 'posix',
+      pathStyle,
       nativeDshHomePath: nodePath.join(base, 'native-dsh-home')
     }),
     capabilities: new DirectorySelectionCapabilities({ ttlMilliseconds: 30_000, now: () => 1_000 }),
     directoryPicker: picker,
-    pathStyle: 'posix',
+    pathStyle,
     nativeDshHomePath: nodePath.join(base, 'native-dsh-home'),
     defaultRootPaths: {
       harness: nodePath.join(base, 'default-harness'),

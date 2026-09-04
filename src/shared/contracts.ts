@@ -20,6 +20,8 @@ export const DESKTOP_IPC_CHANNELS = {
   managedInstallationsStartHarness: 'dsh-launcher:managed-installations:start-harness',
   managedInstallationsStopHarness: 'dsh-launcher:managed-installations:stop-harness',
   launcherHarnessGetState: 'dsh-launcher:launcher-harness:get-state',
+  /** Main-to-renderer push of newly appended console entries; no request payload. */
+  launcherHarnessConsoleAppended: 'dsh-launcher:launcher-harness:console-appended',
   launcherHarnessStart: 'dsh-launcher:launcher-harness:start',
   launcherHarnessStop: 'dsh-launcher:launcher-harness:stop',
   launcherHarnessRefreshVersions: 'dsh-launcher:launcher-harness:refresh-versions',
@@ -317,6 +319,14 @@ export interface LauncherHarnessConsoleEntry {
   readonly stream: 'launcher' | 'command' | 'stdout' | 'stderr'
   readonly occurredAt: number
   readonly text: string
+  /**
+   * Monotonic sequence within one main-process session.
+   *
+   * Console snapshots (`getState`) and append events can arrive out of order
+   * relative to each other, so consumers union entries by this sequence instead
+   * of trusting arrival order.
+   */
+  readonly seq: number
 }
 
 /**
@@ -368,8 +378,17 @@ export type LauncherHarnessState =
       readonly message: string
       readonly launch: LauncherHarnessLaunchView
       readonly port: LauncherHarnessPortSetting
-      readonly commits: readonly []
-      readonly stableVersions: readonly []
+      /**
+       * Main-repository metadata, present whenever the Git history is readable
+       * even though the active version is not usable. It keeps the version list
+       * available for recovery instead of showing an empty state.
+       */
+      readonly remoteUrl?: string
+      readonly currentBranch?: string
+      readonly branches: readonly string[]
+      readonly revision: string | undefined
+      readonly commits: readonly LauncherHarnessCommitView[]
+      readonly stableVersions: readonly LauncherHarnessVersionView[]
       readonly plugins: readonly []
       readonly console: readonly LauncherHarnessConsoleEntry[]
       readonly logFile: LauncherHarnessLogFileView
@@ -519,6 +538,13 @@ export interface DesktopApi {
   }>
   readonly launcherHarness: Readonly<{
     getState(): Promise<ApiResult<LauncherHarnessState>>
+    /**
+     * Subscribes to console entries appended after subscription.
+     *
+     * Returns the unsubscribe function. This is the only main-to-renderer push
+     * channel: operation and launch output streams without polling.
+     */
+    onConsoleAppend(listener: (entries: readonly LauncherHarnessConsoleEntry[]) => void): () => void
     start(): Promise<ApiResult<LauncherHarnessState>>
     stop(): Promise<ApiResult<LauncherHarnessState>>
     refreshVersions(): Promise<ApiResult<LauncherHarnessState>>

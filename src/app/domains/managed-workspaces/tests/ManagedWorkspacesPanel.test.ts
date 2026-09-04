@@ -174,6 +174,29 @@ describe('ManagedWorkspacesPanel', () => {
     expect(wrapper.text()).toContain('/work/alpha')
     expect(wrapper.text()).toContain('工作区已创建')
   })
+
+  it('hides workspace management and own headers in the embedded settings view', async () => {
+    installDesktopApi({
+      getState: vi.fn(async (): Promise<ApiResult<ManagedLauncherState>> => apiOk(readyState())),
+      selectDirectory: vi.fn(),
+      registerRoots: vi.fn(),
+      createWorkspace: vi.fn()
+    })
+
+    const wrapper = mount(ManagedWorkspacesPanel, {
+      props: { embedded: true, showPort: false, showInstallations: false }
+    })
+    await flushPromises()
+
+    // Root rows still render so the registered layout is visible in Settings.
+    expect(wrapper.findAll('.managed-registered-root')).toHaveLength(ROOT_KINDS.length)
+    expect(wrapper.text()).toContain('/managed/harness')
+    // Workspace management belongs to the dedicated route, not to Settings.
+    expect(wrapper.find('.managed-workspace-section').exists()).toBe(false)
+    expect(wrapper.find('.managed-create-workspace').exists()).toBe(false)
+    expect(wrapper.find('.managed-section-header').exists()).toBe(false)
+    expect(wrapper.get('.managed-ready').attributes('data-embedded')).toBe('true')
+  })
 })
 
 function setupState(): ManagedLauncherState {
@@ -216,6 +239,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
     },
     launcherHarness: {
       getState: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      onConsoleAppend: () => () => undefined,
       start: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       stop: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       refreshVersions: async () => apiFail('managed.missing_registry', 'Not used in this test.'),

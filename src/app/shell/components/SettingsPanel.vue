@@ -226,7 +226,7 @@ const selectedLocale = computed<SupportedLocale>({
           </div>
         </header>
         <div class="settings-section-body">
-          <ManagedWorkspacesPanel :show-installations="false" :show-port="false" />
+          <ManagedWorkspacesPanel :show-installations="false" :show-port="false" :embedded="true" />
         </div>
       </section>
     </div>

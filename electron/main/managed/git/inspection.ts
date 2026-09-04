@@ -2,6 +2,7 @@ import { lstat, realpath } from 'node:fs/promises'
 import nodePath from 'node:path'
 import { requireSingleGitLine, runRequiredGitCommand } from './command'
 import { GitRuntimeError, gitRuntimeFailure } from './errors'
+import { isSameRegisteredPath } from './paths'
 import { assertGitNamedRemote, assertGitRemoteIdentity, parseGitRemoteSource } from './remote'
 import { parseGitCommitSha } from './revision'
 import type { GitCommandRunner } from './process'
@@ -39,7 +40,7 @@ export async function inspectUnmanagedGitRepository(
     topLevelResult.stdout,
     'Unmanaged repository top-level'
   )
-  if (observedTopLevel !== repositoryPath) {
+  if (!isSameRegisteredPath(observedTopLevel, repositoryPath)) {
     throw new GitRuntimeError(
       'git.repository_invalid',
       'Selected path is not the Git worktree root.'

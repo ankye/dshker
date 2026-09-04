@@ -481,6 +481,16 @@
   white-space: nowrap;
 }
 
+/* The recovery notice above the version list when history is readable but the
+ * active version is not built; it wraps because the reason sentence matters
+ * more than the single-line chrome around it. */
+.core-not-built-notice {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--color-warning);
+  white-space: normal;
+}
+
 .version-meta-line code {
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1032,6 +1042,35 @@
   font-size: var(--type-caption);
 }
 
+/* Explains a not-ready harness (preparing, missing, invalid) in one line above
+ * the retained output. Without it, the readiness reason would either replace
+ * the output or be nowhere on the route at all. */
+.controller-state-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+
+.controller-state-label {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.controller-state-notice p {
+  min-width: 0;
+  flex: 1 1 12rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--type-caption);
+}
+
 .controller-log-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1104,6 +1143,94 @@
   white-space: pre-wrap;
 }
 
+/* The shell-level console tail: a bottom-docked overlay drawer on the stage,
+ * so every route can watch operation and launch output without navigating.
+ * It reuses the Console route's dark log vocabulary while staying read-only. */
+.console-drawer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  height: min(40vh, 24rem);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: color-mix(in srgb, #050709, transparent 2%);
+  box-shadow: 0 -0.75rem 1.5rem color-mix(in srgb, #000000, transparent 70%);
+  color: #dce7f5;
+}
+
+.console-drawer-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, #dce7f5, transparent 88%);
+}
+
+.console-drawer-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+}
+
+.console-drawer-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Same bounded scroll box contract as the Console route's output. */
+.console-drawer-entries {
+  min-height: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.console-drawer-entries li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.console-drawer-entries li[data-stream='stderr'] {
+  color: #ffaba5;
+}
+
+.console-drawer-entries li[data-stream='launcher'] {
+  color: #85d5ff;
+}
+
+.console-drawer-entries li[data-stream='command'] {
+  color: #b7d9f4;
+}
+
+.console-drawer-entries time,
+.console-drawer-entries span {
+  color: #7d8ea3;
+  white-space: nowrap;
+}
+
+.console-drawer-entries pre {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 /* The runtime action remains at the bottom of Console while output scrolls in
  * its own box above it, so starting or stopping does not require returning to
  * the Launch page. */
@@ -1139,8 +1266,12 @@
 
 /* Settings route: a constrained content column of grouped sections. */
 
+/* A readable settings column that centers itself when the window outgrows it;
+ * without the margin, fullscreen pinned the whole page to the left half. */
 .settings-panel {
+  width: 100%;
   max-width: 56rem;
+  margin-inline: auto;
 }
 
 .settings-tab-panel {
@@ -1204,7 +1335,7 @@
 }
 
 .settings-dsh-port-form {
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 .settings-section-actions {
@@ -1365,7 +1496,7 @@
 
 .settings-row {
   display: flex;
-  min-height: 5rem;
+  min-height: 3.5rem;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-5);

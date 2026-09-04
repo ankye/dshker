@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, realpath, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { promisify } from 'node:util'
@@ -27,6 +27,27 @@ import type {
 } from './types'
 
 const execFileAsync = promisify(execFile)
+
+/**
+ * Probes whether this environment may create file symlinks: Windows denies it
+ * without the SeCreateSymbolicLink privilege (or Developer Mode). The bundle
+ * alias rejection scenario needs one, so the test skips where none can exist.
+ */
+async function probeFileSymlinkSupport(): Promise<boolean> {
+  const directory = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-symlink-probe-'))
+  try {
+    const target = nodePath.join(directory, 'target.bundle')
+    await writeFile(target, 'x')
+    await symlink(target, nodePath.join(directory, 'alias.bundle'))
+    return true
+  } catch {
+    return false
+  } finally {
+    await rm(directory, { recursive: true, force: true })
+  }
+}
+
+const fileSymlinksSupported = await probeFileSymlinkSupport()
 
 async function hostGit(cwd: string, arguments_: readonly string[]): Promise<string> {
   const result = await execFileAsync('git', [...arguments_], { cwd, encoding: 'utf8' })
@@ -197,31 +218,34 @@ describe('managed bare-mirror publication', () => {
     expect(commands.map((command) => command.operation)).not.toContain('git.fetch_managed_mirror')
   })
 
-  it('rejects a bundle alias before invoking the registered Git executable', async () => {
-    const namespacePath = await realpath(
-      await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-bundle-alias-'))
-    )
-    const paths = createManagedGitInstallationPaths(namespacePath, 'installation_alias')
-    const remote = createGitNamedRemote('origin', 'https://example.test/owner/dsh.git')
-    const bundlePath = nodePath.join(namespacePath, 'dsh.git.bundle')
-    const aliasPath = nodePath.join(namespacePath, 'dsh-alias.bundle')
-    await writeFile(bundlePath, 'verified bundle')
-    await symlink(bundlePath, aliasPath)
-    const run = vi.fn()
-    const runner = { run } as unknown as GitCommandRunner
-
-    await expect(
-      createManagedGitMirrorFromBundle(
-        runner,
-        {} as GitExecutableRegistration,
-        {} as GitExecutionContext,
-        paths,
-        remote,
-        aliasPath
+  it.skipIf(!fileSymlinksSupported)(
+    'rejects a bundle alias before invoking the registered Git executable',
+    async () => {
+      const namespacePath = await realpath(
+        await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-bundle-alias-'))
       )
-    ).rejects.toMatchObject({ code: 'git.repository_invalid' })
-    expect(run).not.toHaveBeenCalled()
-  })
+      const paths = createManagedGitInstallationPaths(namespacePath, 'installation_alias')
+      const remote = createGitNamedRemote('origin', 'https://example.test/owner/dsh.git')
+      const bundlePath = nodePath.join(namespacePath, 'dsh.git.bundle')
+      const aliasPath = nodePath.join(namespacePath, 'dsh-alias.bundle')
+      await writeFile(bundlePath, 'verified bundle')
+      await symlink(bundlePath, aliasPath)
+      const run = vi.fn()
+      const runner = { run } as unknown as GitCommandRunner
+
+      await expect(
+        createManagedGitMirrorFromBundle(
+          runner,
+          {} as GitExecutableRegistration,
+          {} as GitExecutionContext,
+          paths,
+          remote,
+          aliasPath
+        )
+      ).rejects.toMatchObject({ code: 'git.repository_invalid' })
+      expect(run).not.toHaveBeenCalled()
+    }
+  )
 
   it('resolves and materializes a bundled branch through the normal managed mirror APIs', async () => {
     const temporaryRoot = await realpath(

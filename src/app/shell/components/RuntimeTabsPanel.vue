@@ -33,10 +33,8 @@ function activeFrame(): RuntimeWebview | undefined {
   return id === undefined ? undefined : frames.value[id]
 }
 
-// A stopped runtime leaves nothing to show, so its tabs close with it.
-watch(browser.runtimeUrl, (url) => {
-  if (url === undefined) browser.resetTabs()
-})
+// Tab lifecycle follows the runtime at module level: a fresh launch opens its
+// first page automatically, and stopping the runtime closes every tab.
 
 // The address bar follows the focused tab, including one restored after the run
 // route was left and re-entered.
@@ -254,34 +252,56 @@ function reload(): void {
   flex-direction: column;
 }
 
+/* The chrome sits directly on the route background: no gray band above the
+ * content. The launched page is framed as a card below, so the tabs and
+ * address row read as a browser chrome instead of two stacked bars. */
 .browser-tab-strip {
   display: flex;
+  min-width: 0;
+  align-items: flex-end;
+  gap: 0.125rem;
+  padding: var(--space-2) var(--space-3) 0;
   overflow-x: auto;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-2) 0;
-  background: var(--color-surface);
+  background: transparent;
 }
 
 .browser-tab {
+  position: relative;
   display: flex;
-  max-width: 14rem;
+  max-width: 13rem;
+  min-width: 0;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid transparent;
-  border-bottom: none;
-  border-radius: var(--radius) var(--radius) 0 0;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
   background: transparent;
   color: var(--color-text-muted);
   font-size: var(--type-caption);
   cursor: pointer;
 }
 
+.browser-tab:hover {
+  background: color-mix(in srgb, var(--color-text), transparent 94%);
+  color: var(--color-text);
+}
+
+/* The active tab opens downward into the framed page, so its bottom edge is
+ * square and its top corners rounded — the classic connected-tab shape. */
 .browser-tab[data-active='true'] {
-  border-color: var(--color-border);
   background: var(--color-bg);
   color: var(--color-text);
+}
+
+.browser-tab[data-active='true']::after {
+  position: absolute;
+  top: 0.15rem;
+  right: 0.15rem;
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  content: '';
 }
 
 .browser-tab:focus-visible,
@@ -296,13 +316,24 @@ function reload(): void {
   white-space: nowrap;
 }
 
+/* The close control appears on hover or focus instead of permanently crowding
+ * narrow tabs, and the active tab keeps it dimmed until hovered. */
 .browser-tab-close {
   flex: none;
-  padding: 0 var(--space-1);
+  margin-right: -0.25rem;
+  padding: 0 0.25rem;
   border-radius: 3px;
   color: var(--color-text-muted);
-  line-height: 1;
+  font-size: var(--type-ui);
+  line-height: 1.4;
+  opacity: 0;
   cursor: pointer;
+}
+
+.browser-tab:hover .browser-tab-close,
+.browser-tab:focus-within .browser-tab-close,
+.browser-tab[data-active='true'] .browser-tab-close {
+  opacity: 1;
 }
 
 .browser-tab-close:hover {
@@ -311,20 +342,23 @@ function reload(): void {
 }
 
 .browser-tab-new {
-  width: 1.5rem;
-  height: 1.5rem;
+  display: grid;
+  width: 1.75rem;
+  height: 1.75rem;
   flex: none;
+  margin-left: 0.25rem;
   border: none;
-  border-radius: var(--radius);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--color-text-muted);
   font-size: var(--type-ui);
   line-height: 1;
   cursor: pointer;
+  place-items: center;
 }
 
 .browser-tab-new:hover {
-  background: var(--color-surface-raised);
+  background: color-mix(in srgb, var(--color-text), transparent 94%);
   color: var(--color-text);
 }
 
@@ -333,9 +367,7 @@ function reload(): void {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
-  background: var(--color-surface);
+  background: transparent;
 }
 
 .browser-icon-button {
@@ -352,7 +384,7 @@ function reload(): void {
 }
 
 .browser-icon-button:hover:not(:disabled) {
-  background: var(--color-surface-raised);
+  background: color-mix(in srgb, var(--color-text), transparent 94%);
   color: var(--color-text);
 }
 
@@ -379,12 +411,13 @@ function reload(): void {
 .browser-address {
   flex: 1;
   min-width: 0;
-  padding: var(--space-1) var(--space-3);
+  padding: 0.375rem var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  background: var(--color-bg);
+  background: color-mix(in srgb, var(--color-surface-raised), var(--color-bg) 40%);
   color: var(--color-text);
   font-size: var(--type-caption);
+  transition: border-color var(--motion-fast) var(--ease-standard);
 }
 
 .browser-address:focus-visible {
@@ -392,11 +425,18 @@ function reload(): void {
   outline: none;
 }
 
+/* The launched page lives in a rounded card with a hairline frame, so the
+ * guest's own background no longer collides with flat gray chrome bands. */
 .browser-viewport-stack {
   position: relative;
   display: flex;
-  flex: 1;
   min-height: 0;
+  flex: 1 1 auto;
+  margin: 0 var(--space-3) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--color-bg);
 }
 
 .browser-viewport {

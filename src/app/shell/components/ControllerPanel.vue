@@ -13,8 +13,20 @@ const emit = defineEmits<{ navigate: ['launch'] }>()
 const CONFIRMATION_MILLISECONDS = 1_600
 
 const logFile = computed(() => harness.state.value?.logFile)
-const consoleEntries = computed(() =>
-  harness.state.value?.kind === 'ready' ? harness.state.value.console : []
+// Operation records (update, switch, plugin install, bootstrap) arrive in the
+// same feed as launch output, and they exist whether or not DSH Web ever
+// started. The feed is push-driven (state snapshots merged with append events),
+// so it renders for every readiness kind, not only `ready`.
+const consoleEntries = computed(() => harness.consoleFeed.value)
+const notReadyMessage = computed(() => {
+  const current = harness.state.value
+  return current !== undefined && current.kind !== 'ready' ? current.message : undefined
+})
+/** True only when nothing has ever been observed, not when DSH Web is merely stopped. */
+const showsNotReady = computed(
+  () =>
+    harness.state.value === undefined ||
+    (harness.state.value.kind !== 'ready' && consoleEntries.value.length === 0)
 )
 const copiedOutput = ref(false)
 const copiedLine = ref(false)
@@ -168,18 +180,30 @@ onUnmounted(() => {
     </div>
 
     <!--
-      Two distinct conditions that previously shared one message: the shell is
-      not ready yet, versus it is ready and simply has produced no output.
+      A not-ready harness (preparing, missing, invalid) explains itself in a
+      compact notice while the retained output stays visible below it. Hiding
+      the output behind an empty state is exactly how a failed install or
+      launch becomes invisible at the moment the user needs its reason.
+    -->
+    <div v-if="notReadyMessage" class="controller-state-notice" role="status">
+      <span class="controller-state-label">{{ t('controller.stateNotice') }}</span>
+      <p>{{ notReadyMessage }}</p>
+    </div>
+
+    <!--
+      Two distinct conditions that previously shared one message: nothing has
+      been observed yet, versus output exists and must be rendered even when
+      the harness itself is not ready or DSH Web is not running.
     -->
     <EmptyState
-      v-if="harness.state.value?.kind !== 'ready'"
+      v-if="showsNotReady"
       icon="plug"
       fill
       :title="t('controller.notReady')"
       :description="t('controller.notReady.description')"
     />
     <EmptyState
-      v-else-if="harness.state.value.console.length === 0"
+      v-else-if="consoleEntries.length === 0"
       icon="inbox"
       fill
       :title="t('controller.empty')"
@@ -197,7 +221,7 @@ onUnmounted(() => {
     </EmptyState>
     <ol v-else class="controller-output" aria-live="polite" @contextmenu="openCopyMenu">
       <li
-        v-for="(entry, index) in harness.state.value.console"
+        v-for="(entry, index) in consoleEntries"
         :key="`${entry.occurredAt}-${index}`"
         :data-stream="entry.stream"
       >

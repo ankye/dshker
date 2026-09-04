@@ -44,7 +44,8 @@ describe('explicit Node and pnpm tool probes', () => {
     const child = fakeChild()
     const spawnProcess = vi.fn(() => child as never)
     const runner = new ToolchainCommandRunner(spawnProcess)
-    const probe = runner.probeNodeVersion(process.execPath, processContext(process.cwd()))
+    const toolchainContext = processContext(process.cwd())
+    const probe = runner.probeNodeVersion(process.execPath, toolchainContext)
 
     await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce())
     child.stdout.end('v22.19.0\n')
@@ -55,7 +56,14 @@ describe('explicit Node and pnpm tool probes', () => {
     expect(spawnProcess).toHaveBeenCalledWith(
       process.execPath,
       ['--version'],
-      expect.objectContaining({ shell: false, env: {}, stdio: ['ignore', 'pipe', 'pipe'] })
+      // The explicit environment is the built one (Windows process variables on
+      // win32, empty elsewhere); asserting the exact object still proves no
+      // ambient PATH or HOME leaks into the probe.
+      expect.objectContaining({
+        shell: false,
+        env: toolchainContext.environment,
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
     )
   })
 
@@ -65,10 +73,11 @@ describe('explicit Node and pnpm tool probes', () => {
     const child = fakeChild()
     const spawnProcess = vi.fn(() => child as never)
     const runner = new ToolchainCommandRunner(spawnProcess)
+    const probeContext = pnpmContext(isolation)
     const probe = runner.probePnpmVersion(
       '/registered/pnpm-script.mjs',
       { kind: 'node-script', node },
-      pnpmContext(isolation)
+      probeContext
     )
 
     await vi.waitFor(() => expect(spawnProcess).toHaveBeenCalledOnce())
@@ -92,7 +101,11 @@ describe('explicit Node and pnpm tool probes', () => {
         '--ignore-workspace',
         '--version'
       ],
-      expect.objectContaining({ shell: false, env: {}, cwd: isolation.directoryPath })
+      expect.objectContaining({
+        shell: false,
+        env: probeContext.environment,
+        cwd: isolation.directoryPath
+      })
     )
   })
 

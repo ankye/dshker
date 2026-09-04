@@ -6,5 +6,5 @@
  * @module
  */
 
-export { useLauncherHarness, launchAttempts } from './useLauncherHarness'
+export { useLauncherHarness, launchAttempts, harnessConsole } from './useLauncherHarness'
 export { usePluginCatalog } from './usePluginCatalog'

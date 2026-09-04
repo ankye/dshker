@@ -6,6 +6,7 @@ import { inspectManagedGitMirror, verifyBareMirror } from './mirror'
 import {
   acquireManagedGitOperationLock,
   assertManagedGitTarget,
+  isSameRegisteredPath,
   managedWorktreePath
 } from './paths'
 import { assertGitRemoteIdentity, parseGitRemoteSource } from './remote'
@@ -83,7 +84,7 @@ export async function verifyManagedGitWorktree(
   ])
 
   const observedTopLevel = requireSingleGitLine(topLevel.stdout, 'Managed worktree top-level')
-  if (observedTopLevel !== worktreePath) {
+  if (!isSameRegisteredPath(observedTopLevel, worktreePath)) {
     throw new GitRuntimeError(
       'git.worktree_mismatch',
       'Managed Git worktree top-level differs from its registered path.'
@@ -119,7 +120,7 @@ export async function verifyManagedGitWorktree(
       error
     )
   }
-  if (canonicalCommonDirectory !== paths.mirrorPath) {
+  if (!isSameRegisteredPath(canonicalCommonDirectory, paths.mirrorPath)) {
     throw new GitRuntimeError(
       'git.worktree_mismatch',
       'Managed Git worktree belongs to a different mirror.'

@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
+import ConsoleDrawer from './components/ConsoleDrawer.vue'
 import ControllerPanel from './components/ControllerPanel.vue'
 import ControllerPrimaryAction from './components/ControllerPrimaryAction.vue'
 import UsagePanel from './components/UsagePanel.vue'
@@ -16,6 +17,7 @@ import ShellToast from './components/ShellToast.vue'
 import VersionManagementPanel from './components/VersionManagementPanel.vue'
 import { startLocale } from '../shared/i18n/useLocale'
 import { startTheme } from '../shared/theme/useTheme'
+import { useConsoleDrawer } from './consoleDrawerState'
 import { useLauncherShell } from './useLauncherShell'
 
 // Applies the persisted theme on the first frame of any route and keeps a
@@ -24,11 +26,17 @@ startTheme()
 // Publishes the persisted language to the document element.
 startLocale()
 
+// The console tail is a session surface; startup history is not "unread".
+const consoleDrawer = useConsoleDrawer()
+onMounted(() => {
+  consoleDrawer.markConsoleSeen()
+})
+
 const shell = useLauncherShell()
 const harness = useLauncherHarness()
 const pluginCatalog = usePluginCatalog()
 
-const statusbarOperationLabel = computed(() => {
+const statusbarBaseLabel = computed(() => {
   const operation = harness.activeOperation.value
   if (operation !== undefined) {
     switch (operation) {
@@ -58,6 +66,21 @@ const statusbarOperationLabel = computed(() => {
   }
   if (pluginCatalog.loading.value) return shell.t('status.operation.refreshCatalog')
   return undefined
+})
+
+/** Filled fraction for the statusbar bar; only step-reporting operations have one. */
+const statusbarProgressRatio = computed(() => {
+  const progress = harness.operationProgress.value
+  if (progress === undefined) return undefined
+  return Math.min(1, progress.stepPosition / progress.totalSteps)
+})
+
+const statusbarOperationLabel = computed(() => {
+  const base = statusbarBaseLabel.value
+  const progress = harness.operationProgress.value
+  if (base === undefined || progress === undefined) return base
+  // Numbers only: the appended position stays meaningful in either language.
+  return `${base} · ${shell.t('status.progress.step')} ${progress.stepPosition}/${progress.totalSteps} · ${progress.elapsedSeconds}s`
 })
 
 const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.t>[0]>> = {
@@ -133,6 +156,12 @@ const protocolVersion = computed(() =>
     ? String(shell.bootstrap.value.info.apiVersion)
     : 'unavailable'
 )
+
+/** The tail's link hands over to the full Console route and collapses itself. */
+function openConsoleRoute(): void {
+  consoleDrawer.closeConsoleDrawer()
+  shell.selectRoute('controller')
+}
 </script>
 
 <template>
@@ -146,8 +175,13 @@ const protocolVersion = computed(() =>
         :collapse-label="shell.t('nav.collapse')"
         :hide-label="shell.t('nav.hide')"
         :expand-label="shell.t('nav.expand')"
+        :console-label="shell.t('nav.console')"
+        :console-unread-label="shell.t('nav.consoleUnread')"
+        :console-open="consoleDrawer.open.value"
+        :console-unread="consoleDrawer.unread.value"
         @select="shell.selectRoute"
         @advance="shell.advanceSidebar"
+        @toggle-console="consoleDrawer.toggleConsoleDrawer"
       />
 
       <main class="workbench-stage">
@@ -224,6 +258,7 @@ const protocolVersion = computed(() =>
           :dismiss-label="shell.t('toast.dismiss')"
           @dismiss="dismissToast"
         />
+        <ConsoleDrawer @navigate="openConsoleRoute" />
       </main>
     </div>
 
@@ -233,6 +268,8 @@ const protocolVersion = computed(() =>
       :scope-label="shell.t('footer.scope')"
       :scope-value="shell.t('footer.scopeValue')"
       :operation-label="statusbarOperationLabel"
+      :operation-progress="statusbarProgressRatio"
+      @progress-toggle="consoleDrawer.toggleConsoleDrawer"
     />
   </div>
 </template>
