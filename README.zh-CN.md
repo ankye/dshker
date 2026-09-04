@@ -2,19 +2,20 @@
 
 [English](README.md) · [使用说明](docs/usage.zh-CN.md) · [产品截图](docs/screenshots.md) · [最新版本](https://github.com/ankye/dshker/releases/latest) · [GitHub Actions 构建](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
-DSHKer Launcher 是面向 macOS 与 Windows 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面启动器。它负责准备 Launcher 自己管理的 Harness 内核目录、查看与切换 Git 提交、通过 DSH 原生命令管理扩展、启动 DSH Web，并将启动日志集中展示。
+## 核心功能
+
+- **一键启动 DSH Web**：准备内置 Harness 初始版本、选择内核提交，并启动标准 DSH Web 命令。
+- **内核版本管理**：刷新远端历史、查看提交，并明确切换 Launcher 管理的 DSH 内核。
+- **扩展管理**：查看已安装扩展，并浏览 Awesome DSH Plugin 精选目录。
+- **控制台与运行标签页**：查看精确进程输出、终止受管进程，并打开进程实际公布的地址。
+- **Token 消耗汇总**：只读汇总原生 DSH 会话与每日模型数据，不写入原生 DSH 数据。
+- **清晰的数据边界**：Harness、插件、预设、设置与原生 `~/.dsh` 数据分别保存在声明目录，应用不会静默替换它们。
+
+DSHKer Launcher 是面向 macOS 与 Windows 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面启动器。
 
 Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HOME` 或 `~/.dsh` 始终归 DeepSeek Harness 所有；切换内核版本时会继续沿用。
 
 ![DSHKer Launcher 启动页](docs/assets/screenshots/launch.png)
-
-## 可以做什么
-
-- 当 `~/.dshlauncher/harness` 为空时，自动准备安装包内置的 Harness 初始版本。
-- 查看远端提交历史、刷新版本列表，并明确切换 DSH 内核提交。
-- 查看已安装 DSH 扩展，并浏览 Awesome DSH Plugin 的精选目录。
-- 启动和终止标准 DSH Web 命令，实时查看输出，并在多个标签页打开进程实际公布的本地页面。
-- 只读汇总 DSH 会话日志中的 Token 消耗，不写入原生 DSH 数据。
 
 ![版本管理](docs/assets/screenshots/versions.png)
 

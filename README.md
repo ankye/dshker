@@ -2,19 +2,20 @@
 
 [简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [Latest release](https://github.com/ankye/dshker/releases/latest) · [GitHub Actions builds](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
-DSHKer Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows. It prepares a Launcher-owned Harness checkout, lets you inspect and switch Git commits, manages DSH extensions through the ordinary DSH CLI, starts DSH Web, and keeps the launch log in one place.
+## Core features
+
+- **One-click DSH Web** — prepare the bundled Harness seed, select a core commit, and start the standard DSH Web command.
+- **Version control** — refresh remote history, inspect commits, and explicitly switch the managed DSH core.
+- **Extension management** — see installed extensions and browse the curated Awesome DSH Plugin catalog.
+- **Console and runtime tabs** — follow exact process output, stop the managed process, and open the URL it actually announces.
+- **Token usage** — read session and daily model totals from native DSH logs without writing native DSH data.
+- **Safe ownership boundaries** — keep Harness, plugins, presets, settings, and native `~/.dsh` data in their declared roots without silently replacing them.
+
+DSHKer Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows.
 
 The Launcher never replaces, moves, or resets native DSH state. Your existing `$DSH_HOME` or `~/.dsh` remains owned by DeepSeek Harness and is reused when you change the selected core version.
 
 ![DSHKer Launcher launch screen](docs/assets/screenshots/launch.png)
-
-## What you can do
-
-- Start a packaged Harness seed automatically when `~/.dshlauncher/harness` is empty.
-- Browse the fetched commit history, refresh a remote, and explicitly switch the DSH core version.
-- See installed DSH extensions and browse the curated Awesome DSH Plugin catalog.
-- Start and stop the standard DSH Web command, inspect real-time output, and open the announced local Web page in tabs.
-- Read token usage from DSH session logs without writing native DSH data.
 
 ![Version management](docs/assets/screenshots/versions.png)
 
