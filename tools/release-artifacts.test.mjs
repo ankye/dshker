@@ -71,6 +71,19 @@ describe('release artifact identity', () => {
     })
   })
 
+  it('ignores electron-builder updater indexes when creating release metadata', async () => {
+    const releaseDirectory = await createReleaseDirectory()
+    const currentArtifact = `dshker-launcher-${currentVersion}-mac-arm64.dmg`
+    await writeFile(path.join(releaseDirectory, currentArtifact), 'installer', 'utf8')
+    await writeFile(path.join(releaseDirectory, 'latest-mac.yml'), 'version: 0.1.7\n', 'utf8')
+
+    const result = await generate({ releaseDir: relativeToApp(releaseDirectory), mode: 'test' })
+
+    expect(result.manifest.artifacts.map((artifact) => artifact.relativePath)).toEqual([
+      currentArtifact
+    ])
+  })
+
   it('rejects a visible artifact whose filename does not identify this package version', async () => {
     const releaseDirectory = await createReleaseDirectory()
     await mkdir(path.join(releaseDirectory, 'mac-arm64'))
