@@ -1,8 +1,8 @@
 # Product screenshots / 产品截图
 
-These images are captured from the v0.1.10 macOS packaged-app smoke run. They are not browser or development-server screenshots. The smoke environment intentionally starts without a user-managed Harness checkout, so the Launch and Version management pages demonstrate their first-run and empty states.
+These images show the current DSHKer Launcher interface. They are supplied from a real macOS session rather than a browser or development server, and include a prepared Harness checkout, running DSH Web process, installed extensions, plugin catalog data, and session usage data.
 
-以下图片由 v0.1.10 macOS 安装包的烟测直接截取，不是浏览器或开发服务器截图。烟测环境不会读取用户的 Harness 目录，因此“启动”和“版本管理”页面展示的是首启与空状态。
+以下图片来自当前 DSHKer Launcher 的真实 macOS 使用场景，不是浏览器或开发服务器截图；截图包含已准备的 Harness 内核、运行中的 DSH Web、已安装扩展、插件目录与会话 Token 数据。
 
 ## Launch / 启动
 
@@ -12,6 +12,14 @@ These images are captured from the v0.1.10 macOS packaged-app smoke run. They ar
 
 ![Version management](assets/screenshots/versions.png)
 
+## Installed extensions / 已安装扩展
+
+![Installed extensions](assets/screenshots/extensions.png)
+
+## Plugin catalog / 安装新扩展
+
+![Plugin catalog](assets/screenshots/plugins.png)
+
 ## Console / 控制台
 
 ![Console](assets/screenshots/controller.png)
@@ -19,6 +27,10 @@ These images are captured from the v0.1.10 macOS packaged-app smoke run. They ar
 ## Token usage / Token 消耗
 
 ![Token usage](assets/screenshots/usage.png)
+
+## Token statistics / Token 统计
+
+![Token statistics](assets/screenshots/usage-statistics.png)
 
 ## Settings / 设置
 
