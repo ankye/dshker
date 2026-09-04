@@ -80,6 +80,7 @@ jobs:
             os: macos-14
             script: dist:mac-arm64
             artifact: dshker-launcher-macos-arm64
+            launchTimeoutMs: 20000
             pattern: |
               release/*.dmg
               release/release-manifest.json
@@ -88,6 +89,7 @@ jobs:
             os: windows-latest
             script: dist:win-x64
             artifact: dshker-launcher-windows-x64
+            launchTimeoutMs: 60000
             pattern: |
               release/*.exe
               release/release-manifest.json
@@ -137,7 +139,7 @@ jobs:
         run: npm run release:verify
 
       - name: Run packaged application smoke
-        run: npm run release:smoke
+        run: npm run release:smoke -- --launch-timeout-ms ${{ matrix.launchTimeoutMs }}
 
       - name: Upload build diagnostics
         if: ${{ always() }}
@@ -147,6 +149,7 @@ jobs:
           path: |
             release/ci-build.log
             release/release-smoke.log
+            release/release-smoke-launch.trace
           if-no-files-found: error
           retention-days: 14
 

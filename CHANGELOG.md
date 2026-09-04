@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8 — 2026-09-04
+
+- Hardened the Windows packaged-app release smoke gate with an explicit startup
+  budget and preserved child-process timeout diagnostics.
+
 ## 0.1.7 — 2026-09-04
 
 - Added a single-source Launcher version identity shared by application metadata,

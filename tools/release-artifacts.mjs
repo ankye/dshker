@@ -27,6 +27,7 @@ const INTERNAL_OUTPUT_NAMES = new Set([
   'builder-effective-config.yaml',
   'ci-build.log',
   'release-smoke.log',
+  'release-smoke-launch.trace',
   // electron-builder emits these updater indexes even when publishing is
   // disabled; the Launcher deliberately uses GitHub Releases discovery and
   // does not ship an electron-updater channel.

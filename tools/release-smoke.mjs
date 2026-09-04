@@ -12,7 +12,8 @@ function parseArgs(argv) {
   const args = {
     releaseDir: 'release',
     launch: false,
-    json: false
+    json: false,
+    launchTimeoutMs: 20_000
   }
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -23,6 +24,14 @@ function parseArgs(argv) {
       const value = argv[index + 1]
       if (!value || value.startsWith('--')) throw new Error('Missing --release-dir value')
       args.releaseDir = value
+      index += 1
+    } else if (arg === '--launch-timeout-ms') {
+      const value = argv[index + 1]
+      if (!value || value.startsWith('--')) throw new Error('Missing --launch-timeout-ms value')
+      if (!/^\d+$/u.test(value) || Number(value) <= 0) {
+        throw new Error('--launch-timeout-ms must be a positive integer')
+      }
+      args.launchTimeoutMs = Number(value)
       index += 1
     } else {
       throw new Error(`Unknown argument: ${arg}`)
@@ -109,10 +118,18 @@ async function readTextWhenReady(filePath, timeoutMs = 3000) {
   return ''
 }
 
-async function launchSmoke(executablePath) {
+async function launchSmoke(executablePath, timeoutMs, releaseDir) {
   const outputDir = path.join(appRoot, '.run', 'release-smoke')
   const outputPath = path.join(outputDir, 'packaged-launch.json')
+  const tracePath = path.join(releaseDir, 'release-smoke-launch.trace')
+  const trace = []
+  const recordTrace = async (message) => {
+    trace.push(`${new Date().toISOString()} ${message}`)
+    await writeFile(tracePath, `${trace.join('\n')}\n`, 'utf8')
+  }
+
   await mkdir(outputDir, { recursive: true })
+  await recordTrace(`launch-start executable=${executablePath} timeoutMs=${timeoutMs}`)
   await rm(outputPath, { force: true })
   await rm(`${outputPath}.trace`, { force: true })
 
@@ -136,7 +153,7 @@ async function launchSmoke(executablePath) {
       {
         cwd: path.dirname(executablePath),
         env: launchEnv,
-        timeout: 20000,
+        timeout: timeoutMs,
         windowsHide: true
       }
     )
@@ -145,14 +162,19 @@ async function launchSmoke(executablePath) {
   } catch (error) {
     exitCode = typeof error.code === 'number' ? error.code : 1
     stdout = error.stdout || ''
-    stderr = error.stderr || error.message || String(error)
+    const errorText = error instanceof Error ? error.message : String(error)
+    stderr = [error.stderr || '', errorText].filter(Boolean).join('\n')
+    await recordTrace(`launch-error ${errorText}`)
   }
 
   const evidence = await readTextWhenReady(outputPath)
+  await recordTrace(`launch-end exitCode=${exitCode} evidence=${evidence.trim().length > 0}`)
   return {
     stdout: (evidence || stdout).trim(),
     stderr: stderr.trim(),
     exitCode,
+    timeoutMs,
+    traceFile: path.relative(appRoot, tracePath).replaceAll(path.sep, '/'),
     evidenceFile: path.relative(appRoot, outputPath).replaceAll(path.sep, '/')
   }
 }
@@ -226,7 +248,10 @@ async function main() {
   const manifest = await readJson(manifestPath)
   const checksumsExist = await exists(checksumsPath)
   const executable = await firstExisting(executableCandidates(releaseDir, manifest))
-  const launch = args.launch && executable ? await launchSmoke(executable) : undefined
+  const launch =
+    args.launch && executable
+      ? await launchSmoke(executable, args.launchTimeoutMs, releaseDir)
+      : undefined
   const launchPayload = parseLaunchPayload(launch)
 
   const checks = {

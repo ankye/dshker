@@ -76,6 +76,11 @@ describe('release artifact identity', () => {
     const currentArtifact = `dshker-launcher-${currentVersion}-mac-arm64.dmg`
     await writeFile(path.join(releaseDirectory, currentArtifact), 'installer', 'utf8')
     await writeFile(path.join(releaseDirectory, 'latest-mac.yml'), 'version: 0.1.7\n', 'utf8')
+    await writeFile(
+      path.join(releaseDirectory, 'release-smoke-launch.trace'),
+      'launch-start\n',
+      'utf8'
+    )
 
     const result = await generate({ releaseDir: relativeToApp(releaseDirectory), mode: 'test' })
 

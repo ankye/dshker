@@ -102,6 +102,9 @@ an arm64 macOS DMG and an x64 Windows NSIS installer independently. Every run
 verifies its release metadata and runs the packaged application smoke on its
 native runner. It then uploads each installer with `release-manifest.json` and
 `checksums.txt` as a 14-day GitHub Actions artifact.
+The packaged smoke launch budget is explicit per native runner: 20 seconds on
+macOS arm64 and 60 seconds on Windows x64. Timeout and child-process error
+details are retained in the diagnostic artifact.
 
 Only a tag run publishes. Before either package job starts, the workflow
 requires a stable tag equal to `v${package.json.version}`. After both platform
