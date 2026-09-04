@@ -1,3 +1,5 @@
+import packageJson from '../../package.json'
+
 /**
  * The only renderer-to-main contract available before a managed Harness runtime
  * has completed its separate desktop bridge handshake.
@@ -38,6 +40,16 @@ export const DESKTOP_IPC_CHANNELS = {
   launcherHarnessRevealLog: 'dsh-launcher:launcher-harness:reveal-log',
   launcherHarnessExportLog: 'dsh-launcher:launcher-harness:export-log',
   tokenUsageGetState: 'dsh-launcher:token-usage:get-state',
+  runtimeBrowserGetPreferences: 'dsh-launcher:runtime-browser:get-preferences',
+  runtimeBrowserSetZoom: 'dsh-launcher:runtime-browser:set-zoom',
+  /** Main-to-renderer notice after a guest shortcut changes the shared page zoom. */
+  runtimeBrowserZoomChanged: 'dsh-launcher:runtime-browser:zoom-changed',
+  runtimeBrowserGetHostRenderingInfo: 'dsh-launcher:runtime-browser:get-host-rendering-info',
+  launcherUpdatesGetState: 'dsh-launcher:updates:get-state',
+  launcherUpdatesCheck: 'dsh-launcher:updates:check',
+  launcherUpdatesOpenInstallerDownload: 'dsh-launcher:updates:open-installer-download',
+  /** Main-to-renderer push whenever update discovery changes state. */
+  launcherUpdatesStateChanged: 'dsh-launcher:updates:state-changed',
   pluginCatalogGetState: 'dsh-launcher:plugin-catalog:get-state',
   pluginCatalogRefresh: 'dsh-launcher:plugin-catalog:refresh',
   externalLinkOpen: 'dsh-launcher:external-link:open'
@@ -48,7 +60,7 @@ export const APP_METADATA = {
   appId: 'dsh-launcher',
   bundleId: 'com.ankye.dsh-launcher',
   name: 'DSHKer Launcher',
-  version: '0.1.5'
+  version: packageJson.version
 } as const
 
 /** The only product-source pages the Renderer may ask the OS browser to open. */
@@ -115,11 +127,27 @@ export type ExternalLinkErrorCode =
   | 'launcher.external_link_invalid'
   | 'launcher.external_link_open_failed'
 
+/** Stable Launcher update failures exposed without network or filesystem details. */
+export type LauncherUpdateErrorCode =
+  | 'launcher.update_invalid_request'
+  | 'launcher.update_network_failed'
+  | 'launcher.update_http_failed'
+  | 'launcher.update_response_invalid'
+  | 'launcher.update_release_unsupported'
+  | 'launcher.update_release_url_invalid'
+  | 'launcher.update_platform_unsupported'
+  | 'launcher.update_asset_missing'
+  | 'launcher.update_asset_ambiguous'
+  | 'launcher.update_asset_url_invalid'
+  | 'launcher.update_not_available'
+  | 'launcher.update_open_failed'
+
 /** Every typed error that may cross the first-release Launcher preload surface. */
 export type DesktopApiErrorCode =
   | BootstrapErrorCode
   | ManagedOperationErrorCode
   | ExternalLinkErrorCode
+  | LauncherUpdateErrorCode
 
 /** A typed cross-process result without ambient exception serialization. */
 export type ApiResult<T, Code extends string = DesktopApiErrorCode> =
@@ -499,6 +527,61 @@ export interface SetLauncherHarnessPortRequest {
   readonly port: LauncherHarnessPortSetting
 }
 
+/** Fixed page-zoom choices shared by every Launcher-owned DSH Web guest. */
+export const RUNTIME_BROWSER_ZOOM_PERCENTAGES = [80, 90, 100, 110, 125, 150, 175, 200] as const
+
+/** One admitted page-zoom percentage; display scaling remains OS and Chromium owned. */
+export type RuntimeBrowserZoomPercent = (typeof RUNTIME_BROWSER_ZOOM_PERCENTAGES)[number]
+
+/** Initial page zoom written when no Launcher runtime-browser preference record exists. */
+export const RUNTIME_BROWSER_DEFAULT_ZOOM_PERCENT = 100 as const
+
+/** Strict Launcher-owned preferences for the embedded DSH Web browser. */
+export interface RuntimeBrowserPreferences {
+  readonly zoomPercent: RuntimeBrowserZoomPercent
+}
+
+/** Exact fixed zoom selected from the Run toolbar or a browser shortcut. */
+export interface SetRuntimeBrowserZoomRequest {
+  readonly zoomPercent: RuntimeBrowserZoomPercent
+}
+
+/** Host rendering facts safe to expose without URLs, credentials, or device identifiers. */
+export interface RuntimeBrowserHostRenderingInfo {
+  readonly electronVersion: string
+  readonly chromiumVersion: string
+  readonly displayScaleFactor: number
+  readonly displayColorSpace: string
+  readonly gpuCompositing: string
+  readonly rasterization: string
+  readonly multipleRasterThreads: string
+}
+
+/** Read-only update discovery state owned by the Electron main process. */
+export type LauncherUpdateState =
+  | { readonly kind: 'idle'; readonly currentVersion: string }
+  | { readonly kind: 'checking'; readonly currentVersion: string }
+  | {
+      readonly kind: 'up-to-date'
+      readonly currentVersion: string
+      readonly latestVersion: string
+      readonly checkedAt: string
+    }
+  | {
+      readonly kind: 'update-available'
+      readonly currentVersion: string
+      readonly latestVersion: string
+      readonly assetName: string
+      readonly releasePageUrl: string
+      readonly checkedAt: string
+    }
+  | {
+      readonly kind: 'failed'
+      readonly currentVersion: string
+      readonly code: LauncherUpdateErrorCode
+      readonly checkedAt?: string
+    }
+
 /** A plugin uninstall selection admitted only by its installed package name. */
 export interface UninstallLauncherHarnessPluginRequest {
   readonly name: string
@@ -541,8 +624,8 @@ export interface DesktopApi {
     /**
      * Subscribes to console entries appended after subscription.
      *
-     * Returns the unsubscribe function. This is the only main-to-renderer push
-     * channel: operation and launch output streams without polling.
+     * Returns the unsubscribe function. Operation and launch output stream
+     * without polling.
      */
     onConsoleAppend(listener: (entries: readonly LauncherHarnessConsoleEntry[]) => void): () => void
     start(): Promise<ApiResult<LauncherHarnessState>>
@@ -578,6 +661,20 @@ export interface DesktopApi {
   }>
   readonly tokenUsage: Readonly<{
     getState(request?: TokenUsageRequest): Promise<ApiResult<TokenUsageState>>
+  }>
+  readonly runtimeBrowser: Readonly<{
+    getPreferences(): Promise<ApiResult<RuntimeBrowserPreferences>>
+    setZoom(request: SetRuntimeBrowserZoomRequest): Promise<ApiResult<RuntimeBrowserPreferences>>
+    getHostRenderingInfo(): Promise<ApiResult<RuntimeBrowserHostRenderingInfo>>
+    /** Follows guest-focused Cmd/Ctrl zoom shortcuts handled by Electron main. */
+    onZoomChange(listener: (result: ApiResult<RuntimeBrowserPreferences>) => void): () => void
+  }>
+  readonly launcherUpdates: Readonly<{
+    getState(): Promise<ApiResult<LauncherUpdateState>>
+    check(): Promise<ApiResult<LauncherUpdateState>>
+    /** Opens only the exact installer URL cached by the latest successful check. */
+    openInstallerDownload(): Promise<ApiResult<LauncherUpdateState>>
+    onStateChange(listener: (result: ApiResult<LauncherUpdateState>) => void): () => void
   }>
   readonly pluginCatalog: Readonly<{
     getState(): Promise<ApiResult<PluginCatalogState>>

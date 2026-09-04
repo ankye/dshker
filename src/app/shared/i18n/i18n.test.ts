@@ -14,6 +14,13 @@ describe('launcher locales', () => {
 
     expect(t('workspace.blocked')).toContain('does not create')
   })
+
+  it('localizes the rendering-diagnostics clipboard failure', () => {
+    expect(createTranslator('zh-CN')('runtime.rendering.copyFailed')).toContain('剪贴板权限')
+    expect(createTranslator('en-US')('runtime.rendering.copyFailed')).toContain(
+      'clipboard permission'
+    )
+  })
 })
 
 /**

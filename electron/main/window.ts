@@ -5,6 +5,7 @@ import nodePath from 'node:path'
 import { APP_METADATA } from '../../src/shared/contracts'
 import { createPreloadWebPreferences } from './preload'
 import { installWebviewPolicy, installWindowNavigationPolicy } from './security'
+import { type RuntimeBrowserController } from './runtime-browser-controller'
 
 export function loadRenderer(window: ElectronBrowserWindow): Promise<void> {
   const rendererDevUrl = process.env.ELECTRON_RENDERER_URL
@@ -52,7 +53,10 @@ function applyDockIcon(): void {
 }
 
 /** Creates the sole Launcher application window with no Node renderer authority. */
-export function createWindow(mainDirectory: string): void {
+export function createWindow(
+  mainDirectory: string,
+  runtimeBrowserController: RuntimeBrowserController
+): void {
   applyDockIcon()
   const icon = unpackagedAppIcon()
   const mainWindow = new BrowserWindow({
@@ -69,7 +73,7 @@ export function createWindow(mainDirectory: string): void {
   })
 
   installWindowNavigationPolicy(mainWindow.webContents)
-  installWebviewPolicy(mainWindow.webContents)
+  installWebviewPolicy(mainWindow.webContents, runtimeBrowserController)
   void loadRenderer(mainWindow)
 
   mainWindow.once('ready-to-show', () => {

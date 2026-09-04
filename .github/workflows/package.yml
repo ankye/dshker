@@ -2,6 +2,8 @@ name: Package desktop installers
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
   workflow_dispatch:
@@ -15,7 +17,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Verify tagged source
+    name: Verify package source
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -31,6 +33,21 @@ jobs:
 
       - name: Install locked dependencies
         run: npm ci
+
+      - name: Verify tag matches package version
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        shell: bash
+        run: |
+          package_version="$(node -p "JSON.parse(require('node:fs').readFileSync('package.json', 'utf8')).version")"
+          expected_tag="v${package_version}"
+          if [[ ! "$package_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error title=Invalid release version::package.json version must be a stable semantic version, received '${package_version}'."
+            exit 1
+          fi
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "::error title=Tag and package version differ::Expected '${expected_tag}' from package.json, received '${GITHUB_REF_NAME}'."
+            exit 1
+          fi
 
       - name: Resolve Git executable
         shell: pwsh
@@ -119,17 +136,20 @@ jobs:
       - name: Verify generated metadata
         run: npm run release:verify
 
+      - name: Run packaged application smoke
+        run: npm run release:smoke
+
       - name: Upload build diagnostics
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}-diagnostics
-          path: release/ci-build.log
+          path: |
+            release/ci-build.log
+            release/release-smoke.log
           if-no-files-found: error
           retention-days: 14
 
-      # A repository without signing and notarization credentials must not
-      # publish a GitHub Release. These are traceable build artifacts only.
       - name: Upload installer and checksums
         uses: actions/upload-artifact@v4
         with:
@@ -137,3 +157,206 @@ jobs:
           path: ${{ matrix.pattern }}
           if-no-files-found: error
           retention-days: 14
+
+  publish:
+    name: Publish GitHub Release
+    if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
+    needs: package
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@v4
+
+      - name: Download exact macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshker-launcher-macos-arm64
+          path: release-input/macos-arm64
+
+      - name: Download exact Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshker-launcher-windows-x64
+          path: release-input/windows-x64
+
+      - name: Validate and assemble release assets
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import { createHash } from 'node:crypto'
+          import { execFileSync } from 'node:child_process'
+          import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
+          import path from 'node:path'
+
+          const packageJson = JSON.parse(await readFile('package.json', 'utf8'))
+          const expectedTag = `v${packageJson.version}`
+          const expectedGitRevision = execFileSync('git', ['rev-parse', '--short', 'HEAD'], {
+            encoding: 'utf8'
+          }).trim()
+          if (process.env.GITHUB_REF_NAME !== expectedTag) {
+            throw new Error(
+              `Tag ${process.env.GITHUB_REF_NAME} does not match package.json version ${expectedTag}`
+            )
+          }
+
+          async function listFiles(root) {
+            const files = []
+            async function walk(current) {
+              for (const entry of await readdir(current, { withFileTypes: true })) {
+                const absolute = path.join(current, entry.name)
+                if (entry.isDirectory()) await walk(absolute)
+                else if (entry.isFile()) files.push(absolute)
+              }
+            }
+            await walk(root)
+            return files.sort((left, right) => left.localeCompare(right))
+          }
+
+          function requireOne(files, predicate, label) {
+            const matches = files.filter(predicate)
+            if (matches.length !== 1) {
+              throw new Error(`Expected exactly one ${label}, found ${matches.length}`)
+            }
+            return matches[0]
+          }
+
+          async function sha256(file) {
+            return createHash('sha256').update(await readFile(file)).digest('hex')
+          }
+
+          async function collectPlatform({ root, target, platform, architecture, outputManifest }) {
+            const files = await listFiles(root)
+            const expectedInstallerName = `dshker-launcher-${packageJson.version}-${target}`
+            const extension = path.extname(expectedInstallerName)
+            const installer = requireOne(
+              files,
+              (file) => path.extname(file).toLowerCase() === extension,
+              `${platform}/${architecture} ${extension} installer`
+            )
+            if (path.basename(installer) !== expectedInstallerName) {
+              throw new Error(
+                `${platform}/${architecture} installer name is not ${expectedInstallerName}`
+              )
+            }
+            const manifestPath = requireOne(
+              files,
+              (file) => path.basename(file) === 'release-manifest.json',
+              `${platform}/${architecture} release-manifest.json`
+            )
+            const checksumsPath = requireOne(
+              files,
+              (file) => path.basename(file) === 'checksums.txt',
+              `${platform}/${architecture} checksums.txt`
+            )
+            const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+            if (manifest.version !== packageJson.version) {
+              throw new Error(`${platform}/${architecture} manifest version does not match package.json`)
+            }
+            if (
+              manifest.packageName !== packageJson.name ||
+              manifest.productName !== packageJson.build.productName ||
+              manifest.appId !== packageJson.build.appId ||
+              manifest.gitRevision !== expectedGitRevision
+            ) {
+              throw new Error(`${platform}/${architecture} manifest source identity is invalid`)
+            }
+            if (manifest.platform !== platform || manifest.architecture !== architecture) {
+              throw new Error(`${platform}/${architecture} manifest platform identity is invalid`)
+            }
+            if (manifest.signingStatus !== 'unsigned-local') {
+              throw new Error(`${platform}/${architecture} manifest signing status is unexpected`)
+            }
+
+            const installerName = path.basename(installer)
+            const manifestEntries = manifest.artifacts.filter(
+              (artifact) =>
+                artifact.kind === 'file' &&
+                artifact.name === installerName &&
+                artifact.relativePath === installerName
+            )
+            if (manifestEntries.length !== 1) {
+              throw new Error(`${platform}/${architecture} manifest does not identify exactly one installer`)
+            }
+
+            const digest = await sha256(installer)
+            if (manifestEntries[0].sha256 !== digest) {
+              throw new Error(`${platform}/${architecture} installer does not match its manifest checksum`)
+            }
+            const checksumRows = (await readFile(checksumsPath, 'utf8'))
+              .trimEnd()
+              .split('\n')
+              .filter(Boolean)
+            if (!checksumRows.includes(`${digest}  ${installerName}`)) {
+              throw new Error(`${platform}/${architecture} installer does not match checksums.txt`)
+            }
+
+            await copyFile(installer, path.join('publish', installerName))
+            await copyFile(manifestPath, path.join('publish', outputManifest))
+            return `${digest}  ${installerName}`
+          }
+
+          await mkdir('publish', { recursive: false })
+          const checksumRows = []
+          checksumRows.push(
+            await collectPlatform({
+              root: 'release-input/macos-arm64',
+              target: 'mac-arm64.dmg',
+              platform: 'darwin',
+              architecture: 'arm64',
+              outputManifest: 'release-manifest-macos-arm64.json'
+            })
+          )
+          checksumRows.push(
+            await collectPlatform({
+              root: 'release-input/windows-x64',
+              target: 'win-x64.exe',
+              platform: 'win32',
+              architecture: 'x64',
+              outputManifest: 'release-manifest-windows-x64.json'
+            })
+          )
+          await writeFile('publish/checksums.txt', `${checksumRows.join('\n')}\n`, 'utf8')
+          NODE
+
+      - name: Refuse an existing GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          status="$(curl --silent --show-error --output release-existing.json --write-out '%{http_code}' \
+            --header 'Accept: application/vnd.github+json' \
+            --header "Authorization: Bearer ${GH_TOKEN}" \
+            --header 'X-GitHub-Api-Version: 2022-11-28' \
+            "${GITHUB_API_URL}/repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}")"
+          case "$status" in
+            200)
+              echo "::error title=GitHub Release already exists::Refusing to overwrite release '${GITHUB_REF_NAME}'."
+              exit 1
+              ;;
+            404)
+              ;;
+            *)
+              echo "::error title=GitHub Release lookup failed::GitHub returned HTTP ${status}; release publication was not attempted."
+              exit 1
+              ;;
+          esac
+
+      - name: Create public latest GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            publish/*.dmg \
+            publish/*.exe \
+            publish/checksums.txt \
+            publish/release-manifest-macos-arm64.json \
+            publish/release-manifest-windows-x64.json \
+            --verify-tag \
+            --generate-notes \
+            --notes 'These macOS and Windows installers are currently unsigned. Download the exact package for your platform, verify it with `checksums.txt`, and run the installer manually. macOS may require **Open** from Finder context menu; Windows may show SmartScreen. DSHKer Launcher can notify you about this release, but it does not install or replace the application silently.' \
+            --title "DSHKer Launcher ${GITHUB_REF_NAME}" \
+            --latest

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
+import { useLauncherUpdates } from '../domains/launcher-updates'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
 import ConsoleDrawer from './components/ConsoleDrawer.vue'
 import ControllerPanel from './components/ControllerPanel.vue'
@@ -8,6 +9,7 @@ import ControllerPrimaryAction from './components/ControllerPrimaryAction.vue'
 import UsagePanel from './components/UsagePanel.vue'
 import LaunchPanel from './components/LaunchPanel.vue'
 import LaunchPrimaryAction from './components/LaunchPrimaryAction.vue'
+import LauncherUpdateNotice from './components/LauncherUpdateNotice.vue'
 import RouteStage from './components/RouteStage.vue'
 import RuntimeTabsPanel from './components/RuntimeTabsPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
@@ -35,6 +37,10 @@ onMounted(() => {
 const shell = useLauncherShell()
 const harness = useLauncherHarness()
 const pluginCatalog = usePluginCatalog()
+const launcherUpdates = useLauncherUpdates()
+const updateNotice = launcherUpdates.notice
+const updateDownloadOpening = launcherUpdates.openingDownload
+const updateError = launcherUpdates.error
 
 const statusbarBaseLabel = computed(() => {
   const operation = harness.activeOperation.value
@@ -185,6 +191,21 @@ function openConsoleRoute(): void {
       />
 
       <main class="workbench-stage">
+        <LauncherUpdateNotice
+          v-if="updateNotice"
+          :state="updateNotice"
+          :title="shell.t('update.notice.title')"
+          :version-label="shell.t('update.notice.version')"
+          :download-label="shell.t('update.notice.download')"
+          :opening-label="shell.t('settings.update.openingDownload')"
+          :install-hint="shell.t('update.notice.installHint')"
+          :dismiss-label="shell.t('update.notice.dismiss')"
+          :error-label="shell.t('update.notice.openFailed')"
+          :opening="updateDownloadOpening"
+          :error="updateError"
+          @download="launcherUpdates.openInstallerDownload"
+          @dismiss="launcherUpdates.dismissNotice"
+        />
         <RouteStage
           v-if="shell.activeRoute.value === 'launch'"
           :title="shell.t('launch.title')"

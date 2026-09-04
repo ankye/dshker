@@ -16,6 +16,7 @@ This change requires no DeepSeek Harness modification. Harness ships no `desktop
 - Keep managed source and Launcher settings separate while using DSH's own profile, plugin, and Agent directories.
 - Require explicit Git, Node.js, and pnpm identities, and treat only the child's own announced startup URL as readiness.
 - Keep operating-system authority in Electron main and expose a narrow, typed renderer API.
+- Use one Launcher version identity and expose higher stable GitHub Releases as an optional manual download.
 
 **Non-Goals:**
 
@@ -24,6 +25,7 @@ This change requires no DeepSeek Harness modification. Harness ships no `desktop
 - Mutate an unmanaged checkout; the launcher only creates and mutates its own mirror and worktrees.
 - Search `PATH`, use a global `dsh`, substitute a tool, select a different ref, or use loopback Web or SDK transport as a fallback.
 - Automatically delete retained worktrees or plugin/configuration generations.
+- Download, install, replace, or restart the Launcher automatically.
 
 ## Decisions
 
@@ -45,6 +47,22 @@ Alternative considered: derive an additional runtime root and put `.dsh` beneath
 ### Decision: Display name changes without changing persistent identities
 
 The product is displayed as DSHKer Launcher in the application window, installer, documentation, release artifacts, and fixed source link. The existing `dsh-launcher` app id, bundle id, IPC channel namespace, local preference keys, resource names, and `~/.dshlauncher` directory remain stable. Renaming any of those persistent identifiers would split existing user state or require an explicit migration, which is outside this display-name change.
+
+### Decision: One package version drives publishing and update discovery
+
+The root `package.json` is the only Launcher version source. Shared application metadata imports that value, Electron Builder expands it into installer names, release metadata verifies it, and the tag workflow requires the exact stable tag `v${package.json.version}` before either platform package is eligible for publication. The workflow publishes only after its macOS arm64 and Windows x64 jobs succeed. Its `contents: write` job downloads those two named artifacts, requires one installer per platform, verifies each installer against its platform manifest and checksum, emits one combined installer checksum file, keeps platform-named manifests, and creates a public latest GitHub Release without replacing an existing Release. Pushes to `main` and manual dispatches remain Actions-artifact builds and never publish.
+
+Electron main alone reads the fixed `https://api.github.com/repos/ankye/dshker/releases/latest` endpoint. It rejects draft or prerelease data, a tag that is not a stable semantic version, a tag/version mismatch, a missing or malformed required field, and a non-HTTPS GitHub release or asset URL. It compares semantic versions, never lexical strings. The update state is exactly `idle`, `checking`, `up-to-date`, `update-available`, or `failed`; an older or equal stable release is `up-to-date`, not an available update.
+
+Platform selection is exact: macOS arm64 requires one DMG asset with the current package naming identity, and Windows x64 requires one EXE asset with that identity. A missing asset, duplicate match, unsupported platform or architecture, unavailable public Release, or network/protocol failure becomes a typed `failed` state. The Launcher does not select another architecture, another operating system, an Actions artifact, a browser page, or a stale cached response as a substitute.
+
+Startup schedules one non-blocking check after the main window is usable. Only `update-available` creates a passive startup notice; a startup failure does not open a dialog or obscure the current page. Launcher Settings exposes the current state, last successful observation, explicit retry, and the exact version and asset name when an update is available. The renderer can request only the named check and download actions; it never supplies a repository, endpoint, or URL. The download action asks the operating system browser to open the exact HTTPS asset URL retained by Electron main from the current successful check.
+
+Current installers are unsigned. The public Release and Settings copy identify manual download and installation; no `electron-updater` path, background replacement, silent restart, or macOS auto-install is enabled. Signing and notarization must exist before a later change can consider native automatic installation.
+
+Alternative considered: publish Actions artifact URLs as the update feed. Rejected because artifacts expire, require workflow-specific navigation, and do not provide the stable latest-release identity the application validates.
+
+Alternative considered: let the renderer fetch GitHub or submit a download URL. Rejected because it would grant mutable network and external-navigation authority beyond the fixed product repository.
 
 ### Decision: Native Harness home remains external and unchanged
 
@@ -100,6 +118,18 @@ The renderer runs from the trusted `dsh-app://` origin with context isolation an
 
 The accepted child runtime is the only source of Harness client traffic. Bridge streams and lifecycle events are generation-fenced; a stopped or crashed child cannot affect a new runtime. Physical transport, protocol failure, and Harness business failure remain distinct user-visible states.
 
+### Decision: Run-page zoom is explicit and independent from display scale
+
+The Run page exposes page zoom as one selected value from `80`, `90`, `100`, `110`, `125`, `150`, `175`, and `200` percent. The browser toolbar provides decrease, current-value, and increase controls, while `Cmd`/`Ctrl` plus `+`, `-`, or `0` supplies the corresponding guest keyboard actions. Reset selects `100` percent. Electron main applies the selected page zoom to every attached Run guest and reports the effective guest zoom back to the toolbar; it does not derive page zoom from device scale factor, move it when a window crosses displays, or force Chromium's device scale factor.
+
+The selected value is Launcher state. It is stored as a strictly versioned record at `dsh-launcher/runtime-browser-preferences.json` below the currently registered Settings root. Only an absent file creates the initial `100` percent record. An unsupported version, unknown field, missing field, malformed value, or value outside the fixed set blocks the Run browser preference capability with a typed persistence error; the Launcher does not substitute `100` or another nearby value.
+
+The guest fills the browser canvas below a single toolbar divider. Its element and container chain do not apply CSS `filter`, `opacity`, `transform`, or `zoom`, and the canvas has no decorative page margin, card border, or rounded clipping. Display metric changes trigger a fresh observation only; they never change the selected page zoom.
+
+Run-page rendering diagnostics are an explicit, copyable observation rather than a rendering override. The observation contains host and guest device-pixel ratios, effective guest zoom factor, `visualViewport.scale`, Electron and Chromium versions, the current display color space, and GPU compositing status. It excludes the guest URL, query, cookies, storage, request headers, credentials, and token values. The guest's `before-input-event` path recognizes only the documented zoom accelerators and grants no arbitrary guest keyboard, navigation, script, or developer-tools authority.
+
+Current comparison evidence shows Chrome has a persisted `125` percent page zoom for `127.0.0.1`, while the current Launcher guest is at `100` percent. The first correction is therefore to make zoom explicit and compare the same page at the same zoom. Migration from `<webview>` to `WebContentsView` remains a separate evidence-driven decision: it is considered only if a controlled same-URL, same-size, same-zoom comparison shows a guest-specific rendering defect after zoom is aligned.
+
 ## Risks / Trade-offs
 
 - [A Harness revision cannot use the stable native home] → block readiness with the reported incompatibility; never create or migrate a replacement home.
@@ -107,6 +137,11 @@ The accepted child runtime is the only source of Harness client traffic. Bridge 
 - [A selected executable changes after registration] → revalidate its canonical identity and block the operation.
 - [A child crashes during a request] → withdraw its generation, retain bounded diagnostics, report potentially lost process-local work, and require user action plus new preflight.
 - [A root becomes unreadable or changes identity] → enter an explicit blocked or recovery state without guessing a replacement path.
+- [A user compares Chrome and Run at different persisted page zoom values] → expose and align the exact zoom values before attributing the difference to DPR, GPU, or the guest architecture.
+- [A window moves to a display with another scale factor or color space] → recollect rendering diagnostics and let Chromium re-rasterize at the display scale without changing the user's page zoom.
+- [GitHub is unreachable or has no public latest Release] → retain a typed failed state for Settings retry and do not interrupt startup or substitute another feed.
+- [A Release contains no exact asset or multiple matching assets] → reject the update observation and require a corrected Release instead of guessing which installer is safe.
+- [Unsigned packages trigger operating-system warnings] → state that installation is manual, publish installer checksums and per-platform manifests, and defer automatic installation until signing and macOS notarization are available.
 
 ## Migration Plan
 

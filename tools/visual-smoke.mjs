@@ -32,6 +32,7 @@ async function readSources(root) {
     'src/app/shell/components/SettingsPanel.vue',
     'src/app/shell/components/VersionManagementPanel.vue',
     'src/app/shared/controls/ThemedListbox.vue',
+    'electron/main/window.ts',
     'src/styles/tokens.css',
     'src/app/shared/i18n/i18n.ts'
   ]
@@ -56,6 +57,7 @@ function evaluateSources(sources) {
   const shell = sourceByPath.get('src/app/shell/AppShell.vue')
   const sidebar = sourceByPath.get('src/app/shell/components/ShellSidebar.vue')
   const runtimePanel = sourceByPath.get('src/app/shell/components/RuntimeTabsPanel.vue')
+  const electronWindow = sourceByPath.get('electron/main/window.ts')
   const settingsPanel = sourceByPath.get('src/app/shell/components/SettingsPanel.vue')
   const versionPanel = sourceByPath.get('src/app/shell/components/VersionManagementPanel.vue')
   const listbox = sourceByPath.get('src/app/shared/controls/ThemedListbox.vue')
@@ -64,6 +66,7 @@ function evaluateSources(sources) {
   const locales = sourceByPath.get('src/app/shared/i18n/i18n.ts')
 
   const flatStyles = styles.replace(/\s+/gu, ' ')
+  const flatRuntimePanel = runtimePanel.replace(/\s+/gu, ' ')
   // Declarations are compared as literal text rather than by regular expression.
   // A whitespace-class pattern after a CSS property name would put a letter, a
   // colon, and a backslash next to each other, which the workspace path-hygiene
@@ -75,6 +78,12 @@ function evaluateSources(sources) {
     return flatStyles.slice(start + marker.length, flatStyles.indexOf('}', start))
   }
   const declared = (selector, property, value) => block(selector).includes(`${property}: ${value}`)
+  const runtimeBlock = (selector) => {
+    const marker = `${selector} {`
+    const start = flatRuntimePanel.indexOf(marker)
+    if (start < 0) return ''
+    return flatRuntimePanel.slice(start + marker.length, flatRuntimePanel.indexOf('}', start))
+  }
 
   return [
     // Shell chrome: the sidebar carries the brand, and a status bar anchors the
@@ -91,6 +100,31 @@ function evaluateSources(sources) {
     // A run page may show only the URL the started process announced.
     finding('runtime.no-hardcoded-url', !runtimePanel.includes('127.0.0.1:3080')),
     finding('runtime.announced-url-only', runtimePanel.includes('runtimeUrl')),
+    finding(
+      'runtime.zoom-controls',
+      runtimePanel.includes('runtime-zoom-decrease') &&
+        runtimePanel.includes('runtime-zoom-reset') &&
+        runtimePanel.includes('runtime-zoom-increase') &&
+        runtimePanel.includes('setZoomFactor')
+    ),
+    finding(
+      'runtime.full-bleed-guest',
+      runtimeBlock('.browser-viewport-stack').includes('flex: 1 1 auto') &&
+        !runtimeBlock('.browser-viewport-stack').includes('margin:') &&
+        !runtimeBlock('.browser-viewport-stack').includes('border:') &&
+        !runtimeBlock('.browser-viewport-stack').includes('border-radius:')
+    ),
+    finding(
+      'runtime.no-raster-css-effects',
+      ['filter:', 'opacity:', 'transform:', 'zoom:'].every(
+        (property) => !runtimeBlock('.browser-viewport').includes(property)
+      )
+    ),
+    finding(
+      'runtime.no-forced-device-scale-factor',
+      !runtimePanel.includes('force-device-scale-factor') &&
+        !electronWindow.includes('force-device-scale-factor')
+    ),
 
     // Themed controls replace native select popups that cannot be palette-styled.
     finding('controls.themed-listbox', listbox.includes('role="listbox"')),

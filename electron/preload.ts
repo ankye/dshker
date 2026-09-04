@@ -16,6 +16,7 @@ import {
   type LauncherHarnessLogExportResult,
   type LauncherHarnessLogFileView,
   type LauncherHarnessState,
+  type LauncherUpdateState,
   type PluginCatalogState,
   type ManagedDirectorySelection,
   type ManagedExecutableKind,
@@ -25,6 +26,9 @@ import {
   type RegisterManagedToolchainRequest,
   type RegisterManagedToolchainResult,
   type RegisterManagedRootsRequest,
+  type RuntimeBrowserHostRenderingInfo,
+  type RuntimeBrowserPreferences,
+  type SetRuntimeBrowserZoomRequest,
   type SetLauncherHarnessPortRequest,
   type TokenUsageRequest,
   type TokenUsageState,
@@ -158,6 +162,44 @@ const desktopApi: DesktopApi = Object.freeze({
   tokenUsage: Object.freeze({
     getState: (request?: TokenUsageRequest): Promise<ApiResult<TokenUsageState>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.tokenUsageGetState, request)
+  }),
+  runtimeBrowser: Object.freeze({
+    getPreferences: (): Promise<ApiResult<RuntimeBrowserPreferences>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.runtimeBrowserGetPreferences),
+    setZoom: (
+      request: SetRuntimeBrowserZoomRequest
+    ): Promise<ApiResult<RuntimeBrowserPreferences>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.runtimeBrowserSetZoom, request),
+    getHostRenderingInfo: (): Promise<ApiResult<RuntimeBrowserHostRenderingInfo>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.runtimeBrowserGetHostRenderingInfo),
+    onZoomChange: (
+      listener: (result: ApiResult<RuntimeBrowserPreferences>) => void
+    ): (() => void) => {
+      const onChanged = (_event: unknown, result: ApiResult<RuntimeBrowserPreferences>): void => {
+        listener(result)
+      }
+      ipcRenderer.on(DESKTOP_IPC_CHANNELS.runtimeBrowserZoomChanged, onChanged)
+      return () => {
+        ipcRenderer.removeListener(DESKTOP_IPC_CHANNELS.runtimeBrowserZoomChanged, onChanged)
+      }
+    }
+  }),
+  launcherUpdates: Object.freeze({
+    getState: (): Promise<ApiResult<LauncherUpdateState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherUpdatesGetState),
+    check: (): Promise<ApiResult<LauncherUpdateState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherUpdatesCheck),
+    openInstallerDownload: (): Promise<ApiResult<LauncherUpdateState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherUpdatesOpenInstallerDownload),
+    onStateChange: (listener: (result: ApiResult<LauncherUpdateState>) => void): (() => void) => {
+      const onChanged = (_event: unknown, result: ApiResult<LauncherUpdateState>): void => {
+        listener(result)
+      }
+      ipcRenderer.on(DESKTOP_IPC_CHANNELS.launcherUpdatesStateChanged, onChanged)
+      return () => {
+        ipcRenderer.removeListener(DESKTOP_IPC_CHANNELS.launcherUpdatesStateChanged, onChanged)
+      }
+    }
   }),
   pluginCatalog: Object.freeze({
     getState: (): Promise<ApiResult<PluginCatalogState>> =>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol } from 'electron'
+import { app, BrowserWindow, protocol, shell } from 'electron'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -24,6 +24,13 @@ import { registerLauncherProtocol } from './main/protocol'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
 import { runSmokeTest, writeSmokeFailure } from './main/smoke'
 import { createWindow } from './main/window'
+import { RuntimeBrowserController } from './main/runtime-browser-controller'
+import { RuntimeBrowserPreferencesStore } from './main/runtime-browser-preferences'
+import { APP_METADATA } from '../src/shared/contracts'
+import {
+  LauncherUpdateService,
+  scheduleLauncherUpdateCheckAfterWindowReady
+} from './main/launcher-update-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -93,16 +100,21 @@ async function startSmokeTest(): Promise<void> {
 async function start(): Promise<void> {
   await app.whenReady()
   await registerLauncherProtocol(mainDirectory)
-  const launcherHarnessService = await registerLauncherServices(
+  const services = await registerLauncherServices(
     path.join(homedir(), '.dshlauncher'),
     path.join(app.getPath('userData'), 'dsh-launcher-bootstrap.json')
   )
-  registerHarnessShutdown(launcherHarnessService)
-  createWindow(mainDirectory)
-  void initializeActiveVersion(launcherHarnessService)
+  registerHarnessShutdown(services.launcherHarnessService)
+  app.once('browser-window-created', (_event, window) => {
+    scheduleLauncherUpdateCheckAfterWindowReady(window, services.launcherUpdateService)
+  })
+  createWindow(mainDirectory, services.runtimeBrowserController)
+  void initializeActiveVersion(services.launcherHarnessService)
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(mainDirectory)
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow(mainDirectory, services.runtimeBrowserController)
+    }
   })
 }
 
@@ -140,9 +152,18 @@ function registerHarnessShutdown(service: LauncherHarnessService): void {
 async function registerLauncherServices(
   launcherRoot: string,
   locatorFilePath: string
-): Promise<LauncherHarnessService> {
+): Promise<{
+  readonly launcherHarnessService: LauncherHarnessService
+  readonly runtimeBrowserController: RuntimeBrowserController
+  readonly launcherUpdateService: LauncherUpdateService
+}> {
   const managedWorkspaceService = await createManagedWorkspaceService(launcherRoot, locatorFilePath)
   await managedWorkspaceService.initializeDefaultRoots()
+  const runtimeBrowserController = new RuntimeBrowserController(
+    new RuntimeBrowserPreferencesStore({
+      resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot()
+    })
+  )
   const launcherHarnessService = new LauncherHarnessService({
     harnessDirectory: path.join(launcherRoot, 'harness'),
     versionsDirectory: path.join(launcherRoot, 'versions'),
@@ -158,6 +179,14 @@ async function registerLauncherServices(
     pnpmExecutable: PNPM_LAUNCHER.executable,
     pnpmLauncher: PNPM_LAUNCHER
   })
+  const launcherUpdateService = new LauncherUpdateService({
+    currentVersion: APP_METADATA.version,
+    platform: process.platform,
+    arch: process.arch,
+    openExternal: async (url) => {
+      await shell.openExternal(url)
+    }
+  })
   registerIpc({
     managedWorkspaceService,
     sessionUsageReader: new SessionUsageReader({
@@ -168,6 +197,8 @@ async function registerLauncherServices(
       pluginsDirectory: path.join(launcherRoot, 'plugins'),
       gitExecutable: GIT_EXECUTABLE
     }),
+    runtimeBrowserController,
+    launcherUpdateService,
     launcherHarnessService,
     managedInstallationService: new ManagedInstallationService({
       workspaceService: managedWorkspaceService,
@@ -179,7 +210,7 @@ async function registerLauncherServices(
       runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor()
     })
   })
-  return launcherHarnessService
+  return { launcherHarnessService, runtimeBrowserController, launcherUpdateService }
 }
 
 /**

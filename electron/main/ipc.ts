@@ -49,6 +49,10 @@ import { SessionUsageReader } from './managed/session-usage-reader'
 import { ToolchainRuntimeError } from './managed/toolchain'
 import { isTrustedRenderer } from './security'
 import { resolveExternalLink } from './external-links'
+import { type RuntimeBrowserController } from './runtime-browser-controller'
+import { registerRuntimeBrowserIpc } from './runtime-browser-ipc'
+import { registerLauncherUpdateIpc } from './launcher-update-ipc'
+import { type LauncherUpdateService } from './launcher-update-service'
 
 /** Dependencies for the restricted Electron IPC registration. */
 export interface LauncherIpcOptions {
@@ -57,13 +61,16 @@ export interface LauncherIpcOptions {
   readonly launcherHarnessService: LauncherHarnessService
   readonly sessionUsageReader: SessionUsageReader
   readonly pluginCatalog: AwesomePluginCatalog
+  readonly runtimeBrowserController: RuntimeBrowserController
+  readonly launcherUpdateService: LauncherUpdateService
 }
 
 /** Registers only named, sender-validated, runtime-validated Launcher IPC methods. */
 export function registerIpc(options: LauncherIpcOptions): void {
-  // The one main-to-renderer push channel: appended console records reach every
-  // launcher window immediately, so operation and launch output no longer wait
-  // for the renderer's periodic state read. Entry payloads are service-owned.
+  registerRuntimeBrowserIpc(options.runtimeBrowserController)
+  registerLauncherUpdateIpc(options.launcherUpdateService)
+  // The console push channel sends appended records to every launcher window,
+  // so operation and launch output do not wait for a periodic state read.
   options.launcherHarnessService.onConsoleAppend((entry) => {
     for (const window of BrowserWindow.getAllWindows()) {
       if (!window.isDestroyed()) {

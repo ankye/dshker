@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
 import { useLauncherHarness } from '@/app/domains/launcher-harness'
+import { LauncherUpdateSettingsCard } from '@/app/domains/launcher-updates'
 import { ManagedWorkspacesPanel } from '@/app/domains/managed-workspaces'
 import { SUPPORTED_LOCALES, type SupportedLocale } from '@/app/shared/i18n/i18n'
 import { locale, setLocale, useTranslator } from '@/app/shared/i18n/useLocale'
@@ -184,7 +185,9 @@ const selectedLocale = computed<SupportedLocale>({
       <p class="settings-dsh-ownership">{{ t('settings.dsh.ownership') }}</p>
     </div>
 
-    <div v-else class="settings-tab-panel">
+    <div v-else class="settings-tab-panel settings-tab-panel--split">
+      <LauncherUpdateSettingsCard />
+
       <section class="settings-section">
         <header class="settings-section-header">
           <div class="settings-section-title">

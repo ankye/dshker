@@ -911,7 +911,10 @@
 }
 
 .catalog-table {
-  min-width: 860px;
+  /* The columns below carry an explicit minimum so the auto table layout can
+   * never crush the description into a one-character-per-line tower on narrow
+   * windows; below this width the panel scrolls instead of squeezing. */
+  min-width: 880px;
   font-size: 12px;
   line-height: 1.35;
 }
@@ -922,6 +925,7 @@
 }
 
 .catalog-name-cell {
+  min-width: 8rem;
   max-width: 15rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -929,6 +933,7 @@
 }
 
 .catalog-category-cell {
+  min-width: 4.5rem;
   max-width: 7rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -937,8 +942,11 @@
 }
 
 /* Catalog descriptions remain readable in place; the user must not infer a
- * plugin's purpose from a clipped summary. */
+ * plugin's purpose from a clipped summary. A real minimum width keeps the
+ * auto table layout from collapsing this column into a one-character tower on
+ * narrow windows, where the table instead scrolls horizontally. */
 .catalog-desc-cell {
+  min-width: 16rem;
   max-width: 34rem;
   color: var(--color-text-muted);
   line-height: 1.45;
@@ -946,6 +954,7 @@
 }
 
 .catalog-url-cell {
+  min-width: 12rem;
   max-width: 16rem;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -960,6 +969,15 @@
 .plugin-action-cell {
   width: 1%;
   white-space: nowrap;
+}
+
+/* On narrow windows the persistent category rail steals width the install
+ * table needs to stay readable. Tighten it (category labels stay legible) so
+ * the results panel keeps more of the viewport and scrolls less. */
+@media (max-width: 980px) {
+  .catalog-workspace {
+    grid-template-columns: minmax(7rem, 9rem) minmax(0, 1fr);
+  }
 }
 
 .plugin-version-cell {
@@ -1268,24 +1286,299 @@
 
 /* A readable settings column that centers itself when the window outgrows it;
  * without the margin, fullscreen pinned the whole page to the left half. */
+/* Settings fills the stage like every other route. It was a 56rem centered
+ * column, which left ~120px of dead margin on each side while 版本管理 and
+ * Token 消耗 ran edge to edge — the visible inconsistency. */
 .settings-panel {
   width: 100%;
-  max-width: 56rem;
-  margin-inline: auto;
 }
 
 .settings-tab-panel {
   display: grid;
-  gap: var(--space-5);
+  gap: var(--space-4);
   margin-top: var(--space-3);
+  align-content: start;
 }
 
-/* A settings section pairs a titled header (title + optional description and a
- * right-hand meta chip) with a body of controls. It mirrors the statistics
- * header pattern rather than inventing a new surface. */
+.settings-update-section {
+  grid-column: 1 / -1;
+}
+
+.settings-update-body {
+  gap: var(--space-3);
+}
+
+.settings-update-status-badge[data-kind='update-available'] {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 45%);
+  color: var(--color-accent);
+}
+
+.settings-update-status-badge[data-kind='up-to-date'] {
+  border-color: color-mix(in srgb, var(--color-success), var(--color-border) 45%);
+  color: var(--color-success);
+}
+
+.settings-update-status-badge[data-kind='failed'] {
+  border-color: color-mix(in srgb, var(--color-danger), var(--color-border) 45%);
+  color: var(--color-danger);
+}
+
+.settings-update-version-line {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.settings-update-version-line strong {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-update-arrow {
+  margin-inline: var(--space-1);
+  color: var(--color-accent);
+}
+
+.settings-update-message,
+.settings-update-install-hint,
+.settings-update-checked-at,
+.settings-update-failure p {
+  margin: 0;
+}
+
+.settings-update-message {
+  color: var(--color-text-muted);
+  font-size: var(--type-ui);
+  line-height: 1.5;
+}
+
+.settings-update-message--success {
+  color: var(--color-success);
+}
+
+.settings-update-message--available {
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-update-available {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.settings-update-asset {
+  margin: 0;
+}
+
+.settings-update-asset div {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+}
+
+.settings-update-asset dt,
+.settings-update-checked-at {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.settings-update-asset dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+}
+
+.settings-update-asset code,
+.settings-update-code code {
+  font-family: var(--font-mono);
+}
+
+.settings-update-install-hint {
+  max-width: 54rem;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+
+.settings-update-checked-at {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.settings-update-failure {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-left: 2px solid var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger), transparent 94%);
+  color: var(--color-danger);
+  font-size: var(--type-caption);
+}
+
+.settings-update-code {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  overflow-wrap: anywhere;
+}
+
+.settings-update-actions {
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.launcher-update-notice {
+  position: absolute;
+  z-index: 7;
+  top: var(--space-4);
+  right: var(--space-5);
+  display: grid;
+  width: min(35rem, calc(100% - var(--space-6) * 2));
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-accent), var(--color-border) 45%);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-float);
+}
+
+.launcher-update-notice-icon {
+  display: grid;
+  width: var(--size-control-md);
+  height: var(--size-control-md);
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+  color: var(--color-accent);
+}
+
+.launcher-update-notice-icon svg,
+.launcher-update-notice-dismiss svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentcolor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.launcher-update-notice-copy {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-1);
+}
+
+.launcher-update-notice-copy > strong {
+  color: var(--color-text);
+  font-size: var(--type-body);
+}
+
+.launcher-update-notice-copy p {
+  margin: 0;
+}
+
+.launcher-update-notice-version {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-2);
+  align-items: baseline;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.launcher-update-notice-version b {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.launcher-update-notice-hint {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  line-height: 1.4;
+}
+
+.launcher-update-notice-error {
+  color: var(--color-danger);
+  font-size: var(--type-caption);
+  overflow-wrap: anywhere;
+}
+
+.launcher-update-notice-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.launcher-update-notice-dismiss {
+  display: grid;
+  width: var(--size-control-sm);
+  height: var(--size-control-sm);
+  flex: 0 0 auto;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.launcher-update-notice-dismiss:hover {
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.launcher-update-notice-dismiss:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+@media (max-width: 980px) {
+  .launcher-update-notice {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .launcher-update-notice-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+/* Two columns once there is genuine room, so the narrow appearance controls and
+ * the wider managed-directory panel sit side by side instead of stacking into a
+ * tall ribbon with dead space beside it. */
+@media (min-width: 68rem) {
+  .settings-tab-panel--split {
+    grid-template-columns: minmax(0, 24rem) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+/* A settings section is one card: the header and body share a single surface,
+ * so the page reads as a set of panels instead of divider-headings sitting
+ * above separately-filled boxes. */
 .settings-section {
   display: grid;
+  align-content: start;
   gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
 }
 
 .settings-section-header {
@@ -1491,19 +1784,23 @@
 /* Appearance and management rows. */
 .settings-list {
   display: grid;
-  gap: var(--space-2);
+  gap: 0;
 }
 
+/* Rows are separated by rules rather than each being its own card: the section
+ * is already a card, and nesting a second card per row was what made the page
+ * look like boxes inside boxes. */
 .settings-row {
   display: flex;
   min-height: 3.5rem;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-5);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface-raised);
+  padding: var(--space-3) 0;
+}
+
+.settings-row + .settings-row {
+  border-top: 1px solid color-mix(in srgb, var(--color-border), transparent 45%);
 }
 
 .settings-row-copy {

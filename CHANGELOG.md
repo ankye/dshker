@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.7 — 2026-09-04
+
+- Added a single-source Launcher version identity shared by application metadata,
+  installer names, release manifests, update comparisons, and release tags.
+- Added non-blocking GitHub Releases checks at startup and an explicit update
+  panel in Launcher settings for the exact macOS arm64 or Windows x64 installer.
+- Added passive startup notices for newer stable releases without silent
+  replacement or restart.
+- Improved embedded WebView rendering diagnostics, zoom handling, and device
+  scale reporting for clearer cross-DPR output.
+- Added daily token usage charts and completed the responsive shell and settings
+  layout refinements.
+
 ## 0.1.0 — Unreleased
 
 - Adopted the Electron, Vite, Vue, and TypeScript desktop foundation.

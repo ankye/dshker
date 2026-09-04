@@ -1,6 +1,6 @@
 {
   "name": "@ankye/dshker-launcher",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "Managed desktop shell for DeepSeek Harness.",
   "author": "ankye",
   "private": true,
@@ -89,6 +89,7 @@
     "productName": "DSHKer Launcher",
     "icon": "resources/dsh-launcher-logo-launcher.png",
     "asar": true,
+    "artifactName": "dshker-launcher-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"
     },
@@ -119,8 +120,7 @@
     "win": {
       "target": [
         "nsis"
-      ],
-      "artifactName": "dshker-launcher-${version}-${os}-${arch}.${ext}"
+      ]
     },
     "nsis": {
       "oneClick": false,

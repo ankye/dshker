@@ -151,9 +151,23 @@ function displayModel(model: string): string {
   return model === 'unknown' ? t('usage.unknownModel') : model
 }
 
+/**
+ * Scales one bar against the tallest bar in the same chart.
+ *
+ * Token counts across days span orders of magnitude: a 28.1K day next to a
+ * 238.61M day is 0.01% of the maximum, and a linear scale rendered it as a 5px
+ * sliver that read as an empty column — the reason the chart looked blank.
+ *
+ * A square-root scale lifts small days into view while keeping the visual
+ * ordering honest; a log scale was rejected because it flattened a 151x
+ * difference into near-equal bars. The floor keeps the smallest non-zero day
+ * legible, and exact values stay available in the label and the table below.
+ */
 function chartHeight(value: number, maximum: number): string {
-  if (value === 0 || maximum === 0) return '0%'
-  return `${Math.max(4, (value / maximum) * 100)}%`
+  if (value <= 0 || maximum <= 0) return '0%'
+  if (value >= maximum) return '100%'
+  const ratio = Math.sqrt(value / maximum)
+  return `${Math.min(100, Math.max(6, ratio * 100))}%`
 }
 </script>
 
@@ -751,13 +765,15 @@ function chartHeight(value: number, maximum: number): string {
   outline-offset: 1px;
 }
 
+/* The baseline lives on `.usage-chart-plot`, directly under the bars. A border
+ * here drew a second line below the date labels, which made every bar look
+ * detached from its axis. */
 .usage-bar-chart {
   display: grid;
-  min-height: 12rem;
+  min-height: 15rem;
   align-items: end;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-2) 0;
-  border-bottom: 1px solid var(--color-border);
   overflow-x: auto;
 }
 
@@ -772,7 +788,7 @@ function chartHeight(value: number, maximum: number): string {
 .usage-chart-day {
   display: grid;
   min-width: 0;
-  grid-template-rows: auto minmax(8rem, 1fr) auto;
+  grid-template-rows: auto minmax(11rem, 1fr) auto;
   gap: var(--space-1);
   align-items: end;
 }
@@ -795,20 +811,26 @@ function chartHeight(value: number, maximum: number): string {
 
 .usage-chart-plot {
   display: flex;
-  height: 8rem;
+  /* Taller plot: with an outlier day present, every scale leaves the small
+   * days short, so the plot needs vertical room for them to read at all. */
+  height: 11rem;
   align-items: end;
   justify-content: center;
   gap: 0.2rem;
-  border-bottom: 1px solid color-mix(in srgb, var(--color-border), transparent 30%);
+  /* The baseline belongs against the bar bases; a gap made bars look detached. */
+  border-bottom: 1px solid var(--color-border);
 }
 
 .usage-chart-day--model {
-  grid-template-rows: minmax(8rem, 1fr) auto;
+  grid-template-rows: minmax(11rem, 1fr) auto;
 }
 
 .usage-chart-bar {
   display: block;
   min-width: 0.45rem;
+  /* A log-scaled short bar can still round to a hairline; this keeps the
+   * smallest non-zero day legible as a bar. */
+  min-height: 3px;
   flex: 1 1 0;
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   background: var(--color-accent);

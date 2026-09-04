@@ -9,6 +9,10 @@ const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../.
 const styles = ['base-shell', 'routes', 'controls', 'responsive']
   .map((sheet) => readFileSync(path.join(appRoot, `src/styles/${sheet}.css`), 'utf8'))
   .join('\n')
+const runtimePanel = readFileSync(
+  path.join(appRoot, 'src/app/shell/components/RuntimeTabsPanel.vue'),
+  'utf8'
+)
 
 /** Returns the declaration block of one exact top-level selector. */
 function ruleBlock(selector: string): string {
@@ -17,6 +21,14 @@ function ruleBlock(selector: string): string {
   expect(start, `${selector} must exist in app.css`).toBeGreaterThan(-1)
   const end = styles.indexOf('}', start)
   return styles.slice(start + marker.length, end)
+}
+
+function runtimeRuleBlock(selector: string): string {
+  const marker = `${selector} {`
+  const start = runtimePanel.indexOf(marker)
+  expect(start, `${selector} must exist in RuntimeTabsPanel.vue`).toBeGreaterThan(-1)
+  const end = runtimePanel.indexOf('}', start)
+  return runtimePanel.slice(start + marker.length, end)
 }
 
 /**
@@ -80,8 +92,11 @@ describe('shell scroll and height adaptation', () => {
   })
 
   it('lets the run frame inherit available height instead of claiming a fixed one', () => {
-    expect(hasDeclaration(ruleBlock('.runtime-frame'), 'height', '100%')).toBe(true)
-    expect(hasDeclaration(ruleBlock('.runtime-tabs-panel'), 'flex', '1 1 auto')).toBe(true)
+    expect(hasDeclaration(runtimeRuleBlock('.browser-panel'), 'flex', '1')).toBe(true)
+    expect(hasDeclaration(runtimeRuleBlock('.browser-panel'), 'min-height', '0')).toBe(true)
+    expect(hasDeclaration(runtimeRuleBlock('.browser-viewport-stack'), 'flex', '1 1 auto')).toBe(
+      true
+    )
   })
 
   it('derives no route height from hand-computed viewport arithmetic', () => {

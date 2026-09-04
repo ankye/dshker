@@ -322,6 +322,12 @@ export class ManagedWorkspaceService {
     await catalogStore.save(catalog)
   }
 
+  /** Resolves the registered Settings root after re-reading and revalidating all managed state. */
+  async resolveSettingsRoot(): Promise<string> {
+    const { registry } = await this.#loadReadyRegistryWithStore()
+    return rootByKind(registry, 'settings').canonicalPath
+  }
+
   async #assertInitialSetup(): Promise<void> {
     try {
       await this.#locator.load()

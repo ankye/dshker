@@ -28,6 +28,16 @@ const INTERNAL_OUTPUT_NAMES = new Set([
   'ci-build.log',
   'release-smoke.log'
 ])
+const UNPACKED_ARTIFACT_DIRECTORIES = new Set([
+  'linux-unpacked',
+  'mac',
+  'mac-arm64',
+  'mac-universal',
+  'mac-x64',
+  'win-unpacked'
+])
+const SEMVER_PATTERN =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
 
 function usage() {
   console.log(`Generate or verify release metadata.
@@ -153,19 +163,74 @@ async function summarizeDirectory(dirPath, releaseDir) {
   }
 }
 
-async function listTopLevelArtifacts(releaseDir) {
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function assertPackageVersion(version) {
+  if (typeof version !== 'string' || !SEMVER_PATTERN.test(version)) {
+    throw new Error(`Package version is not an exact semantic version: ${String(version)}`)
+  }
+}
+
+function versionTokens(name) {
+  return Array.from(
+    name.matchAll(/(?:^|[^0-9.])(\d+\.\d+\.\d+)(?=$|[^0-9.])/g),
+    (match) => match[1]
+  )
+}
+
+function hasExactVersion(name, version) {
+  const pattern = new RegExp(`(?:^|[^0-9.])${escapeRegExp(version)}(?=$|[^0-9.])`)
+  return pattern.test(name)
+}
+
+/**
+ * Classifies one visible top-level release entry against the package version.
+ * Explicit older-version files remain on disk but do not enter this manifest.
+ */
+export function classifyReleaseEntry(name, kind, version) {
+  assertPackageVersion(version)
+  if (kind === 'directory') {
+    if (!UNPACKED_ARTIFACT_DIRECTORIES.has(name)) {
+      throw new Error(`Unexpected release artifact directory: ${name}`)
+    }
+    return 'current'
+  }
+  if (kind !== 'file') throw new Error(`Unsupported release artifact kind: ${kind}`)
+
+  const tokens = [...new Set(versionTokens(name))]
+  if (hasExactVersion(name, version)) {
+    const currentCoreVersion = version.match(/^\d+\.\d+\.\d+/)?.[0]
+    if (!currentCoreVersion || tokens.some((token) => token !== currentCoreVersion)) {
+      throw new Error(`Release artifact mixes package versions: ${name}`)
+    }
+    return 'current'
+  }
+  if (tokens.length > 0) return 'stale'
+  throw new Error(`Release artifact does not identify package version ${version}: ${name}`)
+}
+
+async function listTopLevelArtifacts(releaseDir, version) {
   const entries = await readdir(releaseDir, { withFileTypes: true })
   const artifacts = []
+  const staleArtifacts = []
 
   for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
     if (entry.name === MANIFEST_NAME || entry.name === CHECKSUMS_NAME) continue
     if (entry.name.startsWith('.') || INTERNAL_OUTPUT_NAMES.has(entry.name)) continue
     const fullPath = path.join(releaseDir, entry.name)
-    if (entry.isDirectory()) artifacts.push(await summarizeDirectory(fullPath, releaseDir))
-    else if (entry.isFile()) artifacts.push(await summarizeFile(fullPath, releaseDir))
+    const kind = entry.isDirectory() ? 'directory' : entry.isFile() ? 'file' : 'unsupported'
+    const classification = classifyReleaseEntry(entry.name, kind, version)
+    if (classification === 'stale') {
+      staleArtifacts.push(entry.name)
+      continue
+    }
+    if (kind === 'directory') artifacts.push(await summarizeDirectory(fullPath, releaseDir))
+    else artifacts.push(await summarizeFile(fullPath, releaseDir))
   }
 
-  return artifacts
+  return { artifacts, staleArtifacts }
 }
 
 async function getGitRevision() {
@@ -189,7 +254,7 @@ function buildChecksumText(artifacts) {
   return `${artifacts.map((artifact) => `${artifact.sha256}  ${artifact.relativePath}`).join('\n')}\n`
 }
 
-async function generate(args) {
+export async function generate(args) {
   const releaseDir = path.resolve(appRoot, args.releaseDir)
   assertInside(appRoot, releaseDir, 'Release directory')
   if (!(await exists(releaseDir)))
@@ -197,7 +262,8 @@ async function generate(args) {
 
   await mkdir(releaseDir, { recursive: true })
   const packageJson = await readJson(path.join(appRoot, 'package.json'))
-  const artifacts = await listTopLevelArtifacts(releaseDir)
+  assertPackageVersion(packageJson.version)
+  const { artifacts, staleArtifacts } = await listTopLevelArtifacts(releaseDir, packageJson.version)
   if (artifacts.length === 0) throw new Error(`No release artifacts found in ${args.releaseDir}`)
 
   const manifest = {
@@ -233,20 +299,43 @@ async function generate(args) {
     'utf8'
   )
   await writeFile(path.join(releaseDir, CHECKSUMS_NAME), buildChecksumText(artifacts), 'utf8')
-  return { ok: true, releaseDir, artifacts: artifacts.length, manifest }
+  return {
+    ok: true,
+    releaseDir,
+    artifacts: artifacts.length,
+    staleArtifacts,
+    manifest
+  }
 }
 
-async function verify(args) {
+export async function verify(args) {
   const releaseDir = path.resolve(appRoot, args.releaseDir)
   assertInside(appRoot, releaseDir, 'Release directory')
   const manifestPath = path.join(releaseDir, MANIFEST_NAME)
   const checksumsPath = path.join(releaseDir, CHECKSUMS_NAME)
+  const packageJson = await readJson(path.join(appRoot, 'package.json'))
+  assertPackageVersion(packageJson.version)
   const manifest = await readJson(manifestPath)
-  const artifacts = await listTopLevelArtifacts(releaseDir)
+  const { artifacts, staleArtifacts } = await listTopLevelArtifacts(releaseDir, packageJson.version)
   const expectedByPath = new Map(
     manifest.artifacts.map((artifact) => [artifact.relativePath, artifact])
   )
   const issues = []
+
+  if (manifest.version !== packageJson.version) {
+    issues.push(
+      `Manifest version ${String(manifest.version)} does not match package version ${packageJson.version}`
+    )
+  }
+  if (manifest.appId !== (packageJson.build?.appId || packageJson.name)) {
+    issues.push('Manifest appId does not match package identity')
+  }
+  if (manifest.productName !== (packageJson.build?.productName || packageJson.name)) {
+    issues.push('Manifest productName does not match package identity')
+  }
+  if (manifest.packageName !== packageJson.name) {
+    issues.push('Manifest packageName does not match package identity')
+  }
 
   for (const artifact of artifacts) {
     const expected = expectedByPath.get(artifact.relativePath)
@@ -276,6 +365,7 @@ async function verify(args) {
     ok: issues.length === 0,
     releaseDir,
     artifacts: artifacts.length,
+    staleArtifacts,
     issues
   }
 }
@@ -302,7 +392,9 @@ async function main() {
   if (!result.ok) process.exitCode = 1
 }
 
-main().catch((error) => {
-  console.error(`release-artifacts: ${error.message}`)
-  process.exitCode = 1
-})
+if (path.resolve(process.argv[1] ?? '') === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(`release-artifacts: ${error.message}`)
+    process.exitCode = 1
+  })
+}

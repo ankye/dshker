@@ -1,5 +1,6 @@
 import { app, BrowserWindow, Menu, type IpcMainInvokeEvent, type WebContents } from 'electron'
 import { runtimeContextMenuTemplate, type RuntimeContextMenuLocale } from './runtime-context-menu'
+import { type RuntimeBrowserController } from './runtime-browser-controller'
 
 function devRendererOrigin(): string | undefined {
   const url = process.env.ELECTRON_RENDERER_URL
@@ -49,7 +50,10 @@ function runtimeContextMenuLocale(): RuntimeContextMenuLocale {
  * a loopback address, gets no preload and no Node integration, and cannot open
  * windows or navigate away from loopback.
  */
-export function installWebviewPolicy(contents: WebContents): void {
+export function installWebviewPolicy(
+  contents: WebContents,
+  runtimeBrowserController: RuntimeBrowserController
+): void {
   contents.on('will-attach-webview', (event, webPreferences, params) => {
     delete webPreferences.preload
     webPreferences.nodeIntegration = false
@@ -60,6 +64,7 @@ export function installWebviewPolicy(contents: WebContents): void {
     }
   })
   contents.on('did-attach-webview', (_event, guest) => {
+    runtimeBrowserController.attach(contents, guest)
     guest.setWindowOpenHandler(() => ({ action: 'deny' }))
     guest.on('will-navigate', (event, targetUrl) => {
       if (!isLoopbackRuntimeUrl(targetUrl)) event.preventDefault()

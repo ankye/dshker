@@ -101,6 +101,47 @@ The Launch page SHALL identify the compiled Launcher version, explain that the s
 - **THEN** the Launch page reports the failed action
 - **AND** it does not substitute another URL or browser surface
 
+### Requirement: Launcher settings provide stable release discovery
+
+The Launcher SHALL expose update discovery in Launcher Settings as exactly idle, checking, up to date, update available, or failed. The current application version SHALL match the version used by the application metadata, installer, release manifest, and Git tag. A release SHALL be an available update only when its version is a higher stable semantic version than the current application; equal, older, prerelease, draft, malformed, or missing release data SHALL NOT be presented as a new version.
+
+The Launcher SHALL start one update check in the background after its main window is usable. That check SHALL NOT delay first paint, route navigation, Harness preparation, or launch actions. Only an available higher stable version SHALL create a passive startup notice. A startup check failure SHALL NOT open a dialog or replace the current page; Launcher Settings SHALL retain the failed state and provide an explicit retry.
+
+For a supported macOS arm64 or Windows x64 build, an available update SHALL identify exactly one matching installer asset. Download SHALL open that exact asset in the operating-system browser for manual installation. A missing asset, multiple matching assets, unsupported platform or architecture, unavailable public Release, or invalid asset URL SHALL produce a failed state and SHALL NOT select another platform, architecture, release page, Actions artifact, or cached installer as a substitute.
+
+#### Scenario: Startup finds a higher stable version
+
+- **WHEN** the usable main window starts a background check and the fixed release source returns one higher stable version with one exact platform installer
+- **THEN** startup remains interactive and the Launcher exposes a passive update notice
+- **AND** Settings shows the current version, newer version, and exact installer name
+
+#### Scenario: Startup update discovery fails
+
+- **WHEN** the background request fails, no public latest Release exists, or the release response is invalid
+- **THEN** the current page and Launcher functions remain available without a failure dialog
+- **AND** Launcher Settings shows the typed failed state and an explicit retry action
+- **AND** no alternate update source or package is selected
+
+#### Scenario: Current version is not older
+
+- **WHEN** the latest accepted stable release is equal to or older than the current application version
+- **THEN** Launcher Settings reports that the application is up to date
+- **AND** no startup notice or download action is shown
+
+#### Scenario: User downloads an available update
+
+- **WHEN** the user chooses Download for a validated available update
+- **THEN** the operating-system browser opens the one exact installer asset retained by the successful check
+- **AND** the Launcher describes the unsigned package as a manual installation
+- **AND** it does not download, replace, install, or restart the application silently
+
+#### Scenario: Release asset selection is ambiguous
+
+- **WHEN** the release has no matching installer or more than one matching installer for the current platform and architecture
+- **THEN** Launcher Settings reports a failed update check
+- **AND** Download is unavailable
+- **AND** the Launcher does not choose one of the candidates
+
 ### Requirement: Product display name preserves persistent Launcher identities
 
 The desktop window, packaged application, release artifact names, product documentation, and fixed source action SHALL identify the product as DSHKer Launcher and use the `ankye/dshker` repository. The existing `dsh-launcher` application id, bundle id, IPC namespace, preference keys, resource names, and `~/.dshlauncher` directory SHALL remain unchanged.
@@ -231,6 +272,37 @@ The Launch and Controller footers SHALL show valid start or stop controls for th
 - **THEN** a shell-level read-only console tail can be opened from a control on the sidebar's floating rail beside the sidebar state control, and from the statusbar's busy strip
 - **AND** its control advertises unseen output with a badge instead of opening by itself
 - **AND** the tail renders only the newest bounded slice, hands off to the full Console route, collapses on Escape, and stays below transient error toasts
+
+### Requirement: Run page renders the guest at an explicit page zoom
+
+The Run page SHALL provide page zoom steps of exactly 80, 90, 100, 110, 125, 150, 175, and 200 percent. Its toolbar SHALL place decrease, current-value, and increase controls beside the address field. `Cmd`/`Ctrl` plus `+` or `-` SHALL select the next supported step, and `Cmd`/`Ctrl` plus `0` SHALL select 100 percent, whether focus is in trusted Launcher chrome or the attached loopback guest. The toolbar SHALL show the effective guest value and disable only the unavailable endpoint action. A newly created preferences record SHALL start at 100 percent; the Launcher SHALL NOT adopt a page zoom stored by Chrome or infer one from device-pixel ratio.
+
+The guest SHALL fill the Run canvas below one toolbar divider without a decorative page margin, card border, or rounded clipping. Neither the guest nor its Launcher container chain SHALL alter the page through CSS `filter`, `opacity`, `transform`, or `zoom`. Page zoom SHALL remain independent from host and guest device-pixel ratio: crossing between displays SHALL refresh rendering observations but SHALL NOT change the selected zoom or force a device scale factor.
+
+#### Scenario: User changes the Run page zoom
+
+- **WHEN** the user selects a toolbar zoom action or a documented keyboard accelerator
+- **THEN** Electron applies the corresponding supported page zoom to the attached guest and synchronizes the toolbar with the effective value
+- **AND** every tab attached during the same Launcher session uses the selected Launcher preference
+- **AND** reset selects exactly 100 percent rather than a display-derived or Chrome-derived value
+
+#### Scenario: Window crosses displays with different scale factors
+
+- **WHEN** the Run window moves to a display whose device-pixel ratio, scale factor, or color space differs
+- **THEN** the Launcher refreshes its rendering observations and allows Chromium to rasterize for that display
+- **AND** it leaves the selected page zoom unchanged
+- **AND** it does not pass a forced device-scale-factor switch
+
+### Requirement: Run rendering diagnostics are copyable and secret-free
+
+The Run page SHALL expose a copyable rendering observation containing host device-pixel ratio, guest device-pixel ratio, effective guest zoom factor, guest `visualViewport.scale`, Electron version, Chromium version, current display color space, and GPU compositing status. An unavailable observation SHALL be identified explicitly rather than replaced with a guessed value. The diagnostic payload SHALL NOT contain the guest URL, query, cookies, storage values, request headers, credentials, or tokens, and SHALL NOT grant developer-tools, arbitrary script, or unrestricted guest capabilities.
+
+#### Scenario: User copies Run rendering information
+
+- **WHEN** the user invokes the rendering-information copy action for an attached guest
+- **THEN** the copied text identifies each available renderer, display, and compositing observation
+- **AND** an unavailable field is represented as an explicit unavailable state
+- **AND** no URL, cookie, storage, request-header, credential, or token value is read or copied
 
 ### Requirement: Version switching builds each revision in isolation
 

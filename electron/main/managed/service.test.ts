@@ -229,4 +229,18 @@ describe('managed workspace service', () => {
       capabilities.inspect(capability.capabilityId, 'workspace-working-directory')
     ).toThrow(ManagedRootError)
   })
+
+  it('resolves the registered Settings root from revalidated persisted state on every call', async () => {
+    const { service, base } = await fixture()
+    await service.registerRoots({ selections: await selectAllRoots(service) })
+
+    await expect(service.resolveSettingsRoot()).resolves.toBe(
+      await realpath(nodePath.join(base, 'settings'))
+    )
+
+    await rm(nodePath.join(base, 'settings'), { recursive: true })
+    await expect(service.resolveSettingsRoot()).rejects.toMatchObject({
+      code: 'managed.root_not_directory'
+    })
+  })
 })

@@ -1,6 +1,6 @@
 # DSHKer Launcher
 
-[简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [GitHub Actions builds](https://github.com/ankye/dshker/actions/workflows/package.yml)
+[简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [Latest release](https://github.com/ankye/dshker/releases/latest) · [GitHub Actions builds](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
 DSHKer Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows. It prepares a Launcher-owned Harness checkout, lets you inspect and switch Git commits, manages DSH extensions through the ordinary DSH CLI, starts DSH Web, and keeps the launch log in one place.
 
@@ -20,13 +20,21 @@ The Launcher never replaces, moves, or resets native DSH state. Your existing `$
 
 ## Install
 
-1. Open the [latest successful package workflow](https://github.com/ankye/dshker/actions/workflows/package.yml).
-2. Download the artifact for your platform:
-   - **macOS Apple Silicon**: `dshker-launcher-macos-arm64` (`.dmg`)
-   - **Windows x64**: `dshker-launcher-windows-x64` (`.exe`)
-3. Install the application and start **DSHKer Launcher**.
+1. Open the [latest GitHub Release](https://github.com/ankye/dshker/releases/latest).
+2. Download the installer for your platform:
+   - **macOS Apple Silicon**: the `mac-arm64.dmg` asset
+   - **Windows x64**: the `win-x64.exe` asset
+3. Verify the installer against the release's `checksums.txt`, install it manually, and start **DSHKer Launcher**.
 
-Current GitHub Actions artifacts are unsigned build artifacts and expire after 14 days. macOS may require **Open** from Finder's context menu, and Windows may show SmartScreen. Install only an artifact you obtained from this repository and verified against its included checksum. Signed and notarized public releases are a separate delivery step.
+Current release installers are unsigned. macOS may require **Open** from Finder's context menu, and Windows may show SmartScreen. Install only an asset obtained from this repository and verified against its checksum. The application does not silently replace itself.
+
+If the repository has no published Release yet, the latest-release link has no update feed to return. [GitHub Actions package runs](https://github.com/ankye/dshker/actions/workflows/package.yml) remain short-lived build and diagnostic evidence; they are not the Launcher update feed.
+
+## Check for Launcher updates
+
+Open **Settings → Launcher settings → Updates** to check the fixed DSHKer GitHub Release feed. The Launcher also performs this check in the background after startup without blocking the window. It shows a startup notice only when GitHub reports a higher stable semantic version; a network or feed failure remains available in Settings for an explicit retry instead of interrupting startup.
+
+When an update is available, **Download** opens the exact macOS arm64 or Windows x64 installer asset in the system browser. Missing, duplicate, or unsupported platform assets are reported as errors; the Launcher does not choose another package. Installation remains a user-controlled manual step because the current macOS and Windows packages are unsigned.
 
 ## First launch
 
@@ -44,10 +52,10 @@ If the Harness directory is empty, the application unpacks the bundled DSH sourc
 Then use the sidebar in this order when needed:
 
 1. **Launch** — review the selected commit and start DSH Web.
-2. **Advanced** — inspect Launcher-managed directories and tool settings.
+2. **Console** — follow the exact process output and stop the managed process.
 3. **Version management** — refresh, switch, and inspect core and extensions.
-4. **Console** — follow the exact process output and stop the managed process.
-5. **Settings** — choose theme, language, and npm acceleration preferences.
+4. **Token usage** — inspect session and daily model totals from native DSH logs.
+5. **Settings** — manage DSH and Launcher settings, including update checks.
 6. **Run** — open the URL announced by the process in separate tabs.
 
 For step-by-step details, troubleshooting, and the directory ownership model, read the [English usage guide](docs/usage.en.md) or [Chinese usage guide](docs/usage.zh-CN.md).
@@ -76,7 +84,7 @@ npm run build:electron
 
 ## Build and release
 
-`npm run dist:mac-arm64` and `npm run dist:win-x64` create local unsigned installers. Tagging `v*` triggers GitHub Actions to build the same two targets and upload artifacts with `checksums.txt` and `release-manifest.json`; it intentionally does not create a GitHub Release until signing and macOS notarization are configured.
+`package.json` is the only Launcher version source. `npm run dist:mac-arm64` and `npm run dist:win-x64` create local unsigned installers. A stable `v*` tag must equal `v${package.json.version}` exactly. After both platform builds pass, GitHub Actions verifies their manifests and checksums, then creates the public latest GitHub Release with both installers, a combined `checksums.txt`, and platform-named manifests. A manual workflow dispatch uploads Actions artifacts but never publishes a Release.
 
 See [docs/release.md](docs/release.md) for the release handoff and [docs/ci.md](docs/ci.md) for CI gates.
 

@@ -110,8 +110,22 @@ The renderer SHALL never submit an arbitrary path for a managed operation. A pat
 
 Launcher root, workspace, installation, tool, and preference records SHALL have explicit format versions and reject unknown fields, missing fields, malformed values, unsupported versions, and obsolete records that describe an unrecognized role or Launcher-managed `.dsh`. The launcher MAY migrate only Launcher-owned records after explicit user confirmation and SHALL never parse or migrate native Harness state.
 
+The selected Run page zoom SHALL be stored as a strictly versioned Launcher-owned record at `dsh-launcher/runtime-browser-preferences.json` below the currently registered Settings root. Only a missing file SHALL create the initial record with 100 percent. An unsupported version, unknown field, missing field, malformed value, or zoom value outside 80, 90, 100, 110, 125, 150, 175, and 200 percent SHALL produce a typed blocking persistence failure; the Launcher SHALL NOT replace the record, infer another Settings root, clamp the value, or silently reset it to 100 percent.
+
 #### Scenario: Registry record is unsupported
 
 - **WHEN** the launcher reads a record with an unsupported version, unknown field, unrecognized role, or managed `.dsh` entry
 - **THEN** it enters a blocking recovery state
 - **AND** it leaves the native Harness home untouched
+
+#### Scenario: Run browser preferences do not exist yet
+
+- **WHEN** the current registered Settings root contains no `dsh-launcher/runtime-browser-preferences.json`
+- **THEN** the Launcher atomically creates the current supported record with 100 percent selected
+- **AND** it does not inspect Chrome preferences or device scale to choose that value
+
+#### Scenario: Run browser preferences are invalid
+
+- **WHEN** the persisted Run browser preference record has an unsupported version, an unknown or missing field, malformed content, or an unsupported zoom value
+- **THEN** the Launcher reports a typed blocking persistence failure before attaching or changing a guest
+- **AND** it leaves the invalid record unchanged for explicit recovery

@@ -90,16 +90,13 @@ export async function waitForRendererEvidence(
  * hash-based walk would silently pass without changing the view.
  */
 export async function smokeRoutes(window: ElectronBrowserWindow): Promise<RouteSmokeEvidence> {
-  const cases: readonly { id: string; text: string; selector?: string }[] = [
-    { id: 'launch', text: '一键启动' },
-    { id: 'advanced', text: '高级选项' },
-    { id: 'versions', text: '版本管理' },
-    { id: 'controller', text: '控制台' },
-    { id: 'usage', text: 'Token 消耗' },
-    { id: 'settings', text: '应用设置' },
-    // The run route carries no stage heading, so its evidence is the browser
-    // surface itself rather than a title string that the sidebar also contains.
-    { id: 'runtime', text: '运行', selector: '.browser-panel' }
+  const cases: readonly { id: string; text: string; selector: string }[] = [
+    { id: 'launch', text: 'Launch', selector: '.launch-panel' },
+    { id: 'controller', text: 'Console', selector: '.controller-panel' },
+    { id: 'versions', text: 'Versions', selector: '.version-management' },
+    { id: 'usage', text: 'Token usage', selector: '.usage-panel' },
+    { id: 'settings', text: 'Settings', selector: '.settings-panel' },
+    { id: 'runtime', text: 'Run', selector: '.browser-panel' }
   ]
   const routes: RouteSmokeEvidence['routes'] = []
 
@@ -114,10 +111,7 @@ export async function smokeRoutes(window: ElectronBrowserWindow): Promise<RouteS
         control.click();
         setTimeout(() => {
           const active = control.dataset.active === 'true';
-          const selector = ${JSON.stringify(route.selector ?? null)};
-          const shown = selector === null
-            ? document.body?.innerText?.includes(${JSON.stringify(route.text)}) === true
-            : document.querySelector(selector) !== null;
+          const shown = document.querySelector(${JSON.stringify(route.selector)}) !== null;
           resolve(active && shown);
         }, 160);
       })`

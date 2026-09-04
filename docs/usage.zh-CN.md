@@ -2,7 +2,7 @@
 
 ## 开始前
 
-请从仓库的 GitHub Actions 打包工作流下载 macOS arm64 或 Windows x64 Artifact。当前 Artifact 是未签名构建证据，不是已签名的公开发行包；打开安装程序前请核对 `checksums.txt`，并按自己的常规方式备份 DSH 原生数据。
+请从仓库的[最新 GitHub Release](https://github.com/ankye/dshker/releases/latest)下载 macOS arm64 或 Windows x64 安装包。当前安装包尚未签名；请先使用 `checksums.txt` 核对文件，再手动运行安装程序，并按自己的常规方式备份 DSH 原生数据。GitHub Actions Artifact 是短期构建证据，不是 Launcher 更新源。
 
 DSHKer Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.dshlauncher`，也不要通过删除它来切换版本。
 
@@ -30,6 +30,15 @@ DSHKer Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.d
 - 安装和卸载会转发到标准 DSH CLI；Launcher 不会直接写 DSH profile manifest 或原生插件目录。
 - 变更扩展前先停止 DSH Web。
 
+## 检查 Launcher 新版本
+
+1. 打开**设置 → Launcher 设置 → 版本更新**。
+2. 点击**重新检查**。页面会从检查中进入已是最新、新版本可用或明确的失败状态。
+3. 发现新版本后，确认展示的稳定版本号和安装包名称，再点击**下载**。
+4. 系统浏览器会打开严格匹配 macOS arm64 或 Windows x64 的 GitHub Release 资产。请在 Release 页面核对 `checksums.txt`，然后手动运行安装程序。
+
+Launcher 启动后也会对同一个固定仓库做后台检查，不延迟主窗口；只有存在更高的稳定语义版本时才显示启动提示。启动检查失败不会弹出警告打扰，设置页会保留失败状态供用户重试。如果 GitHub 尚无公开的 latest Release，或目标平台安装包缺失、重复，检查会明确失败，不会改用 Actions Artifact 或其他平台安装包。
+
 ## 控制台与运行
 
 控制台会区分 Launcher 生命周期消息、启动命令、标准输出和标准错误。底部按钮只启动或终止 Launcher 自己创建的进程。日志文件位于 `~/.dshlauncher/logs/dsh-web.log`，可从控制台显示或导出。
@@ -38,13 +47,14 @@ DSHKer Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.d
 
 ## 排障
 
-| 现象             | 处理方式                                                                  |
-| ---------------- | ------------------------------------------------------------------------- |
-| 启动按钮不可用   | 等待首次内置内核准备完成，再回到启动页重新检测。                          |
-| 版本操作被拒绝   | 在启动页或控制台停止 DSH Web 后，再切换内核或扩展。                       |
-| DSH 没有就绪     | 打开控制台查看输出和导出的日志；Launcher 不会假设端口。                   |
-| Harness 目录异常 | 在高级选项检查 `~/.dshlauncher/harness`；不要用替换 `~/.dsh` 的方式修复。 |
-| 扩展修改失败     | 查看控制台输出；失败时原有 DSH 扩展列表不会改变。                         |
+| 现象                  | 处理方式                                                                        |
+| --------------------- | ------------------------------------------------------------------------------- |
+| 启动按钮不可用        | 等待首次内置内核准备完成，再回到启动页重新检测。                                |
+| 版本操作被拒绝        | 在启动页或控制台停止 DSH Web 后，再切换内核或扩展。                             |
+| DSH 没有就绪          | 打开控制台查看输出和导出的日志；Launcher 不会假设端口。                         |
+| Harness 目录异常      | 在 Launcher 设置检查 `~/.dshlauncher/harness`；不要用替换 `~/.dsh` 的方式修复。 |
+| 扩展修改失败          | 查看控制台输出；失败时原有 DSH 扩展列表不会改变。                               |
+| Launcher 更新检查失败 | 在设置页重试，并确认 GitHub Release 中只有一个严格匹配当前平台的安装包。        |
 
 ## 开源与反馈
 

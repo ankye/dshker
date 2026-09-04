@@ -2,7 +2,7 @@
 
 ## Before you begin
 
-Install a macOS arm64 or Windows x64 artifact from the repository's GitHub Actions package workflow. The current artifacts are unsigned build evidence, not a signed public release. Verify `checksums.txt` before opening an installer and keep your native DSH data backed up as you normally would.
+Install the macOS arm64 or Windows x64 package from the repository's [latest GitHub Release](https://github.com/ankye/dshker/releases/latest). The current packages are unsigned; verify the installer against `checksums.txt`, run it manually, and keep your native DSH data backed up as you normally would. GitHub Actions artifacts are short-lived build evidence, not the Launcher update feed.
 
 DSHKer Launcher does not take ownership of `$DSH_HOME` or `~/.dsh`. Do not move that directory into `~/.dshlauncher`, and do not delete it when switching versions.
 
@@ -30,6 +30,15 @@ The selected core lives at `~/.dshlauncher/harness`. It is Git-managed by Launch
 - Installing or removing an extension forwards to the standard DSH CLI. Launcher does not write DSH profile manifests or native plugin directories directly.
 - Stop DSH Web before changing extensions.
 
+## Check for a new Launcher version
+
+1. Open **Settings → Launcher settings → Updates**.
+2. Choose **Check again**. The page moves from checking to either up to date, update available, or an explicit failed state.
+3. If an update is available, confirm the reported stable version and installer name, then choose **Download**.
+4. The system browser opens the exact GitHub Release asset for macOS arm64 or Windows x64. Verify `checksums.txt` on the Release page and run the installer manually.
+
+The Launcher also performs the same fixed-repository check after startup without delaying the main window. It displays a startup notice only for a higher stable semantic version. A failed startup check does not open a warning dialog; Settings retains the failure state so you can retry. If GitHub has no public latest Release, or if the required asset is missing or duplicated, the check fails explicitly and does not substitute an Actions artifact or another platform package.
+
 ## Use Console and Run
 
 Console separates Launcher lifecycle messages, the launch command, standard output, and standard error. Use its bottom action to start or stop the exact process Launcher created. The log file is stored in `~/.dshlauncher/logs/dsh-web.log`; you can reveal or export it from Console.
@@ -43,8 +52,9 @@ Run contains browser-like tabs for the DSH Web address announced by the managed 
 | The start button is disabled     | Wait for the first bundled-core preparation to finish, then refresh Launch.                        |
 | A version operation is refused   | Stop DSH Web in Launch or Console before switching core versions or extensions.                    |
 | DSH does not become ready        | Open Console and inspect the process output and the exported log; Launcher does not assume a port. |
-| The Harness directory is invalid | Check `~/.dshlauncher/harness` in Advanced. Do not replace `~/.dsh` to repair it.                  |
+| The Harness directory is invalid | Check `~/.dshlauncher/harness` in Launcher settings. Do not replace `~/.dsh` to repair it.         |
 | An extension change fails        | Review Console output. The existing DSH extension list remains unchanged on failure.               |
+| Launcher update check fails      | Retry from Settings. Confirm GitHub Releases has one exact installer for your platform.            |
 
 ## Open source and support
 

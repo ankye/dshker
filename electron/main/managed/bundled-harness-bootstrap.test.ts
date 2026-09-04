@@ -1,7 +1,7 @@
 import type { ChildProcess } from 'node:child_process'
 import { EventEmitter } from 'node:events'
 import { mkdirSync } from 'node:fs'
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { describe, expect, it } from 'vitest'
@@ -50,7 +50,11 @@ describe('BundledHarnessBootstrap activity', () => {
     readonly bundlePath: string
     readonly cleanup: () => Promise<void>
   }> {
-    const root = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-bootstrap-'))
+    // macOS exposes the temporary root through `/var`, whose canonical path is
+    // `/private/var`. Bootstrap deliberately rejects non-canonical inputs, so
+    // the fixture must pass the same direct paths that production registration
+    // provides instead of accidentally testing that operating-system alias.
+    const root = await realpath(await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-bootstrap-')))
     const harnessDirectory = nodePath.join(root, 'harness')
     const bundlePath = nodePath.join(root, 'deepseek-harness.git.bundle')
     await mkdir(harnessDirectory, { recursive: true })

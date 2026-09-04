@@ -237,6 +237,20 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
     tokenUsage: {
       getState: async () => apiFail('managed.missing_registry', 'Not used in this test.')
     },
+    runtimeBrowser: {
+      getPreferences: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      setZoom: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
+      getHostRenderingInfo: async () =>
+        apiFail('managed.missing_registry', 'Not used in this test.'),
+      onZoomChange: () => () => undefined
+    },
+    launcherUpdates: {
+      getState: async () => apiFail('launcher.update_invalid_request', 'Not used in this test.'),
+      check: async () => apiFail('launcher.update_invalid_request', 'Not used in this test.'),
+      openInstallerDownload: async () =>
+        apiFail('launcher.update_not_available', 'Not used in this test.'),
+      onStateChange: () => () => undefined
+    },
     launcherHarness: {
       getState: async () => apiFail('managed.missing_registry', 'Not used in this test.'),
       onConsoleAppend: () => () => undefined,

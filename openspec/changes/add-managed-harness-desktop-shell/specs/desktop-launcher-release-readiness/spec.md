@@ -42,13 +42,52 @@ The packaged macOS and Windows applications SHALL demonstrate equivalent handlin
 
 ### Requirement: Packaged artifact inspection protects the trust boundary
 
-Before release, artifact inspection SHALL confirm expected application identity, signed packaging where supported, trusted local-resource policy, no embedded unmanaged Harness checkout, no secret value, no development-only command surface, and no alternate production transport. Installation, first launch, update behavior where supported, and uninstall behavior SHALL be recorded for each supported platform.
+Before release, artifact inspection SHALL confirm expected application identity, declared signing and notarization state, trusted local-resource policy, no embedded unmanaged Harness checkout, no secret value, no development-only command surface, and no alternate production transport. Each platform installer SHALL pass its manifest, checksum, packaging, and startup smoke gates. Installation, first launch, update behavior where supported, and uninstall behavior SHALL be recorded for each supported platform.
+
+An unsigned installer MAY be published for manual download only when its platform manifest identifies that unsigned state, the public Release repeats the warning, the installer checksum is published, and the Launcher does not describe or invoke silent or automatic installation. Signed packaging, and macOS notarization, SHALL remain hard gates before a future in-application install or replacement flow can be enabled.
 
 #### Scenario: Artifact inspection finds an unexpected surface
 
-- **WHEN** inspection finds an unexpected source checkout, secret, unsigned required artifact, development entry point, or alternate transport
+- **WHEN** inspection finds an unexpected source checkout, secret, false or missing signing state, checksum mismatch, failed platform smoke, development entry point, or alternate transport
 - **THEN** release promotion is blocked
 - **AND** the artifact is not treated as equivalent to the verified candidate
+
+#### Scenario: Unsigned installer is published for manual installation
+
+- **WHEN** a platform installer passes its manifest, checksum, packaging, and startup smoke gates but records an unsigned state
+- **THEN** the GitHub Release and Launcher update surface identify the installer as unsigned and require manual installation
+- **AND** neither surface claims signed, notarized, silent, or automatic installation
+- **AND** no in-application install, replacement, or restart action is enabled
+
+### Requirement: Tagged builds publish one immutable public release
+
+The package workflow SHALL treat root `package.json` as the only Launcher version source and SHALL require a stable release tag equal to `v${package.json.version}`. Pushes to `main` and manual workflow dispatches SHALL retain their installers as GitHub Actions artifacts and SHALL NOT publish a GitHub Release.
+
+After both the macOS arm64 and Windows x64 package jobs pass for an exact release tag, a job with only the required `contents: write` permission SHALL download those two named artifacts, require exactly one installer per platform, verify each installer against its platform manifest and checksum, produce one combined installer checksum file, and retain each manifest under a platform-specific name. It SHALL create one public latest GitHub Release from the verified tag and SHALL fail if a Release already exists for that tag rather than replacing any existing asset or metadata.
+
+#### Scenario: Tag differs from package version
+
+- **WHEN** a `v*` tag does not equal the stable version in root `package.json`
+- **THEN** the workflow fails before platform packaging or publication
+- **AND** it does not derive a version from another file or alter the tag
+
+#### Scenario: Both tagged platform packages pass
+
+- **WHEN** the exact tag and both platform jobs pass all required gates and no Release exists for the tag
+- **THEN** the workflow publishes one public latest Release with one DMG, one EXE, one combined installer checksum file, and two platform-named manifests
+- **AND** the Release identifies the installers as unsigned and manually installed
+
+#### Scenario: Manual package workflow completes
+
+- **WHEN** a maintainer uses manual workflow dispatch or a package build runs from `main`
+- **THEN** the platform packages remain GitHub Actions artifacts
+- **AND** no GitHub Release is created
+
+#### Scenario: Release tag already exists
+
+- **WHEN** a GitHub Release already exists for the exact tag
+- **THEN** publication fails with an existing-release error
+- **AND** it does not overwrite, replace, or append assets to that Release
 
 ### Requirement: OpenSpec and cross-repository evidence are complete before archive
 
