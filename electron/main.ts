@@ -22,7 +22,7 @@ import {
 import { SessionUsageReader } from './main/managed/session-usage-reader'
 import { registerLauncherProtocol } from './main/protocol'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
-import { runSmokeTest, writeSmokeFailure } from './main/smoke'
+import { runSmokeTest, writeSmokeFailure, writeSmokeTrace } from './main/smoke'
 import { createWindow } from './main/window'
 import { RuntimeBrowserController } from './main/runtime-browser-controller'
 import { RuntimeBrowserPreferencesStore } from './main/runtime-browser-preferences'
@@ -89,14 +89,19 @@ function resolveGitExecutable(): string {
  * `~/.dshlauncher` roots or clones a Harness checkout.
  */
 async function startSmokeTest(): Promise<void> {
+  await writeSmokeTrace('startSmokeTest:before-app-whenReady')
   await app.whenReady()
+  await writeSmokeTrace('startSmokeTest:after-app-whenReady')
   await registerLauncherProtocol(mainDirectory)
+  await writeSmokeTrace('startSmokeTest:after-register-protocol')
   const launcherRoot = path.join(app.getPath('temp'), 'dsh-launcher-smoke', String(process.pid))
   await registerLauncherServices(
     launcherRoot,
     path.join(launcherRoot, 'dsh-launcher-bootstrap.json')
   )
+  await writeSmokeTrace('startSmokeTest:after-register-services')
   await runSmokeTest(mainDirectory)
+  await writeSmokeTrace('startSmokeTest:after-runSmokeTest')
 }
 
 async function start(): Promise<void> {

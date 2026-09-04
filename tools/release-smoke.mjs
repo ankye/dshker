@@ -168,6 +168,11 @@ async function launchSmoke(executablePath, timeoutMs, releaseDir) {
   }
 
   const evidence = await readTextWhenReady(outputPath)
+  if (await exists(`${outputPath}.trace`)) {
+    const childTrace = await readFile(`${outputPath}.trace`, 'utf8')
+    trace.push(...childTrace.trimEnd().split('\n').filter(Boolean))
+    await writeFile(tracePath, `${trace.join('\n')}\n`, 'utf8')
+  }
   await recordTrace(`launch-end exitCode=${exitCode} evidence=${evidence.trim().length > 0}`)
   return {
     stdout: (evidence || stdout).trim(),

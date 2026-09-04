@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.9 — 2026-09-04
+
+- Hardened the Windows packaged-app release smoke gate with an explicit startup
+  budget and native startup-stage diagnostics.
+
 ## 0.1.8 — 2026-09-04
 
 - Hardened the Windows packaged-app release smoke gate with an explicit startup

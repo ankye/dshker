@@ -1,6 +1,6 @@
 import { BrowserWindow } from 'electron'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { appendFile, mkdir, writeFile } from 'node:fs/promises'
+import { dirname, join } from 'node:path'
 import { APP_METADATA } from '../../src/shared/contracts'
 import { createPreloadWebPreferences } from './preload'
 import { installWindowNavigationPolicy } from './security'
@@ -18,7 +18,7 @@ import {
   type RouteSmokeEvidence
 } from './smoke-helpers'
 
-function smokeOutputPath(): string | undefined {
+export function smokeOutputPath(): string | undefined {
   const environmentPath = process.env.DESKTOP_APP_SMOKE_OUTPUT ?? process.env.ELECTRON_SMOKE_OUTPUT
   if (environmentPath !== undefined) return environmentPath
   const markerIndex = process.argv.indexOf('--dshker-smoke-output')
@@ -26,6 +26,15 @@ function smokeOutputPath(): string | undefined {
   return markerIndex >= 0 && argumentPath !== undefined && argumentPath.trim().length > 0
     ? argumentPath
     : undefined
+}
+
+/** Records packaged-smoke startup stages so native-runner hangs remain diagnosable. */
+export async function writeSmokeTrace(message: string): Promise<void> {
+  const outputPath = smokeOutputPath()
+  if (!outputPath) return
+  const tracePath = `${outputPath}.trace`
+  await mkdir(dirname(tracePath), { recursive: true })
+  await appendFile(tracePath, `${new Date().toISOString()} ${message}\n`, 'utf8')
 }
 
 /**
@@ -97,6 +106,24 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
     paintWhenInitiallyHidden: true,
     webPreferences: createPreloadWebPreferences(mainDirectory)
   })
+  smokeWindow.webContents.on('did-start-loading', () => {
+    void writeSmokeTrace('webcontents:did-start-loading')
+  })
+  smokeWindow.webContents.on('dom-ready', () => {
+    void writeSmokeTrace('webcontents:dom-ready')
+  })
+  smokeWindow.webContents.on('did-finish-load', () => {
+    void writeSmokeTrace('webcontents:did-finish-load')
+  })
+  smokeWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL) => {
+      void writeSmokeTrace(
+        `webcontents:did-fail-load code=${errorCode} description=${errorDescription} url=${validatedURL}`
+      )
+    }
+  )
+  await writeSmokeTrace('runSmokeTest:window-created')
   installWindowNavigationPolicy(smokeWindow.webContents)
 
   let rendererEvidence: RendererEvidence = {
@@ -119,13 +146,18 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
   let heightEvidence: HeightAdaptationEvidence = { ok: false, cases: [] }
 
   try {
+    await writeSmokeTrace('runSmokeTest:before-loadRenderer')
     await loadRenderer(smokeWindow)
+    await writeSmokeTrace('runSmokeTest:after-loadRenderer')
     rendererEvidence = await waitForRendererEvidence(smokeWindow)
+    await writeSmokeTrace('runSmokeTest:after-renderer-evidence')
     routeEvidence = await smokeRoutes(smokeWindow)
+    await writeSmokeTrace('runSmokeTest:after-route-smoke')
     heightEvidence = await smokeHeightAdaptation(
       smokeWindow,
       routeEvidence.routes.map((entry) => entry.id)
     )
+    await writeSmokeTrace('runSmokeTest:after-height-adaptation')
     await waitForRendererPaint(smokeWindow)
     firstFrame = analyzeFirstFrame(await captureFirstFrame(smokeWindow))
     // Opt-in visual evidence. The packaged smoke is the only path that renders
@@ -179,12 +211,16 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
 
   const outputPath = smokeOutputPath()
   if (outputPath) await writeFile(outputPath, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
+  await writeSmokeTrace(`runSmokeTest:complete ok=${payload.ok}`)
   console.log(JSON.stringify(payload))
   if (!payload.ok) throw new Error('renderer smoke evidence failed')
 }
 
 /** Records a smoke failure so the harness reports the cause, not just an exit code. */
 export async function writeSmokeFailure(error: unknown): Promise<void> {
+  await writeSmokeTrace(
+    `runSmokeTest:failure ${error instanceof Error ? error.message : String(error)}`
+  )
   const outputPath = smokeOutputPath()
   if (!outputPath) return
 

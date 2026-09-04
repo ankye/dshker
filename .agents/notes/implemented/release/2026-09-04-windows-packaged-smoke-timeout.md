@@ -16,9 +16,16 @@ retains the child error text alongside stderr. The package workflow keeps the
 normal hosted-runner startup variance remains bounded and visible. The Windows
 package smoke remains a hard prerequisite for the publish job.
 
+## Follow-up diagnostics
+
+The first `0.1.8` retry still exhausted the 60-second Windows budget without a
+launch payload. The smoke now records native startup stages and BrowserWindow
+load events in `packaged-launch.json.trace`, which the workflow copies into its
+diagnostic artifact.
+
 ## Verification target
 
-The `0.1.8` tag must produce successful macOS arm64 and Windows x64 packaged
+The `0.1.9` tag must produce successful macOS arm64 and Windows x64 packaged
 smoke evidence, followed by one public latest GitHub Release. A failed smoke
 still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.
