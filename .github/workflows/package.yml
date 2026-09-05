@@ -86,7 +86,7 @@ jobs:
               release/release-manifest.json
               release/checksums.txt
           - name: macOS x64
-            os: macos-13
+            os: macos-15-intel
             script: dist:mac-x64
             artifact: dshker-launcher-macos-x64
             launchTimeoutMs: 20000
@@ -104,7 +104,7 @@ jobs:
               release/release-manifest.json
               release/checksums.txt
           - name: Windows arm64
-            os: windows-latest
+            os: windows-11-arm
             script: dist:win-arm64
             artifact: dshker-launcher-windows-arm64
             launchTimeoutMs: 60000
