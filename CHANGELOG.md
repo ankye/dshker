@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.12 — 2026-09-05
+
+- Keep the macOS Intel packaged smoke window valid during the short-height
+  resize probe.
+- Retry transient Windows seed-directory locks while preserving persistent
+  cleanup failures as release blockers.
+
 ## 0.1.11 — 2026-09-05
 
 - Added native release packages for macOS Intel, macOS Apple Silicon, Windows

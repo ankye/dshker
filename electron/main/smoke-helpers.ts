@@ -212,9 +212,13 @@ export async function smokeHeightAdaptation(
   const [initialWidth, initialHeight] = window.getSize()
 
   for (const height of [820, 560, 420]) {
+    if (window.isDestroyed()) throw new Error(`Smoke window was destroyed before height ${height}.`)
     window.setSize(initialWidth, height)
     await delay(220)
     for (const route of routeIds) {
+      if (window.isDestroyed()) {
+        throw new Error(`Smoke window was destroyed at height ${height}, route ${route}.`)
+      }
       const probe = await window.webContents.executeJavaScript(
         `new Promise((resolve) => {
           const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
@@ -257,6 +261,7 @@ export async function smokeHeightAdaptation(
     }
   }
 
+  if (window.isDestroyed()) throw new Error('Smoke window was destroyed before size restore.')
   window.setSize(initialWidth, initialHeight)
   await delay(200)
   return {

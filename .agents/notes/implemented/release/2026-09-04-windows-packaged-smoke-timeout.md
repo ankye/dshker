@@ -29,9 +29,15 @@ resize. The smoke window was fully outside the virtual desktop at negative
 coordinates; `0.1.10` keeps it at `(0, 0)` and records the paint/capture
 boundaries so the compositor can continue producing evidence.
 
+The first four-platform `0.1.11` run built the macOS Intel DMG but failed during
+the height-adaptation probe with `Object has been destroyed`; its Windows ARM
+seed preparation also hit a transient `EBUSY` lock while removing the clone.
+`0.1.12` lowers the smoke-only native minimum height to the probed 420px and
+uses bounded `fs.rm` retries for the Windows temporary clone cleanup.
+
 ## Verification target
 
-The `0.1.10` tag must produce successful macOS arm64 and Windows x64 packaged
-smoke evidence, followed by one public latest GitHub Release. A failed smoke
-still blocks publication and leaves its diagnostics as a traceable Actions
+The `0.1.12` tag must produce successful macOS arm64/x64 and Windows x64/arm64
+packaged smoke evidence, followed by one public latest GitHub Release. A failed
+smoke still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.

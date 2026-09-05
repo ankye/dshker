@@ -101,7 +101,10 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
     width: 1240,
     height: 820,
     minWidth: 760,
-    minHeight: 560,
+    // The height-adaptation probe intentionally exercises a 420px viewport;
+    // keep the smoke-only window's native minimum below that value so Cocoa
+    // does not tear down the x64 test window while clamping the resize.
+    minHeight: 420,
     title: `${APP_METADATA.name} Smoke`,
     backgroundColor: '#121820',
     show: true,

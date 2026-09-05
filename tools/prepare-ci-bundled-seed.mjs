@@ -63,7 +63,10 @@ async function main() {
     })
     console.log(`Bundled seed prepared for ${result.manifest.harness.revision}.`)
   } finally {
-    await rm(temporaryRoot, { recursive: true, force: true })
+    // Windows runners can briefly keep a freshly-cloned Git packfile open
+    // after the child process exits. Retry only the OS-reported transient
+    // removal condition; a persistent cleanup failure remains release-fatal.
+    await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 30, retryDelay: 500 })
   }
 }
 
