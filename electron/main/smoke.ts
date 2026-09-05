@@ -1,4 +1,4 @@
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, screen } from 'electron'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { APP_METADATA } from '../../src/shared/contracts'
@@ -92,15 +92,18 @@ async function captureRouteScreenshots(
  * window may never paint and would make the frame evidence meaningless.
  */
 export async function runSmokeTest(mainDirectory: string): Promise<void> {
+  const workArea = screen.getPrimaryDisplay().workArea
+  const smokeWidth = Math.min(1240, workArea.width)
+  const smokeHeight = Math.min(820, workArea.height)
   const smokeWindow = new BrowserWindow({
     // Windows may suspend requestAnimationFrame for a fully off-virtual-screen
     // window after a resize. Keep the smoke window in the desktop work area so
     // the compositor continues producing the frame evidence we are checking.
-    x: 0,
-    y: 0,
-    width: 1240,
-    height: 820,
-    minWidth: 760,
+    x: workArea.x,
+    y: workArea.y,
+    width: smokeWidth,
+    height: smokeHeight,
+    minWidth: Math.min(760, smokeWidth),
     // The height-adaptation probe intentionally exercises a 420px viewport;
     // keep the smoke-only window's native minimum below that value so Cocoa
     // does not tear down the x64 test window while clamping the resize.

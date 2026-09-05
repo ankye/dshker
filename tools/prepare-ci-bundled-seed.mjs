@@ -66,7 +66,23 @@ async function main() {
     // Windows runners can briefly keep a freshly-cloned Git packfile open
     // after the child process exits. Retry only the OS-reported transient
     // removal condition; a persistent cleanup failure remains release-fatal.
-    await rm(temporaryRoot, { recursive: true, force: true, maxRetries: 30, retryDelay: 500 })
+    try {
+      await rm(temporaryRoot, {
+        recursive: true,
+        force: true,
+        maxRetries: 30,
+        retryDelay: 500
+      })
+    } catch (error) {
+      const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
+      if (process.platform === 'win32' && (code === 'EBUSY' || code === 'EPERM')) {
+        console.warn(
+          `prepare-ci-bundled-seed: temporary clone cleanup deferred (${String(code)}): ${temporaryRoot}`
+        )
+      } else {
+        throw error
+      }
+    }
   }
 }
 

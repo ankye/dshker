@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.13 — 2026-09-05
+
+- Size the packaged smoke window to the native display work area so Intel Mac
+  runners can complete resize and renderer evidence without window teardown.
+- Treat only a Windows transient temp-clone lock as deferred cleanup; all other
+  seed preparation and cleanup errors remain release-fatal.
+
 ## 0.1.12 — 2026-09-05
 
 - Keep the macOS Intel packaged smoke window valid during the short-height

@@ -33,11 +33,15 @@ The first four-platform `0.1.11` run built the macOS Intel DMG but failed during
 the height-adaptation probe with `Object has been destroyed`; its Windows ARM
 seed preparation also hit a transient `EBUSY` lock while removing the clone.
 `0.1.12` lowers the smoke-only native minimum height to the probed 420px and
-uses bounded `fs.rm` retries for the Windows temporary clone cleanup.
+uses bounded `fs.rm` retries for the Windows temporary clone cleanup. The retry
+did not clear the Windows ARM runner lock, and the Intel Mac smoke still timed
+out after the height probe. `0.1.13` sizes the smoke window to the native
+display work area and defers only an explicitly reported Windows `EBUSY`/`EPERM`
+temporary-clone cleanup.
 
 ## Verification target
 
-The `0.1.12` tag must produce successful macOS arm64/x64 and Windows x64/arm64
+The `0.1.13` tag must produce successful macOS arm64/x64 and Windows x64/arm64
 packaged smoke evidence, followed by one public latest GitHub Release. A failed
 smoke still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.
