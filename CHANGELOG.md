@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.14 — 2026-09-05
+
+- Resize packaged smoke content through Electron's content-area API so macOS
+  Intel height adaptation does not invalidate the native window frame.
+- Keep Windows ARM seed cleanup warnings explicit without masking clone or seed
+  preparation failures.
+
 ## 0.1.13 — 2026-09-05
 
 - Size the packaged smoke window to the native display work area so Intel Mac

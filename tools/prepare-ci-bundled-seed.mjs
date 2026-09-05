@@ -75,7 +75,7 @@ async function main() {
       })
     } catch (error) {
       const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined
-      if (process.platform === 'win32' && (code === 'EBUSY' || code === 'EPERM')) {
+      if (process.platform === 'win32') {
         console.warn(
           `prepare-ci-bundled-seed: temporary clone cleanup deferred (${String(code)}): ${temporaryRoot}`
         )

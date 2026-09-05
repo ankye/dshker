@@ -39,9 +39,15 @@ out after the height probe. `0.1.13` sizes the smoke window to the native
 display work area and defers only an explicitly reported Windows `EBUSY`/`EPERM`
 temporary-clone cleanup.
 
+The `0.1.13` retry still failed before publication: macOS Intel continued to
+tear down during native frame resizing, while Windows ARM did not leave a
+diagnostic artifact. `0.1.14` resizes the BrowserWindow content area rather
+than its title-bar-inclusive frame and reports any Windows cleanup error while
+preserving the original seed operation result.
+
 ## Verification target
 
-The `0.1.13` tag must produce successful macOS arm64/x64 and Windows x64/arm64
+The `0.1.14` tag must produce successful macOS arm64/x64 and Windows x64/arm64
 packaged smoke evidence, followed by one public latest GitHub Release. A failed
 smoke still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.

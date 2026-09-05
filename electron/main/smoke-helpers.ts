@@ -209,11 +209,14 @@ export async function smokeHeightAdaptation(
   routeIds: readonly string[]
 ): Promise<HeightAdaptationEvidence> {
   const cases: HeightAdaptationEvidence['cases'] = []
-  const [initialWidth, initialHeight] = window.getSize()
+  // Resize the content area rather than the native frame. Cocoa's frame
+  // constraints can destroy an x64 smoke window when a title-bar-inclusive
+  // size falls below the runner's available work area.
+  const [initialWidth, initialHeight] = window.getContentSize()
 
   for (const height of [820, 560, 420]) {
     if (window.isDestroyed()) throw new Error(`Smoke window was destroyed before height ${height}.`)
-    window.setSize(initialWidth, height)
+    window.setContentSize(initialWidth, height)
     await delay(220)
     for (const route of routeIds) {
       if (window.isDestroyed()) {
@@ -262,7 +265,7 @@ export async function smokeHeightAdaptation(
   }
 
   if (window.isDestroyed()) throw new Error('Smoke window was destroyed before size restore.')
-  window.setSize(initialWidth, initialHeight)
+  window.setContentSize(initialWidth, initialHeight)
   await delay(200)
   return {
     ok: cases.every(
