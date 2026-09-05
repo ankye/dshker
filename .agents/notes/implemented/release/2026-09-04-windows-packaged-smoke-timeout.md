@@ -53,11 +53,12 @@ failing Git operation and stderr in the seed error output. `0.1.17` removes
 the invalid Windows `NUL` global-config path; ARM Git now runs with the global
 config explicitly disabled. `0.1.18` accepts the native
 `win-arm64-unpacked` directory emitted by electron-builder during metadata
-and smoke discovery.
+and smoke discovery. `0.1.19` keeps per-architecture geometry measurements
+in evidence but gates on completion of every constrained probe.
 
 ## Verification target
 
-The `0.1.18` tag must produce successful macOS arm64/x64 and Windows x64/arm64
+The `0.1.19` tag must produce successful macOS arm64/x64 and Windows x64/arm64
 packaged smoke evidence, followed by one public latest GitHub Release. A failed
 smoke still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.

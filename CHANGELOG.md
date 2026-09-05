@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.19 — 2026-09-05
+
+- Keep geometry measurements in smoke evidence while gating on deterministic
+  completion of every constrained height/route probe across macOS runners.
+
 ## 0.1.18 — 2026-09-05
 
 - Recognize electron-builder's `win-arm64-unpacked` output during metadata
