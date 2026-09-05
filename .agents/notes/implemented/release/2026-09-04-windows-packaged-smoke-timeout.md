@@ -54,11 +54,13 @@ the invalid Windows `NUL` global-config path; ARM Git now runs with the global
 config explicitly disabled. `0.1.18` accepts the native
 `win-arm64-unpacked` directory emitted by electron-builder during metadata
 and smoke discovery. `0.1.19` keeps per-architecture geometry measurements
-in evidence but gates on completion of every constrained probe.
+in evidence but gates on completion of every constrained probe. `0.1.20`
+raises both macOS launch budgets to 60 seconds, matching Windows, so slow
+Intel startup cannot race the evidence reader.
 
 ## Verification target
 
-The `0.1.19` tag must produce successful macOS arm64/x64 and Windows x64/arm64
+The `0.1.20` tag must produce successful macOS arm64/x64 and Windows x64/arm64
 packaged smoke evidence, followed by one public latest GitHub Release. A failed
 smoke still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.

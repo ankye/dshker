@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.20 — 2026-09-05
+
+- Give macOS packaged smoke the same 60-second startup budget as Windows so
+  slow Intel runner evidence cannot race the output reader.
+
 ## 0.1.19 — 2026-09-05
 
 - Keep geometry measurements in smoke evidence while gating on deterministic

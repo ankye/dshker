@@ -80,7 +80,7 @@ jobs:
             os: macos-14
             script: dist:mac-arm64
             artifact: dshker-launcher-macos-arm64
-            launchTimeoutMs: 20000
+            launchTimeoutMs: 60000
             pattern: |
               release/*.dmg
               release/release-manifest.json
@@ -89,7 +89,7 @@ jobs:
             os: macos-15-intel
             script: dist:mac-x64
             artifact: dshker-launcher-macos-x64
-            launchTimeoutMs: 20000
+            launchTimeoutMs: 60000
             pattern: |
               release/*.dmg
               release/release-manifest.json
