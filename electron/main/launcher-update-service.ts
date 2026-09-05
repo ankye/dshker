@@ -225,7 +225,9 @@ export function expectedLauncherInstallerAssetName(
 
 function launcherInstallerTargetSuffix(platform: NodeJS.Platform, arch: string): string {
   if (platform === 'darwin' && arch === 'arm64') return 'mac-arm64.dmg'
+  if (platform === 'darwin' && arch === 'x64') return 'mac-x64.dmg'
   if (platform === 'win32' && arch === 'x64') return 'win-x64.exe'
+  if (platform === 'win32' && arch === 'arm64') return 'win-arm64.exe'
   throw new LauncherUpdateRuntimeError(
     'launcher.update_platform_unsupported',
     `Launcher updates do not support ${platform}-${arch}.`

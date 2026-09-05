@@ -2,7 +2,7 @@
 
 ## Before you begin
 
-Install the macOS arm64 or Windows x64 package from the repository's [latest GitHub Release](https://github.com/ankye/dshker/releases/latest). The current packages are unsigned; verify the installer against `checksums.txt`, run it manually, and keep your native DSH data backed up as you normally would. GitHub Actions artifacts are short-lived build evidence, not the Launcher update feed.
+Install the package matching your device from the repository's [latest GitHub Release](https://github.com/ankye/dshker/releases/latest): macOS arm64/x64 or Windows x64/arm64. The current packages are unsigned; verify the installer against `checksums.txt`, run it manually, and keep your native DSH data backed up as you normally would. GitHub Actions artifacts are short-lived build evidence, not the Launcher update feed.
 
 DSHKer Launcher does not take ownership of `$DSH_HOME` or `~/.dsh`. Do not move that directory into `~/.dshlauncher`, and do not delete it when switching versions.
 
@@ -35,7 +35,7 @@ The selected core lives at `~/.dshlauncher/harness`. It is Git-managed by Launch
 1. Open **Settings → Launcher settings → Updates**.
 2. Choose **Check again**. The page moves from checking to either up to date, update available, or an explicit failed state.
 3. If an update is available, confirm the reported stable version and installer name, then choose **Download**.
-4. The system browser opens the exact GitHub Release asset for macOS arm64 or Windows x64. Verify `checksums.txt` on the Release page and run the installer manually.
+4. The system browser opens the exact GitHub Release asset for the current macOS or Windows architecture. Verify `checksums.txt` on the Release page and run the installer manually.
 
 The Launcher also performs the same fixed-repository check after startup without delaying the main window. It displays a startup notice only for a higher stable semantic version. A failed startup check does not open a warning dialog; Settings retains the failure state so you can retry. If GitHub has no public latest Release, or if the required asset is missing or duplicated, the check fails explicitly and does not substitute an Actions artifact or another platform package.
 

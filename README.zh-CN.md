@@ -24,7 +24,9 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 1. 打开[最新 GitHub Release](https://github.com/ankye/dshker/releases/latest)。
 2. 下载对应平台的安装包：
    - **macOS Apple Silicon**：名称包含 `mac-arm64.dmg` 的资产
+   - **macOS Intel**：名称包含 `mac-x64.dmg` 的资产
    - **Windows x64**：名称包含 `win-x64.exe` 的资产
+   - **Windows ARM64**：名称包含 `win-arm64.exe` 的资产
 3. 使用 Release 中的 `checksums.txt` 核对安装包，手动安装后启动 **DSHKer Launcher**。
 
 当前 Release 安装包尚未签名。macOS 可能需要在 Finder 中右键选择“打开”，Windows 可能显示 SmartScreen 提示。请只安装来自本仓库、且已核对校验和的资产；应用不会在后台静默替换自己。
@@ -85,7 +87,7 @@ npm run build:electron
 
 ## 打包与发布
 
-`package.json` 是 Launcher 版本号的唯一来源。`npm run dist:mac-arm64` 与 `npm run dist:win-x64` 分别生成本机未签名安装包。稳定版 `v*` tag 必须与 `v${package.json.version}` 完全一致；两个平台全部构建通过并核验清单、校验和后，GitHub Actions 会创建公开的 latest Release，附带两个安装包、合并后的 `checksums.txt` 和按平台命名的清单。手动触发工作流只上传 Actions Artifact，不会发布 Release。
+`package.json` 是 Launcher 版本号的唯一来源。`npm run dist:*` 脚本分别生成 macOS arm64/x64 与 Windows x64/arm64 的本机未签名安装包。稳定版 `v*` tag 必须与 `v${package.json.version}` 完全一致；四个目标全部构建通过并核验清单、校验和后，GitHub Actions 会创建公开的 latest Release，附带四个安装包、合并后的 `checksums.txt` 和按平台命名的清单。手动触发工作流只上传 Actions Artifact，不会发布 Release。
 
 详细交付流程见 [docs/release.md](docs/release.md)，CI 规则见 [docs/ci.md](docs/ci.md)。
 

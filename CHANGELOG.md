@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.11 — 2026-09-05
+
+- Added native release packages for macOS Intel, macOS Apple Silicon, Windows
+  x64, and Windows ARM64.
+- Launcher update discovery now selects the exact installer for all four
+  supported platform and architecture combinations.
+
 ## 0.1.10 — 2026-09-04
 
 - Keep the Windows packaged smoke window on-screen so resize-triggered frame

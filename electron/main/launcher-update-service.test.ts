@@ -117,15 +117,33 @@ describe('Launcher update version and package matrix', () => {
     expect(expectedLauncherInstallerAssetName('darwin', 'arm64', '1.2.3')).toBe(
       'dshker-launcher-1.2.3-mac-arm64.dmg'
     )
+    expect(expectedLauncherInstallerAssetName('darwin', 'x64', '1.2.3')).toBe(
+      'dshker-launcher-1.2.3-mac-x64.dmg'
+    )
     expect(expectedLauncherInstallerAssetName('win32', 'x64', '1.2.3')).toBe(
       'dshker-launcher-1.2.3-win-x64.exe'
     )
+    expect(expectedLauncherInstallerAssetName('win32', 'arm64', '1.2.3')).toBe(
+      'dshker-launcher-1.2.3-win-arm64.exe'
+    )
+  })
+
+  it.each([
+    ['darwin', 'x64', 'dshker-launcher-0.2.0-mac-x64.dmg'],
+    ['win32', 'arm64', 'dshker-launcher-0.2.0-win-arm64.exe']
+  ] as const)('accepts the %s %s update asset', (platform, arch, assetName) => {
+    const { updateService } = service({
+      platform,
+      arch,
+      payload: releasePayload('0.2.0', [assetName])
+    })
+    return expect(updateService.check()).resolves.toMatchObject({
+      kind: 'update-available',
+      assetName
+    })
   })
 
   it('rejects every platform and architecture outside the package matrix', () => {
-    expect(() => expectedLauncherInstallerAssetName('darwin', 'x64', '1.2.3')).toThrowError(
-      expect.objectContaining({ code: 'launcher.update_platform_unsupported' })
-    )
     expect(() => expectedLauncherInstallerAssetName('linux', 'x64', '1.2.3')).toThrowError(
       expect.objectContaining({ code: 'launcher.update_platform_unsupported' })
     )

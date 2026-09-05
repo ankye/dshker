@@ -1,6 +1,6 @@
 {
   "name": "@ankye/dshker-launcher",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Managed desktop shell for DeepSeek Harness.",
   "author": "ankye",
   "private": true,
@@ -42,7 +42,9 @@
     "package": "npm run bundled-source:verify && electron-vite build && electron-builder --dir --publish never && npm run release:metadata -- --mode package",
     "dist": "npm run bundled-source:verify && electron-vite build && electron-builder --publish never && npm run release:metadata -- --mode dist",
     "dist:mac-arm64": "npm run bundled-source:verify && electron-vite build && electron-builder --mac --arm64 --publish never && npm run release:metadata -- --mode dist-mac-arm64",
+    "dist:mac-x64": "npm run bundled-source:verify && electron-vite build && electron-builder --mac --x64 --publish never && npm run release:metadata -- --mode dist-mac-x64",
     "dist:win-x64": "npm run bundled-source:verify && electron-vite build && electron-builder --win --x64 --publish never && npm run release:metadata -- --mode dist-win-x64",
+    "dist:win-arm64": "npm run bundled-source:verify && electron-vite build && electron-builder --win --arm64 --publish never && npm run release:metadata -- --mode dist-win-arm64",
     "performance:check": "node tools/performance-check.mjs --mode release-dry-run --json",
     "release:metadata": "node tools/release-artifacts.mjs --release-dir release",
     "release:verify": "node tools/release-artifacts.mjs --release-dir release --verify",

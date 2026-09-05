@@ -85,10 +85,28 @@ jobs:
               release/*.dmg
               release/release-manifest.json
               release/checksums.txt
+          - name: macOS x64
+            os: macos-13
+            script: dist:mac-x64
+            artifact: dshker-launcher-macos-x64
+            launchTimeoutMs: 20000
+            pattern: |
+              release/*.dmg
+              release/release-manifest.json
+              release/checksums.txt
           - name: Windows x64
             os: windows-latest
             script: dist:win-x64
             artifact: dshker-launcher-windows-x64
+            launchTimeoutMs: 60000
+            pattern: |
+              release/*.exe
+              release/release-manifest.json
+              release/checksums.txt
+          - name: Windows arm64
+            os: windows-latest
+            script: dist:win-arm64
+            artifact: dshker-launcher-windows-arm64
             launchTimeoutMs: 60000
             pattern: |
               release/*.exe
@@ -179,11 +197,23 @@ jobs:
           name: dshker-launcher-macos-arm64
           path: release-input/macos-arm64
 
+      - name: Download exact macOS Intel artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshker-launcher-macos-x64
+          path: release-input/macos-x64
+
       - name: Download exact Windows artifact
         uses: actions/download-artifact@v4
         with:
           name: dshker-launcher-windows-x64
           path: release-input/windows-x64
+
+      - name: Download exact Windows arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshker-launcher-windows-arm64
+          path: release-input/windows-arm64
 
       - name: Validate and assemble release assets
         shell: bash
@@ -314,11 +344,29 @@ jobs:
           )
           checksumRows.push(
             await collectPlatform({
+              root: 'release-input/macos-x64',
+              target: 'mac-x64.dmg',
+              platform: 'darwin',
+              architecture: 'x64',
+              outputManifest: 'release-manifest-macos-x64.json'
+            })
+          )
+          checksumRows.push(
+            await collectPlatform({
               root: 'release-input/windows-x64',
               target: 'win-x64.exe',
               platform: 'win32',
               architecture: 'x64',
               outputManifest: 'release-manifest-windows-x64.json'
+            })
+          )
+          checksumRows.push(
+            await collectPlatform({
+              root: 'release-input/windows-arm64',
+              target: 'win-arm64.exe',
+              platform: 'win32',
+              architecture: 'arm64',
+              outputManifest: 'release-manifest-windows-arm64.json'
             })
           )
           await writeFile('publish/checksums.txt', `${checksumRows.join('\n')}\n`, 'utf8')
@@ -357,7 +405,9 @@ jobs:
             publish/*.exe \
             publish/checksums.txt \
             publish/release-manifest-macos-arm64.json \
+            publish/release-manifest-macos-x64.json \
             publish/release-manifest-windows-x64.json \
+            publish/release-manifest-windows-arm64.json \
             --verify-tag \
             --generate-notes \
             --notes 'These macOS and Windows installers are currently unsigned. Download the exact package for your platform, verify it with `checksums.txt`, and run the installer manually. macOS may require **Open** from Finder context menu; Windows may show SmartScreen. DSHKer Launcher can notify you about this release, but it does not install or replace the application silently.' \

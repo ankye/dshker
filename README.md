@@ -24,7 +24,9 @@ The Launcher never replaces, moves, or resets native DSH state. Your existing `$
 1. Open the [latest GitHub Release](https://github.com/ankye/dshker/releases/latest).
 2. Download the installer for your platform:
    - **macOS Apple Silicon**: the `mac-arm64.dmg` asset
+   - **macOS Intel**: the `mac-x64.dmg` asset
    - **Windows x64**: the `win-x64.exe` asset
+   - **Windows ARM64**: the `win-arm64.exe` asset
 3. Verify the installer against the release's `checksums.txt`, install it manually, and start **DSHKer Launcher**.
 
 Current release installers are unsigned. macOS may require **Open** from Finder's context menu, and Windows may show SmartScreen. Install only an asset obtained from this repository and verified against its checksum. The application does not silently replace itself.
@@ -35,7 +37,7 @@ If the repository has no published Release yet, the latest-release link has no u
 
 Open **Settings → Launcher settings → Updates** to check the fixed DSHKer GitHub Release feed. The Launcher also performs this check in the background after startup without blocking the window. It shows a startup notice only when GitHub reports a higher stable semantic version; a network or feed failure remains available in Settings for an explicit retry instead of interrupting startup.
 
-When an update is available, **Download** opens the exact macOS arm64 or Windows x64 installer asset in the system browser. Missing, duplicate, or unsupported platform assets are reported as errors; the Launcher does not choose another package. Installation remains a user-controlled manual step because the current macOS and Windows packages are unsigned.
+When an update is available, **Download** opens the exact installer asset for the current macOS or Windows architecture in the system browser. Missing, duplicate, or unsupported platform assets are reported as errors; the Launcher does not choose another package. Installation remains a user-controlled manual step because the current macOS and Windows packages are unsigned.
 
 ## First launch
 
@@ -85,7 +87,7 @@ npm run build:electron
 
 ## Build and release
 
-`package.json` is the only Launcher version source. `npm run dist:mac-arm64` and `npm run dist:win-x64` create local unsigned installers. A stable `v*` tag must equal `v${package.json.version}` exactly. After both platform builds pass, GitHub Actions verifies their manifests and checksums, then creates the public latest GitHub Release with both installers, a combined `checksums.txt`, and platform-named manifests. A manual workflow dispatch uploads Actions artifacts but never publishes a Release.
+`package.json` is the only Launcher version source. The `npm run dist:*` scripts create local unsigned installers for macOS arm64/x64 and Windows x64/arm64. A stable `v*` tag must equal `v${package.json.version}` exactly. After all four builds pass, GitHub Actions verifies their manifests and checksums, then creates the public latest GitHub Release with all four installers, a combined `checksums.txt`, and platform-named manifests. A manual workflow dispatch uploads Actions artifacts but never publishes a Release.
 
 See [docs/release.md](docs/release.md) for the release handoff and [docs/ci.md](docs/ci.md) for CI gates.
 

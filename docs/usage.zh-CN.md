@@ -2,7 +2,7 @@
 
 ## 开始前
 
-请从仓库的[最新 GitHub Release](https://github.com/ankye/dshker/releases/latest)下载 macOS arm64 或 Windows x64 安装包。当前安装包尚未签名；请先使用 `checksums.txt` 核对文件，再手动运行安装程序，并按自己的常规方式备份 DSH 原生数据。GitHub Actions Artifact 是短期构建证据，不是 Launcher 更新源。
+请从仓库的[最新 GitHub Release](https://github.com/ankye/dshker/releases/latest)下载与设备架构匹配的安装包：macOS arm64/x64 或 Windows x64/arm64。当前安装包尚未签名；请先使用 `checksums.txt` 核对文件，再手动运行安装程序，并按自己的常规方式备份 DSH 原生数据。GitHub Actions Artifact 是短期构建证据，不是 Launcher 更新源。
 
 DSHKer Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.dshlauncher`，也不要通过删除它来切换版本。
 
@@ -35,7 +35,7 @@ DSHKer Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.d
 1. 打开**设置 → Launcher 设置 → 版本更新**。
 2. 点击**重新检查**。页面会从检查中进入已是最新、新版本可用或明确的失败状态。
 3. 发现新版本后，确认展示的稳定版本号和安装包名称，再点击**下载**。
-4. 系统浏览器会打开严格匹配 macOS arm64 或 Windows x64 的 GitHub Release 资产。请在 Release 页面核对 `checksums.txt`，然后手动运行安装程序。
+4. 系统浏览器会打开严格匹配当前 macOS 或 Windows 架构的 GitHub Release 资产。请在 Release 页面核对 `checksums.txt`，然后手动运行安装程序。
 
 Launcher 启动后也会对同一个固定仓库做后台检查，不延迟主窗口；只有存在更高的稳定语义版本时才显示启动提示。启动检查失败不会弹出警告打扰，设置页会保留失败状态供用户重试。如果 GitHub 尚无公开的 latest Release，或目标平台安装包缺失、重复，检查会明确失败，不会改用 Actions Artifact 或其他平台安装包。
 

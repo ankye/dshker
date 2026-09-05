@@ -98,21 +98,23 @@ type checks, tests, smoke checks, and both renderer and Electron builds.
 
 `.github/workflows/package.yml` runs for a push to `main`, a `v*` tag, or a
 manual dispatch. It first repeats the release-input quality gates, then builds
-an arm64 macOS DMG and an x64 Windows NSIS installer independently. Every run
-verifies its release metadata and runs the packaged application smoke on its
+macOS arm64/x64 DMGs and Windows x64/arm64 NSIS installers independently. Every
+run verifies its release metadata and runs the packaged application smoke on its
 native runner. It then uploads each installer with `release-manifest.json` and
 `checksums.txt` as a 14-day GitHub Actions artifact.
 The packaged smoke launch budget is explicit per native runner: 20 seconds on
-macOS arm64 and 60 seconds on Windows x64. Timeout and child-process error
-details are retained in the diagnostic artifact.
+macOS and 60 seconds on Windows. Timeout and child-process error details are
+retained in the diagnostic artifact.
 
-Only a tag run publishes. Before either package job starts, the workflow
-requires a stable tag equal to `v${package.json.version}`. After both platform
-jobs succeed, a minimal `contents: write` job downloads the two named artifacts,
-requires one DMG and one EXE, checks each installer against its platform manifest
-and checksum, writes one installer-only `checksums.txt`, and preserves the two
-manifests as `release-manifest-macos-arm64.json` and
-`release-manifest-windows-x64.json`. It refuses to continue if the tag already
+Only a tag run publishes. Before any package job starts, the workflow requires
+a stable tag equal to `v${package.json.version}`. After all four platform jobs
+succeed, a minimal `contents: write` job downloads the four named artifacts,
+requires one DMG and one EXE for each architecture, checks each installer
+against its platform manifest and checksum, writes one installer-only
+`checksums.txt`, and preserves the four manifests as
+`release-manifest-macos-arm64.json`, `release-manifest-macos-x64.json`,
+`release-manifest-windows-x64.json`, and `release-manifest-windows-arm64.json`.
+It refuses to continue if the tag already
 has a GitHub Release, and `gh release create --verify-tag --generate-notes`
 creates a public latest Release without clobbering an existing one. Pushes to
 `main` and manual dispatches never execute the publishing job.
