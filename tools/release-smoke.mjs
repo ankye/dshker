@@ -63,7 +63,9 @@ function assertInside(parent, child, label) {
 
 function executableCandidates(releaseDir, manifest) {
   if (process.platform === 'win32') {
-    return [path.join(releaseDir, 'win-unpacked', `${manifest.productName}.exe`)]
+    return ['win-unpacked', 'win-arm64-unpacked', 'win-x64-unpacked'].map((directory) =>
+      path.join(releaseDir, directory, `${manifest.productName}.exe`)
+    )
   }
 
   if (process.platform === 'darwin') {

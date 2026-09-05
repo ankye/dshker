@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.18 — 2026-09-05
+
+- Recognize electron-builder's `win-arm64-unpacked` output during metadata
+  generation and packaged smoke discovery.
+
 ## 0.1.17 — 2026-09-05
 
 - Disable the invalid Windows `NUL` global Git config path used by ARM Git.

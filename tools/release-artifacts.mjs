@@ -41,7 +41,9 @@ const UNPACKED_ARTIFACT_DIRECTORIES = new Set([
   'mac-arm64',
   'mac-universal',
   'mac-x64',
-  'win-unpacked'
+  'win-unpacked',
+  'win-arm64-unpacked',
+  'win-x64-unpacked'
 ])
 const SEMVER_PATTERN =
   /^\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/
