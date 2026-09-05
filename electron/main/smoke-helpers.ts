@@ -214,7 +214,15 @@ export async function smokeHeightAdaptation(
   // size falls below the runner's available work area.
   const [initialWidth, initialHeight] = window.getContentSize()
 
-  for (const height of [820, 560, 420]) {
+  // Never request a content height larger than the runner can currently
+  // display. On Intel macOS CI the work area can be shorter than 820px;
+  // asking Cocoa to grow beyond it destroys the smoke window instead of
+  // exercising the renderer layout.
+  const heights = [
+    ...new Set([initialHeight, 560, 420].map((height) => Math.min(height, initialHeight)))
+  ]
+
+  for (const height of heights) {
     if (window.isDestroyed()) throw new Error(`Smoke window was destroyed before height ${height}.`)
     window.setContentSize(initialWidth, height)
     await delay(220)

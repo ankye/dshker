@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.15 — 2026-09-05
+
+- Keep Intel Mac height probes within the native display work area so Cocoa
+  does not destroy the smoke window when the runner is shorter than 820px.
+- Preserve the original Windows ARM seed error when cleanup is temporarily
+  locked, and retain seed logs when preparation fails before packaging.
+
 ## 0.1.14 — 2026-09-05
 
 - Resize packaged smoke content through Electron's content-area API so macOS

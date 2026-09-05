@@ -135,9 +135,26 @@ jobs:
           "DSH_BUNDLED_GIT_EXECUTABLE=$git" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Prepare and verify pinned release-input seed
+        shell: pwsh
         run: |
-          npm run seed:prepare:ci
-          npm run seed:verify
+          New-Item -ItemType Directory -Force -Path release | Out-Null
+          $logPath = Join-Path $PWD 'release/ci-build.log'
+          npm run seed:prepare:ci *>&1 | Tee-Object -FilePath $logPath
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            $tail = (Get-Content -LiteralPath $logPath -Tail 80) -join "`n"
+            $escapedTail = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Bundled seed preparation::$escapedTail"
+            exit $exitCode
+          }
+          npm run seed:verify *>&1 | Tee-Object -FilePath $logPath -Append
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -ne 0) {
+            $tail = (Get-Content -LiteralPath $logPath -Tail 80) -join "`n"
+            $escapedTail = $tail.Replace('%', '%25').Replace("`r", '%0D').Replace("`n", '%0A')
+            Write-Output "::error title=Bundled seed verification::$escapedTail"
+            exit $exitCode
+          }
 
       - name: Build unsigned installer
         shell: pwsh
@@ -168,7 +185,7 @@ jobs:
             release/ci-build.log
             release/release-smoke.log
             release/release-smoke-launch.trace
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
 
       - name: Upload installer and checksums

@@ -138,7 +138,14 @@ export async function prepareBundledSeed({
     const verified = await verifyBundledSeedDirectory(outputDirectory)
     return Object.freeze({ directory: outputDirectory, manifest: verified.manifest })
   } catch (error) {
-    await removeSeedOutputDirectory(outputDirectory)
+    try {
+      await removeSeedOutputDirectory(outputDirectory)
+    } catch (cleanupError) {
+      // A Windows runner may briefly hold a generated bundle while the
+      // original Git/build error is being handled. Preserve the original
+      // release-blocking error so cleanup cannot mask its cause.
+      if (process.platform !== 'win32') throw cleanupError
+    }
     throw error
   }
 }
@@ -443,7 +450,7 @@ async function resetSeedOutputDirectory(directory) {
         'Bundled seed output must be a direct directory when it already exists.'
       )
     }
-    await rm(directory, { recursive: true, force: false })
+    await rm(directory, { recursive: true, force: false, maxRetries: 30, retryDelay: 500 })
   } catch (error) {
     if (!isNodeCode(error, 'ENOENT')) throw error
   }
@@ -460,7 +467,7 @@ async function removeSeedOutputDirectory(directory) {
         'Partially generated bundled seed output is not a direct directory.'
       )
     }
-    await rm(directory, { recursive: true, force: false })
+    await rm(directory, { recursive: true, force: false, maxRetries: 30, retryDelay: 500 })
   } catch (error) {
     if (isNodeCode(error, 'ENOENT')) return
     if (error instanceof BundledSeedError) throw error
