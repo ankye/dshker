@@ -49,11 +49,13 @@ the original seed failure if generated-output cleanup is locked; the CI seed
 step also creates its diagnostics directory before preparation so a failed
 seed leaves an actionable log. `0.1.16` moves height adaptation to Chromium
 viewport metrics, avoiding native frame mutation entirely, and includes the
-failing Git operation and stderr in the seed error output.
+failing Git operation and stderr in the seed error output. `0.1.17` removes
+the invalid Windows `NUL` global-config path; ARM Git now runs with the global
+config explicitly disabled.
 
 ## Verification target
 
-The `0.1.16` tag must produce successful macOS arm64/x64 and Windows x64/arm64
+The `0.1.17` tag must produce successful macOS arm64/x64 and Windows x64/arm64
 packaged smoke evidence, followed by one public latest GitHub Release. A failed
 smoke still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.

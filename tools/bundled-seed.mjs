@@ -610,7 +610,9 @@ async function runGit(executable, cwd, arguments_) {
     delete environment.GIT_CONFIG_KEY_0
     delete environment.GIT_CONFIG_VALUE_0
     environment.GIT_CONFIG_NOSYSTEM = '1'
-    environment.GIT_CONFIG_GLOBAL = process.platform === 'win32' ? 'NUL' : '/dev/null'
+    // An empty global-config path disables user config without asking Git for
+    // the Windows `NUL` device, which ARM Git builds reject as a file path.
+    environment.GIT_CONFIG_GLOBAL = ''
     environment.GIT_CONFIG_COUNT = '0'
     environment.GIT_TERMINAL_PROMPT = '0'
     environment.GIT_OPTIONAL_LOCKS = '0'

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.17 — 2026-09-05
+
+- Disable the invalid Windows `NUL` global Git config path used by ARM Git.
+- Exercise short-height shell constraints without mutating the native window.
+
 ## 0.1.16 — 2026-09-05
 
 - Probe responsive heights through Chromium viewport metrics so Intel Mac CI

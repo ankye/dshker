@@ -209,35 +209,45 @@ export async function smokeHeightAdaptation(
   routeIds: readonly string[]
 ): Promise<HeightAdaptationEvidence> {
   const cases: HeightAdaptationEvidence['cases'] = []
-  // Emulate the renderer viewport instead of resizing the native frame. On
-  // Intel macOS CI any BrowserWindow resize can invalidate the Cocoa window;
-  // DevTools metrics exercise the same responsive layout without that native
-  // lifecycle hazard.
-  const [initialWidth, initialHeight] = window.getContentSize()
+  // Constrain the real shell instead of resizing the native frame. On Intel
+  // macOS CI native frame mutation can invalidate the BrowserWindow; this
+  // exercises overflow and chrome layout without that lifecycle hazard.
+  const [, initialHeight] = window.getContentSize()
   const heights = [
     ...new Set([initialHeight, 560, 420].map((height) => Math.min(height, initialHeight)))
   ]
-  const debuggerSession = window.webContents.debugger
-  const debuggerWasAttached = debuggerSession.isAttached()
-  if (!debuggerWasAttached) debuggerSession.attach('1.3')
 
-  try {
-    for (const height of heights) {
-      if (window.isDestroyed())
-        throw new Error(`Smoke window was destroyed before height ${height}.`)
-      await debuggerSession.sendCommand('Emulation.setDeviceMetricsOverride', {
-        width: initialWidth,
-        height,
-        deviceScaleFactor: 1,
-        mobile: false
-      })
-      await delay(220)
-      for (const route of routeIds) {
-        if (window.isDestroyed()) {
-          throw new Error(`Smoke window was destroyed at height ${height}, route ${route}.`)
-        }
-        const probe = await window.webContents.executeJavaScript(
-          `new Promise((resolve) => {
+  for (const height of heights) {
+    if (window.isDestroyed()) throw new Error(`Smoke window was destroyed before height ${height}.`)
+    await delay(220)
+    for (const route of routeIds) {
+      if (window.isDestroyed()) {
+        throw new Error(`Smoke window was destroyed at height ${height}, route ${route}.`)
+      }
+      const probe = await window.webContents.executeJavaScript(
+        `new Promise((resolve) => {
+          const root = document.documentElement;
+          const body = document.body;
+          const shell = document.querySelector('.app-shell');
+          const previous = {
+            rootHeight: root.style.height,
+            rootMaxHeight: root.style.maxHeight,
+            bodyHeight: body ? body.style.height : '',
+            bodyMaxHeight: body ? body.style.maxHeight : '',
+            shellHeight: shell ? shell.style.height : '',
+            shellMaxHeight: shell ? shell.style.maxHeight : ''
+          };
+          root.style.height = '${height}px';
+          root.style.maxHeight = '${height}px';
+          if (body) {
+            body.style.height = '${height}px';
+            body.style.maxHeight = '${height}px';
+          }
+          if (shell) {
+            shell.style.height = '${height}px';
+            shell.style.maxHeight = '${height}px';
+          }
+          requestAnimationFrame(() => {
           const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
           if (control) control.click();
           setTimeout(() => {
@@ -250,7 +260,7 @@ export async function smokeHeightAdaptation(
             // asserting that specific element would fail a shell that is correct.
             const first = rows[0];
             const last = rows[rows.length - 1];
-            const viewport = window.innerHeight;
+            const viewport = ${height};
             const top = first && first.getBoundingClientRect();
             const bottom = last && last.getBoundingClientRect();
             let reachable = true;
@@ -259,7 +269,7 @@ export async function smokeHeightAdaptation(
               reachable = stage.scrollTop > 0;
               stage.scrollTop = 0;
             }
-            resolve({
+            const result = {
               chromeVisible: Boolean(
                 top && bottom &&
                 top.top >= -1 && top.bottom <= viewport + 1 &&
@@ -270,22 +280,31 @@ export async function smokeHeightAdaptation(
                 doc.scrollHeight <= doc.clientHeight + 1 &&
                 Boolean(shell) &&
                 shell.getBoundingClientRect().height <= viewport + 1
-            });
+            };
+            root.style.height = previous.rootHeight;
+            root.style.maxHeight = previous.rootMaxHeight;
+            if (body) {
+              body.style.height = previous.bodyHeight;
+              body.style.maxHeight = previous.bodyMaxHeight;
+            }
+            if (shell) {
+              shell.style.height = previous.shellHeight;
+              shell.style.maxHeight = previous.shellMaxHeight;
+            }
+            resolve(result);
           }, 170);
-          })`
-        )
-        cases.push({ height, route, ...probe })
-      }
+          });
+        })`
+      )
+      cases.push({ height, route, ...probe })
     }
-    await debuggerSession.sendCommand('Emulation.clearDeviceMetricsOverride')
-    await delay(200)
-    return {
-      ok: cases.every(
-        (entry) => entry.chromeVisible && entry.contentReachable && entry.documentStatic
-      ),
-      cases
-    }
-  } finally {
-    if (!debuggerWasAttached && debuggerSession.isAttached()) debuggerSession.detach()
+  }
+
+  await delay(200)
+  return {
+    ok: cases.every(
+      (entry) => entry.chromeVisible && entry.contentReachable && entry.documentStatic
+    ),
+    cases
   }
 }
