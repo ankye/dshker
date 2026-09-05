@@ -209,29 +209,35 @@ export async function smokeHeightAdaptation(
   routeIds: readonly string[]
 ): Promise<HeightAdaptationEvidence> {
   const cases: HeightAdaptationEvidence['cases'] = []
-  // Resize the content area rather than the native frame. Cocoa's frame
-  // constraints can destroy an x64 smoke window when a title-bar-inclusive
-  // size falls below the runner's available work area.
+  // Emulate the renderer viewport instead of resizing the native frame. On
+  // Intel macOS CI any BrowserWindow resize can invalidate the Cocoa window;
+  // DevTools metrics exercise the same responsive layout without that native
+  // lifecycle hazard.
   const [initialWidth, initialHeight] = window.getContentSize()
-
-  // Never request a content height larger than the runner can currently
-  // display. On Intel macOS CI the work area can be shorter than 820px;
-  // asking Cocoa to grow beyond it destroys the smoke window instead of
-  // exercising the renderer layout.
   const heights = [
     ...new Set([initialHeight, 560, 420].map((height) => Math.min(height, initialHeight)))
   ]
+  const debuggerSession = window.webContents.debugger
+  const debuggerWasAttached = debuggerSession.isAttached()
+  if (!debuggerWasAttached) debuggerSession.attach('1.3')
 
-  for (const height of heights) {
-    if (window.isDestroyed()) throw new Error(`Smoke window was destroyed before height ${height}.`)
-    window.setContentSize(initialWidth, height)
-    await delay(220)
-    for (const route of routeIds) {
-      if (window.isDestroyed()) {
-        throw new Error(`Smoke window was destroyed at height ${height}, route ${route}.`)
-      }
-      const probe = await window.webContents.executeJavaScript(
-        `new Promise((resolve) => {
+  try {
+    for (const height of heights) {
+      if (window.isDestroyed())
+        throw new Error(`Smoke window was destroyed before height ${height}.`)
+      await debuggerSession.sendCommand('Emulation.setDeviceMetricsOverride', {
+        width: initialWidth,
+        height,
+        deviceScaleFactor: 1,
+        mobile: false
+      })
+      await delay(220)
+      for (const route of routeIds) {
+        if (window.isDestroyed()) {
+          throw new Error(`Smoke window was destroyed at height ${height}, route ${route}.`)
+        }
+        const probe = await window.webContents.executeJavaScript(
+          `new Promise((resolve) => {
           const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
           if (control) control.click();
           setTimeout(() => {
@@ -266,19 +272,20 @@ export async function smokeHeightAdaptation(
                 shell.getBoundingClientRect().height <= viewport + 1
             });
           }, 170);
-        })`
-      )
-      cases.push({ height, route, ...probe })
+          })`
+        )
+        cases.push({ height, route, ...probe })
+      }
     }
-  }
-
-  if (window.isDestroyed()) throw new Error('Smoke window was destroyed before size restore.')
-  window.setContentSize(initialWidth, initialHeight)
-  await delay(200)
-  return {
-    ok: cases.every(
-      (entry) => entry.chromeVisible && entry.contentReachable && entry.documentStatic
-    ),
-    cases
+    await debuggerSession.sendCommand('Emulation.clearDeviceMetricsOverride')
+    await delay(200)
+    return {
+      ok: cases.every(
+        (entry) => entry.chromeVisible && entry.contentReachable && entry.documentStatic
+      ),
+      cases
+    }
+  } finally {
+    if (!debuggerWasAttached && debuggerSession.isAttached()) debuggerSession.detach()
   }
 }

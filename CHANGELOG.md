@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.16 — 2026-09-05
+
+- Probe responsive heights through Chromium viewport metrics so Intel Mac CI
+  does not invalidate the native BrowserWindow during smoke.
+- Include the failing Git operation and stderr in Windows ARM seed diagnostics.
+
 ## 0.1.15 — 2026-09-05
 
 - Keep Intel Mac height probes within the native display work area so Cocoa

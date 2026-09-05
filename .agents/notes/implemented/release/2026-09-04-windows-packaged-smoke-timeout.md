@@ -47,11 +47,13 @@ preserving the original seed operation result. The follow-up `0.1.15` caps
 each Intel Mac height probe at the actual initial content height and preserves
 the original seed failure if generated-output cleanup is locked; the CI seed
 step also creates its diagnostics directory before preparation so a failed
-seed leaves an actionable log.
+seed leaves an actionable log. `0.1.16` moves height adaptation to Chromium
+viewport metrics, avoiding native frame mutation entirely, and includes the
+failing Git operation and stderr in the seed error output.
 
 ## Verification target
 
-The `0.1.15` tag must produce successful macOS arm64/x64 and Windows x64/arm64
+The `0.1.16` tag must produce successful macOS arm64/x64 and Windows x64/arm64
 packaged smoke evidence, followed by one public latest GitHub Release. A failed
 smoke still blocks publication and leaves its diagnostics as a traceable Actions
 artifact.

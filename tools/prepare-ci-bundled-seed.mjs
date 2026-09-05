@@ -87,8 +87,12 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(
-    `prepare-ci-bundled-seed: ${error instanceof Error ? error.message : String(error)}`
-  )
+  const message = error instanceof Error ? error.message : String(error)
+  const details =
+    error && typeof error === 'object' && 'details' in error ? error.details : undefined
+  console.error(`prepare-ci-bundled-seed: ${message}`)
+  if (details && typeof details === 'object') {
+    console.error(`prepare-ci-bundled-seed details: ${JSON.stringify(details)}`)
+  }
   process.exitCode = 1
 })
