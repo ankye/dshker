@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
 import { useLauncherUpdates } from '../domains/launcher-updates'
+import { useRemoteConnections } from '../domains/remote-connections'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
 import ConsoleDrawer from './components/ConsoleDrawer.vue'
 import ControllerPanel from './components/ControllerPanel.vue'
@@ -11,6 +12,7 @@ import LaunchPanel from './components/LaunchPanel.vue'
 import LaunchPrimaryAction from './components/LaunchPrimaryAction.vue'
 import LauncherUpdateNotice from './components/LauncherUpdateNotice.vue'
 import RouteStage from './components/RouteStage.vue'
+import RemoteConnectionsPanel from './components/RemoteConnectionsPanel.vue'
 import RuntimeTabsPanel from './components/RuntimeTabsPanel.vue'
 import SettingsPanel from './components/SettingsPanel.vue'
 import ShellSidebar, { type NavigationItem } from './components/ShellSidebar.vue'
@@ -38,6 +40,7 @@ const shell = useLauncherShell()
 const harness = useLauncherHarness()
 const pluginCatalog = usePluginCatalog()
 const launcherUpdates = useLauncherUpdates()
+useRemoteConnections()
 const updateNotice = launcherUpdates.notice
 const updateDownloadOpening = launcherUpdates.openingDownload
 const updateError = launcherUpdates.error
@@ -253,6 +256,16 @@ function openConsoleRoute(): void {
           :status-kind="statusKind"
         >
           <UsagePanel />
+        </RouteStage>
+
+        <RouteStage
+          v-else-if="shell.activeRoute.value === 'remote'"
+          :title="shell.t('remote.title')"
+          :description="shell.t('remote.description')"
+          :status="shell.bootstrapStatus.value"
+          :status-kind="statusKind"
+        >
+          <RemoteConnectionsPanel />
         </RouteStage>
 
         <RouteStage

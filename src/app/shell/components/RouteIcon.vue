@@ -51,5 +51,11 @@ defineProps<{
       <circle cx="12" cy="14" r="3.5" />
       <path d="M8.5 14h7M12 10.5c1 1.1 1 5.9 0 7" />
     </template>
+
+    <template v-else-if="icon === 'network'">
+      <rect x="3" y="4" width="7" height="6" rx="1.5" />
+      <rect x="14" y="14" width="7" height="6" rx="1.5" />
+      <path d="M10 7h3a4 4 0 0 1 4 4v3M7 10v3a4 4 0 0 0 4 4h3" />
+    </template>
   </svg>
 </template>

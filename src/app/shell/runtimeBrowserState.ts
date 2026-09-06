@@ -1,30 +1,62 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
+import { remoteConnectionsState } from '@/app/domains/remote-connections'
+import type { RemoteConnectionStatus } from '@/shared/contracts'
 
-/** One run-view browser tab. */
+export type RuntimeTabId = 'local' | `remote:${string}`
+
+/** One fixed local or registered-computer browser workspace. */
 export interface RuntimeTab {
-  readonly id: number
-  /** Address to load; updated as the guest navigates. */
-  url: string
-  /** Page title reported by the guest, falling back to its address. */
+  readonly id: RuntimeTabId
+  readonly source: 'local' | 'remote'
+  readonly connectionId?: string
+  url: string | undefined
   title: string
+  readonly status: RemoteConnectionStatus | undefined
 }
 
-// Module-level state: switching to another route unmounts the run panel, and the
-// open tabs plus their addresses must survive that so returning restores them.
-const tabs = reactive<RuntimeTab[]>([])
-const activeTabId = ref<number>()
-let nextTabId = 1
+const navigation = reactive<Record<string, { url: string; title: string } | undefined>>({})
+const remoteSourceUrls = new Map<string, string>()
+const activeTabId = ref<RuntimeTabId>('local')
 
-/** The address the started DSH process announced, including its credential. */
+/** Exact address announced by the locally supervised DSH child. */
 const runtimeUrl = computed(() => {
   const launch = harnessState.value?.launch
   return launch?.kind === 'running' ? launch.url : undefined
 })
 
-const activeTab = computed(() => tabs.find((tab) => tab.id === activeTabId.value))
+const tabs = computed<readonly RuntimeTab[]>(() => {
+  const localNavigation = navigation.local
+  const local: RuntimeTab = {
+    id: 'local',
+    source: 'local',
+    url: runtimeUrl.value === undefined ? undefined : (localNavigation?.url ?? runtimeUrl.value),
+    title: localNavigation?.title ?? '',
+    status: undefined
+  }
+  return [
+    local,
+    ...remoteConnectionsState.value.connections.map((connection): RuntimeTab => {
+      const id = `remote:${connection.connectionId}` as const
+      const current = navigation[id]
+      const readyUrl = connection.status.kind === 'ready' ? connection.status.url : undefined
+      return {
+        id,
+        source: 'remote',
+        connectionId: connection.connectionId,
+        url: readyUrl === undefined ? undefined : (current?.url ?? readyUrl),
+        title: current?.title ?? connection.displayName,
+        status: connection.status
+      }
+    })
+  ]
+})
 
-/** Admits only a loopback http(s) address; the main process checks this again. */
+const activeTab = computed(
+  () => tabs.value.find((tab) => tab.id === activeTabId.value) ?? tabs.value[0]
+)
+
+/** Admits only a loopback http(s) address; the main process constrains remote mappings too. */
 export function isLoopbackAddress(candidate: string): boolean {
   let url: URL
   try {
@@ -36,59 +68,55 @@ export function isLoopbackAddress(candidate: string): boolean {
   return url.hostname === '127.0.0.1' || url.hostname === 'localhost' || url.hostname === '[::1]'
 }
 
-/** Opens a tab at the announced runtime address and focuses it. */
-function openTab(url?: string): void {
-  const target = url ?? runtimeUrl.value
-  if (target === undefined) return
-  const id = nextTabId
-  nextTabId += 1
-  tabs.push({ id, url: target, title: target })
-  activeTabId.value = id
+/** Records navigation for one fixed workspace while its authoritative source stays ready. */
+function updateTab(id: RuntimeTabId, changes: Partial<Pick<RuntimeTab, 'url' | 'title'>>): void {
+  if (!tabs.value.some((tab) => tab.id === id)) return
+  const current = navigation[id] ?? { url: '', title: '' }
+  navigation[id] = {
+    url: changes.url ?? current.url,
+    title: changes.title ?? current.title
+  }
 }
 
-/** Closes one tab, focusing a neighbour so the view never goes blank. */
-function closeTab(id: number): void {
-  const index = tabs.findIndex((tab) => tab.id === id)
-  if (index < 0) return
-  tabs.splice(index, 1)
-  if (activeTabId.value !== id) return
-  activeTabId.value = tabs[Math.min(index, tabs.length - 1)]?.id
-}
-
-/** Records what the guest actually navigated to, keeping the strip truthful. */
-function updateTab(id: number, changes: Partial<Pick<RuntimeTab, 'url' | 'title'>>): void {
-  const tab = tabs.find((entry) => entry.id === id)
-  if (tab === undefined) return
-  if (changes.url !== undefined) tab.url = changes.url
-  if (changes.title !== undefined) tab.title = changes.title
-}
-
-/** Drops every tab; used when the runtime it pointed at is gone. */
-function resetTabs(): void {
-  tabs.splice(0, tabs.length)
-  activeTabId.value = undefined
-}
-
-// The Run view is where the launched DSH Web gets browsed, so a fresh launch
-// opens its first page automatically; the tab survives route changes because
-// this state is module-level. Closing every tab does not reopen anything —
-// only an actual stop/start transition does.
-watch(runtimeUrl, (url) => {
+watch(runtimeUrl, (url, previous) => {
   if (url === undefined) {
-    resetTabs()
+    delete navigation.local
     return
   }
-  if (tabs.length === 0) openTab(url)
+  if (url !== previous) navigation.local = { url, title: '' }
 })
 
-/** Shared run-view browser state, preserved across route changes. */
+watch(
+  () => remoteConnectionsState.value.connections,
+  (connections) => {
+    const retained = new Set<string>(['local'])
+    for (const connection of connections) {
+      const id = `remote:${connection.connectionId}`
+      retained.add(id)
+      if (connection.status.kind !== 'ready') {
+        delete navigation[id]
+        remoteSourceUrls.delete(id)
+      } else if (remoteSourceUrls.get(id) !== connection.status.url) {
+        remoteSourceUrls.set(id, connection.status.url)
+        navigation[id] = { url: connection.status.url, title: connection.displayName }
+      }
+    }
+    for (const id of Object.keys(navigation)) {
+      if (!retained.has(id)) {
+        delete navigation[id]
+        remoteSourceUrls.delete(id)
+      }
+    }
+    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) activeTabId.value = 'local'
+  },
+  { deep: true }
+)
+
+/** Shared fixed-workspace Run state, preserved across route changes. */
 export const runtimeBrowser = {
   tabs,
   activeTabId,
   activeTab,
   runtimeUrl,
-  openTab,
-  closeTab,
-  updateTab,
-  resetTabs
+  updateTab
 }

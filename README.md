@@ -4,10 +4,11 @@
 
 ## Core features
 
+- **Managed remote DSHKer connections** — register trusted computers, test the complete SSH tunnel and DSH session path, then open each connected computer in its fixed Run tab without copying a Web credential manually.
 - **One-click DSH Web** — prepare the bundled Harness seed, select a core commit, and start the standard DSH Web command.
 - **Version control** — refresh remote history, inspect commits, and explicitly switch the managed DSH core.
 - **Extension management** — see installed extensions and browse the curated Awesome DSH Plugin catalog.
-- **Console and runtime tabs** — follow exact process output, stop the managed process, and open the URL it actually announces.
+- **Console and fixed runtime tabs** — follow exact process output, stop the managed process, and keep one Local tab plus one durable tab for every registered computer.
 - **Token usage** — read session and daily model totals from native DSH logs without writing native DSH data.
 - **Safe ownership boundaries** — keep Harness, plugins, presets, settings, and native `~/.dsh` data in their declared roots without silently replacing them.
 
@@ -59,7 +60,8 @@ Then use the sidebar in this order when needed:
 3. **Version management** — refresh, switch, and inspect core and extensions.
 4. **Token usage** — inspect session and daily model totals from native DSH logs.
 5. **Settings** — manage DSH and Launcher settings, including update checks.
-6. **Run** — open the URL announced by the process in separate tabs.
+6. **Remote connections** — register, test, connect, and monitor trusted DSHKer computers through loopback SSH tunnels.
+7. **Run** — use the fixed Local and remote computer tabs for connected DSH Web sessions.
 
 For step-by-step details, troubleshooting, and the directory ownership model, read the [English usage guide](docs/usage.en.md) or [Chinese usage guide](docs/usage.zh-CN.md).
 

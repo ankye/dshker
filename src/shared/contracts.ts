@@ -45,6 +45,14 @@ export const DESKTOP_IPC_CHANNELS = {
   /** Main-to-renderer notice after a guest shortcut changes the shared page zoom. */
   runtimeBrowserZoomChanged: 'dsh-launcher:runtime-browser:zoom-changed',
   runtimeBrowserGetHostRenderingInfo: 'dsh-launcher:runtime-browser:get-host-rendering-info',
+  remoteConnectionsGetState: 'dsh-launcher:remote-connections:get-state',
+  remoteConnectionsCreate: 'dsh-launcher:remote-connections:create',
+  remoteConnectionsTest: 'dsh-launcher:remote-connections:test',
+  remoteConnectionsConnect: 'dsh-launcher:remote-connections:connect',
+  remoteConnectionsDisconnect: 'dsh-launcher:remote-connections:disconnect',
+  remoteConnectionsRemove: 'dsh-launcher:remote-connections:remove',
+  /** Main-to-renderer projection after a catalog or tunnel state change. */
+  remoteConnectionsStateChanged: 'dsh-launcher:remote-connections:state-changed',
   launcherUpdatesGetState: 'dsh-launcher:updates:get-state',
   launcherUpdatesCheck: 'dsh-launcher:updates:check',
   launcherUpdatesOpenInstallerDownload: 'dsh-launcher:updates:open-installer-download',
@@ -142,12 +150,30 @@ export type LauncherUpdateErrorCode =
   | 'launcher.update_not_available'
   | 'launcher.update_open_failed'
 
+/** Stable failures from the Launcher-to-Launcher SSH peer capability. */
+export type RemoteConnectionErrorCode =
+  | 'remote.invalid_request'
+  | 'remote.invalid_record'
+  | 'remote.unsupported_version'
+  | 'remote.persistence_failed'
+  | 'remote.connection_not_found'
+  | 'remote.connection_exists'
+  | 'remote.connection_busy'
+  | 'remote.connection_not_disconnected'
+  | 'remote.ssh_unavailable'
+  | 'remote.ssh_authentication_failed'
+  | 'remote.peer_unavailable'
+  | 'remote.peer_authentication_failed'
+  | 'remote.peer_protocol_invalid'
+  | 'remote.tunnel_failed'
+
 /** Every typed error that may cross the first-release Launcher preload surface. */
 export type DesktopApiErrorCode =
   | BootstrapErrorCode
   | ManagedOperationErrorCode
   | ExternalLinkErrorCode
   | LauncherUpdateErrorCode
+  | RemoteConnectionErrorCode
 
 /** A typed cross-process result without ambient exception serialization. */
 export type ApiResult<T, Code extends string = DesktopApiErrorCode> =
@@ -557,6 +583,53 @@ export interface RuntimeBrowserHostRenderingInfo {
   readonly multipleRasterThreads: string
 }
 
+/** Persisted, renderer-safe identity for one explicitly registered SSH computer. */
+export interface RemoteComputerView {
+  readonly connectionId: string
+  readonly displayName: string
+  readonly host: string
+  readonly port: number
+  readonly user: string
+}
+
+/** Transient tunnel state; only the mapped loopback URL may reach the renderer. */
+export type RemoteConnectionStatus =
+  | { readonly kind: 'disconnected' }
+  | { readonly kind: 'connecting' }
+  | { readonly kind: 'ready'; readonly url: string }
+  | { readonly kind: 'failed'; readonly code: RemoteConnectionErrorCode; readonly message: string }
+
+/** Process-local result of the latest full-path connection test. */
+export type RemoteConnectionTestStatus =
+  | { readonly kind: 'untested' }
+  | { readonly kind: 'testing' }
+  | { readonly kind: 'passed' }
+  | { readonly kind: 'failed'; readonly code: RemoteConnectionErrorCode; readonly message: string }
+
+/** One catalog record paired with its current process-local connection state. */
+export interface RemoteConnectionView extends RemoteComputerView {
+  readonly status: RemoteConnectionStatus
+  readonly testStatus: RemoteConnectionTestStatus
+}
+
+/** Complete projection used by Remote Connections and fixed Run tabs. */
+export interface RemoteConnectionsState {
+  readonly connections: readonly RemoteConnectionView[]
+}
+
+/** Exact user-authored computer definition. Every field is required. */
+export interface CreateRemoteConnectionRequest {
+  readonly displayName: string
+  readonly host: string
+  readonly port: number
+  readonly user: string
+}
+
+/** Identifies one already registered computer for a named operation. */
+export interface RemoteConnectionIdentityRequest {
+  readonly connectionId: string
+}
+
 /** Read-only update discovery state owned by the Electron main process. */
 export type LauncherUpdateState =
   | { readonly kind: 'idle'; readonly currentVersion: string }
@@ -668,6 +741,27 @@ export interface DesktopApi {
     getHostRenderingInfo(): Promise<ApiResult<RuntimeBrowserHostRenderingInfo>>
     /** Follows guest-focused Cmd/Ctrl zoom shortcuts handled by Electron main. */
     onZoomChange(listener: (result: ApiResult<RuntimeBrowserPreferences>) => void): () => void
+  }>
+  readonly remoteConnections: Readonly<{
+    getState(): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
+    create(
+      request: CreateRemoteConnectionRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
+    test(
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
+    connect(
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
+    disconnect(
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
+    remove(
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
+    onStateChange(
+      listener: (result: ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>) => void
+    ): () => void
   }>
   readonly launcherUpdates: Readonly<{
     getState(): Promise<ApiResult<LauncherUpdateState>>

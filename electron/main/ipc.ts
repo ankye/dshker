@@ -53,6 +53,8 @@ import { type RuntimeBrowserController } from './runtime-browser-controller'
 import { registerRuntimeBrowserIpc } from './runtime-browser-ipc'
 import { registerLauncherUpdateIpc } from './launcher-update-ipc'
 import { type LauncherUpdateService } from './launcher-update-service'
+import { registerRemoteConnectionIpc } from './remote-ipc'
+import { type RemoteConnectionService } from './remote/service'
 
 /** Dependencies for the restricted Electron IPC registration. */
 export interface LauncherIpcOptions {
@@ -63,12 +65,14 @@ export interface LauncherIpcOptions {
   readonly pluginCatalog: AwesomePluginCatalog
   readonly runtimeBrowserController: RuntimeBrowserController
   readonly launcherUpdateService: LauncherUpdateService
+  readonly remoteConnectionService: RemoteConnectionService
 }
 
 /** Registers only named, sender-validated, runtime-validated Launcher IPC methods. */
 export function registerIpc(options: LauncherIpcOptions): void {
   registerRuntimeBrowserIpc(options.runtimeBrowserController)
   registerLauncherUpdateIpc(options.launcherUpdateService)
+  registerRemoteConnectionIpc(options.remoteConnectionService)
   // The console push channel sends appended records to every launcher window,
   // so operation and launch output do not wait for a periodic state read.
   options.launcherHarnessService.onConsoleAppend((entry) => {

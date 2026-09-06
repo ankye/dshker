@@ -4,6 +4,7 @@ export const APPLICATION_ROUTES = [
   { id: 'versions', labelKey: 'nav.versions', icon: 'layers' },
   { id: 'usage', labelKey: 'nav.usage', icon: 'gauge' },
   { id: 'settings', labelKey: 'nav.settings', icon: 'gear' },
+  { id: 'remote', labelKey: 'nav.remote', icon: 'network' },
   { id: 'runtime', labelKey: 'nav.runtime', icon: 'browser' }
 ] as const
 

@@ -16,7 +16,7 @@ import {
   runtimeBrowserZoomCommandForInput,
   type RuntimeBrowserZoomCommand
 } from '@/shared/runtime-browser-zoom'
-import { isLoopbackAddress, runtimeBrowser } from '../runtimeBrowserState'
+import { isLoopbackAddress, runtimeBrowser, type RuntimeTabId } from '../runtimeBrowserState'
 import EmptyState from './EmptyState.vue'
 
 /** The Electron <webview> members this panel drives. */
@@ -46,13 +46,13 @@ const browser = runtimeBrowser
 const runtime = useRuntimeBrowser()
 
 /** Routing belongs to the shell, so a stopped runtime asks it to move. */
-const emit = defineEmits<{ navigate: ['launch'] }>()
-const frames = ref<Record<number, RuntimeWebview | undefined>>({})
+const emit = defineEmits<{ navigate: [route: 'launch' | 'remote'] }>()
+const frames = ref<Record<string, RuntimeWebview | undefined>>({})
 const addressDraft = ref('')
 const loading = ref(false)
 const canGoBack = ref(false)
 const canGoForward = ref(false)
-const readyFrames = ref<Record<number, boolean | undefined>>({})
+const readyFrames = ref<Record<string, boolean | undefined>>({})
 const diagnosticsOpen = ref(false)
 const diagnosticsLoading = ref(false)
 const diagnosticsUnavailable = ref(false)
@@ -146,7 +146,7 @@ watch(
   { immediate: true }
 )
 
-function syncFrom(id: number): void {
+function syncFrom(id: RuntimeTabId): void {
   const view = frames.value[id]
   if (view === undefined || id !== browser.activeTabId.value) return
   canGoBack.value = view.canGoBack()
@@ -167,13 +167,13 @@ function commitAddress(): void {
 }
 
 /** Clears the busy flag and re-reads navigation state once a load settles. */
-function onStopLoading(id: number): void {
+function onStopLoading(id: RuntimeTabId): void {
   loading.value = false
   syncFrom(id)
 }
 
 /** Tracks the guest element of one tab as Vue mounts and unmounts it. */
-function registerFrame(id: number, element: unknown): void {
+function registerFrame(id: RuntimeTabId, element: unknown): void {
   if (element === null || element === undefined) {
     delete frames.value[id]
     delete readyFrames.value[id]
@@ -183,14 +183,14 @@ function registerFrame(id: number, element: unknown): void {
 }
 
 /** Applies the persisted page zoom once the guest DOM can receive WebView methods. */
-function onDomReady(id: number): void {
+function onDomReady(id: RuntimeTabId): void {
   readyFrames.value[id] = true
   applyZoom(frames.value[id])
   if (id === browser.activeTabId.value && diagnosticsOpen.value) void refreshDiagnostics()
 }
 
 /** Records the page title the guest reports, so the tab strip stays truthful. */
-function onTitleUpdated(id: number, event: unknown): void {
+function onTitleUpdated(id: RuntimeTabId, event: unknown): void {
   const title = (event as { title?: unknown }).title
   if (typeof title === 'string' && title.length > 0) browser.updateTab(id, { title })
 }
@@ -215,7 +215,7 @@ function applyZoom(frame: RuntimeWebview | undefined): void {
 
 watch(zoomPercent, () => {
   for (const [id, frame] of Object.entries(frames.value)) {
-    if (readyFrames.value[Number(id)]) applyZoom(frame)
+    if (readyFrames.value[id]) applyZoom(frame)
   }
 })
 
@@ -365,283 +365,269 @@ onUnmounted(() => {
 
 <template>
   <section class="browser-panel">
-    <template v-if="browser.runtimeUrl.value">
-      <EmptyState
-        v-if="runtime.preferences.value === undefined"
-        icon="window"
-        fill
-        :title="
-          runtime.loading.value
-            ? t('runtime.preferences.loading')
-            : t('runtime.preferences.blocked')
-        "
-        :description="
-          runtime.loading.value
-            ? t('runtime.preferences.loading.description')
-            : t('runtime.preferences.blocked.description')
-        "
-      >
-        <template v-if="!runtime.loading.value" #actions>
+    <EmptyState
+      v-if="runtime.preferences.value === undefined"
+      icon="window"
+      fill
+      :title="
+        runtime.loading.value ? t('runtime.preferences.loading') : t('runtime.preferences.blocked')
+      "
+      :description="
+        runtime.loading.value
+          ? t('runtime.preferences.loading.description')
+          : t('runtime.preferences.blocked.description')
+      "
+    >
+      <template v-if="!runtime.loading.value" #actions>
+        <button
+          type="button"
+          class="prototype-button prototype-button--primary"
+          @click="runtime.refresh()"
+        >
+          {{ t('runtime.preferences.retry') }}
+        </button>
+      </template>
+    </EmptyState>
+    <template v-else>
+      <div class="browser-tab-strip" role="tablist" :aria-label="t('runtime.title')">
+        <button
+          v-for="tab in browser.tabs.value"
+          :key="tab.id"
+          class="browser-tab"
+          type="button"
+          role="tab"
+          :aria-selected="browser.activeTabId.value === tab.id"
+          :data-active="browser.activeTabId.value === tab.id"
+          :data-state="
+            tab.source === 'local' ? (tab.url ? 'ready' : 'disconnected') : tab.status?.kind
+          "
+          :title="tab.url ?? tab.title"
+          :data-testid="`runtime-tab-${tab.id}`"
+          @click="browser.activeTabId.value = tab.id"
+        >
+          <span class="browser-tab-status" aria-hidden="true" />
+          <span class="browser-tab-title">{{
+            tab.source === 'local' ? t('runtime.localTab') : tab.title
+          }}</span>
+        </button>
+      </div>
+
+      <div v-if="browser.activeTab.value?.url" class="browser-bar">
+        <button
+          class="browser-icon-button"
+          type="button"
+          :disabled="!canGoBack"
+          :aria-label="t('runtime.back')"
+          data-testid="runtime-back"
+          @click="activeFrame()?.goBack()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+        </button>
+        <button
+          class="browser-icon-button"
+          type="button"
+          :disabled="!canGoForward"
+          :aria-label="t('runtime.forward')"
+          data-testid="runtime-forward"
+          @click="activeFrame()?.goForward()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
+        </button>
+        <button
+          class="browser-icon-button"
+          type="button"
+          :aria-label="loading ? t('runtime.stop') : t('runtime.reload')"
+          data-testid="runtime-reload"
+          @click="reload"
+        >
+          <svg v-if="loading" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18" />
+          </svg>
+          <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M20 12a8 8 0 1 1-2.3-5.6" />
+            <path d="M20 4v4h-4" />
+          </svg>
+        </button>
+        <input
+          v-model="addressDraft"
+          class="browser-address"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          :aria-label="t('runtime.url')"
+          data-testid="runtime-address"
+          @keydown.enter.prevent="commitAddress"
+        />
+        <div class="browser-zoom-control" role="group" :aria-label="t('runtime.zoom')">
           <button
             type="button"
-            class="prototype-button prototype-button--primary"
-            @click="runtime.refresh()"
+            :disabled="zoomAtMinimum || runtime.saving.value"
+            :aria-label="t('runtime.zoom.decrease')"
+            :title="t('runtime.zoom.decrease')"
+            data-testid="runtime-zoom-decrease"
+            @click="changeZoom('decrease')"
           >
-            {{ t('runtime.preferences.retry') }}
+            −
           </button>
-        </template>
-      </EmptyState>
-      <template v-else>
-        <div class="browser-tab-strip" role="tablist" :aria-label="t('runtime.title')">
           <button
-            v-for="tab in browser.tabs"
-            :key="tab.id"
-            class="browser-tab"
+            class="browser-zoom-value"
             type="button"
-            role="tab"
-            :aria-selected="browser.activeTabId.value === tab.id"
-            :data-active="browser.activeTabId.value === tab.id"
-            :title="tab.url"
-            :data-testid="`runtime-tab-${tab.id}`"
-            @click="browser.activeTabId.value = tab.id"
+            :disabled="runtime.saving.value"
+            :aria-label="t('runtime.zoom.reset')"
+            :title="t('runtime.zoom.reset')"
+            data-testid="runtime-zoom-reset"
+            @click="changeZoom('reset')"
           >
-            <span class="browser-tab-title">{{ tab.title }}</span>
-            <span
-              class="browser-tab-close"
-              role="button"
-              tabindex="0"
-              :aria-label="t('runtime.closeTab')"
-              @click.stop="browser.closeTab(tab.id)"
-              @keydown.enter.stop.prevent="browser.closeTab(tab.id)"
-            >
-              ×
-            </span>
+            {{ zoomPercent }}%
           </button>
           <button
-            class="browser-tab-new"
             type="button"
-            :aria-label="t('runtime.newTab')"
-            :title="t('runtime.newTab')"
-            data-testid="runtime-new-tab"
-            @click="browser.openTab()"
+            :disabled="zoomAtMaximum || runtime.saving.value"
+            :aria-label="t('runtime.zoom.increase')"
+            :title="t('runtime.zoom.increase')"
+            data-testid="runtime-zoom-increase"
+            @click="changeZoom('increase')"
           >
             +
           </button>
         </div>
-
-        <div v-if="browser.activeTab.value" class="browser-bar">
+        <div class="browser-rendering-control">
           <button
             class="browser-icon-button"
             type="button"
-            :disabled="!canGoBack"
-            :aria-label="t('runtime.back')"
-            data-testid="runtime-back"
-            @click="activeFrame()?.goBack()"
+            :aria-expanded="diagnosticsOpen"
+            :aria-label="t('runtime.rendering.open')"
+            :title="t('runtime.rendering.open')"
+            data-testid="runtime-rendering-info"
+            @click="toggleDiagnostics"
           >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
-          </button>
-          <button
-            class="browser-icon-button"
-            type="button"
-            :disabled="!canGoForward"
-            :aria-label="t('runtime.forward')"
-            data-testid="runtime-forward"
-            @click="activeFrame()?.goForward()"
-          >
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 5l7 7-7 7" /></svg>
-          </button>
-          <button
-            class="browser-icon-button"
-            type="button"
-            :aria-label="loading ? t('runtime.stop') : t('runtime.reload')"
-            data-testid="runtime-reload"
-            @click="reload"
-          >
-            <svg v-if="loading" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M20 12a8 8 0 1 1-2.3-5.6" />
-              <path d="M20 4v4h-4" />
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 10v6M12 7h.01" />
             </svg>
           </button>
-          <input
-            v-model="addressDraft"
-            class="browser-address"
-            type="text"
-            spellcheck="false"
-            autocomplete="off"
-            :aria-label="t('runtime.url')"
-            data-testid="runtime-address"
-            @keydown.enter.prevent="commitAddress"
-          />
-          <div class="browser-zoom-control" role="group" :aria-label="t('runtime.zoom')">
-            <button
-              type="button"
-              :disabled="zoomAtMinimum || runtime.saving.value"
-              :aria-label="t('runtime.zoom.decrease')"
-              :title="t('runtime.zoom.decrease')"
-              data-testid="runtime-zoom-decrease"
-              @click="changeZoom('decrease')"
-            >
-              −
-            </button>
-            <button
-              class="browser-zoom-value"
-              type="button"
-              :disabled="runtime.saving.value"
-              :aria-label="t('runtime.zoom.reset')"
-              :title="t('runtime.zoom.reset')"
-              data-testid="runtime-zoom-reset"
-              @click="changeZoom('reset')"
-            >
-              {{ zoomPercent }}%
-            </button>
-            <button
-              type="button"
-              :disabled="zoomAtMaximum || runtime.saving.value"
-              :aria-label="t('runtime.zoom.increase')"
-              :title="t('runtime.zoom.increase')"
-              data-testid="runtime-zoom-increase"
-              @click="changeZoom('increase')"
-            >
-              +
-            </button>
-          </div>
-          <div class="browser-rendering-control">
-            <button
-              class="browser-icon-button"
-              type="button"
-              :aria-expanded="diagnosticsOpen"
-              :aria-label="t('runtime.rendering.open')"
-              :title="t('runtime.rendering.open')"
-              data-testid="runtime-rendering-info"
-              @click="toggleDiagnostics"
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="M12 10v6M12 7h.01" />
-              </svg>
-            </button>
-            <section
-              v-if="diagnosticsOpen"
-              class="browser-rendering-popover"
-              role="dialog"
-              :aria-label="t('runtime.rendering.title')"
-              data-testid="runtime-rendering-popover"
-            >
-              <header>
-                <div>
-                  <h3>{{ t('runtime.rendering.title') }}</h3>
-                  <p>{{ t('runtime.rendering.description') }}</p>
-                </div>
-                <button
-                  class="browser-icon-button"
-                  type="button"
-                  :aria-label="t('runtime.rendering.close')"
-                  @click="diagnosticsOpen = false"
-                >
-                  ×
-                </button>
-              </header>
-              <p v-if="diagnosticsLoading" class="browser-rendering-status">
-                {{ t('runtime.rendering.loading') }}
-              </p>
-              <p v-else-if="diagnosticsUnavailable" class="browser-rendering-status" role="alert">
-                {{ t('runtime.rendering.unavailable') }}
-              </p>
-              <dl v-else class="browser-rendering-grid">
-                <template v-for="row in renderingRows" :key="row.label">
-                  <dt>{{ row.label }}</dt>
-                  <dd>{{ row.value }}</dd>
-                </template>
-              </dl>
-              <footer>
-                <button
-                  type="button"
-                  class="prototype-button"
-                  :disabled="diagnosticsLoading"
-                  @click="refreshDiagnostics"
-                >
-                  {{ t('runtime.rendering.refresh') }}
-                </button>
-                <button
-                  type="button"
-                  class="prototype-button prototype-button--primary"
-                  :disabled="renderingRows.length === 0"
-                  @click="copyDiagnostics"
-                >
-                  {{
-                    diagnosticsCopied ? t('runtime.rendering.copied') : t('runtime.rendering.copy')
-                  }}
-                </button>
-              </footer>
-              <p v-if="diagnosticsCopyFailed" class="browser-rendering-copy-error" role="alert">
-                {{ t('runtime.rendering.copyFailed') }}
-              </p>
-            </section>
-          </div>
+          <section
+            v-if="diagnosticsOpen"
+            class="browser-rendering-popover"
+            role="dialog"
+            :aria-label="t('runtime.rendering.title')"
+            data-testid="runtime-rendering-popover"
+          >
+            <header>
+              <div>
+                <h3>{{ t('runtime.rendering.title') }}</h3>
+                <p>{{ t('runtime.rendering.description') }}</p>
+              </div>
+              <button
+                class="browser-icon-button"
+                type="button"
+                :aria-label="t('runtime.rendering.close')"
+                @click="diagnosticsOpen = false"
+              >
+                ×
+              </button>
+            </header>
+            <p v-if="diagnosticsLoading" class="browser-rendering-status">
+              {{ t('runtime.rendering.loading') }}
+            </p>
+            <p v-else-if="diagnosticsUnavailable" class="browser-rendering-status" role="alert">
+              {{ t('runtime.rendering.unavailable') }}
+            </p>
+            <dl v-else class="browser-rendering-grid">
+              <template v-for="row in renderingRows" :key="row.label">
+                <dt>{{ row.label }}</dt>
+                <dd>{{ row.value }}</dd>
+              </template>
+            </dl>
+            <footer>
+              <button
+                type="button"
+                class="prototype-button"
+                :disabled="diagnosticsLoading"
+                @click="refreshDiagnostics"
+              >
+                {{ t('runtime.rendering.refresh') }}
+              </button>
+              <button
+                type="button"
+                class="prototype-button prototype-button--primary"
+                :disabled="renderingRows.length === 0"
+                @click="copyDiagnostics"
+              >
+                {{
+                  diagnosticsCopied ? t('runtime.rendering.copied') : t('runtime.rendering.copy')
+                }}
+              </button>
+            </footer>
+            <p v-if="diagnosticsCopyFailed" class="browser-rendering-copy-error" role="alert">
+              {{ t('runtime.rendering.copyFailed') }}
+            </p>
+          </section>
         </div>
+      </div>
 
-        <div class="browser-viewport-stack">
-          <!-- Every open tab stays mounted and is merely hidden, so switching tabs
+      <div
+        v-if="browser.tabs.value.some((entry) => entry.url !== undefined)"
+        class="browser-viewport-stack"
+        :data-hidden="browser.activeTab.value?.url === undefined"
+      >
+        <!-- Every open tab stays mounted and is merely hidden, so switching tabs
              keeps each page's own history and scroll position. -->
-          <webview
-            v-for="tab in browser.tabs"
-            :key="tab.id"
-            :ref="(element: unknown) => registerFrame(tab.id, element)"
-            class="browser-viewport"
-            :src="tab.url"
-            :data-hidden="browser.activeTabId.value !== tab.id"
-            :data-testid="`runtime-webview-${tab.id}`"
-            @did-start-loading="loading = browser.activeTabId.value === tab.id"
-            @did-stop-loading="onStopLoading(tab.id)"
-            @did-navigate="syncFrom(tab.id)"
-            @did-navigate-in-page="syncFrom(tab.id)"
-            @dom-ready="onDomReady(tab.id)"
-            @page-title-updated="onTitleUpdated(tab.id, $event)"
-          />
-        </div>
-        <EmptyState
-          v-if="browser.tabs.length === 0"
-          icon="window"
-          fill
-          :title="t('runtime.empty')"
-          :description="t('runtime.empty.description')"
-        >
-          <template #actions>
-            <button
-              type="button"
-              class="prototype-button prototype-button--primary"
-              @click="browser.openTab()"
-            >
-              {{ t('runtime.newTab') }}
-            </button>
-          </template>
-        </EmptyState>
-      </template>
+        <webview
+          v-for="tab in browser.tabs.value.filter((entry) => entry.url !== undefined)"
+          :key="tab.id"
+          :ref="(element: unknown) => registerFrame(tab.id, element)"
+          class="browser-viewport"
+          :src="tab.url"
+          :data-hidden="browser.activeTabId.value !== tab.id"
+          :data-testid="`runtime-webview-${tab.id}`"
+          @did-start-loading="loading = browser.activeTabId.value === tab.id"
+          @did-stop-loading="onStopLoading(tab.id)"
+          @did-navigate="syncFrom(tab.id)"
+          @did-navigate-in-page="syncFrom(tab.id)"
+          @dom-ready="onDomReady(tab.id)"
+          @page-title-updated="onTitleUpdated(tab.id, $event)"
+        />
+      </div>
+      <EmptyState
+        v-if="
+          browser.activeTab.value?.url === undefined && browser.activeTab.value?.source === 'local'
+        "
+        icon="plug"
+        fill
+        :title="t('runtime.notRunning')"
+        :description="t('runtime.notRunning.description')"
+      >
+        <template #actions>
+          <button
+            type="button"
+            class="prototype-button prototype-button--primary"
+            @click="emit('navigate', 'launch')"
+          >
+            {{ t('runtime.notRunning.action') }}
+          </button>
+        </template>
+      </EmptyState>
+      <EmptyState
+        v-if="
+          browser.activeTab.value?.url === undefined && browser.activeTab.value?.source === 'remote'
+        "
+        icon="plug"
+        fill
+        :title="t('runtime.remoteUnavailable')"
+        :description="t('runtime.remoteUnavailable.description')"
+      >
+        <template #actions>
+          <button
+            type="button"
+            class="prototype-button prototype-button--primary"
+            @click="emit('navigate', 'remote')"
+          >
+            {{ t('runtime.remoteUnavailable.action') }}
+          </button>
+        </template>
+      </EmptyState>
     </template>
-    <!--
-      A route that reports "not running" without a way to start it leaves the
-      user stranded on an otherwise blank surface.
-    -->
-    <EmptyState
-      v-else
-      icon="plug"
-      fill
-      :title="t('runtime.notRunning')"
-      :description="t('runtime.notRunning.description')"
-    >
-      <template #actions>
-        <button
-          type="button"
-          class="prototype-button prototype-button--primary"
-          @click="emit('navigate', 'launch')"
-        >
-          {{ t('runtime.notRunning.action') }}
-        </button>
-      </template>
-    </EmptyState>
   </section>
 </template>
 
@@ -693,19 +679,7 @@ onUnmounted(() => {
   color: var(--color-text);
 }
 
-.browser-tab[data-active='true']::after {
-  position: absolute;
-  top: 0.15rem;
-  right: 0.15rem;
-  width: 0.4rem;
-  height: 0.4rem;
-  border-radius: 999px;
-  background: var(--color-accent);
-  content: '';
-}
-
-.browser-tab:focus-visible,
-.browser-tab-new:focus-visible {
+.browser-tab:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
@@ -716,50 +690,28 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-/* The close control appears on hover or focus instead of permanently crowding
- * narrow tabs, and the active tab keeps it dimmed until hovered. */
-.browser-tab-close {
+.browser-tab-status {
+  width: 0.45rem;
+  height: 0.45rem;
   flex: none;
-  margin-right: -0.25rem;
-  padding: 0 0.25rem;
-  border-radius: 3px;
-  color: var(--color-text-muted);
-  font-size: var(--type-ui);
-  line-height: 1.4;
-  opacity: 0;
-  cursor: pointer;
+  border-radius: 999px;
+  background: var(--color-text-muted);
 }
 
-.browser-tab:hover .browser-tab-close,
-.browser-tab:focus-within .browser-tab-close,
-.browser-tab[data-active='true'] .browser-tab-close {
-  opacity: 1;
+.browser-tab[data-state='ready'] .browser-tab-status {
+  background: var(--color-success);
 }
 
-.browser-tab-close:hover {
-  background: var(--color-surface-raised);
-  color: var(--color-text);
+.browser-tab[data-state='connecting'] .browser-tab-status {
+  background: var(--color-accent);
 }
 
-.browser-tab-new {
-  display: grid;
-  width: 1.75rem;
-  height: 1.75rem;
-  flex: none;
-  margin-left: 0.25rem;
-  border: none;
-  border-radius: var(--radius);
-  background: transparent;
-  color: var(--color-text-muted);
-  font-size: var(--type-ui);
-  line-height: 1;
-  cursor: pointer;
-  place-items: center;
+.browser-tab[data-state='failed'] .browser-tab-status {
+  background: var(--color-danger);
 }
 
-.browser-tab-new:hover {
-  background: color-mix(in srgb, var(--color-text), transparent 94%);
-  color: var(--color-text);
+.browser-tab[data-state='disconnected'] .browser-tab-status {
+  background: var(--color-danger);
 }
 
 .browser-bar {
@@ -965,6 +917,10 @@ onUnmounted(() => {
   flex: 1 1 auto;
   overflow: hidden;
   background: var(--color-bg);
+}
+
+.browser-viewport-stack[data-hidden='true'] {
+  display: none;
 }
 
 .browser-viewport {

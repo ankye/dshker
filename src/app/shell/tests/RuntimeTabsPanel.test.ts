@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { apiFail, apiOk, type DesktopApi, type LauncherHarnessState } from '@/shared/contracts'
 import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
+import { remoteConnectionsState } from '@/app/domains/remote-connections'
 import RuntimeTabsPanel from '../components/RuntimeTabsPanel.vue'
 import { runtimeBrowser } from '../runtimeBrowserState'
 
@@ -98,13 +99,15 @@ function prepareWebview(wrapper: VueWrapper, zoomFactor = 1) {
 
 describe('RuntimeTabsPanel rendering controls', () => {
   beforeEach(() => {
-    runtimeBrowser.resetTabs()
+    runtimeBrowser.activeTabId.value = 'local'
+    remoteConnectionsState.value = { connections: [] }
     harnessState.value = undefined
     vi.restoreAllMocks()
   })
 
   afterEach(() => {
-    runtimeBrowser.resetTabs()
+    runtimeBrowser.activeTabId.value = 'local'
+    remoteConnectionsState.value = { connections: [] }
     harnessState.value = undefined
     window.dshLauncher = undefined
   })
@@ -126,6 +129,30 @@ describe('RuntimeTabsPanel rendering controls', () => {
     await wrapper.get('[data-testid="runtime-zoom-reset"]').trigger('click')
     await flushPromises()
     expect(setZoom).toHaveBeenLastCalledWith({ zoomPercent: 100 })
+    wrapper.unmount()
+  })
+
+  it('renders fixed local and per-computer tabs without add or close controls', async () => {
+    remoteConnectionsState.value = {
+      connections: [
+        {
+          connectionId: '11111111-1111-4111-8111-111111111111',
+          displayName: '工作室 Mac',
+          host: 'studio-mac',
+          port: 22,
+          user: 'dev',
+          status: { kind: 'disconnected' },
+          testStatus: { kind: 'untested' }
+        }
+      ]
+    }
+    installRuntimeApi({})
+    const wrapper = await mountRunningPanel()
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(2)
+    expect(wrapper.text()).toContain('本地')
+    expect(wrapper.text()).toContain('工作室 Mac')
+    expect(wrapper.find('[data-testid="runtime-new-tab"]').exists()).toBe(false)
+    expect(wrapper.find('.browser-tab-close').exists()).toBe(false)
     wrapper.unmount()
   })
 

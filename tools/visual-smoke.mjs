@@ -29,6 +29,8 @@ async function readSources(root) {
     'src/app/shell/AppShell.vue',
     'src/app/shell/components/ShellSidebar.vue',
     'src/app/shell/components/RuntimeTabsPanel.vue',
+    'src/app/shell/components/RemoteConnectionsPanel.vue',
+    'src/app/shell/runtimeBrowserState.ts',
     'src/app/shell/components/SettingsPanel.vue',
     'src/app/shell/components/VersionManagementPanel.vue',
     'src/app/shared/controls/ThemedListbox.vue',
@@ -57,6 +59,8 @@ function evaluateSources(sources) {
   const shell = sourceByPath.get('src/app/shell/AppShell.vue')
   const sidebar = sourceByPath.get('src/app/shell/components/ShellSidebar.vue')
   const runtimePanel = sourceByPath.get('src/app/shell/components/RuntimeTabsPanel.vue')
+  const runtimeState = sourceByPath.get('src/app/shell/runtimeBrowserState.ts')
+  const remotePanel = sourceByPath.get('src/app/shell/components/RemoteConnectionsPanel.vue')
   const electronWindow = sourceByPath.get('electron/main/window.ts')
   const settingsPanel = sourceByPath.get('src/app/shell/components/SettingsPanel.vue')
   const versionPanel = sourceByPath.get('src/app/shell/components/VersionManagementPanel.vue')
@@ -99,7 +103,12 @@ function evaluateSources(sources) {
 
     // A run page may show only the URL the started process announced.
     finding('runtime.no-hardcoded-url', !runtimePanel.includes('127.0.0.1:3080')),
-    finding('runtime.announced-url-only', runtimePanel.includes('runtimeUrl')),
+    finding(
+      'runtime.announced-url-only',
+      runtimePanel.includes(':src="tab.url"') &&
+        runtimeState.includes('launch.url') &&
+        runtimeState.includes('connection.status.url')
+    ),
     finding(
       'runtime.zoom-controls',
       runtimePanel.includes('runtime-zoom-decrease') &&
@@ -124,6 +133,18 @@ function evaluateSources(sources) {
       'runtime.no-forced-device-scale-factor',
       !runtimePanel.includes('force-device-scale-factor') &&
         !electronWindow.includes('force-device-scale-factor')
+    ),
+    finding(
+      'remote.connection-test-status',
+      remotePanel.includes("t('remote.test.action')") &&
+        remotePanel.includes('class="remote-status-dot"') &&
+        styles.includes(".remote-status[data-state='disconnected']") &&
+        styles.includes(".remote-status[data-state='ready']") &&
+        styles.includes(".remote-test-status[data-state='passed']") &&
+        styles.includes(".remote-test-status[data-state='failed']") &&
+        runtimeBlock(".browser-tab[data-state='disconnected'] .browser-tab-status").includes(
+          'background: var(--color-danger)'
+        )
     ),
 
     // Themed controls replace native select popups that cannot be palette-styled.

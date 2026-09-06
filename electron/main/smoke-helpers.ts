@@ -96,6 +96,7 @@ export async function smokeRoutes(window: ElectronBrowserWindow): Promise<RouteS
     { id: 'versions', text: 'Versions', selector: '.version-management' },
     { id: 'usage', text: 'Token usage', selector: '.usage-panel' },
     { id: 'settings', text: 'Settings', selector: '.settings-panel' },
+    { id: 'remote', text: 'Remote connections', selector: '.remote-connections-layout' },
     { id: 'runtime', text: 'Run', selector: '.browser-panel' }
   ]
   const routes: RouteSmokeEvidence['routes'] = []

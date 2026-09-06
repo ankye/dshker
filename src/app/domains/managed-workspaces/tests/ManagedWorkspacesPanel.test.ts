@@ -244,6 +244,15 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
         apiFail('managed.missing_registry', 'Not used in this test.'),
       onZoomChange: () => () => undefined
     },
+    remoteConnections: {
+      getState: async () => ({ ok: true, data: { connections: [] } }),
+      create: async () => ({ ok: true, data: { connections: [] } }),
+      test: async () => ({ ok: true, data: { connections: [] } }),
+      connect: async () => ({ ok: true, data: { connections: [] } }),
+      disconnect: async () => ({ ok: true, data: { connections: [] } }),
+      remove: async () => ({ ok: true, data: { connections: [] } }),
+      onStateChange: () => () => undefined
+    },
     launcherUpdates: {
       getState: async () => apiFail('launcher.update_invalid_request', 'Not used in this test.'),
       check: async () => apiFail('launcher.update_invalid_request', 'Not used in this test.'),

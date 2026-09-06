@@ -31,6 +31,12 @@ import {
   LauncherUpdateService,
   scheduleLauncherUpdateCheckAfterWindowReady
 } from './main/launcher-update-service'
+import {
+  OpenSshRemoteConnector,
+  RemoteConnectionCatalog,
+  RemoteConnectionService,
+  RemotePeerBroker
+} from './main/remote'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -111,7 +117,7 @@ async function start(): Promise<void> {
     path.join(homedir(), '.dshlauncher'),
     path.join(app.getPath('userData'), 'dsh-launcher-bootstrap.json')
   )
-  registerHarnessShutdown(services.launcherHarnessService)
+  registerServicesShutdown(services)
   app.once('browser-window-created', (_event, window) => {
     scheduleLauncherUpdateCheckAfterWindowReady(window, services.launcherUpdateService)
   })
@@ -126,14 +132,20 @@ async function start(): Promise<void> {
 }
 
 /** Keeps the DSH process tree under Launcher ownership through normal quits and termination signals. */
-function registerHarnessShutdown(service: LauncherHarnessService): void {
+function registerServicesShutdown(services: {
+  readonly launcherHarnessService: LauncherHarnessService
+  readonly remoteConnectionService: RemoteConnectionService
+  readonly remotePeerBroker: RemotePeerBroker
+}): void {
   let shutdownInProgress = false
   let shutdownComplete = false
   const shutdown = async () => {
     if (shutdownInProgress) return
     shutdownInProgress = true
     try {
-      await service.shutdown()
+      await services.remoteConnectionService.shutdown()
+      await services.remotePeerBroker.shutdown()
+      await services.launcherHarnessService.shutdown()
       shutdownComplete = true
       app.quit()
     } catch (error) {
@@ -163,6 +175,8 @@ async function registerLauncherServices(
   readonly launcherHarnessService: LauncherHarnessService
   readonly runtimeBrowserController: RuntimeBrowserController
   readonly launcherUpdateService: LauncherUpdateService
+  readonly remoteConnectionService: RemoteConnectionService
+  readonly remotePeerBroker: RemotePeerBroker
 }> {
   const managedWorkspaceService = await createManagedWorkspaceService(launcherRoot, locatorFilePath)
   await managedWorkspaceService.initializeDefaultRoots()
@@ -194,6 +208,17 @@ async function registerLauncherServices(
       await shell.openExternal(url)
     }
   })
+  const remoteConnectionService = new RemoteConnectionService(
+    new RemoteConnectionCatalog({
+      resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot()
+    }),
+    new OpenSshRemoteConnector({ platform: process.platform })
+  )
+  const remotePeerBroker = new RemotePeerBroker({
+    descriptorPath: path.join(launcherRoot, 'remote-peer.json'),
+    launcherHarnessService
+  })
+  await remotePeerBroker.start()
   registerIpc({
     managedWorkspaceService,
     sessionUsageReader: new SessionUsageReader({
@@ -206,6 +231,7 @@ async function registerLauncherServices(
     }),
     runtimeBrowserController,
     launcherUpdateService,
+    remoteConnectionService,
     launcherHarnessService,
     managedInstallationService: new ManagedInstallationService({
       workspaceService: managedWorkspaceService,
@@ -217,7 +243,13 @@ async function registerLauncherServices(
       runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor()
     })
   })
-  return { launcherHarnessService, runtimeBrowserController, launcherUpdateService }
+  return {
+    launcherHarnessService,
+    runtimeBrowserController,
+    launcherUpdateService,
+    remoteConnectionService,
+    remotePeerBroker
+  }
 }
 
 /**

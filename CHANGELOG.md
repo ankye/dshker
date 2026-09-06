@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.21 — 2026-09-06
+
+- Add managed DSHKer-to-DSHKer remote connections over supervised loopback SSH
+  tunnels, with short-lived peer credential exchange and one fixed Run tab per
+  registered computer.
+- Add full-path connection testing plus clear red/green live and test status
+  indicators. SSH private keys and passwords are never transferred or stored.
+
 ## 0.1.20 — 2026-09-05
 
 - Give macOS packaged smoke the same 60-second startup budget as Windows so

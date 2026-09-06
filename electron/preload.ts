@@ -27,6 +27,10 @@ import {
   type RegisterManagedToolchainResult,
   type RegisterManagedRootsRequest,
   type RuntimeBrowserHostRenderingInfo,
+  type CreateRemoteConnectionRequest,
+  type RemoteConnectionIdentityRequest,
+  type RemoteConnectionsState,
+  type RemoteConnectionErrorCode,
   type RuntimeBrowserPreferences,
   type SetRuntimeBrowserZoomRequest,
   type SetLauncherHarnessPortRequest,
@@ -182,6 +186,41 @@ const desktopApi: DesktopApi = Object.freeze({
       return () => {
         ipcRenderer.removeListener(DESKTOP_IPC_CHANNELS.runtimeBrowserZoomChanged, onChanged)
       }
+    }
+  }),
+  remoteConnections: Object.freeze({
+    getState: (): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsGetState),
+    create: (
+      request: CreateRemoteConnectionRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsCreate, request),
+    test: (
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsTest, request),
+    connect: (
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsConnect, request),
+    disconnect: (
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsDisconnect, request),
+    remove: (
+      request: RemoteConnectionIdentityRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsRemove, request),
+    onStateChange: (
+      listener: (result: ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>) => void
+    ): (() => void) => {
+      const onChanged = (
+        _event: unknown,
+        result: ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>
+      ): void => listener(result)
+      ipcRenderer.on(DESKTOP_IPC_CHANNELS.remoteConnectionsStateChanged, onChanged)
+      return () =>
+        ipcRenderer.removeListener(DESKTOP_IPC_CHANNELS.remoteConnectionsStateChanged, onChanged)
     }
   }),
   launcherUpdates: Object.freeze({

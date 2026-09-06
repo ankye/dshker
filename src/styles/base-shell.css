@@ -266,7 +266,7 @@ button:focus-visible,
 .nav-item {
   position: relative;
   display: grid;
-  min-height: 5.25rem;
+  min-height: 4.5rem;
   place-items: center;
   gap: var(--space-1);
   width: 100%;

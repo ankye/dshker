@@ -9,6 +9,7 @@ describe('launcher navigation', () => {
       'versions',
       'usage',
       'settings',
+      'remote',
       'runtime'
     ])
   })

@@ -23,9 +23,10 @@ describe('packaged route smoke', () => {
       'versions',
       'usage',
       'settings',
+      'remote',
       'runtime'
     ])
-    expect(scripts).toHaveLength(6)
+    expect(scripts).toHaveLength(7)
     expect(scripts.join('\n')).not.toContain('advanced')
     for (const selector of [
       '.launch-panel',
@@ -33,6 +34,7 @@ describe('packaged route smoke', () => {
       '.version-management',
       '.usage-panel',
       '.settings-panel',
+      '.remote-connections-layout',
       '.browser-panel'
     ]) {
       expect(scripts.join('\n')).toContain(`document.querySelector(${JSON.stringify(selector)})`)

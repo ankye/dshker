@@ -19,7 +19,16 @@ const CHROMIUM_ROOT = path.join(
   os.homedir(),
   'Library/Caches/ms-playwright/chromium-1234/chrome-mac-arm64'
 )
-const ROUTES = ['launch', 'advanced', 'versions', 'controller', 'usage', 'settings', 'runtime']
+const ROUTES = [
+  'launch',
+  'advanced',
+  'versions',
+  'controller',
+  'usage',
+  'settings',
+  'remote',
+  'runtime'
+]
 const THEMES = ['dark', 'light']
 const LOCALES = ['zh-CN', 'en-US']
 const VIEWPORT = { width: 1240, height: 820 }
