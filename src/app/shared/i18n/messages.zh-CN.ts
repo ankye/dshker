@@ -4,6 +4,9 @@ import { zhCNErrors } from './i18n.errors'
 export const zhCN = {
   'p2p.enrollment.title': '本机登记与恢复',
   'p2p.enrollment.description': '查看此服务的本机凭据，或核对中断的登记。私钥始终留在本机。',
+  'p2p.enrollment.register': '登记本机',
+  'p2p.enrollment.registerHint':
+    '登记会在本机生成设备密钥（私钥不离开本机），并向服务器提交登记请求。',
   'p2p.enrollment.read': '读取本机登记',
   'p2p.enrollment.recover': '查询原登记结果',
   'p2p.enrollment.registered': '已读到本机登记凭据；这不代表证书仍有效、设备在线或 DSH 已连接。',

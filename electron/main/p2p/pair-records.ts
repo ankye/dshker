@@ -167,7 +167,9 @@ export function peerPairs(value: unknown, localDeviceId: string): PeerPair[] {
 /** Validates a `pairs.share` reply. The code is a bearer secret, never persisted. */
 export function peerInvite(value: unknown, networkId: string): PeerInvite {
   const record = exactPeerObject(value, ['code', 'expiresAt'])
-  if (typeof record.code !== 'string' || !/^[A-Za-z0-9_-]{16,512}$/.test(record.code))
+  // The code is base64url of the signed share record (~520 chars for the real
+  // field sizes); 2048 leaves room without admitting arbitrary blobs.
+  if (typeof record.code !== 'string' || !/^[A-Za-z0-9_-]{16,2048}$/.test(record.code))
     throw new PeerHelperError('p2p.invite_invalid')
   if (!Number.isSafeInteger(record.expiresAt) || (record.expiresAt as number) <= 0)
     throw new PeerHelperError('p2p.invite_invalid')

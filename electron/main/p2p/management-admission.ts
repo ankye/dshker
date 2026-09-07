@@ -92,7 +92,7 @@ function validateField(field: string, value: unknown): void {
   }
   if (field === 'code') {
     // Bearer invite code: bounded opaque token, never logged or persisted.
-    if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{16,512}$/.test(value))
+    if (typeof value !== 'string' || !/^[A-Za-z0-9_-]{16,2048}$/.test(value))
       throw new PeerHelperError('p2p.invite_invalid')
     return
   }

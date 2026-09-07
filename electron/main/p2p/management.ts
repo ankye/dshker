@@ -6,6 +6,7 @@ import { PeerCredentialStore } from './credentials'
 import { PeerEnrollment } from './enrollment'
 import { PeerPairing } from './pairing'
 import { PeerRemoteProjects } from './remote-projects'
+import type { PeerComputerRecord } from './catalog-schema'
 import type { PeerRpc } from './rpc'
 import { PeerRuntimeHost } from './runtime-host'
 import { PeerServices, type PeerServiceInput } from './services'
@@ -34,6 +35,8 @@ export class PeerManagement {
   readonly #host: PeerRuntimeHost
   readonly #lifetime = new AbortController()
   #session: Session | undefined
+  /** Services whose enrolled device has been restored into the live helper. */
+  readonly #restored = new Set<string>()
 
   constructor(options: Options) {
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot)
@@ -127,21 +130,75 @@ export class PeerManagement {
     return (await this.#ready(signal)).enrollment.recover(serviceId, revision, this.#signal(signal))
   }
 
+  /**
+   * Ready session with the enrolled device restored into the helper.
+   *
+   * Pairing, connections and remote browsing all speak as the enrolled device,
+   * but nothing restored the saved credential into the helper after enrollment,
+   * so every pairs.* call failed with device_unregistered. Restoring is
+   * idempotent: the helper refusing a second restore counts as restored.
+   */
+  async #readyAsDevice(serviceId: string, signal: AbortSignal): Promise<Session> {
+    const session = await this.#ready(signal)
+    await session.services.activate(serviceId, this.#signal(signal))
+    if (this.#restored.has(serviceId)) return session
+    const saved = await this.#credentials.load(serviceId).catch(() => undefined)
+    if (!saved || saved.credential.serviceId !== serviceId)
+      throw new PeerHelperError('p2p.device_unregistered')
+    const catalog = await this.#catalog.inspect()
+    try {
+      exactPeerObject(
+        await session.rpc.call(
+          'device.restore',
+          {
+            serviceId,
+            data: {
+              device: {
+                deviceId: saved.credential.deviceId,
+                userId: saved.credential.userId,
+                name: saved.credential.name,
+                publicKey: saved.credential.publicKey,
+                certificate: saved.credential.certificate
+              },
+              privateKey: saved.credential.privateKey,
+              pins: catalog ? restorePins(catalog.record.computers, serviceId) : []
+            }
+          },
+          this.#signal(signal)
+        ),
+        ['deviceId']
+      )
+    } catch (error) {
+      // Already restored in this helper process: not an error.
+      if (!(error instanceof PeerHelperError) || error.code !== 'p2p.invalid_device_state')
+        throw error
+    }
+    this.#restored.add(serviceId)
+    return session
+  }
+
   async pairs(serviceId: string, signal: AbortSignal) {
-    return (await this.#ready(signal)).pairing.list(serviceId, this.#signal(signal))
+    return (await this.#readyAsDevice(serviceId, signal)).pairing.list(
+      serviceId,
+      this.#signal(signal)
+    )
   }
   async pairIdentity(serviceId: string, pairId: string, signal: AbortSignal) {
-    return (await this.#ready(signal)).pairing.identity(serviceId, pairId, this.#signal(signal))
+    return (await this.#readyAsDevice(serviceId, signal)).pairing.identity(
+      serviceId,
+      pairId,
+      this.#signal(signal)
+    )
   }
   async createInvite(serviceId: string, networkId: string, signal: AbortSignal) {
-    return (await this.#ready(signal)).pairing.createInvite(
+    return (await this.#readyAsDevice(serviceId, signal)).pairing.createInvite(
       serviceId,
       networkId,
       this.#signal(signal)
     )
   }
   async acceptInvite(serviceId: string, networkId: string, code: string, signal: AbortSignal) {
-    return (await this.#ready(signal)).pairing.acceptInvite(
+    return (await this.#readyAsDevice(serviceId, signal)).pairing.acceptInvite(
       serviceId,
       networkId,
       code,
@@ -149,7 +206,7 @@ export class PeerManagement {
     )
   }
   async approvePair(serviceId: string, pairId: string, fingerprint: string, signal: AbortSignal) {
-    return (await this.#ready(signal)).pairing.approve(
+    return (await this.#readyAsDevice(serviceId, signal)).pairing.approve(
       serviceId,
       pairId,
       fingerprint,
@@ -157,7 +214,11 @@ export class PeerManagement {
     )
   }
   async rejectPair(serviceId: string, pairId: string, signal: AbortSignal) {
-    return (await this.#ready(signal)).pairing.reject(serviceId, pairId, this.#signal(signal))
+    return (await this.#readyAsDevice(serviceId, signal)).pairing.reject(
+      serviceId,
+      pairId,
+      this.#signal(signal)
+    )
   }
   /** Returns the catalog because revocation removes the paired computer record. */
   async revokePair(serviceId: string, pairId: string, signal: AbortSignal) {
@@ -216,16 +277,16 @@ export class PeerManagement {
     return this.#host.snapshot()
   }
   async connect(serviceId: string, pairId: string, signal: AbortSignal) {
-    const session = await this.#ready(signal)
+    const session = await this.#readyAsDevice(serviceId, signal)
     return session.connections.connect(serviceId, pairId, this.#signal(signal))
   }
   async disconnect(serviceId: string, pairId: string, signal: AbortSignal) {
-    const session = await this.#ready(signal)
+    const session = await this.#readyAsDevice(serviceId, signal)
     return session.connections.disconnect(serviceId, pairId, this.#signal(signal))
   }
 
   async remoteRoots(serviceId: string, pairId: string, signal: AbortSignal) {
-    const session = await this.#ready(signal)
+    const session = await this.#readyAsDevice(serviceId, signal)
     return session.projects.roots(serviceId, pairId, this.#signal(signal))
   }
   async remoteDirectory(
@@ -359,6 +420,7 @@ export class PeerManagement {
   }
 
   #clearSession(): void {
+    this.#restored.clear()
     this.#session?.projects.close()
     this.#session?.connections.close()
     this.#session?.pairing.close()
@@ -373,4 +435,47 @@ export class PeerManagement {
   #admit(): void {
     if (this.#lifetime.signal.aborted) throw new PeerHelperError('p2p.helper_closed')
   }
+}
+
+/**
+ * Rebuilds helper pins from persisted computer records.
+ *
+ * The helper keeps pins in memory, so a restart would otherwise silently drop
+ * authorization for every established pair. Records carry both device
+ * identities; entries for other services or revoked pairs are skipped.
+ */
+function restorePins(
+  computers: readonly PeerComputerRecord[],
+  serviceId: string
+): readonly unknown[] {
+  const pins: unknown[] = []
+  for (const computer of computers) {
+    if (computer.serviceId !== serviceId || computer.pairState !== 'active') continue
+    pins.push({
+      pair: {
+        pairId: computer.pairId,
+        networkId: computer.networkId,
+        initiator: computer.localDeviceId,
+        target: computer.remoteDeviceId,
+        state: 'active',
+        revision: computer.pairRevision,
+        expiresAt: 0
+      },
+      initiator: {
+        deviceId: computer.localDeviceId,
+        userId: computer.userId,
+        publicKey: computer.localPublicKey,
+        name: computer.displayName,
+        presence: 'offline'
+      },
+      target: {
+        deviceId: computer.remoteDeviceId,
+        userId: computer.userId,
+        publicKey: computer.remotePublicKey,
+        name: computer.displayName,
+        presence: 'offline'
+      }
+    })
+  }
+  return pins
 }

@@ -163,7 +163,14 @@ export class PeerCredentialStore {
       throw new PeerHelperError('p2p.settings_root_required')
     const directory = join(parent, 'p2p-credentials')
     if (create) await mkdir(directory, { recursive: true, mode: 0o700 })
-    const folder = await lstat(directory)
+    // A first run before any enrollment has no credentials directory at all.
+    // That is "nothing stored", not an internal error: surface the typed code so
+    // the renderer can offer registration instead of showing a failure.
+    const folder = await lstat(directory).catch((error: NodeJS.ErrnoException) => {
+      if (!create && error.code === 'ENOENT')
+        throw new PeerHelperError('p2p.credential_unavailable')
+      throw error
+    })
     if (!folder.isDirectory() || folder.isSymbolicLink())
       throw new PeerHelperError('p2p.credential_invalid')
     return join(directory, serviceId + '.json')

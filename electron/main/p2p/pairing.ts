@@ -82,7 +82,7 @@ export class PeerPairing {
     signal: AbortSignal
   ): Promise<PeerPair> {
     assertAccountId(networkId)
-    if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{16,512}$/.test(code))
+    if (typeof code !== 'string' || !/^[A-Za-z0-9_-]{16,2048}$/.test(code))
       throw new PeerHelperError('p2p.invite_invalid')
     return this.#operation(serviceId, signal, async () => {
       const local = await this.localDeviceId(serviceId, signal)

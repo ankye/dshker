@@ -6,6 +6,9 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.enrollment.title': 'Local enrollment and recovery',
   'p2p.enrollment.description':
     'Read this service’s local credential or reconcile interrupted enrollment. The private key stays on this computer.',
+  'p2p.enrollment.register': 'Register this computer',
+  'p2p.enrollment.registerHint':
+    'Registration generates a device key locally (the private key never leaves this computer) and submits an enrollment request to the server.',
   'p2p.enrollment.read': 'Read local enrollment',
   'p2p.enrollment.recover': 'Query original enrollment result',
   'p2p.enrollment.registered':
