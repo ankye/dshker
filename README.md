@@ -1,10 +1,16 @@
+<p align="center">
+  <img src="resources/dsh-launcher-logo-launcher.png" alt="DSHKer otter logo" width="128" />
+</p>
+
 # DSHKer Launcher
+
+One desktop home for your local and remote DeepSeek Harness sessions.
 
 [简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [Latest release](https://github.com/ankye/dshker/releases/latest) · [GitHub Actions builds](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
 ## Core features
 
-- **Managed remote DSHKer connections** — register trusted computers, test the complete SSH tunnel and DSH session path, then open each connected computer in its fixed Run tab without copying a Web credential manually.
+- **Multiple computers, one workspace** — manage trusted SSH connections, test the full DSH session path, and switch between fixed Local and per-computer Run tabs without manually copying DSH Web credentials.
 - **One-click DSH Web** — prepare the bundled Harness seed, select a core commit, and start the standard DSH Web command.
 - **Version control** — refresh remote history, inspect commits, and explicitly switch the managed DSH core.
 - **Extension management** — see installed extensions and browse the curated Awesome DSH Plugin catalog.
@@ -16,9 +22,31 @@ DSHKer Launcher is a desktop shell for running [DeepSeek Harness](https://github
 
 The Launcher never replaces, moves, or resets native DSH state. Your existing `$DSH_HOME` or `~/.dsh` remains owned by DeepSeek Harness and is reused when you change the selected core version.
 
-![DSHKer Launcher launch screen](docs/assets/screenshots/launch.png)
+![DSHKer otter workbench — the current launch-page background artwork](resources/dshker-hero-workbench.png)
 
-![Version management](docs/assets/screenshots/versions.png)
+The otter logo and workbench artwork above are the assets used by the current source version. For interface captures, see [product screenshots](docs/screenshots.md); published installers may lag behind `main`.
+
+## Remote connections
+
+Keep your DSH machines together without exposing DSH Web to the network. The current desktop connection path uses **SSH tunnels**, forwarding HTTP and WebSocket traffic to the remote DSH's actual loopback address and port.
+
+- **Computer management:** add a display name, host, SSH port and user; edit saved connections or remove computers you no longer need. Disconnect before changing connection details.
+- **Test before connecting:** verify SSH authentication, the remote DSHKer handshake and DSH access. A successful test is separate from an active connection.
+- **Visible status:** green indicates readiness or a passed test; red indicates failure, with text describing the state. Connect and disconnect explicitly.
+- **Persistent tabs:** one Local tab and one fixed, non-closable tab per registered computer. Disconnecting does not remove the computer's tab.
+- **No manual DSH token copying:** the authenticated connection obtains the DSH Web credential. SSH authentication is still required; the app neither asks for SSH passwords nor transfers private keys.
+
+To connect:
+
+1. Run DSHKer on the remote computer and ensure it can start its managed DSH Web session.
+2. Configure the remote SSH server and verify access using your system OpenSSH configuration or agent, including trusted host keys.
+3. Open **Remote connections**, enter the computer details, choose **Test**, then **Connect**. Open its tab under **Run**.
+
+The form's port is the **SSH port**, not the DSH Web port. DSHKer obtains the current DSH endpoint instead of assuming `3080`. If you see `remote.peer_unavailable`, check that remote DSHKer is running and can provide a DSH session; an accessible SSH server alone is not enough.
+
+### In development: self-hosted P2P workbench
+
+The independent [DSHKer Server](https://github.com/ankye/dshker-server) provides user-scoped networks and authenticated device pairing. Direct transport and the DSH client navigation extension have local diagnostic coverage, but **production desktop integration, remote project-folder selection and complete two-peer acceptance are not finished**. These are not advertised as available desktop or released features. See the [implementation checklist](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md).
 
 ## Install
 

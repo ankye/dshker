@@ -1,10 +1,16 @@
+<p align="center">
+  <img src="resources/dsh-launcher-logo-launcher.png" alt="DSHKer 水獭品牌 Logo" width="128" />
+</p>
+
 # DSHKer Launcher
+
+一个桌面入口，连接本地与远程的 DeepSeek Harness 工作空间。
 
 [English](README.md) · [使用说明](docs/usage.zh-CN.md) · [产品截图](docs/screenshots.md) · [最新版本](https://github.com/ankye/dshker/releases/latest) · [GitHub Actions 构建](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
 ## 核心功能
 
-- **受管远程 DSHKer 连接**：登记可信电脑，测试完整 SSH 隧道与 DSH 会话链路；连接后在固定运行标签中打开，无需手动复制 Web 认证凭据。
+- **多台电脑，一个工作台**：管理可信 SSH 连接，测试完整 DSH 会话链路，在固定的本地与各电脑运行标签间切换，无需手动复制 DSH Web 认证凭据。
 - **一键启动 DSH Web**：准备内置 Harness 初始版本、选择内核提交，并启动标准 DSH Web 命令。
 - **内核版本管理**：刷新远端历史、查看提交，并明确切换 Launcher 管理的 DSH 内核。
 - **扩展管理**：查看已安装扩展，并浏览 Awesome DSH Plugin 精选目录。
@@ -16,9 +22,31 @@ DSHKer Launcher 是面向 macOS 与 Windows 的 [DeepSeek Harness](https://githu
 
 Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HOME` 或 `~/.dsh` 始终归 DeepSeek Harness 所有；切换内核版本时会继续沿用。
 
-![DSHKer Launcher 启动页](docs/assets/screenshots/launch.png)
+![DSHKer 水獭工作台——当前启动页使用的品牌背景插画](resources/dshker-hero-workbench.png)
 
-![版本管理](docs/assets/screenshots/versions.png)
+上方 Logo 与工作台插画直接复用当前源码中的应用素材。界面实拍见[产品截图](docs/screenshots.md)；已发布安装包可能落后于 `main` 分支。
+
+## 远程连接
+
+把多台电脑的 DSH 集中到同一个桌面入口，无需将 DSH Web 暴露到网络。当前桌面连接方式为 **SSH 隧道**，将 HTTP 与 WebSocket 流量转发到远端 DSH 实际使用的回环地址和端口。
+
+- **电脑管理**：添加名称、主机、SSH 端口与用户名，支持编辑连接记录、删除不再使用的电脑；修改连接参数前需先断开。
+- **先测试，再连接**：验证 SSH 认证、远端 DSHKer 握手及 DSH 访问。测试通过与正在连接是两个独立状态。
+- **状态一目了然**：绿色表示就绪或测试通过，红色表示失败，同时显示文字状态；支持主动连接与断开。
+- **固定运行标签**：保留一个本地标签，每台已登记电脑各有一个不可关闭的固定标签；断开连接不会删除电脑标签。
+- **无需手动复制 DSH Token**：通过已认证链路获取 DSH Web 凭据。仍需配置 SSH 认证；应用不接收 SSH 密码，也不传输私钥。
+
+连接步骤：
+
+1. 在远端电脑运行 DSHKer，并确认它能够启动受管 DSH Web 会话。
+2. 配置远端 SSH 服务，通过系统 OpenSSH 配置或 agent 验证访问，并完成主机密钥信任校验。
+3. 打开**远程连接**，填写电脑信息，先点**测试**，再点**连接**，然后进入**运行**中的对应电脑标签。
+
+表单填写的是 **SSH 端口**，不是 DSH Web 端口。DSHKer 获取实际 DSH 地址，不假定端口为 `3080`。若提示 `remote.peer_unavailable`，请检查远端 DSHKer 是否运行、能否提供 DSH 会话；仅 SSH 服务可访问还不够。
+
+### 开发中：自托管 P2P 远程工作台
+
+独立的 [DSHKer Server](https://github.com/ankye/dshker-server) 提供分用户网络与认证设备配对。直连传输和 DSH 客户端导航扩展已有本地诊断验证，但**正式桌面接入、远程工程目录选择和双端完整验收尚未完成**，不能视为当前桌面或已发布版本的可用功能。进度见[实现清单](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md)。
 
 ## 安装
 
