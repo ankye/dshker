@@ -45,6 +45,13 @@ The launcher SHALL use a narrow persistent sidebar with three presentation state
 - **WHEN** the user selects a sidebar entry
 - **THEN** the matching page becomes active without moving or reconfiguring any DSH-owned path
 
+#### Scenario: Hidden sidebar controls must not cover guest settings
+
+- **WHEN** the sidebar is hidden and the two floating controls overlay the Run guest
+- **THEN** both controls move upward together by 4rem from their ordinary rail position, preserving their size, spacing, and accessible actions
+- **AND** the guest's bottom-left footer remains free of Launcher controls and receives pointer input
+- **AND** expanded and collapsed sidebars keep the controls in their own rail without moving them over navigation entries
+
 ### Requirement: Token usage supports range-scoped daily model analysis
 
 The Token usage page SHALL provide Overview and Statistics tabs. Statistics SHALL list the exact DSH-recorded token totals grouped by local calendar day and recorded model, with visible start and end date controls plus recent-range presets. It SHALL provide switchable column charts for daily total usage and daily per-model comparison using the same selected range; the exact totals table remains available as the readable comparison view. The range filter SHALL operate on Launcher-cached aggregates without rereading unchanged DSH session logs. A Refresh control SHALL have the same icon-and-label affordance as the version-management refresh controls and show an honest pending state while the authoritative log read is in progress. The Launcher SHALL use an event's recorded timestamp and active model header for daily attribution; usage records without a timestamp SHALL remain in session totals but SHALL NOT be assigned to an invented day.
@@ -272,6 +279,21 @@ The Launch and Controller footers SHALL show valid start or stop controls for th
 - **THEN** a shell-level read-only console tail can be opened from a control on the sidebar's floating rail beside the sidebar state control, and from the statusbar's busy strip
 - **AND** its control advertises unseen output with a badge instead of opening by itself
 - **AND** the tail renders only the newest bounded slice, hands off to the full Console route, collapses on Escape, and stays below transient error toasts
+
+### Requirement: Console text color represents severity rather than output stream
+
+The Controller and console drawer SHALL share normal-green and error-red text presentation. Standard error SHALL NOT by itself mean an error. Explicit DSH and common CLI error levels, exception headers, compiler error diagnostics, and Launcher operation failures SHALL render red; ordinary progress, commands, information, and warning-level records SHALL remain green. Explicit log levels SHALL take precedence over severity words quoted in their messages. Mixed multiline fragments SHALL be styled per line without changing original text, timestamps, stream identity, sequence, copy, export, or feed retention. Color SHALL NOT change runtime readiness or failure state.
+
+#### Scenario: Normal output is written to standard error
+
+- **WHEN** DSH information, Git progress, or dependency-install progress arrives on standard error
+- **THEN** both console surfaces render its text green and retain the standard-error source label
+
+#### Scenario: One fragment includes normal and error lines
+
+- **WHEN** a fragment includes information followed by an explicit error and then normal progress
+- **THEN** only the error and its following stack frames are red in both surfaces
+- **AND** the displayed and copied text retain the original content and order
 
 ### Requirement: Run page renders the guest at an explicit page zoom
 

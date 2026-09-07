@@ -1,0 +1,3 @@
+- insert:
+    - id: dshker-workbench-client
+      name: '@ankye/dshker-workbench-client'

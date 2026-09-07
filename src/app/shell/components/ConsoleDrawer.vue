@@ -3,6 +3,7 @@ import { computed, nextTick, ref, watch } from 'vue'
 import { harnessConsole } from '@/app/domains/launcher-harness'
 import { useConsoleDrawer } from '../consoleDrawerState'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
+import ConsoleOutputText from './ConsoleOutputText.vue'
 
 /**
  * The shell-level read-only tail of Launcher activity.
@@ -95,7 +96,7 @@ function openConsole(): void {
                   : t('controller.output.stderr')
           }}
         </span>
-        <pre>{{ entry.text }}</pre>
+        <ConsoleOutputText :entry="entry" />
       </li>
     </ol>
   </section>

@@ -3,15 +3,16 @@ import type {
   ApiResult,
   CreateRemoteConnectionRequest,
   RemoteConnectionErrorCode,
+  UpdateRemoteConnectionRequest,
   RemoteConnectionsState
 } from '@/shared/contracts'
 
 export const remoteConnectionsState = ref<RemoteConnectionsState>({ connections: [] })
 const loading = ref(false)
-const pendingActions = ref<Readonly<Record<string, 'test' | 'connect' | 'disconnect' | 'remove'>>>(
-  {}
-)
-const error = ref<RemoteConnectionErrorCode | 'bridge'>()
+const pendingActions = ref<
+  Readonly<Record<string, 'test' | 'connect' | 'disconnect' | 'remove' | 'update'>>
+>({})
+const error = ref<RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'>()
 let startPromise: Promise<void> | undefined
 let unsubscribe: (() => void) | undefined
 let revision = 0
@@ -93,6 +94,56 @@ async function runIdentityOperation(
   }
 }
 
+async function update(request: UpdateRemoteConnectionRequest): Promise<boolean> {
+  const api = window.dshLauncher?.remoteConnections
+  const id = request.connectionId
+  if (api === undefined || pendingActions.value[id] !== undefined) {
+    error.value = api === undefined ? 'bridge' : 'remote.connection_busy'
+    return false
+  }
+  pendingActions.value = { ...pendingActions.value, [id]: 'update' }
+  error.value = undefined
+  try {
+    return publish(await api.update(request))
+  } catch {
+    error.value = 'unconfirmed'
+    try {
+      const result = await api.getState()
+      if (!result.ok) return false
+      publish(result)
+      const saved = result.data.connections.find((entry) => entry.connectionId === id)
+      const confirmed =
+        saved !== undefined &&
+        saved.displayName === request.displayName &&
+        saved.host === request.host &&
+        saved.port === request.port &&
+        saved.user === request.user
+      if (!confirmed) error.value = 'unconfirmed'
+      return confirmed
+    } catch {
+      return false
+    }
+  } finally {
+    const next = { ...pendingActions.value }
+    delete next[id]
+    pendingActions.value = next
+  }
+}
+
+async function refresh(): Promise<boolean> {
+  const api = window.dshLauncher?.remoteConnections
+  if (api === undefined) {
+    error.value = 'bridge'
+    return false
+  }
+  try {
+    return publish(await api.getState())
+  } catch {
+    error.value = 'bridge'
+    return false
+  }
+}
+
 export function useRemoteConnections() {
   onMounted(() => void startRemoteConnections())
   return {
@@ -101,6 +152,8 @@ export function useRemoteConnections() {
     pendingActions,
     error,
     create,
+    update,
+    refresh,
     test: (connectionId: string) => runIdentityOperation(connectionId, 'test'),
     connect: (connectionId: string) => runIdentityOperation(connectionId, 'connect'),
     disconnect: (connectionId: string) => runIdentityOperation(connectionId, 'disconnect'),

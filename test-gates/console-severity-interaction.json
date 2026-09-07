@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "change": "Console severity colors",
+  "acceptance_stage": "diagnostic",
+  "implementation_complete": true,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "prerequisites": [],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "workflows": [
+    {
+      "id": "open-console",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='nav-controller']",
+      "expected_state": {
+        "normal_color": "#72d9a0",
+        "error_color": "#ffaba5"
+      },
+      "expected_native_event": "Console route becomes visible",
+      "requires_persistence": false,
+      "invariants": [
+        "raw text, stream, sequence and timestamp stay unchanged",
+        "copy and export stay unchanged"
+      ],
+      "required_content_checks": ["text_order", "severity_colors", "source_labels"]
+    },
+    {
+      "id": "open-console-tail",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": ".sidebar-console-toggle",
+      "expected_state": {
+        "normal_color": "#72d9a0",
+        "error_color": "#ffaba5"
+      },
+      "expected_native_event": "Console drawer becomes visible",
+      "requires_persistence": false,
+      "invariants": ["newest 200 entries retained", "Escape closes drawer"],
+      "required_content_checks": ["text_order", "severity_colors", "source_labels"]
+    }
+  ]
+}

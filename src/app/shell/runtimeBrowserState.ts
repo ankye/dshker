@@ -17,6 +17,7 @@ export interface RuntimeTab {
 
 const navigation = reactive<Record<string, { url: string; title: string } | undefined>>({})
 const remoteSourceUrls = new Map<string, string>()
+const remoteDisplayNames = new Map<string, string>()
 const activeTabId = ref<RuntimeTabId>('local')
 
 /** Exact address announced by the locally supervised DSH child. */
@@ -93,18 +94,24 @@ watch(
     for (const connection of connections) {
       const id = `remote:${connection.connectionId}`
       retained.add(id)
+      const renamed =
+        remoteDisplayNames.has(id) && remoteDisplayNames.get(id) !== connection.displayName
+      remoteDisplayNames.set(id, connection.displayName)
       if (connection.status.kind !== 'ready') {
         delete navigation[id]
         remoteSourceUrls.delete(id)
       } else if (remoteSourceUrls.get(id) !== connection.status.url) {
         remoteSourceUrls.set(id, connection.status.url)
         navigation[id] = { url: connection.status.url, title: connection.displayName }
+      } else if (renamed && navigation[id] !== undefined) {
+        navigation[id] = { url: navigation[id].url, title: connection.displayName }
       }
     }
     for (const id of Object.keys(navigation)) {
       if (!retained.has(id)) {
         delete navigation[id]
         remoteSourceUrls.delete(id)
+        remoteDisplayNames.delete(id)
       }
     }
     if (!tabs.value.some((tab) => tab.id === activeTabId.value)) activeTabId.value = 'local'

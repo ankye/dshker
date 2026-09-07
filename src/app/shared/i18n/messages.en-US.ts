@@ -362,6 +362,19 @@ export const enUS: Record<MessageKey, string> = {
   'remote.field.host': 'SSH host',
   'remote.field.port': 'SSH port',
   'remote.field.user': 'SSH user',
+  'remote.edit.action': 'Edit',
+  'remote.edit.title': 'Edit remote computer',
+  'remote.edit.hint':
+    'Renaming keeps the connection. Disconnect before changing the SSH host, port or user. Saving does not reconnect.',
+  'remote.edit.save': 'Save changes',
+  'remote.edit.cancel': 'Cancel',
+  'remote.edit.conflict': 'Configuration changed. Review your draft before reloading.',
+  'remote.edit.reload': 'Discard draft and reload',
+  'remote.edit.unconfirmed':
+    'Save outcome is unconfirmed. Check the connection and reread the record; no automatic resubmission.',
+  'remote.edit.discardQuestion': 'Discard unsaved changes?',
+  'remote.edit.keep': 'Keep editing',
+  'remote.edit.discard': 'Discard changes',
   'remote.add.action': 'Add computer',
   'remote.add.saving': 'Saving…',
   'remote.add.hint':
@@ -375,7 +388,8 @@ export const enUS: Record<MessageKey, string> = {
   'remote.error.notFound': 'This remote computer was not found.',
   'remote.error.exists': 'A remote computer already uses this name.',
   'remote.error.busy': 'This computer is being tested, connecting, or already connected.',
-  'remote.error.notDisconnected': 'Disconnect this computer before removing it.',
+  'remote.error.notDisconnected':
+    'Disconnect this computer before changing connection parameters or removing it.',
   'remote.error.sshUnavailable': 'System OpenSSH or SCP is unavailable.',
   'remote.error.sshAuthentication': 'SSH authentication or host-key verification failed.',
   'remote.error.peerUnavailable': 'Remote DSHKer is not running or cannot provide a DSH session.',

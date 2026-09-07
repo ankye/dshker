@@ -1,13 +1,17 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopApi, RemoteConnectionsState } from '@/shared/contracts'
-import { resetRemoteConnectionsForTests } from '@/app/domains/remote-connections'
+import {
+  remoteConnectionEditor,
+  resetRemoteConnectionsForTests
+} from '@/app/domains/remote-connections'
 import RemoteConnectionsPanel from '../components/RemoteConnectionsPanel.vue'
 
 const disconnected: RemoteConnectionsState = {
   connections: [
     {
       connectionId: '11111111-1111-4111-8111-111111111111',
+      configRevision: 'a'.repeat(64),
       displayName: '工作室 Mac',
       host: '10.147.17.251',
       port: 22,
@@ -21,6 +25,23 @@ const disconnected: RemoteConnectionsState = {
 function installApi(state: RemoteConnectionsState = { connections: [] }) {
   let listener: Parameters<DesktopApi['remoteConnections']['onStateChange']>[0] | undefined
   const api: DesktopApi['remoteConnections'] = {
+    update: vi.fn(async (request) => ({
+      ok: true as const,
+      data: {
+        connections: state.connections.map((entry) =>
+          entry.connectionId === request.connectionId
+            ? {
+                ...entry,
+                displayName: request.displayName,
+                host: request.host,
+                port: request.port,
+                user: request.user,
+                configRevision: 'b'.repeat(64)
+              }
+            : entry
+        )
+      }
+    })),
     getState: vi.fn(async () => ({ ok: true as const, data: state })),
     create: vi.fn(async () => ({ ok: true as const, data: disconnected })),
     test: vi.fn(async () => ({
@@ -55,9 +76,13 @@ function installApi(state: RemoteConnectionsState = { connections: [] }) {
 }
 
 describe('RemoteConnectionsPanel', () => {
-  beforeEach(() => resetRemoteConnectionsForTests())
+  beforeEach(() => {
+    resetRemoteConnectionsForTests()
+    remoteConnectionEditor.clear()
+  })
   afterEach(() => {
     resetRemoteConnectionsForTests()
+    remoteConnectionEditor.clear()
     window.dshLauncher = undefined
   })
 
@@ -80,6 +105,84 @@ describe('RemoteConnectionsPanel', () => {
     })
     expect(wrapper.text()).toContain('工作室 Mac')
     expect(wrapper.text()).toContain('a1021500932@10.147.17.251:22')
+  })
+
+  it('prefills and submits an explicit edit with the persisted revision, keeping the same row', async () => {
+    const { api } = installApi(disconnected)
+    const wrapper = mount(RemoteConnectionsPanel)
+    await flushPromises()
+    await wrapper.get('#remote-edit-11111111-1111-4111-8111-111111111111').trigger('click')
+    const form = wrapper.get('[data-testid="remote-edit-form"]')
+    const inputs = form.findAll('input')
+    expect((inputs[0]!.element as HTMLInputElement).value).toBe('工作室 Mac')
+    expect((inputs[1]!.element as HTMLInputElement).value).toBe('10.147.17.251')
+    await inputs[0]!.setValue('新版工作室')
+    await form.trigger('submit')
+    await flushPromises()
+    expect(api.update).toHaveBeenCalledWith({
+      connectionId: disconnected.connections[0]!.connectionId,
+      expectedConfigRevision: 'a'.repeat(64),
+      displayName: '新版工作室',
+      host: '10.147.17.251',
+      port: 22,
+      user: 'a1021500932'
+    })
+    expect(wrapper.find('[data-testid="remote-edit-form"]').exists()).toBe(false)
+    expect(wrapper.get('.remote-computer-title').text()).toContain('新版工作室')
+    expect(api.remove).not.toHaveBeenCalled()
+    expect(api.create).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('keeps rejected drafts and requires explicit discard after Escape', async () => {
+    const { api } = installApi(disconnected)
+    vi.mocked(api.update).mockResolvedValue({
+      ok: false,
+      code: 'remote.persistence_failed',
+      message: 'Unable to save'
+    })
+    const wrapper = mount(RemoteConnectionsPanel)
+    await flushPromises()
+    await wrapper.get('#remote-edit-11111111-1111-4111-8111-111111111111').trigger('click')
+    const form = wrapper.get('[data-testid="remote-edit-form"]')
+    await form.get('input').setValue('未保存输入')
+    await form.trigger('submit')
+    await flushPromises()
+    expect((form.get('input').element as HTMLInputElement).value).toBe('未保存输入')
+    expect(wrapper.get('.remote-computer-title').text()).toContain('工作室 Mac')
+    await form.trigger('keydown', { key: 'Escape' })
+    expect(wrapper.get('[role="alertdialog"]').text()).toContain('有未保存的修改')
+    await wrapper.get('[role="alertdialog"] .prototype-button--danger').trigger('click')
+    expect(wrapper.find('[data-testid="remote-edit-form"]').exists()).toBe(false)
+    expect(api.update).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('reads back an interrupted save without resubmitting it', async () => {
+    const { api } = installApi(disconnected)
+    const wrapper = mount(RemoteConnectionsPanel)
+    await flushPromises()
+    vi.mocked(api.update).mockRejectedValue(new Error('reply interrupted'))
+    vi.mocked(api.getState).mockResolvedValue({
+      ok: true,
+      data: {
+        connections: disconnected.connections.map((entry) => ({
+          ...entry,
+          displayName: '已保存',
+          configRevision: 'b'.repeat(64)
+        }))
+      }
+    })
+    await wrapper.get('#remote-edit-11111111-1111-4111-8111-111111111111').trigger('click')
+    const form = wrapper.get('[data-testid="remote-edit-form"]')
+    await form.get('input').setValue('已保存')
+    await form.trigger('submit')
+    await flushPromises()
+    expect(api.update).toHaveBeenCalledTimes(1)
+    expect(api.getState).toHaveBeenCalledTimes(2)
+    expect(wrapper.find('[data-testid="remote-edit-form"]').exists()).toBe(false)
+    expect(wrapper.get('.remote-computer-title').text()).toContain('已保存')
+    wrapper.unmount()
   })
 
   it('shows distinct disconnected, connecting, ready, and failed states from peer events', async () => {
@@ -121,7 +224,7 @@ describe('RemoteConnectionsPanel', () => {
     const disconnectedBadge = wrapper.get('.remote-status')
     expect(disconnectedBadge.attributes('data-state')).toBe('disconnected')
     expect(disconnectedBadge.text()).toContain('未连接')
-    await wrapper.get('.remote-row-actions button').trigger('click')
+    await wrapper.get('[data-testid="remote-test-connection"]').trigger('click')
     await flushPromises()
 
     expect(api.test).toHaveBeenCalledWith({

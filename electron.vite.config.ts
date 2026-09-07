@@ -26,7 +26,8 @@ export default defineConfig({
     build: {
       rollupOptions: {
         input: {
-          index: resolve(root, 'electron/preload.ts')
+          index: resolve(root, 'electron/preload.ts'),
+          workbench: resolve(root, 'electron/workbench-preload.ts')
         },
         output: {
           entryFileNames: '[name].cjs',

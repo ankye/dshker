@@ -47,6 +47,7 @@ export const DESKTOP_IPC_CHANNELS = {
   runtimeBrowserGetHostRenderingInfo: 'dsh-launcher:runtime-browser:get-host-rendering-info',
   remoteConnectionsGetState: 'dsh-launcher:remote-connections:get-state',
   remoteConnectionsCreate: 'dsh-launcher:remote-connections:create',
+  remoteConnectionsUpdate: 'dsh-launcher:remote-connections:update',
   remoteConnectionsTest: 'dsh-launcher:remote-connections:test',
   remoteConnectionsConnect: 'dsh-launcher:remote-connections:connect',
   remoteConnectionsDisconnect: 'dsh-launcher:remote-connections:disconnect',
@@ -159,6 +160,7 @@ export type RemoteConnectionErrorCode =
   | 'remote.connection_not_found'
   | 'remote.connection_exists'
   | 'remote.connection_busy'
+  | 'remote.config_conflict'
   | 'remote.connection_not_disconnected'
   | 'remote.ssh_unavailable'
   | 'remote.ssh_authentication_failed'
@@ -608,6 +610,7 @@ export type RemoteConnectionTestStatus =
 
 /** One catalog record paired with its current process-local connection state. */
 export interface RemoteConnectionView extends RemoteComputerView {
+  readonly configRevision: string
   readonly status: RemoteConnectionStatus
   readonly testStatus: RemoteConnectionTestStatus
 }
@@ -628,6 +631,12 @@ export interface CreateRemoteConnectionRequest {
 /** Identifies one already registered computer for a named operation. */
 export interface RemoteConnectionIdentityRequest {
   readonly connectionId: string
+}
+
+/** Explicit replacement of editable fields, guarded by the exact persisted revision. */
+export interface UpdateRemoteConnectionRequest extends CreateRemoteConnectionRequest {
+  readonly connectionId: string
+  readonly expectedConfigRevision: string
 }
 
 /** Read-only update discovery state owned by the Electron main process. */
@@ -746,6 +755,9 @@ export interface DesktopApi {
     getState(): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
     create(
       request: CreateRemoteConnectionRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
+    update(
+      request: UpdateRemoteConnectionRequest
     ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
     test(
       request: RemoteConnectionIdentityRequest

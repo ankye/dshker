@@ -63,3 +63,14 @@ repositories.
 
 - [x] 7.1 Resolve native pnpm and npm/Corepack shim targets, including adjacent/parent layouts, using an absolute Node path. Evidence: six focused cases and a real pnpm version probe.
 - [x] 7.2 Verify repaired installed Launcher starts the selected Harness. Evidence: authenticated HTTP 200, original archive retained under .run/pnpm-startup-repair/. Local repair only; no public release.
+
+## 8. Console severity colors
+
+- [x] 8.1 Share normal-green/error-red line presentation between Controller and console drawer without changing transport or copied output. Evidence: five focused suites cover normal stderr, stdout errors, explicit-level precedence, mixed chunks, operation failures, feed replacement, preserved copy text, and actual authored CSS cascade in both containers. Full regression: 95 files / 558 tests pass.
+- [x] 8.2 Run types, architecture, environment, service isolation, static visual checks, strict specification, Web/Electron builds, source-size checks, and desktop workspace validation. Evidence recorded in `.agents/notes/2026-09-07-console-severity-colors.md`.
+- [ ] 8.3 Collect real macOS and Windows console interaction/color evidence before native visual or release acceptance. Current Electron mount smoke exits successfully but its screenshot is an empty background, not console evidence. The test-integrity verify gate also rejects unrelated dirty P2P production files outside this scoped manifest; no gate has been waived or relabeled passed.
+
+## 9. Hidden sidebar controls clearance
+
+- [x] 9.1 Raise both hidden-sidebar floating controls by 4rem while keeping their gap and expanded/collapsed positions unchanged. Evidence: 14 focused tests; full regression 95 files / 559 tests; Web and Electron builds; source-size, type, architecture, environment, static visual, service isolation, strict specification, and desktop workspace checks. Native isolated shell smoke covers seven routes and three heights.
+- [ ] 9.2 Verify clicks on the actual DSH guest footer with hidden controls, including macOS/Windows interaction evidence. Native shell smoke and CSS readback do not prove that guest click. Default test-integrity verification also remains blocked by unrelated dirty production changes outside this scoped CSS manifest. No installed application replacement or release is included.

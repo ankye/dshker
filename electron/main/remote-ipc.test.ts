@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { DESKTOP_IPC_CHANNELS } from '../../src/shared/contracts'
 import type { RemoteConnectionService } from './remote/service'
-import { parseCreateRemoteConnectionRequest, registerRemoteConnectionIpc } from './remote-ipc'
+import {
+  parseCreateRemoteConnectionRequest,
+  parseUpdateRemoteConnectionRequest,
+  registerRemoteConnectionIpc
+} from './remote-ipc'
 
 const mocks = vi.hoisted(() => ({
   handlers: new Map<string, (...args: unknown[]) => unknown>(),
@@ -27,6 +31,7 @@ function remoteService() {
     service: {
       getState: vi.fn(async () => state),
       create: vi.fn(async () => state),
+      update: vi.fn(async () => state),
       test: vi.fn(async () => state),
       connect: vi.fn(async () => state),
       disconnect: vi.fn(async () => state),
@@ -41,6 +46,38 @@ function remoteService() {
 }
 
 describe('remote connection IPC', () => {
+  it('admits exact versioned updates and rejects authority, missing revisions and untrusted senders', async () => {
+    const request = {
+      connectionId: '11111111-1111-4111-8111-111111111111',
+      expectedConfigRevision: 'a'.repeat(64),
+      displayName: 'Mac',
+      host: 'mac',
+      port: 22,
+      user: 'dev'
+    }
+    expect(parseUpdateRemoteConnectionRequest(request)).toEqual(request)
+    for (const field of ['privateKey', 'deviceId', 'pairId', 'mode', 'url', 'targetPort']) {
+      expect(() =>
+        parseUpdateRemoteConnectionRequest({ ...request, [field]: 'forbidden' })
+      ).toThrow()
+    }
+    expect(() =>
+      parseUpdateRemoteConnectionRequest({ ...request, expectedConfigRevision: '' })
+    ).toThrow()
+    const { service } = remoteService()
+    registerRemoteConnectionIpc(service)
+    const update = mocks.handlers.get(DESKTOP_IPC_CHANNELS.remoteConnectionsUpdate)!
+    mocks.trusted = false
+    expect(await update({}, request)).toMatchObject({ ok: false, code: 'remote.invalid_request' })
+    expect(service.update).not.toHaveBeenCalled()
+    mocks.trusted = true
+    expect(await update({}, request, 'extra')).toMatchObject({
+      ok: false,
+      code: 'remote.invalid_request'
+    })
+    expect(await update({}, request)).toEqual({ ok: true, data: { connections: [] } })
+    expect(service.update).toHaveBeenCalledWith(request)
+  })
   beforeEach(() => {
     mocks.handlers.clear()
     mocks.trusted = true

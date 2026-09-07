@@ -57,6 +57,19 @@ describe('ConsoleDrawer', () => {
     expect(rows[199]?.text()).toContain('line 205')
   })
 
+  it('shares per-line severity and preserves stderr metadata', async () => {
+    const text = '[I] watching\n[E] request failed\n[I] ready\n'
+    harnessConsole.value = [{ ...entry(1, 'stderr'), text }]
+    drawer.toggleConsoleDrawer()
+    await nextTick()
+    const wrapper = mount(ConsoleDrawer)
+    expect(wrapper.get('.console-drawer-entries li').attributes('data-stream')).toBe('stderr')
+    expect(
+      wrapper.findAll('.console-output-line').map((line) => line.attributes('data-severity'))
+    ).toEqual(['normal', 'error', 'normal'])
+    expect(wrapper.get('.console-drawer-entries pre').element.textContent).toBe(text)
+  })
+
   it('hands off to the Console route and collapses itself', async () => {
     harnessConsole.value = [entry(1)]
     await nextTick()

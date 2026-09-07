@@ -93,6 +93,23 @@ describe('ControllerPanel log controls', () => {
     expect(copied).toContain(new Date(1_700_000_000_002).toISOString())
   })
 
+  it('uses per-line severity without changing source identity or copy output', async () => {
+    const text = '[I] watching\n[E] request failed\n[I] ready\n'
+    const writeText = vi.fn(async (_text: string) => undefined)
+    vi.stubGlobal('navigator', { clipboard: { writeText } })
+    seedState(readyState([entry(1, 'stderr', text)]))
+    const wrapper = mount(ControllerPanel)
+    expect(wrapper.get('.controller-output li').attributes('data-stream')).toBe('stderr')
+    expect(
+      wrapper.findAll('.console-output-line').map((line) => line.attributes('data-severity'))
+    ).toEqual(['normal', 'error', 'normal'])
+    expect(wrapper.get('.controller-output pre').element.textContent).toBe(text)
+    await wrapper.findAll('.controller-log-actions button')[2].trigger('click')
+    expect(writeText).toHaveBeenCalledWith(
+      `[${new Date(1_700_000_000_001).toISOString()}] stderr: ${text.slice(0, -1)}`
+    )
+  })
+
   it('copies the right-clicked log row without requiring a prior text selection', async () => {
     const writeText = vi.fn(async (_text: string) => undefined)
     vi.stubGlobal('navigator', { clipboard: { writeText } })

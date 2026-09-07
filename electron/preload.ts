@@ -31,6 +31,7 @@ import {
   type RemoteConnectionIdentityRequest,
   type RemoteConnectionsState,
   type RemoteConnectionErrorCode,
+  type UpdateRemoteConnectionRequest,
   type RuntimeBrowserPreferences,
   type SetRuntimeBrowserZoomRequest,
   type SetLauncherHarnessPortRequest,
@@ -189,6 +190,10 @@ const desktopApi: DesktopApi = Object.freeze({
     }
   }),
   remoteConnections: Object.freeze({
+    update: (
+      request: UpdateRemoteConnectionRequest
+    ): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsUpdate, request),
     getState: (): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.remoteConnectionsGetState),
     create: (

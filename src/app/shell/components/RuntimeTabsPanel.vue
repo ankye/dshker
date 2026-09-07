@@ -18,6 +18,7 @@ import {
 } from '@/shared/runtime-browser-zoom'
 import { isLoopbackAddress, runtimeBrowser, type RuntimeTabId } from '../runtimeBrowserState'
 import EmptyState from './EmptyState.vue'
+import RemoteRunActions from './RemoteRunActions.vue'
 
 /** The Electron <webview> members this panel drives. */
 interface RuntimeWebview extends HTMLElement {
@@ -618,6 +619,11 @@ onUnmounted(() => {
         :description="t('runtime.remoteUnavailable.description')"
       >
         <template #actions>
+          <RemoteRunActions
+            v-if="browser.activeTab.value?.connectionId"
+            :connection-id="browser.activeTab.value.connectionId"
+            @edit="emit('navigate', 'remote')"
+          />
           <button
             type="button"
             class="prototype-button prototype-button--primary"

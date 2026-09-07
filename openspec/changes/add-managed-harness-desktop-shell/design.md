@@ -147,6 +147,14 @@ Current comparison evidence shows Chrome has a persisted `125` percent page zoom
 
 This is a pre-release format replacement. The launcher accepts only the four-root registry formats defined by this change. A persisted record that describes an unrecognized role, a launcher-managed `.dsh`, an unknown field, or an unsupported version is rejected and requires explicit fresh Launcher-root registration. Native Harness state is never part of that migration and remains untouched.
 
+## Hidden sidebar controls clearance (2026-09-07)
+
+Only the hidden sidebar overlays the Run guest. Its two floating controls share a 4rem upward offset, preserving the 2.5rem button size and 0.5rem gap. Expanded and collapsed rails retain their original bottom positions so navigation does not lose space. The hidden full-stage overlay remains pointer-transparent outside the two controls. No guest layout, zoom, IPC, or persistence changes are involved.
+
+## Console severity presentation (2026-09-07)
+
+The renderer owns one shared console-text component and pure line classifier. It keeps the source stream as metadata, never interprets stderr as an error, and colors normal text green and recognized error diagnostics red. Explicit log levels win over message prose. Styling preserves raw text and line endings; neither the IPC contract nor durable logs change. Mixed chunks keep independent line colors; stack frames following an error within that fragment remain red. Transport fragments without a complete level are not claimed to carry an inferred severity. Native visual acceptance is tracked separately from classifier/component tests.
+
 ## Windows pnpm compatibility repair (2026-09-07)
 
 The existing Launcher pnpm path reads the selected Windows CMD shim target instead of assuming a relative layout. It follows shim symlinks, preserves PATH precedence, checks PNPM_HOME and named npm/Scoop/Node installation locations for GUI startup, and uses an absolute Node executable. Native pnpm.exe needs no JS entry. Missing tools produce a typed failure before spawn. macOS, renderer capabilities, and managed roots are unchanged.

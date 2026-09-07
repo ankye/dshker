@@ -1,0 +1,72 @@
+{
+  "change": "Hidden sidebar controls clearance",
+  "risk": "interactive",
+  "production_files": ["src/styles/base-shell.css"],
+  "test_files": [
+    "src/app/shell/tests/ShellSidebar.test.ts",
+    "src/app/shell/tests/sidebarState.test.ts",
+    "src/app/shell/tests/ConsoleDrawer.test.ts"
+  ],
+  "live_test_files": ["electron/main/smoke.ts", "electron/main/smoke-helpers.ts"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "raises the hidden controls together and restores the ordinary rail position"
+    },
+    {
+      "state": "no_op",
+      "test": "raises the hidden controls together and restores the ordinary rail position",
+      "semantics": "CSS has no command or repeated-input mutation."
+    },
+    {
+      "state": "recovery",
+      "test": "raises the hidden controls together and restores the ordinary rail position",
+      "semantics": "Hidden to expanded restores original positions."
+    },
+    {
+      "state": "stale_timeout",
+      "test": "raises the hidden controls together and restores the ordinary rail position",
+      "semantics": "No asynchronous position state exists; CSS follows only the current sidebar state."
+    },
+    {
+      "state": "reset",
+      "test": "raises the hidden controls together and restores the ordinary rail position"
+    },
+    {
+      "state": "superseded",
+      "test": "raises the hidden controls together and restores the ordinary rail position",
+      "semantics": "Expanded, collapsed, hidden, then expanded readback."
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "src/styles/base-shell.css",
+      "field": "--sidebar-controls-offset and both button bottom values",
+      "source": ".shell-body[data-sidebar-state] and .sidebar-region",
+      "assertion": "expect(offset).toBe(state === 'hidden' ? '4rem' : '0rem')",
+      "test": "raises the hidden controls together and restores the ordinary rail position",
+      "state": "success",
+      "identity_keys": ["sidebar state", "sidebar-state-toggle", "sidebar-console-toggle"],
+      "missing_semantics": "Controls always use the current explicit sidebar state; only hidden raises the shared offset."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "DESKTOP_APP_SMOKE_TEST=1 DESKTOP_APP_SMOKE_OUTPUT=\"$PWD/.run/sidebar-controls/native-smoke.json\" node_modules/.bin/electron .",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/sidebar-controls/native-smoke.json"
+    },
+    {
+      "artifact": ".run/sidebar-controls/interaction.jsonl"
+    }
+  ],
+  "interaction_gate": {
+    "contract": "test-gates/sidebar-controls-interaction.json",
+    "ledger": ".run/sidebar-controls/interaction.jsonl"
+  },
+  "acceptance_status": "Native shell mount/route smoke only; a live DSH guest footer click and raw interaction ledger remain unverified. Existing unrelated dirty code is outside this CSS-only change."
+}

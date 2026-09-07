@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "change": "Hidden sidebar controls clearance",
+  "acceptance_stage": "diagnostic",
+  "implementation_complete": true,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "prerequisites": [],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "workflows": [
+    {
+      "id": "hide-sidebar-clear-footer",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["standard", "compact"],
+      "requires_public_ui": true,
+      "selector": ".sidebar-state-toggle",
+      "expected_state": {
+        "sidebar": "hidden",
+        "root_font_px": 16,
+        "state_button_bottom_px": 76,
+        "console_button_bottom_px": 124,
+        "button_height_px": 40,
+        "button_gap_px": 8,
+        "footer_pointer_clear": true
+      },
+      "expected_native_event": "Both floating controls move upward when the sidebar is hidden",
+      "requires_persistence": false,
+      "invariants": [
+        "Guest navigation and settings remain unchanged",
+        "Expanded and collapsed rail positions are unchanged"
+      ],
+      "required_content_checks": ["button_geometry", "footer_hit_test", "accessible_actions"]
+    }
+  ]
+}

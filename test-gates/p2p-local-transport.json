@@ -1,0 +1,296 @@
+{
+  "change": "add-self-hosted-p2p-dsh-connections: local Go transport diagnostic only",
+  "risk": "data_critical",
+  "scope_note": "Not desktop, DSH HTTP/WS, production helper or physical-machine acceptance. The full dirty worktree includes unrelated/incomplete Electron changes; default verify must stay fail-closed for those undeclared files.",
+  "production_files": [
+    "networking/internal/controlplane/client.go",
+    "networking/internal/controlplane/types.go",
+    "networking/internal/controlplane/management.go",
+    "networking/internal/controlplane/signals.go",
+    "networking/internal/peer/transport.go",
+    "networking/internal/peer/negotiation.go",
+    "networking/internal/peer/streams.go",
+    "networking/internal/peer/stream.go",
+    "networking/internal/protocol/window.go",
+    "networking/internal/protocol/json.go",
+    "networking/internal/protocol/lease.go",
+    "networking/internal/protocol/frame.go",
+    "networking/internal/protocol/signal.go"
+  ],
+  "test_files": [
+    "networking/internal/controlplane/client_test.go",
+    "networking/internal/peer/transport_test.go",
+    "networking/internal/peer/streams_test.go",
+    "networking/internal/peer/streams_admission_test.go",
+    "networking/internal/protocol/window_test.go",
+    "networking/internal/protocol/protocol_test.go",
+    "networking/internal/protocol/lease_test.go",
+    "networking/integration/process_child_test.go",
+    "networking/integration/process_fixture_test.go",
+    "networking/integration/stability_test.go"
+  ],
+  "live_test_files": ["networking/integration/stability_test.go"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestTwoPeerProcessConnectivity"
+    },
+    {
+      "state": "no_op",
+      "test": "TestExplicitEndpointsAndStrictResponses"
+    },
+    {
+      "state": "partial",
+      "test": "TestTwoPeerProcessSlowReceiverIsBounded"
+    },
+    {
+      "state": "recovery",
+      "test": "TestTwoPeerProcessLoadAndReconnect"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestTwoPeerProcessSoakAndServerLoss"
+    },
+    {
+      "state": "reset",
+      "test": "TestTwoPeerProcessSoakAndServerLoss"
+    },
+    {
+      "state": "superseded",
+      "test": "TestSignalSignatureAndScope"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "networking/internal/peer/streams.go",
+      "field": "attemptId,generation,runtimeGeneration,streamId",
+      "source": "strict frames received over authenticated ordered transport",
+      "test": "TestMuxRejectsStaleScopeAndUnknownStream",
+      "assertion": "invalid frame retained capabilities",
+      "state": "superseded",
+      "identity_keys": ["attemptId", "generation", "runtimeGeneration", "streamId"],
+      "missing_semantics": "Missing, future, cross-generation, duplicate OPEN and inflated credit reject; retired stream ids cannot resurrect capabilities."
+    },
+    {
+      "production_file": "networking/internal/peer/stream.go",
+      "field": "buffered,receive,writeClosed,writeGate",
+      "source": "actual direct stream bytes and public read/write/half-close operations",
+      "test": "TestMuxDirectStreamCreditHalfCloseAndReverse",
+      "assertion": "half-close discarded or reordered bytes",
+      "state": "partial",
+      "identity_keys": ["attemptId", "runtimeGeneration", "streamId"],
+      "missing_semantics": "Zero credit waits with caller cancellation; FIN is not RESET and cannot discard preceding bytes."
+    },
+    {
+      "production_file": "networking/internal/protocol/window.go",
+      "field": "available,pending,finished",
+      "source": "exact admitted data lengths and consumed-byte credit",
+      "test": "TestWindowRejectsInflationWithoutMutation",
+      "assertion": "duplicate update inflated credit",
+      "state": "no_op",
+      "identity_keys": ["streamId", "direction"],
+      "missing_semantics": "No implicit credit; invalid or repeated returns cannot mutate the window."
+    },
+    {
+      "production_file": "networking/internal/controlplane/client.go",
+      "field": "serviceId,nonce,publicKey,certificate,endpoints",
+      "source": "signed identity with explicit TLS roots",
+      "test": "TestServiceIdentityNoncePinAndCertificateBinding",
+      "assertion": "valid signed identity readback failed",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/controlplane/types.go",
+      "field": "pairId,deviceId,userId,publicKey",
+      "source": "strict public wire DTOs",
+      "test": "TestPairIdentityRejectsMissingCrossDeviceAndCrossUserFields",
+      "assertion": "exact pair identity readback failed",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/controlplane/management.go",
+      "field": "networkId,pairId,participants",
+      "source": "authenticated pair identity readback",
+      "test": "TestPairIdentityRejectsMissingCrossDeviceAndCrossUserFields",
+      "assertion": "missing or cross-scope identity accepted",
+      "state": "no_op",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/controlplane/signals.go",
+      "field": "ready.deviceId,lease,signal",
+      "source": "real authenticated WSS events and HTTP heartbeat",
+      "test": "TestTwoPeerProcessSoakAndServerLoss",
+      "assertion": "control WSS dropped during healthy soak",
+      "state": "stale_timeout",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/peer/transport.go",
+      "field": "path,lease expiry,payload",
+      "source": "actual UDP/DTLS transport with signed lease",
+      "test": "TestTwoPeerProcessSoakAndServerLoss",
+      "assertion": "transport survived its authorization lease",
+      "state": "stale_timeout",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/peer/negotiation.go",
+      "field": "SDP fingerprint,signature",
+      "source": "signed negotiation bound to pinned key",
+      "test": "TestTamperedSDPRejectedBeforeChannel",
+      "assertion": "tampered fingerprint accepted",
+      "state": "no_op",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/protocol/json.go",
+      "field": "JSON fields",
+      "source": "strict wire decoder",
+      "test": "TestExplicitEndpointsAndStrictResponses",
+      "assertion": "accepted ambiguous or incomplete response",
+      "state": "no_op",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/protocol/lease.go",
+      "field": "networkId,userId,expiresAt",
+      "source": "signed scoped authorization",
+      "test": "TestLeaseGoldenUserNetworkAndTampering",
+      "assertion": "expired scoped lease accepted",
+      "state": "stale_timeout",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/protocol/frame.go",
+      "field": "attemptId,generation,runtimeGeneration",
+      "source": "strict stream frame contract only",
+      "test": "TestFrameLimitsAndGeneration",
+      "assertion": "accepted stale or cross-peer frame",
+      "state": "superseded",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    },
+    {
+      "production_file": "networking/internal/protocol/signal.go",
+      "field": "signature,sequence,generation",
+      "source": "signed control envelope",
+      "test": "TestSignalSignatureAndScope",
+      "assertion": "wire readback changed signed fields",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "revision"
+      ],
+      "missing_semantics": "Reject missing, cross-scope or expired identities; no guessed key, endpoint, relay or runtime."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "cd networking && test -n \"$DSHKER_SERVER_BINARY\" && mkdir -p .run/p2p-stability && go test -race ./integration -count=1 -timeout=6m -json > .run/p2p-stability/integration-gate.jsonl",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": "networking/.run/p2p-stability/integration-gate.jsonl"
+    }
+  ]
+}

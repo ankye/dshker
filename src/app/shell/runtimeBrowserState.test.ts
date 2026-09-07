@@ -63,6 +63,7 @@ describe('fixed runtime workspaces', () => {
       connections: [
         {
           connectionId: '11111111-1111-4111-8111-111111111111',
+          configRevision: 'a'.repeat(64),
           displayName: 'Studio Mac',
           host: 'studio-mac',
           port: 22,
@@ -72,6 +73,7 @@ describe('fixed runtime workspaces', () => {
         },
         {
           connectionId: '22222222-2222-4222-8222-222222222222',
+          configRevision: 'b'.repeat(64),
           displayName: 'Office PC',
           host: 'office-pc',
           port: 2222,
@@ -97,6 +99,7 @@ describe('fixed runtime workspaces', () => {
       connections: [
         {
           connectionId,
+          configRevision: 'c'.repeat(64),
           displayName: 'Build Mac',
           host: 'build-mac',
           port: 22,
@@ -116,6 +119,7 @@ describe('fixed runtime workspaces', () => {
       connections: [
         {
           connectionId,
+          configRevision: 'c'.repeat(64),
           displayName: 'Build Mac',
           host: 'build-mac',
           port: 22,
@@ -132,6 +136,7 @@ describe('fixed runtime workspaces', () => {
       connections: [
         {
           connectionId,
+          configRevision: 'c'.repeat(64),
           displayName: 'Build Mac',
           host: 'build-mac',
           port: 22,
@@ -152,6 +157,7 @@ describe('fixed runtime workspaces', () => {
       connections: [
         {
           connectionId,
+          configRevision: 'd'.repeat(64),
           displayName: 'Laptop',
           host: 'laptop',
           port: 22,

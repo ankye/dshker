@@ -1,5 +1,6 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
 import { APPLICATION_ROUTES } from '../../shared/navigation/routes'
 import ShellSidebar from '../components/ShellSidebar.vue'
 
@@ -28,6 +29,49 @@ function mountSidebar() {
 }
 
 describe('ShellSidebar', () => {
+  afterEach(() => {
+    document.head.querySelectorAll('[data-sidebar-layout-test]').forEach((node) => node.remove())
+    document.body.innerHTML = ''
+  })
+
+  it('raises the hidden controls together and restores the ordinary rail position', async () => {
+    const sheet = document.createElement('style')
+    sheet.dataset.sidebarLayoutTest = 'true'
+    sheet.textContent = readFileSync('src/styles/base-shell.css', 'utf8')
+    document.head.append(sheet)
+    const shell = document.createElement('div')
+    shell.className = 'shell-body'
+    shell.style.setProperty('--space-3', '12px')
+    shell.style.setProperty('--space-2', '8px')
+    document.body.append(shell)
+    const wrapper = mountSidebar()
+    shell.append(wrapper.element)
+
+    for (const state of ['expanded', 'collapsed', 'hidden', 'expanded'] as const) {
+      shell.dataset.sidebarState = state
+      await wrapper.setProps({ state })
+      const region = wrapper.get('.sidebar-region').element
+      const offset = getComputedStyle(region).getPropertyValue('--sidebar-controls-offset')
+      expect(offset).toBe(state === 'hidden' ? '4rem' : '0rem')
+      const pixels = state === 'hidden' ? 64 : 0
+      expect(getComputedStyle(wrapper.get('.sidebar-state-toggle').element).bottom).toBe(
+        `calc(12px + ${pixels}px)`
+      )
+      expect(getComputedStyle(wrapper.get('.sidebar-console-toggle').element).bottom).toBe(
+        `calc(12px + ${pixels}px + 40px + 8px)`
+      )
+      const buttons = wrapper.findAll('.sidebar-toggle')
+      expect(buttons).toHaveLength(2)
+      for (const button of buttons) expect(button.attributes('disabled')).toBeUndefined()
+      if (state === 'hidden') {
+        expect(getComputedStyle(region).pointerEvents).toBe('none')
+        for (const button of buttons)
+          expect(getComputedStyle(button.element).pointerEvents).toBe('auto')
+      }
+    }
+    wrapper.unmount()
+  })
+
   it('renders an inline SVG icon for every navigation entry', () => {
     const wrapper = mountSidebar()
     const navItems = wrapper.findAll('[data-testid^="nav-"]')

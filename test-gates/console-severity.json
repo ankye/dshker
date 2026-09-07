@@ -1,0 +1,106 @@
+{
+  "change": "Console severity colors",
+  "risk": "interactive",
+  "production_files": [
+    "src/app/shell/consoleOutput.ts",
+    "src/app/shell/components/ConsoleOutputText.vue",
+    "src/app/shell/components/ControllerPanel.vue",
+    "src/app/shell/components/ConsoleDrawer.vue"
+  ],
+  "test_files": [
+    "src/app/shell/tests/consoleOutput.test.ts",
+    "src/app/shell/tests/ConsoleOutputText.test.ts",
+    "src/app/shell/tests/ConsoleOutputColors.test.ts",
+    "src/app/shell/tests/ControllerPanelLog.test.ts",
+    "src/app/shell/tests/ConsoleDrawer.test.ts"
+  ],
+  "live_test_files": ["tools/electron-renderer-smoke.mjs"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "preserves raw multiline text and classifies errors independently"
+    },
+    {
+      "state": "no_op",
+      "test": "keeps repeated input unchanged and clears all lines on reset"
+    },
+    {
+      "state": "recovery",
+      "test": "replaces stale severity when the entry changes"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "replaces stale severity when the entry changes",
+      "semantics": "Pure synchronous presentation has no timeout; replacing source entry must withdraw old severity."
+    },
+    {
+      "state": "reset",
+      "test": "keeps repeated input unchanged and clears all lines on reset"
+    },
+    {
+      "state": "superseded",
+      "test": "replaces stale severity when the entry changes"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "src/app/shell/consoleOutput.ts",
+      "field": "parts[].text and severity",
+      "source": "LauncherHarnessConsoleEntry from the existing bounded console feed",
+      "assertion": "expect(parts.map((part) => part.text).join('')).toBe(text)",
+      "test": "preserves raw multiline text and classifies errors independently",
+      "state": "success",
+      "identity_keys": ["seq", "stream", "occurredAt"],
+      "missing_semantics": "Empty text stays empty; an unrecognized error level is not invented from stderr. Ordinary text uses the user-requested green presentation."
+    },
+    {
+      "production_file": "src/app/shell/components/ConsoleOutputText.vue",
+      "field": "entry.text and data-severity",
+      "source": "LauncherHarnessConsoleEntry from the existing bounded console feed",
+      "assertion": "expect(wrapper.get('span').attributes('data-severity')).toBe('normal')",
+      "test": "replaces stale severity when the entry changes",
+      "state": "success",
+      "identity_keys": ["seq", "stream", "occurredAt"],
+      "missing_semantics": "Empty text stays empty; an unrecognized error level is not invented from stderr. Ordinary text uses the user-requested green presentation."
+    },
+    {
+      "production_file": "src/app/shell/components/ControllerPanel.vue",
+      "field": "consoleFeed entry stream and text",
+      "source": "LauncherHarnessConsoleEntry from the existing bounded console feed",
+      "assertion": "expect(wrapper.get('.controller-output pre').element.textContent).toBe(text)",
+      "test": "uses per-line severity without changing source identity or copy output",
+      "state": "success",
+      "identity_keys": ["seq", "stream", "occurredAt"],
+      "missing_semantics": "Empty text stays empty; an unrecognized error level is not invented from stderr. Ordinary text uses the user-requested green presentation."
+    },
+    {
+      "production_file": "src/app/shell/components/ConsoleDrawer.vue",
+      "field": "harnessConsole entry stream and text",
+      "source": "LauncherHarnessConsoleEntry from the existing bounded console feed",
+      "assertion": "expect(wrapper.get('.console-drawer-entries pre').element.textContent).toBe(text)",
+      "test": "shares per-line severity and preserves stderr metadata",
+      "state": "success",
+      "identity_keys": ["seq", "stream", "occurredAt"],
+      "missing_semantics": "Empty text stays empty; an unrecognized error level is not invented from stderr. Ordinary text uses the user-requested green presentation."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "npm run electron:renderer-smoke",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/electron-smoke/renderer.png"
+    },
+    {
+      "artifact": ".run/console-severity/interaction.jsonl"
+    }
+  ],
+  "interaction_gate": {
+    "contract": "test-gates/console-severity-interaction.json",
+    "ledger": ".run/console-severity/interaction.jsonl"
+  },
+  "acceptance_status": "Not release-accepted: current native run is a diagnostic mount smoke, not a raw public-UI color acceptance ledger. Existing unrelated dirty P2P changes are outside this manifest."
+}

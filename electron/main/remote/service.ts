@@ -1,12 +1,13 @@
 import type {
   CreateRemoteConnectionRequest,
+  UpdateRemoteConnectionRequest,
   RemoteComputerView,
   RemoteConnectionErrorCode,
   RemoteConnectionsState,
   RemoteConnectionStatus,
   RemoteConnectionTestStatus
 } from '../../../src/shared/contracts'
-import { RemoteConnectionCatalog, assertConnectionId } from './catalog'
+import { RemoteConnectionCatalog, assertConnectionId, remoteConfigRevision } from './catalog'
 import { RemoteConnectionError } from './errors'
 import type { OpenSshRemoteConnector, RemoteTunnel } from './openssh'
 
@@ -20,9 +21,14 @@ export class RemoteConnectionService {
   readonly #generations = new Map<string, number>()
   readonly #controllers = new Map<string, AbortController>()
   readonly #listeners = new Set<StateListener>()
+  readonly #editing = new Set<string>()
+  readonly #disconnecting = new Set<string>()
 
   constructor(
-    private readonly catalog: Pick<RemoteConnectionCatalog, 'load' | 'create' | 'remove'>,
+    private readonly catalog: Pick<
+      RemoteConnectionCatalog,
+      'load' | 'create' | 'update' | 'remove'
+    >,
     private readonly connector: Pick<OpenSshRemoteConnector, 'connect'>
   ) {}
 
@@ -44,7 +50,7 @@ export class RemoteConnectionService {
 
   async connect(connectionId: string): Promise<RemoteConnectionsState> {
     assertConnectionId(connectionId)
-    const computer = await this.#find(connectionId)
+    this.#assertNotEditing(connectionId)
     const current = this.#status.get(connectionId)?.kind ?? 'disconnected'
     if (current === 'connecting' || current === 'ready' || this.#controllers.has(connectionId)) {
       throw new RemoteConnectionError(
@@ -57,8 +63,11 @@ export class RemoteConnectionService {
     this.#generations.set(connectionId, generation)
     this.#controllers.set(connectionId, controller)
     this.#status.set(connectionId, { kind: 'connecting' })
-    this.#emit(await this.getState())
     try {
+      const computer = await this.#find(connectionId)
+      this.#emit(await this.getState())
+      if (controller.signal.aborted || this.#generations.get(connectionId) !== generation)
+        return this.getState()
       const tunnel = await this.connector.connect(
         computer,
         () => {
@@ -101,7 +110,7 @@ export class RemoteConnectionService {
 
   async test(connectionId: string): Promise<RemoteConnectionsState> {
     assertConnectionId(connectionId)
-    const computer = await this.#find(connectionId)
+    this.#assertNotEditing(connectionId)
     const current = this.#status.get(connectionId)?.kind ?? 'disconnected'
     if (current === 'connecting' || current === 'ready' || this.#controllers.has(connectionId)) {
       throw new RemoteConnectionError(
@@ -115,8 +124,11 @@ export class RemoteConnectionService {
     this.#controllers.set(connectionId, controller)
     this.#status.set(connectionId, { kind: 'disconnected' })
     this.#testStatus.set(connectionId, { kind: 'testing' })
-    this.#emit(await this.getState())
     try {
+      const computer = await this.#find(connectionId)
+      this.#emit(await this.getState())
+      if (controller.signal.aborted || this.#generations.get(connectionId) !== generation)
+        return this.getState()
       const tunnel = await this.connector.connect(computer, () => undefined, controller.signal)
       await tunnel.stop()
       if (this.#generations.get(connectionId) !== generation) return this.getState()
@@ -144,6 +156,16 @@ export class RemoteConnectionService {
 
   async disconnect(connectionId: string): Promise<RemoteConnectionsState> {
     assertConnectionId(connectionId)
+    this.#assertNotEditing(connectionId)
+    this.#disconnecting.add(connectionId)
+    try {
+      return await this.#disconnect(connectionId)
+    } finally {
+      this.#disconnecting.delete(connectionId)
+    }
+  }
+
+  async #disconnect(connectionId: string): Promise<RemoteConnectionsState> {
     await this.#find(connectionId)
     this.#generations.set(connectionId, (this.#generations.get(connectionId) ?? 0) + 1)
     this.#controllers.get(connectionId)?.abort()
@@ -152,8 +174,8 @@ export class RemoteConnectionService {
       this.#testStatus.set(connectionId, { kind: 'untested' })
     }
     const tunnel = this.#tunnels.get(connectionId)
-    this.#tunnels.delete(connectionId)
     if (tunnel !== undefined) await tunnel.stop()
+    this.#tunnels.delete(connectionId)
     this.#status.set(connectionId, { kind: 'disconnected' })
     const state = await this.getState()
     this.#emit(state)
@@ -162,6 +184,16 @@ export class RemoteConnectionService {
 
   async remove(connectionId: string): Promise<RemoteConnectionsState> {
     assertConnectionId(connectionId)
+    this.#assertNotEditing(connectionId)
+    this.#editing.add(connectionId)
+    try {
+      return await this.#remove(connectionId)
+    } finally {
+      this.#editing.delete(connectionId)
+    }
+  }
+
+  async #remove(connectionId: string): Promise<RemoteConnectionsState> {
     await this.#find(connectionId)
     if (this.#controllers.has(connectionId)) {
       throw new RemoteConnectionError(
@@ -182,6 +214,52 @@ export class RemoteConnectionService {
     const state = this.#project(connections)
     this.#emit(state)
     return state
+  }
+
+  async update(request: UpdateRemoteConnectionRequest): Promise<RemoteConnectionsState> {
+    const id = request.connectionId
+    assertConnectionId(id)
+    this.#assertNotEditing(id)
+    if (this.#controllers.has(id)) {
+      throw new RemoteConnectionError(
+        'remote.connection_busy',
+        'Remote computer has an operation in progress.'
+      )
+    }
+    this.#editing.add(id)
+    try {
+      const current = await this.#find(id)
+      const changedDestination =
+        current.host !== request.host ||
+        current.port !== request.port ||
+        current.user !== request.user
+      if (changedDestination && (this.#status.get(id)?.kind ?? 'disconnected') !== 'disconnected') {
+        throw new RemoteConnectionError(
+          'remote.connection_not_disconnected',
+          'Disconnect before changing SSH parameters.'
+        )
+      }
+      const connections = await this.catalog.update(request)
+      if (changedDestination) {
+        this.#generations.set(id, (this.#generations.get(id) ?? 0) + 1)
+        this.#status.set(id, { kind: 'disconnected' })
+        this.#testStatus.set(id, { kind: 'untested' })
+      }
+      const state = this.#project(connections)
+      this.#emit(state)
+      return state
+    } finally {
+      this.#editing.delete(id)
+    }
+  }
+
+  #assertNotEditing(connectionId: string): void {
+    if (this.#editing.has(connectionId) || this.#disconnecting.has(connectionId)) {
+      throw new RemoteConnectionError(
+        'remote.connection_busy',
+        'Remote computer has an operation in progress.'
+      )
+    }
   }
 
   async shutdown(): Promise<void> {
@@ -233,6 +311,7 @@ export class RemoteConnectionService {
     return {
       connections: computers.map((computer) => ({
         ...computer,
+        configRevision: remoteConfigRevision(computer),
         status: this.#status.get(computer.connectionId) ?? { kind: 'disconnected' },
         testStatus: this.#testStatus.get(computer.connectionId) ?? { kind: 'untested' }
       }))

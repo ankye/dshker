@@ -4,6 +4,7 @@ import { useLauncherHarness } from '@/app/domains/launcher-harness'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { CopyPathButton } from '@/app/shared/controls'
 import EmptyState from './EmptyState.vue'
+import ConsoleOutputText from './ConsoleOutputText.vue'
 
 const t = useTranslator()
 const harness = useLauncherHarness()
@@ -239,7 +240,7 @@ onUnmounted(() => {
                   : t('controller.output.stderr')
           }}
         </span>
-        <pre>{{ entry.text }}</pre>
+        <ConsoleOutputText :entry="entry" />
       </li>
     </ol>
 

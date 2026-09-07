@@ -3,6 +3,8 @@ out/
 dist/
 dist-web/
 release/
+# Generated client/host plugin bundles; source remains format-checked.
+packages/dshker-workbench-client/lib/
 # Generated bundled-seed staging: its bytes are hashed by seed-manifest.json,
 # so reformatting them breaks seed integrity verification.
 resources/bundled-seed/staged/

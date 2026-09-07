@@ -245,6 +245,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       onZoomChange: () => () => undefined
     },
     remoteConnections: {
+      update: async () => ({ ok: true, data: { connections: [] } }),
       getState: async () => ({ ok: true, data: { connections: [] } }),
       create: async () => ({ ok: true, data: { connections: [] } }),
       test: async () => ({ ok: true, data: { connections: [] } }),

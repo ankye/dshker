@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive } from 'vue'
-import { useRemoteConnections } from '@/app/domains/remote-connections'
+import { remoteConnectionEditor, useRemoteConnections } from '@/app/domains/remote-connections'
+import RemoteConnectionEditor from './RemoteConnectionEditor.vue'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/messages.zh-CN'
 import type { RemoteConnectionErrorCode } from '@/shared/contracts'
@@ -17,6 +18,7 @@ const REMOTE_ERROR_KEYS: Readonly<Record<RemoteConnectionErrorCode, MessageKey>>
   'remote.connection_not_found': 'remote.error.notFound',
   'remote.connection_exists': 'remote.error.exists',
   'remote.connection_busy': 'remote.error.busy',
+  'remote.config_conflict': 'remote.edit.conflict',
   'remote.connection_not_disconnected': 'remote.error.notDisconnected',
   'remote.ssh_unavailable': 'remote.error.sshUnavailable',
   'remote.ssh_authentication_failed': 'remote.error.sshAuthentication',
@@ -66,7 +68,8 @@ function testStatusLabel(kind: 'untested' | 'testing' | 'passed' | 'failed'): st
   }
 }
 
-function errorLabel(code: RemoteConnectionErrorCode | 'bridge'): string {
+function errorLabel(code: RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'): string {
+  if (code === 'unconfirmed') return t('remote.edit.unconfirmed')
   return code === 'bridge' ? t('remote.error.bridge') : t(REMOTE_ERROR_KEYS[code])
 }
 </script>
@@ -111,6 +114,8 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge'): string {
         {{ errorLabel(remote.error.value) }} · {{ remote.error.value }}
       </p>
     </section>
+
+    <RemoteConnectionEditor />
 
     <section class="remote-list-card" aria-labelledby="remote-list-title">
       <div class="remote-section-heading">
@@ -162,6 +167,15 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge'): string {
           </div>
           <div class="remote-row-actions">
             <button
+              :id="`remote-edit-${connection.connectionId}`"
+              class="prototype-button"
+              type="button"
+              :disabled="remote.pendingActions.value[connection.connectionId] !== undefined"
+              @click="remoteConnectionEditor.open(connection.connectionId)"
+            >
+              {{ t('remote.edit.action') }}
+            </button>
+            <button
               v-if="
                 connection.status.kind === 'disconnected' || connection.status.kind === 'failed'
               "
@@ -169,6 +183,7 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge'): string {
               type="button"
               :disabled="remote.pendingActions.value[connection.connectionId] !== undefined"
               @click="remote.test(connection.connectionId)"
+              data-testid="remote-test-connection"
             >
               {{
                 remote.pendingActions.value[connection.connectionId] === 'test'

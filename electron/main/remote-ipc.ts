@@ -5,6 +5,7 @@ import {
   apiOk,
   type ApiResult,
   type CreateRemoteConnectionRequest,
+  type UpdateRemoteConnectionRequest,
   type RemoteConnectionIdentityRequest,
   type RemoteConnectionsState,
   type RemoteConnectionErrorCode
@@ -40,6 +41,11 @@ export function registerRemoteConnectionIpc(service: RemoteConnectionService): v
     return remoteResult(() =>
       service.test(parseRemoteConnectionIdentityRequest(payload).connectionId)
     )
+  })
+  ipcMain.handle(DESKTOP_IPC_CHANNELS.remoteConnectionsUpdate, (event, payload, ...args) => {
+    if (!isTrustedRenderer(event)) return invalidSender()
+    if (args.length !== 0) return invalidRequest()
+    return remoteResult(() => service.update(parseUpdateRemoteConnectionRequest(payload)))
   })
   ipcMain.handle(DESKTOP_IPC_CHANNELS.remoteConnectionsConnect, (event, payload, ...args) => {
     if (!isTrustedRenderer(event)) return invalidSender()
@@ -94,6 +100,40 @@ export function parseRemoteConnectionIdentityRequest(
     )
   }
   return { connectionId: record.connectionId }
+}
+
+export function parseUpdateRemoteConnectionRequest(
+  payload: unknown
+): UpdateRemoteConnectionRequest {
+  const record = exactRecord(payload, [
+    'connectionId',
+    'expectedConfigRevision',
+    'displayName',
+    'host',
+    'port',
+    'user'
+  ])
+  if (
+    typeof record.connectionId !== 'string' ||
+    typeof record.expectedConfigRevision !== 'string' ||
+    !/^[0-9a-f]{64}$/u.test(record.expectedConfigRevision)
+  ) {
+    throw new RemoteConnectionError(
+      'remote.invalid_request',
+      'Remote configuration revision is invalid.'
+    )
+  }
+  const fields = parseCreateRemoteConnectionRequest({
+    displayName: record.displayName,
+    host: record.host,
+    port: record.port,
+    user: record.user
+  })
+  return {
+    ...fields,
+    connectionId: record.connectionId,
+    expectedConfigRevision: record.expectedConfigRevision
+  }
 }
 
 async function remoteResult(

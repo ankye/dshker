@@ -1,8 +1,9 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { chmod, lstat, open, readFile, rename, rm } from 'node:fs/promises'
 import path from 'node:path'
 import type {
   CreateRemoteConnectionRequest,
+  UpdateRemoteConnectionRequest,
   RemoteComputerView
 } from '../../../src/shared/contracts'
 import { RemoteConnectionError } from './errors'
@@ -22,14 +23,21 @@ export interface RemoteConnectionCatalogOptions {
 
 /** Strict persistence for stable computer definitions; runtime authority never enters this file. */
 export class RemoteConnectionCatalog {
+  #writes: Promise<unknown> = Promise.resolve()
   constructor(private readonly options: RemoteConnectionCatalogOptions) {}
 
   async load(): Promise<readonly RemoteComputerView[]> {
-    const filePath = await this.#filePath()
-    return (await loadOrCreate(filePath)).connections
+    return this.#serialize(async () => {
+      const filePath = await this.#filePath()
+      return (await loadOrCreate(filePath)).connections
+    })
   }
 
   async create(request: CreateRemoteConnectionRequest): Promise<readonly RemoteComputerView[]> {
+    return this.#serialize(() => this.#create(request))
+  }
+
+  async #create(request: CreateRemoteConnectionRequest): Promise<readonly RemoteComputerView[]> {
     assertCreateRemoteConnectionRequest(request)
     const filePath = await this.#filePath()
     const current = await loadOrCreate(filePath)
@@ -63,6 +71,10 @@ export class RemoteConnectionCatalog {
   }
 
   async remove(connectionId: string): Promise<readonly RemoteComputerView[]> {
+    return this.#serialize(() => this.#remove(connectionId))
+  }
+
+  async #remove(connectionId: string): Promise<readonly RemoteComputerView[]> {
     assertConnectionId(connectionId)
     const filePath = await this.#filePath()
     const current = await loadOrCreate(filePath)
@@ -82,11 +94,88 @@ export class RemoteConnectionCatalog {
     return next.connections
   }
 
+  update(request: UpdateRemoteConnectionRequest): Promise<readonly RemoteComputerView[]> {
+    return this.#serialize(async () => {
+      assertConnectionId(request.connectionId)
+      assertCreateRemoteConnectionRequest(request)
+      const filePath = await this.#filePath()
+      const current = await loadOrCreate(filePath)
+      const computer = current.connections.find(
+        (entry) => entry.connectionId === request.connectionId
+      )
+      if (computer === undefined) {
+        throw new RemoteConnectionError(
+          'remote.connection_not_found',
+          'Remote computer was not found.'
+        )
+      }
+      if (remoteConfigRevision(computer) !== request.expectedConfigRevision) {
+        throw new RemoteConnectionError(
+          'remote.config_conflict',
+          'Remote computer configuration changed. Reload before editing.'
+        )
+      }
+      const replacement: RemoteComputerView = {
+        connectionId: computer.connectionId,
+        displayName: request.displayName,
+        host: request.host,
+        port: request.port,
+        user: request.user
+      }
+      if (
+        current.connections.some(
+          (entry) =>
+            entry.connectionId !== computer.connectionId &&
+            entry.displayName.toLocaleLowerCase() === replacement.displayName.toLocaleLowerCase()
+        )
+      ) {
+        throw new RemoteConnectionError(
+          'remote.connection_exists',
+          'A remote computer with this display name already exists.'
+        )
+      }
+      if (remoteConfigRevision(replacement) === request.expectedConfigRevision)
+        return current.connections
+      const next = {
+        ...current,
+        connections: current.connections.map((entry) =>
+          entry.connectionId === computer.connectionId ? replacement : entry
+        )
+      }
+      await save(filePath, next)
+      return next.connections
+    })
+  }
+
+  #serialize<T>(operation: () => Promise<T>): Promise<T> {
+    const result = this.#writes.then(operation)
+    // A failed write releases serialization; it never supplies a substitute result.
+    this.#writes = result.then(
+      () => undefined,
+      () => undefined
+    )
+    return result
+  }
+
   async #filePath(): Promise<string> {
     const settingsRoot = await this.options.resolveSettingsRoot()
     const launcherDirectory = path.join(settingsRoot, 'dsh-launcher')
     return path.join(launcherDirectory, 'remote-connections.json')
   }
+}
+
+export function remoteConfigRevision(computer: RemoteComputerView): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify([
+        computer.connectionId,
+        computer.displayName,
+        computer.host,
+        computer.port,
+        computer.user
+      ])
+    )
+    .digest('hex')
 }
 
 export function assertCreateRemoteConnectionRequest(request: CreateRemoteConnectionRequest): void {

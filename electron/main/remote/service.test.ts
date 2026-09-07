@@ -15,6 +15,7 @@ function catalog(initial: readonly RemoteComputerView[] = [computer]) {
   return {
     load: vi.fn(async () => records),
     create: vi.fn(async () => records),
+    update: vi.fn(async () => records),
     remove: vi.fn(async (connectionId: string) => {
       records = records.filter((entry) => entry.connectionId !== connectionId)
       return records
@@ -133,7 +134,7 @@ describe('RemoteConnectionService', () => {
     }
     const service = new RemoteConnectionService(catalog(), connector)
     const connecting = service.connect(computer.connectionId)
-    await Promise.resolve()
+    await vi.waitFor(() => expect(connectionSignal).toBeDefined())
     await service.disconnect(computer.connectionId)
     expect(connectionSignal?.aborted).toBe(true)
     resolveTunnel?.({ url: 'http://127.0.0.1:41000/', stop })
