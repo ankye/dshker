@@ -43,6 +43,43 @@ You need three things:
    actual workbench; if its DSH cannot start, pairing succeeds but connecting
    will not produce a usable workbench.
 
+## Before you begin: run the preflight check
+
+Two things block a first run more often than anything else: this machine has no
+usable peer helper, or the coordination server is not actually reachable. Check
+both before you start pairing:
+
+```
+npm run p2p:preflight
+```
+
+That verifies only the local helper. To check your server too:
+
+```
+node tools/p2p-preflight.mjs \
+  --https https://your-server.example \
+  --wss   wss://your-server.example/v1/signals \
+  --stun  your-server.example:3478
+```
+
+Add `--json` for machine-readable output. The tool exits non-zero if any check
+fails, sends no credentials, and changes nothing.
+
+What the failures mean:
+
+- **Helper missing or checksum mismatch.** Each machine must build its own helper
+  for its own architecture; one built elsewhere cannot be copied in. The command
+  to run is printed with the failure.
+- **TLS certificate not trusted.** Fix this on the server. The app deliberately
+  refuses a server it cannot verify, so a self-signed certificate that this
+  machine does not trust will not work.
+- **No STUN response.** UDP is blocked or the port is closed. This is the usual
+  reason pairing succeeds but connecting reports `direct_unavailable`. There is
+  no relay, so it must be fixed rather than worked around.
+
+A STUN pass proves this machine can reach the server over UDP. It does not prove
+the two computers can reach each other; only an actual connection shows that.
+
 ## 1. Add your server
 
 Open **Remote connections → P2P**, then add the server:

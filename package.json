@@ -24,6 +24,7 @@
     "electron:renderer-smoke": "node tools/electron-renderer-smoke.mjs --json",
     "environment:check": "node tools/environment-check.mjs",
     "architecture:check": "node tools/architecture-check.mjs",
+    "p2p:preflight": "node tools/p2p-preflight.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check:foundation": "npm run type-check --workspace @desktop-workspace/foundation",

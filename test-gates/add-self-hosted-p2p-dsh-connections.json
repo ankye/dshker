@@ -60,7 +60,9 @@
     "README.md",
     "README.zh-CN.md",
     "docs/testing/p2p-credential-storage.md",
-    "docs/testing/p2p-runtime-session.md"
+    "docs/testing/p2p-runtime-session.md",
+    "tools/p2p-preflight.mjs",
+    "package.json"
   ],
   "test_files": [
     "electron/main/p2p/pairing.test.ts",
@@ -98,7 +100,8 @@
     "networking/integration/network_revocation_test.go",
     "networking/integration/process_fixture_test.go",
     "networking/integration/runtime_session_test.go",
-    "networking/integration/user_management_test.go"
+    "networking/integration/user_management_test.go",
+    "tools/p2p-preflight.test.mjs"
   ],
   "live_test_files": [
     "networking/internal/runtimebridge/directory_test.go"
@@ -314,6 +317,10 @@
     {
       "command": "npx vitest run src/app/shell/",
       "no_mock": true
+    },
+    {
+      "command": "npx vitest run tools/p2p-preflight.test.mjs",
+      "no_mock": true
     }
   ],
   "runtime_evidence": [
@@ -325,6 +332,9 @@
     },
     {
       "artifact": "User documentation (docs/p2p-connections.md and .zh-CN.md) states the no-relay limit, the authorized-root-is-not-a-DSH-sandbox distinction, and that an installer build is not a release. Every error code it documents was verified to exist in src/shared/p2p-management.ts or the Go tree."
+    },
+    {
+      "artifact": "tools/p2p-preflight.mjs was exercised against real endpoints on this machine: a genuine STUN Binding to stun.l.google.com:19302 succeeded, a dead UDP port timed out, an untrusted certificate (self-signed.badssl.com) was identified as a TLS trust failure, a real wss handshake completed, and a tampered helper binary was caught by checksum."
     }
   ],
   "interaction_gate": {
