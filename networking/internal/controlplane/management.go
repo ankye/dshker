@@ -1,6 +1,7 @@
 package controlplane
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
@@ -19,11 +20,26 @@ func NewDeviceKey() (ed25519.PrivateKey, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{}, key)
+	csr, err := DeviceCSR(key)
 	if err != nil {
 		return nil, "", err
 	}
-	return key, string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})), nil
+	return key, csr, nil
+}
+
+// DeviceCSR preserves a previously persisted identity; it never generates a replacement key.
+func DeviceCSR(key ed25519.PrivateKey) (string, error) {
+	if len(key) != ed25519.PrivateKeySize {
+		return "", errors.New("p2p.invalid_device_key")
+	}
+	if !bytes.Equal(key, ed25519.NewKeyFromSeed(key.Seed())) {
+		return "", errors.New("p2p.identity_mismatch")
+	}
+	csr, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{}, key)
+	if err != nil {
+		return "", err
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})), nil
 }
 
 func (client *Client) Login(ctx context.Context, username, password string) (UserSession, error) {

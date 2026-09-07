@@ -98,6 +98,8 @@ func (mux *Mux) Close() error {
 	return nil
 }
 
+func (mux *Mux) RuntimeGeneration() uint64 { return mux.scope.RuntimeGeneration }
+
 func (mux *Mux) failure() error {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()

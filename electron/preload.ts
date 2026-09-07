@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import { p2pManagement } from './p2p-management-preload'
 import {
   DESKTOP_API_VERSION,
   DESKTOP_IPC_CHANNELS,
@@ -50,6 +51,7 @@ import {
 
 const desktopApi: DesktopApi = Object.freeze({
   apiVersion: DESKTOP_API_VERSION,
+  p2pManagement,
   bootstrap: Object.freeze({
     getInfo: (): Promise<ApiResult<BootstrapInfo, BootstrapErrorCode>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.bootstrapInfo)

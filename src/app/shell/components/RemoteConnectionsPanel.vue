@@ -2,6 +2,7 @@
 import { reactive } from 'vue'
 import { remoteConnectionEditor, useRemoteConnections } from '@/app/domains/remote-connections'
 import RemoteConnectionEditor from './RemoteConnectionEditor.vue'
+import P2PManagementPanel from './P2PManagementPanel.vue'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/messages.zh-CN'
 import type { RemoteConnectionErrorCode } from '@/shared/contracts'
@@ -76,6 +77,7 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'):
 
 <template>
   <div class="remote-connections-layout">
+    <P2PManagementPanel />
     <section class="remote-add-card" aria-labelledby="remote-add-title">
       <div class="remote-section-heading">
         <div>

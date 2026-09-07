@@ -120,7 +120,25 @@ export class LauncherHarnessService {
   /** Operation start/step/failure records on the console feed and durable log. */
   readonly #operations: LauncherOperationReporter
   #child: ChildProcess | undefined
-  #launch: LauncherHarnessState['launch'] = { kind: 'stopped' }
+  #launchState: LauncherHarnessState['launch'] = { kind: 'stopped' }
+  readonly #launchListeners = new Set<(state: LauncherHarnessState['launch']) => void>()
+  get #launch(): LauncherHarnessState['launch'] {
+    return this.#launchState
+  }
+  set #launch(state: LauncherHarnessState['launch']) {
+    this.#launchState = Object.freeze({ ...state })
+    for (const listener of this.#launchListeners) listener(this.#launchState)
+  }
+  /** Main-owned lifecycle feed; no renderer authority or guessed runtime endpoint. */
+  getRuntimeState(): LauncherHarnessState['launch'] {
+    return this.#launchState
+  }
+  onRuntimeState(listener: (state: LauncherHarnessState['launch']) => void): () => void {
+    this.#launchListeners.add(listener)
+    return () => {
+      this.#launchListeners.delete(listener)
+    }
+  }
   /** Buffers launch-child output and reads the announced URL from complete lines. */
   readonly #childOutput = new ChildOutputObserver({
     onText: (stream, text) => {

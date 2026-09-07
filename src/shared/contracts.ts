@@ -1,4 +1,5 @@
 import packageJson from '../../package.json'
+import type { P2PManagementApi } from './p2p-management'
 
 /**
  * The only renderer-to-main contract available before a managed Harness runtime
@@ -751,6 +752,7 @@ export interface DesktopApi {
     /** Follows guest-focused Cmd/Ctrl zoom shortcuts handled by Electron main. */
     onZoomChange(listener: (result: ApiResult<RuntimeBrowserPreferences>) => void): () => void
   }>
+  readonly p2pManagement: P2PManagementApi
   readonly remoteConnections: Readonly<{
     getState(): Promise<ApiResult<RemoteConnectionsState, RemoteConnectionErrorCode>>
     create(

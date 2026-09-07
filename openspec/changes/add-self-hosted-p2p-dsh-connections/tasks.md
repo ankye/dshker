@@ -1,5 +1,43 @@
 ## 1. 协议与构建边界
 
+登记恢复 domain 接续：本地 pending 读回不再清除服务器结果未知；仅原 revision 的签名结果查询明确返回 enrollment_not_found 后，允许用户显式提交一次原登记请求。查询失败、服务忙、读取新 revision 和提交回复丢失均不能自动重提或生成新身份。此项仅 domain 回归，首次登记历史标记、正式登记控件与真实主进程/服务器组合验收尚未完成，3.1/5.3 保持未完成。
+
+用户/网络界面接续：服务列表已有明确管理入口，按固定 serviceId 展示用户读取/登录/登出、网络读取/显式选择/创建/改名/确认删除。密码提交即清空，用户切换清理旧网络上下文；写结果不明保留原读回且阻止再写，只有网络列表读回解除，不能用读取用户清掉不确定状态。补修 main 在明确会话未授权后清掉原服务会话以允许重新登录，普通断网不清除。相关 30 项 main/domain/组件诊断通过；真实两 App、全控件布局/键盘及设备登记/配对/工作台仍未完成，D62/D63/5.3 不提前勾选。
+
+Renderer 接续：增加 remote-connections 的共享 P2P domain owner，以及正式远程页服务管理区。可显式启用、读取、输入全部端点并验证添加；typed 中英文文案区分未加载/失败/未启用/已保存，不显示假连接状态。文档序号跨组件保留，服务级 pending 隔离，取消等待原结果，未知写结果不重发；草稿保留且不进入操作状态秘密。新增 domain/组件诊断用例 11 项通过；尚缺真实 UI 尺寸/输入轨迹、完整用户网络/登记配对控件和双 App 验收，5.2/5.3/5.9 不提前完成。
+
+管理 IPC 接续：正式 main 注册 15 项版本化 named IPC，冻结 preload 能力包含启用/公开目录/服务添加、用户与网络管理、登记/恢复及同页面取消。字段、顶层 sender、请求序号/并发预算和页面退役准入均在 main；已接受写入取消或超时返回结果未确认，公开 projection 排除证书/秘密/运行地址。新增准入、请求生命周期、projection 与生产 preload 测试共 46 项通过，类型/架构/Electron 构建通过；完整回归 113 文件/775 项通过。完整 Go race 亦通过，integration 195.448 秒。domain/UI/完整配对和双 App 尚未完成，不提前勾选 5.2/5.3。
+
+正式管理组合接续：`electron/main.ts` 已创建 `PeerManagement`，实际拥有 catalog/安全存储/helper/服务/账号/登记编排；helper 故障清空账户与登记 owner。网络删除确认后调用真实 `network.invalidate` 并持久化同网络电脑的 revoked 状态；Go 清理 pins/保留中的 session 并等待释放，保留网络/配对 tombstone 防复活。控制器/host/退出相关 27 项、完整应用 729 项、类型/架构/构建通过。IPC/preload/UI 与双完整 App 仍未接通，不提前完成 5.2/5.3/7.8。
+
+登记编排接续：新增 `PeerEnrollment`，串接服务信任、账户/网络准入、加密待登记保存、原 CSR、登记及独立结果查询，三处身份读回一致后才报告完成。恢复查询不自动消费新凭据；显式重提保留原 key/request。17 项契约测试覆盖持久化失败、回复不明、身份冲突、并发/取消/关闭迟到结果。正式 controller/IPC/UI 及该 TS 流程的真实服务器集成尚未接通，3.1/5.2/5.3 保持未完成。
+
+原密钥登记准入接续：新增 main/helper `device.createCSR`，校验已保存 Ed25519 key 的 seed/public 一致性，不生成替代身份；真实 helper 的 8 个原 CSR 读回及关闭/取消准入通过。main 账户层新增原用户/网络归属约束的登记 grant 获取，拒绝身份变更、错网络和过期结果（新增 5 项测试）。尚未接通完整登记编排及 UI，不提前完成 3.1/5.3。
+
+登记恢复接续：客户端/helper 已接现有服务器签名登记查询；原请求/密钥可独立读回，真实 server 重启后身份/证书不变，错误 key/request 被拒绝且无重复设备。全 Go race 回归通过（integration 187.565 秒）。main 安全存储新增待登记→正式凭据的同文件原子转换和显式状态读取，14 项 schema 单测及真实两 Electron 进程加密/重启/身份冲突诊断通过。尚需正式登记编排、原 key 的 CSR 重建、结果不明 UI 和实际回复丢失注入；3.1/5.3 不提前勾选。
+
+主进程组合接续：`electron/main.ts` 已创建正式 `PeerRuntimeHost`，使用登记 settings root、实际受管 runtime 和明确的开发/打包资源根；显式启用后才启动 helper。回调重新校验服务/配对/状态，拒绝旧代次和已退役 URL，运行时失效调用真实 helper manager；失效清理失败停用 P2P，不回退传输。退出组合尝试全部所有者清理并保留所有错误。相关单测 111 项通过，真实 Go helper + 实际 runtime owner 诊断通过，未启动 DSH 工作台。IPC/UI、登记恢复与显式 helper 重启编排仍待实现；任务不提前勾选。
+
+正式运行源接入接续：为既有 `LauncherHarnessService` 新增 main-only launch 快照/事件，P2P runtime owner 据真实公告分配/退役 generation、合并冷启动和独立取消，保留具体启动前置错误。新增服务目录→helper 的身份验证/保存/重开准入，拒绝旧 revision、端点/身份替换及忘记后的缓存复用。新增服务与运行时测试 18 项，相关 140 项通过；完整应用单测 104 文件/665 项通过（使用规范 TMPDIR），类型/架构/源码长度 47 文件通过。正式 main/helper/IPC/preload/UI 组合尚未完成，相关任务不勾选；本次结果不能替代完整联测。
+
+账户业务接续：新增 main-only `PeerAccounts` 登录/当前用户/登出及网络列举/创建/改名/删除编排，令牌仅驻留内存，按服务隔离操作锁，写后按网络/用户身份读回，删除确认后调用必需的授权清理回调。14 项 test-only RPC 契约测试通过，P2P 子集共 70 项、type-check、architecture:check、42 文件长度门禁通过。该层尚未接入正式 main/preload/UI，也未做该 TypeScript 编排与真实服务器的端到端验证；5.2/5.3/D62/D63 不提前完成。
+
+完整 Go 回归接续：使用显式真实 server 二进制及受管 Harness，`go test -race -count=1 -timeout 8m ./...` 全部通过，integration 用时 186.703 秒，原重连资源阈值未修改。P2P TypeScript 子集 56 项通过，源码长度检查 39 文件无超限。该结果更新 Go 层回归证据，不替代双完整 App、1 小时工作台压力、完整交互清单或平台打包门禁。
+
+Helper 清理接续：修复子进程强杀后 Unix socket 残留导致目录删除失败，以及退出后未自动执行完整本地清理的问题；启动认证后再次校验取消。新增精确 Windows 管道名称合约、真实测试 socket 子进程强杀和非 socket/额外文件保留测试（4 项通过），重建 macOS arm64 Go helper 并通过生产 supervisor 的并发 RPC/取消/退出诊断。尚无 Windows 管道实跑及双完整 App 故障恢复证据，3.5/7.8 保持未完成。
+
+目录持久化接续：新增 main-only catalog 的显式启用/标记身份、严格 schema、原子提交与读回、revision 冲突和输入快照；补齐固定配对身份、撤销不回退及 tombstone 先于删除的存储准入。新增 27 项真实临时文件/模式测试，加原 RPC/wire 共 52 项 focused 测试通过，type-check 与 architecture:check 通过。尚未接入 named IPC、完整主进程业务及 UI，5.1/5.2 不据此完成，完整回归与发布门禁仍待执行。
+
+安全存储与管理客户端接续：真实 Electron macOS safeStorage 在两个独立进程中完成加密保存/重启读回/删除，拒绝重复创建、旧 revision、错误密钥、损坏格式，落盘不包含明文私钥。初次写入改为同步完整临时密文后排他发布。新增 Go 用户/网络/绑定管理命名操作，真实服务器 readback 验证通过；只新增客户端 API，不改独立 server 架构或提交历史。尚缺业务 catalog、UI/正式 app composition 和 Windows DPAPI，任务不提前勾选。
+
+Electron helper 接入进展：主进程私有 RPC、严格 JSON framing、固定资源摘要校验、stdin 随机秘密和 Unix/named-pipe 认证已形成独立模块；真实 Go helper 诊断通过 8 次并发设备密钥生成、错误字段拒绝、取消准入和退出确认，25 项协议/RPC 单测及类型检查通过。新增 safeStorage 凭据模块尚待真实系统安全存储与服务登记/忘记流程集成验证。未接入正式 app composition、未完成打包资源和 UI；3.1/3.5 不勾选。完整 workspace validator 仍有文档机器路径、生成二进制及协议正则/管道字符串的路径检查发现，未将其标绿。
+
+生命周期接续（2026-09-07）：建立请求从 Begin 前即持有可取消 session；Disconnect/Close 等待 gateway、mux、transport、续租及会话占用清理，目标 runtime invalidate 拒绝迟到 owner 凭据，失败终态不再立即覆盖为 disconnected。新增真实独立 coordinator + 两个生产 Go manager + 隔离真实 DSH 诊断，验证 5 次显式重连、真实 DSH 重启、新 runtime generation、旧入口关闭和 manager 退出后 DSH 继续可用。该诊断未启动两个 Electron App，不据此完成 3.5/4.1/5.10/7.8；命令与证据边界见 `docs/testing/p2p-runtime-session.md`。
+
+Helper 接入进展（2026-09-07）：新增 Go helper、私有 RPC、runtime HTTP/WS gateway 与 session manager 的生产模块；修复 RPC 并发编号乱序、认证预读丢字节、连接 deadline 并发、gateway 关闭竞争及公钥类型比较错误。focused race 测试覆盖双向 800 次 RPC、错误密钥、协议拒绝、身份替换拒绝和 Pion 上 HTTP/WS 转发；Windows x64 helper 交叉编译仅作为编译证据。尚缺 Electron supervisor/安全持久化/UI/真实受管 DSH 生产组合及完整压力门禁，3.5、4.1、4.2 和发布任务不据此勾选。详见 `.agents/notes/2026-09-07-p2p-helper-integration.md`。
+
+预发布顺序修订（用户已明确确认）：先完成实现、本地生产组合端到端、安全和包门禁，发布 GitHub prerelease 供 Win/Mac 联测；不进入 latest/稳定源。物理平台与公网矩阵在候选发布后执行，相关任务不提前勾选；7.9 继续约束正式稳定版。新增 9.3 追踪联测预发布，不能借此跳过缺失实现或本地门禁。
+
 扩展授权修订：用户已明确要求继续补齐客户端扩展。扩展归属 Launcher 独立包，不需要改写用户受管 Harness 源码；按第 9 节继续实现，替代下面历史记录中的“等待所有权确认”。
 
 客户端扩展验证：9.1 的 16 项模块/准入测试通过；针对实际选定 Harness `a66e4702047846cdaa10c66c9d3df3951f5ea70d`，隔离真实 DSH + Electron 通过插件加载、导航读回、新会话切换、重载重新注册、错误路径拒绝且选择不变。命令与限制记录于 `docs/testing/remote-workbench-api-audit.md` 和 Agent Note。只完成独立扩展任务，不代表 9.2 正式产品接入或整项发布验收。
@@ -234,6 +272,11 @@
 
 D62/D63 补齐此前已有但漏入逐场景表的用户网络操作，归属 2.6/5.3/7.2；它们同样属于完整发布门槛。
 
+| ID / Scenario | 前置条件与操作 | 预期结果与读回断言 | 层级 |
+| --- | --- | --- | --- |
+| D64 `Cancel an owned management request` | 两个真实页面并发管理；取消/导航/销毁其中一个，并在服务写入后延迟回复 | 只取消原页面请求；已接受写入为未确认且显式读回，无自动重放；另一页面/网络不变 | A+I+R |
+| D65 `Replay or overload management IPC` | 15 项入口逐一注入旧序号、未知版本/字段/秘密、子 frame/外部 sender；16 并发后继续请求/取消 | 业务 owner 不接收非法输入；第 17 项拒绝，取消仍可操作；新文档可从新序号开始但旧回复不污染它 | A+I |
+
 ### 8.6 命令、证据与通过条件
 
 当前仓库已存在、实现后必须运行的命令如下。新 Go module 与新用例 harness 属于上面未完成的实现任务，未产生前不得声称可运行或通过。
@@ -277,6 +320,8 @@ Go race 在工具链支持的真实平台运行；不支持的架构需明确记
 最终通过必须同时满足：所有规格场景被本节用例追踪；每个适用参数/平台/网络有独立可复查结果；新增自动化、既有完整套件、构建、真实 UI/网络、包检查和安全边界全部通过。FAIL、BLOCKED、NOT_RUN、缺少测试设备、未生成 harness 或缺原始证据均保持相关任务未完成；不得归档、宣称功能完整或发布就绪。
 
 ## 9. 已批准的 DSH 客户端扩展
+
+- [ ] 9.3 完整功能及本地生产组合、隔离、安全、构建/包检查通过后发布联测 prerelease。Owner: integration/release；依赖: 全部功能实现与本地门禁；验证: prerelease 版本/标签/提交及四架构构建一致，GitHub prerelease=true、非 latest，发布说明列明 Win/Mac 物理联测未执行；用户联测后再按 7.9 晋级正式版。
 
 - [x] 9.1 实现独立客户端插件的版本化导航、真实 public service 适配、身份读回、取消/并发和测试，并针对显式选定 Harness 构建。Owner: Launcher extension；依赖: 1.4 的源码审计；验证: `Navigate through the supported client extension`、`Cancel a pending client navigation`、`Selection readback does not match the requested project`，拒绝错误路径/会话、过期序号、迟到结果；类型引用来自实际 Harness，生产 bundle 不含测试或未解析依赖；真实 DSH 客户端运行读回后方可完成。
 - [ ] 9.2 实现安全 guest preload/main 准入、插件安装/版本检查与远端工程操作接入。Owner: Electron/runtime + renderer；依赖: 9.1、4.5–4.7；验证: `Reject an incompatible or foreign navigation channel`，假 sender/subframe/错误 guest、attempt/runtime 变化、销毁/超时/重复回执拒绝；只加载固定资源路径，原任意 preload 拒绝策略不削弱；Local/SSH 回归及真实双 peer UI 完成，纳入 5.10/7.8 发布前置。

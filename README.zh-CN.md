@@ -46,7 +46,15 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 
 ### 开发中：自托管 P2P 远程工作台
 
-独立的 [DSHKer Server](https://github.com/ankye/dshker-server) 提供分用户网络与认证设备配对。直连传输和 DSH 客户端导航扩展已有本地诊断验证，但**正式桌面接入、远程工程目录选择和双端完整验收尚未完成**，不能视为当前桌面或已发布版本的可用功能。进度见[实现清单](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md)。
+通过你自己托管的协调服务器，在你的两台电脑之间建立直连，无需把 DSH Web 暴露到网络，也不需要 SSH 隧道。独立的 [DSHKer Server](https://github.com/ankye/dshker-server) 提供分用户网络与认证设备配对。
+
+桌面端实现与自动化测试已完成：带指纹核对的配对、连接阶段状态、每台电脑独立隔离的浏览器会话、远端授权目录浏览与工程选择、共享服务器配置编辑，以及断线后的任务核对。
+
+**尚未发布。** 双机验收、四架构安装包与协调服务器部署尚未执行，因此不能视为当前桌面版本的可用功能。安装包构建成功不等于发布成功。
+
+规划前需了解两条限制：本功能**不使用中继**，缺少可用 UDP 路径的网络会直接报 `direct_unavailable`，而不会悄悄绕经第三方；授权目录只限制本应用的目录选择器——工程打开后，对方电脑上 DSH 自身的权限与审批策略仍然管辖一切。
+
+详见[使用说明](docs/p2p-connections.zh-CN.md)与[实现清单](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md)。
 
 ## 安装
 

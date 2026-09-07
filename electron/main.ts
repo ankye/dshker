@@ -20,6 +20,8 @@ import {
   type ManagedPathStyle
 } from './main/managed'
 import { SessionUsageReader } from './main/managed/session-usage-reader'
+import { PeerManagement } from './main/p2p/management'
+import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
 import { runSmokeTest, writeSmokeFailure, writeSmokeTrace } from './main/smoke'
@@ -132,20 +134,14 @@ async function start(): Promise<void> {
 }
 
 /** Keeps the DSH process tree under Launcher ownership through normal quits and termination signals. */
-function registerServicesShutdown(services: {
-  readonly launcherHarnessService: LauncherHarnessService
-  readonly remoteConnectionService: RemoteConnectionService
-  readonly remotePeerBroker: RemotePeerBroker
-}): void {
+function registerServicesShutdown(services: LauncherShutdownOwners): void {
   let shutdownInProgress = false
   let shutdownComplete = false
   const shutdown = async () => {
     if (shutdownInProgress) return
     shutdownInProgress = true
     try {
-      await services.remoteConnectionService.shutdown()
-      await services.remotePeerBroker.shutdown()
-      await services.launcherHarnessService.shutdown()
+      await shutdownLauncherOwners(services)
       shutdownComplete = true
       app.quit()
     } catch (error) {
@@ -177,6 +173,7 @@ async function registerLauncherServices(
   readonly launcherUpdateService: LauncherUpdateService
   readonly remoteConnectionService: RemoteConnectionService
   readonly remotePeerBroker: RemotePeerBroker
+  readonly peerManagement: PeerManagement
 }> {
   const managedWorkspaceService = await createManagedWorkspaceService(launcherRoot, locatorFilePath)
   await managedWorkspaceService.initializeDefaultRoots()
@@ -219,6 +216,11 @@ async function registerLauncherServices(
     launcherHarnessService
   })
   await remotePeerBroker.start()
+  const peerManagement = new PeerManagement({
+    resourcesRoot: app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build'),
+    resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot(),
+    runtime: launcherHarnessService
+  })
   registerIpc({
     managedWorkspaceService,
     sessionUsageReader: new SessionUsageReader({
@@ -233,6 +235,7 @@ async function registerLauncherServices(
     launcherUpdateService,
     remoteConnectionService,
     launcherHarnessService,
+    peerManagement,
     managedInstallationService: new ManagedInstallationService({
       workspaceService: managedWorkspaceService,
       executableCapabilities: new ExecutableSelectionCapabilities({
@@ -248,7 +251,8 @@ async function registerLauncherServices(
     runtimeBrowserController,
     launcherUpdateService,
     remoteConnectionService,
-    remotePeerBroker
+    remotePeerBroker,
+    peerManagement
   }
 }
 

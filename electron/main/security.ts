@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, type IpcMainInvokeEvent, type WebContents } from 'electron'
+import { LOCAL_PARTITION, isPeerPartition } from './p2p/partitions'
 import { runtimeContextMenuTemplate, type RuntimeContextMenuLocale } from './runtime-context-menu'
 import { type RuntimeBrowserController } from './runtime-browser-controller'
 
@@ -44,11 +45,25 @@ function runtimeContextMenuLocale(): RuntimeContextMenuLocale {
 }
 
 /**
+ * Admits only session partitions this application allocates.
+ *
+ * Without this check a run page could attach a guest to an arbitrary partition
+ * and inherit another computer's cookies and tokens. `Local` keeps its own
+ * partition, and every remote workbench uses a label derived from its pinned
+ * pair identity, so an unrecognised or hand-written value is refused.
+ */
+function isAllowedGuestPartition(value: unknown): boolean {
+  if (value === undefined || value === LOCAL_PARTITION) return true
+  return isPeerPartition(value)
+}
+
+/**
  * Constrains every <webview> the run page attaches.
  *
  * The guest exists only to host the DSH Web runtime, so it may load nothing but
- * a loopback address, gets no preload and no Node integration, and cannot open
- * windows or navigate away from loopback.
+ * a loopback address, gets no preload and no Node integration, cannot open
+ * windows or navigate away from loopback, and must sit in an allocated session
+ * partition so remote workbenches stay isolated from each other and from Local.
  */
 export function installWebviewPolicy(
   contents: WebContents,
@@ -60,6 +75,10 @@ export function installWebviewPolicy(
     webPreferences.contextIsolation = true
     webPreferences.sandbox = true
     if (typeof params.src !== 'string' || !isLoopbackRuntimeUrl(params.src)) {
+      event.preventDefault()
+      return
+    }
+    if (!isAllowedGuestPartition((params as { partition?: unknown }).partition)) {
       event.preventDefault()
     }
   })

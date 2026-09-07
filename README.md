@@ -46,7 +46,29 @@ The form's port is the **SSH port**, not the DSH Web port. DSHKer obtains the cu
 
 ### In development: self-hosted P2P workbench
 
-The independent [DSHKer Server](https://github.com/ankye/dshker-server) provides user-scoped networks and authenticated device pairing. Direct transport and the DSH client navigation extension have local diagnostic coverage, but **production desktop integration, remote project-folder selection and complete two-peer acceptance are not finished**. These are not advertised as available desktop or released features. See the [implementation checklist](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md).
+Connect two of your own computers directly through a coordination server you
+host, without exposing DSH Web to the network and without an SSH tunnel. The
+independent [DSHKer Server](https://github.com/ankye/dshker-server) provides
+user-scoped networks and authenticated device pairing.
+
+The desktop implementation and its automated tests are complete: pairing with
+fingerprint confirmation, connection staging, per-computer isolated browser
+sessions, remote authorized-directory browsing and project selection, shared
+server configuration editing, and post-disconnect task reconciliation.
+
+**Not released.** Two-machine acceptance, the four-architecture packaged builds
+and coordination-server deployment have not been carried out, so this is not
+advertised as an available desktop feature. A successful installer build is not
+a successful release.
+
+Two limits worth knowing before you plan around it: there is **no relay**, so
+networks without a usable UDP path fail with `direct_unavailable` instead of
+silently routing through a third party; and authorized directories only constrain the
+folder picker in this app — once a project is open, DSH's own permission and
+approval policy on the other computer still governs everything.
+
+See the [user guide](docs/p2p-connections.md) and the
+[implementation checklist](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md).
 
 ## Install
 

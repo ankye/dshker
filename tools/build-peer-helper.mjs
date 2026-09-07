@@ -1,0 +1,55 @@
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
+import { createHash } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const args = process.argv.slice(2)
+if (args.length !== 4 || args[0] !== '--platform' || args[2] !== '--arch')
+  throw new Error('Explicit --platform darwin|win32 --arch arm64|x64 required')
+const [, platform, , arch] = args
+if (!['darwin', 'win32'].includes(platform) || !['arm64', 'x64'].includes(arch))
+  throw new Error('Unsupported helper target')
+const root = fileURLToPath(new URL('..', import.meta.url))
+const target = `${platform}-${arch}`
+const directory = resolve(root, 'build/p2p', target)
+const file = platform === 'win32' ? 'dshker-peer.exe' : 'dshker-peer'
+await mkdir(directory, { recursive: true })
+const run = promisify(execFile)
+const environment = {
+  ...process.env,
+  GOOS: platform === 'win32' ? 'windows' : 'darwin',
+  GOARCH: arch === 'x64' ? 'amd64' : 'arm64',
+  CGO_ENABLED: '0'
+}
+const cwd = resolve(root, 'networking')
+const { stdout } = await run(
+  'go',
+  ['list', '-deps', '-f', '{{.ImportPath}}', './cmd/dshker-peer'],
+  {
+    cwd,
+    env: environment
+  }
+)
+for (const dependency of stdout.trim().split('\n')) {
+  if (/(?:^|\/)(?:integration|fixtures?|mocks?|testsupport)(?:\/|$)/i.test(dependency))
+    throw new Error(`Test-only dependency in helper: ${dependency}`)
+}
+await run(
+  'go',
+  ['build', '-mod=readonly', '-trimpath', '-o', resolve(directory, file), './cmd/dshker-peer'],
+  {
+    cwd,
+    env: environment
+  }
+)
+const sha256 = createHash('sha256')
+  .update(await readFile(resolve(directory, file)))
+  .digest('hex')
+// Generated resource metadata. Rebuild after any executable transformation.
+await writeFile(
+  resolve(directory, 'manifest.json'),
+  JSON.stringify({ version: 1, target, file, sha256 }) + '\n'
+)
+console.log(JSON.stringify({ target, output: `build/p2p/${target}`, sha256 }))

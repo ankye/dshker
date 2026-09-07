@@ -55,6 +55,8 @@ import { registerLauncherUpdateIpc } from './launcher-update-ipc'
 import { type LauncherUpdateService } from './launcher-update-service'
 import { registerRemoteConnectionIpc } from './remote-ipc'
 import { type RemoteConnectionService } from './remote/service'
+import { registerPeerManagementIpc } from './p2p/management-ipc'
+import type { PeerManagement } from './p2p/management'
 
 /** Dependencies for the restricted Electron IPC registration. */
 export interface LauncherIpcOptions {
@@ -66,6 +68,7 @@ export interface LauncherIpcOptions {
   readonly runtimeBrowserController: RuntimeBrowserController
   readonly launcherUpdateService: LauncherUpdateService
   readonly remoteConnectionService: RemoteConnectionService
+  readonly peerManagement: PeerManagement
 }
 
 /** Registers only named, sender-validated, runtime-validated Launcher IPC methods. */
@@ -73,6 +76,7 @@ export function registerIpc(options: LauncherIpcOptions): void {
   registerRuntimeBrowserIpc(options.runtimeBrowserController)
   registerLauncherUpdateIpc(options.launcherUpdateService)
   registerRemoteConnectionIpc(options.remoteConnectionService)
+  registerPeerManagementIpc(options.peerManagement)
   // The console push channel sends appended records to every launcher window,
   // so operation and launch output do not wait for a periodic state read.
   options.launcherHarnessService.onConsoleAppend((entry) => {

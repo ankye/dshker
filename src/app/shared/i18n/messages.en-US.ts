@@ -3,6 +3,227 @@ import type { MessageKey } from './messages.zh-CN'
 
 /** US English message catalog, checked against every reference key. */
 export const enUS: Record<MessageKey, string> = {
+  'p2p.enrollment.title': 'Local enrollment and recovery',
+  'p2p.enrollment.description':
+    'Read this service’s local credential or reconcile interrupted enrollment. The private key stays on this computer.',
+  'p2p.enrollment.read': 'Read local enrollment',
+  'p2p.enrollment.recover': 'Query original enrollment result',
+  'p2p.enrollment.registered':
+    'Local enrollment credential read. This does not confirm certificate validity, device presence or a DSH connection.',
+  'p2p.enrollment.pending': 'A local enrollment request is awaiting confirmation.',
+  'p2p.enrollment.unknown':
+    'Local enrollment state has not been read. A read failure does not authorize new enrollment.',
+  'p2p.enrollment.readFailed':
+    'Enrollment operation did not complete. Preserve the original credential and query again.',
+  'p2p.enrollment.name': 'Computer name',
+  'p2p.enrollment.owner': 'Owning user',
+  'p2p.enrollment.publicKey': 'Local public key',
+  'p2p.enrollment.request': 'Original enrollment request',
+  'p2p.enrollment.network': 'Original network',
+  'p2p.enrollment.device': 'Device ID',
+  'p2p.enrollment.unconfirmed':
+    'The server result is unconfirmed. Query the original result before any retry; do not generate a new key.',
+  'p2p.enrollment.absent':
+    'The server has not found a result for the original request. You may explicitly submit it with the original key and network.',
+  'p2p.enrollment.loginRequired':
+    'Log in as the original owning user in the user section before submitting.',
+  'p2p.enrollment.submit': 'Submit original enrollment request',
+  'p2p.account.title': 'User and private networks',
+  'p2p.account.manage': 'Manage user and networks',
+  'p2p.account.readUser': 'Read user again',
+  'p2p.account.login': 'Log in',
+  'p2p.account.logout': 'Log out',
+  'p2p.account.username': 'Username',
+  'p2p.account.password': 'Password',
+  'p2p.account.passwordHint':
+    'The password is cleared immediately after submission and is not kept in drafts or shared state.',
+  'p2p.account.unknown': 'User state is unconfirmed. Read the server result.',
+  'p2p.account.user': 'User readback',
+  'p2p.account.readNetworks': 'Read networks',
+  'p2p.account.networksUnknown': 'Networks have not been read; this does not mean there are none.',
+  'p2p.account.networksEmpty': 'This user has no networks. You can explicitly create one.',
+  'p2p.account.newName': 'Network name',
+  'p2p.account.rename': 'Save name',
+  'p2p.account.delete': 'Delete network',
+  'p2p.account.create': 'Create network',
+  'p2p.account.selected': 'Selected network',
+  'p2p.account.selectRequired':
+    'Select a network explicitly. The first network or a matching name is never selected automatically.',
+  'p2p.account.deleteConfirm': 'Confirm deletion of this network',
+  'p2p.account.deleteWarning':
+    'Deletion revokes device bindings and pairing authority in this network and disconnects its P2P sessions. Recreating the name does not restore trust. Local, SSH and other networks are unaffected.',
+  'p2p.account.keep': 'Keep network',
+  'p2p.connection.title': 'Connection state',
+  'p2p.connection.read': 'Read connection state',
+  'p2p.connection.unknown':
+    'The connection state has not been read. A failed read does not mean it is disconnected.',
+  'p2p.connection.none': 'This computer has no connection yet.',
+  'p2p.connection.stagePunching': 'Attempting a direct connection...',
+  'p2p.connection.stageStarting': 'Starting the remote runtime...',
+  'p2p.connection.stageReady': 'Connected, workbench available',
+  'p2p.connection.stageFailed': 'Connection failed',
+  'p2p.connection.stageDisconnected': 'Disconnected',
+  'p2p.connection.connect': 'Connect this computer',
+  'p2p.connection.disconnect': 'Disconnect',
+  'p2p.connection.direct': 'Direct (UDP)',
+  'p2p.connection.pathHint': 'Direct transport only; no relay is enabled.',
+  'p2p.connection.helperError':
+    'The local P2P component reported an error, so no connection is usable.',
+  'p2p.connection.unconfirmed':
+    'The connection result is unconfirmed and may already have taken effect. Read the state again rather than resubmitting.',
+  'p2p.connection.isolated':
+    'This computer uses a fixed isolated session label. Its cookies and tokens are never shared with Local, SSH or another computer.',
+  'p2p.remote.title': 'Remote project selection',
+  'p2p.remote.description':
+    'Browse directories the other computer authorized and choose a project. Only explicitly authorized directories can be entered.',
+  'p2p.remote.readRoots': 'Read authorized directories',
+  'p2p.remote.rootsUnknown':
+    'Authorized directories have not been read. A failed read does not mean none were granted.',
+  'p2p.remote.rootsEmpty':
+    'The other computer has not authorized any directory yet. Ask its user to add one.',
+  'p2p.remote.selectRoot': 'Select an authorized directory',
+  'p2p.remote.selectRootRequired':
+    'Select an authorized directory explicitly; the first one is never chosen automatically.',
+  'p2p.remote.rootPath': 'Path on the other computer',
+  'p2p.remote.rootPathHint':
+    'Shown for recognition only. This computer never joins or rewrites remote paths.',
+  'p2p.remote.entriesUnknown': 'Directory contents have not been read.',
+  'p2p.remote.entriesEmpty': 'This directory contains no subdirectories.',
+  'p2p.remote.enter': 'Open',
+  'p2p.remote.backToRoot': 'Back to the authorized directory root',
+  'p2p.remote.project': 'Project',
+  'p2p.remote.choose': 'Choose this project',
+  'p2p.remote.chosen': 'Chosen project',
+  'p2p.remote.clearChoice': 'Clear selection',
+  'p2p.remote.page': 'Current page',
+  'p2p.remote.pageTotal': 'Total items',
+  'p2p.remote.prevPage': 'Previous page',
+  'p2p.remote.nextPage': 'Next page',
+  'p2p.remote.failedForbidden':
+    'The other system refused access to this location. This does not mean the directory is empty.',
+  'p2p.remote.failedMissing': 'This location no longer exists on the other computer.',
+  'p2p.remote.failedUnauthorized': 'This directory is outside the authorized scope.',
+  'p2p.remote.failedOther': 'Reading the remote directory failed. Read it again.',
+  'p2p.remote.notConnected': 'Connect this computer before browsing its directories.',
+  'p2p.remote.approvalNotice':
+    'Authorized directories only constrain this directory picker. After a project is opened, conversations, file access and tasks remain governed by the DSH permission and approval policy on the other computer, which this app does not bypass.',
+  'p2p.work.title': 'Post-disconnect task reconciliation',
+  'p2p.work.connectionLost':
+    'The connection to this computer was lost. That does not mean the remote task stopped, nor that it finished.',
+  'p2p.work.unknown':
+    'The connection ended abnormally and the result of the submitted task is unknown. Check the actual result in DSH on the other computer.',
+  'p2p.work.runtimeReplaced':
+    'Reconnected, but the remote runtime was replaced. Earlier work belongs to a runtime that no longer exists; verify its result yourself.',
+  'p2p.work.noReplay':
+    'This app never retries or resubmits a task automatically, and never infers task state.',
+  'p2p.work.markReconciled': 'I verified the result on the other computer',
+  'p2p.work.noteStarted': 'Mark: work started in this workbench',
+  'p2p.run.connect': 'Connect this computer',
+  'p2p.run.retry': 'Retry connection',
+  'p2p.run.edit': 'Edit this computer',
+  'p2p.run.revoked':
+    'Pairing with this computer was revoked, so it can no longer connect. Pair again to keep using it.',
+  'p2p.serviceEdit.title': 'Server configuration (shared)',
+  'p2p.serviceEdit.sharedNotice':
+    'This configuration is shared by every computer paired through this server. A change affects all of them, so it cannot be saved while any of them is in use.',
+  'p2p.serviceEdit.displayName': 'Name (shown on this computer only)',
+  'p2p.serviceEdit.httpsOrigin': 'HTTPS address',
+  'p2p.serviceEdit.wssUrl': 'Signalling WSS address',
+  'p2p.serviceEdit.stunAddress': 'STUN address',
+  'p2p.serviceEdit.save': 'Save configuration',
+  'p2p.serviceEdit.cancel': 'Cancel',
+  'p2p.serviceEdit.willInvalidateTests':
+    'Saving invalidates the existing connection test result, so it must be tested again.',
+  'p2p.serviceEdit.conflict':
+    'The configuration changed elsewhere and your input was kept. Read it again before saving.',
+  'p2p.serviceEdit.busy':
+    'A computer is using this server, so it cannot be saved right now. Retry once it is idle.',
+  'p2p.serviceEdit.identityMismatch':
+    'The new address does not prove the pinned server identity, so it was refused. The stored configuration is unchanged.',
+  'p2p.serviceEdit.duplicate': 'Another server record already uses this address.',
+  'p2p.serviceEdit.failed':
+    'Saving failed and your input was kept. The stored configuration is unchanged.',
+  'p2p.serviceEdit.unconfirmed':
+    'The save result is unconfirmed and may already have taken effect. Read the configuration again rather than saving twice.',
+  'p2p.serviceEdit.discardPrompt': 'There are unsaved changes. Discard them?',
+  'p2p.serviceEdit.keepEditing': 'Keep editing',
+  'p2p.serviceEdit.discard': 'Discard changes',
+  'p2p.pairing.title': 'Device pairing',
+  'p2p.pairing.description':
+    'Pair with another computer. A completed pair does not mean it is connected or that its DSH is reachable.',
+  'p2p.pairing.read': 'Read pairing list',
+  'p2p.pairing.unknown':
+    'The pairing list has not been read. A failed read does not mean there are no pairs.',
+  'p2p.pairing.empty': 'This service has no pairing relationships yet.',
+  'p2p.pairing.createInvite': 'Create invite code',
+  'p2p.pairing.inviteIssued':
+    'The invite code is shown once. Hand it to the other computer over a trusted channel now; it cannot be read again after closing.',
+  'p2p.pairing.inviteCode': 'Invite code',
+  'p2p.pairing.inviteExpires': 'Expires',
+  'p2p.pairing.dismissInvite': 'Saved, close',
+  'p2p.pairing.acceptTitle': 'Pair using an invite code',
+  'p2p.pairing.codeLabel': 'Invite code from the other computer',
+  'p2p.pairing.accept': 'Submit invite code',
+  'p2p.pairing.acceptHint':
+    'After submitting, the other side still has to approve and confirm the fingerprint before the pair becomes usable.',
+  'p2p.pairing.state': 'Pair state',
+  'p2p.pairing.statePendingTarget': 'Waiting for the other side to approve',
+  'p2p.pairing.statePendingInitiator': 'Waiting for you to confirm the fingerprint and approve',
+  'p2p.pairing.stateActive': 'Pair is valid (not necessarily connected)',
+  'p2p.pairing.stateRevoked': 'Revoked',
+  'p2p.pairing.stateExpired': 'Expired',
+  'p2p.pairing.presenceOnline': 'Server reports online',
+  'p2p.pairing.presenceOffline': 'Server reports offline',
+  'p2p.pairing.presenceHint':
+    'Presence comes from server heartbeats and is advisory only; it does not mean a direct connection is possible.',
+  'p2p.pairing.review': 'Confirm fingerprint',
+  'p2p.pairing.reviewTitle': 'Confirm the remote device fingerprint',
+  'p2p.pairing.reviewHint':
+    'Compare the fingerprint below with the other person over an independent channel such as a phone call or in person. Only confirm when it matches exactly; do not rely on the displayed name.',
+  'p2p.pairing.remoteName': 'Remote device name',
+  'p2p.pairing.remoteFingerprint': 'Remote device fingerprint',
+  'p2p.pairing.confirmLabel': 'Re-enter the fingerprint you verified',
+  'p2p.pairing.confirmHint':
+    'It must match exactly. A mismatch is refused and never authorizes an unknown device.',
+  'p2p.pairing.approve': 'Confirm fingerprint and approve',
+  'p2p.pairing.reject': 'Reject this pair',
+  'p2p.pairing.revoke': 'Revoke pair',
+  'p2p.pairing.revokeWarning':
+    'Revoking immediately disconnects the P2P session with this computer and invalidates its old entry points. Local, SSH and other computers are unaffected. Pairing again does not restore the old session.',
+  'p2p.pairing.closeReview': 'Close',
+  'p2p.pairing.mismatch':
+    'The fingerprint did not match, so approval was refused. Verify again with the other person; do not bypass this step.',
+  'p2p.pairing.unconfirmed':
+    'The pairing result is unconfirmed and may already have taken effect on the server. Read the list again to check rather than resubmitting.',
+  'p2p.management.title': 'P2P service management',
+  'p2p.management.description':
+    'Configure your pairing server. A reachable server does not mean remote DSH is connected.',
+  'p2p.management.readback': 'Read again',
+  'p2p.management.pending': 'Operation in progress. Waiting for the actual result…',
+  'p2p.management.cancelling': 'Cancellation requested. Waiting for the original operation…',
+  'p2p.management.cancel': 'Request cancellation',
+  'p2p.management.confirmed': 'The operation result has been read back.',
+  'p2p.management.unconfirmed':
+    'The result is unconfirmed; the operation may have completed. Read back before submitting again.',
+  'p2p.management.failed':
+    'The operation failed. Input is preserved. Check the configuration and error code, then read again or correct it.',
+  'p2p.management.cancelFailed':
+    'Cancellation is unconfirmed. Keep waiting for the original operation; this does not mean a write was rolled back.',
+  'p2p.management.notLoaded':
+    'P2P configuration has not been read. A failed read does not mean no configuration exists.',
+  'p2p.management.disabled':
+    'P2P is not enabled on this computer. Enabling creates local records only, without enrollment or connection.',
+  'p2p.management.enable': 'Enable P2P',
+  'p2p.management.empty': 'No verified service has been added.',
+  'p2p.management.https': 'HTTPS service origin',
+  'p2p.management.wss': 'WSS signaling URL',
+  'p2p.management.stun': 'UDP STUN host and port',
+  'p2p.management.identity': 'Pinned service identity',
+  'p2p.management.notConnected': 'This is service configuration, not computer connection status.',
+  'p2p.management.addService': 'Add service',
+  'p2p.management.verifyAdd': 'Verify identity and add',
+  'p2p.management.addHint':
+    'Enter every endpoint exactly as announced by your server. TLS is verified; addresses are never guessed and certificates are never bypassed.',
   'app.title': 'DSHKer Launcher',
   'nav.application': 'Application',
   'nav.launch': 'Launch',

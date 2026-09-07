@@ -23,6 +23,8 @@
 
 ## Decisions
 
+登记结果恢复的 renderer 状态与本地凭据状态分离：读取 pending 文件不能证明服务器未完成登记，保留结果未知并要求查询原 request/key 的结果。只有该 revision 的权威 enrollment_not_found 才开放一次显式重提，发出前消费该权限；任何重新读取凭据或失败查询使旧权限失效。服务级忙状态不改变正在执行操作的恢复状态。此控制不替代 main 的 revision、身份和加密持久化准入，也不解决首次登记与凭据丢失的历史区分；后者在完整登记界面交付前仍须补齐。
+
 ### 1. 自研控制面，使用标准协议实现数据面
 
 选择 Go coordinator + Go peer helper + Pion WebRTC。服务器负责信令和 STUN；DTLS/SCTP 会话终止于两台 peer，不终止于 coordinator。helper 在用户态运行，随 DSHKer 启停，Electron main 保留本地 DSH 所有权。
@@ -67,6 +69,10 @@ WSS 转发受限的 offer/answer/candidate，不转发 DataChannel 帧或 DSH �
 
 每台电脑本地生成设备 Ed25519 身份私钥，存入主进程拥有的安全存储。macOS Keychain、Windows DPAPI 保护持久密文；安全存储不可用就失败，不存明文。私钥只交本机 helper 内存使用，不经 renderer、日志、命令行参数或服务器传输。
 
+用户管理编排由 main 的 `PeerAccounts` 持有每服务短期用户会话，公开返回值仅含用户/网络身份和展示字段；登录密码、Bearer token 不进入 projection 或目录。登录须独立查询当前用户并匹配登录回复后才接受，过期令牌禁止继续发送，helper 关闭清除会话并拒绝迟到回复恢复。操作锁按 serviceId 隔离。网络创建/改名用服务端返回的 networkId/userId/name 再列举读回，不用同名推断身份；无变化不写入，失败不自动重发。网络删除确认后必须通知 owning connection workflow 清理该网络授权，即使随后的结果读回失败也不得恢复旧授权。显式登出先清本地会话；远端登出失败继续返回错误而非声称撤销成功。设备身份和配对不因用户登出自动替换，完整 UI/IPC/连接撤销编排仍是独立接入任务。
+
+主进程凭据实现将每个 serviceId 的设备身份、密钥和证书作为整体，经 Electron safeStorage 加密后写入已登记 settings root 的 `dsh-launcher/p2p-credentials/<serviceId>.json`。明文目录配置仍属于 `p2p-devices.json`，不向 renderer 返回密文或解密结果。首次登记显式 create，已存在拒绝覆盖；更新检查原密文 revision 和设备/用户/公钥身份，原子替换并解密读回。删除只由已完成撤销或已持久 tombstone 的服务工作流调用；凭据文件缺失、损坏或不可解密不能触发自动重新登记。
+
 1. 管理员在独立服务器本地创建账号；用户在 DSHKer 配置 HTTPS 服务、登录并显式选择或创建自己的私有网络，再申请 5 分钟单次绑定凭证。没有默认网络、跨用户配对或匿名注册。HTTPS 必须正常校验证书；用户会话仅用于管理，设备 mTLS 用于信令。
 2. helper 生成公钥与 CSR，证明私钥持有；服务器原子消费限定 userId/networkId 的凭证、绑定 deviceId 并签发设备证书。后续设备 REST/WSS 使用 mTLS，绑定凭证不成为长效客户端凭证。分享码、配对和授权租约必须限定明确网络，双方均需属于该用户且有有效绑定。删除网络、解绑设备或删除配对会撤销相应授权，重绑不恢复旧配对。
 3. B 在“分享配对码”生成 5 分钟、单次、至少 128 bit 熵的目标凭据；码包含版本、服务身份、B 的 deviceId/公钥指纹、有效期和服务签名，不含私钥或 DSH Token。A 在“添加 P2P 电脑”粘贴该码，main 验证同服务、非自身、签名/期限后提交邀请，服务器原子消费凭据；这是未知本地目标唯一的邀请准入入口，不开放设备目录或裸 deviceId 邀请。B 明确批准且 A 确认显示的 B 身份指纹后，双方保存彼此公钥、服务身份及 pairId。在线或知道 deviceId 不等于获准访问。
@@ -91,6 +97,8 @@ offer/answer 由持久设备密钥签名，签名覆盖完整 SDP（包含 DTLS 
 peer 控制 DataChannel 暴露 `runtime.connect` / `runtime.state` / `runtime.invalidate` 与有限的 stream 操作，并支持下述经过授权的命名工程选择操作；不提供通用 shell、任意文件读写、任意目标 host/port、HTTP CONNECT 或 SOCKS。远端 main 按本地启动合约获取正在运行的 DSH URL；运行未启动时才调用受管 start，并等待真实启动公告。缺失根、工具、profile、未知选定版本、脏 checkout 等错误继续由本地运行时拒绝。
 
 认证直连上返回含 runtime generation 的会话信息。发起端生成一个 `127.0.0.1` 临时入口，仅映射该 peer 的当前 DSH；目标端为每个 stream 绑定本地当前公告中的 loopback authority。端口来自 URL，不能从界面已保存但未生效的设置推断，不能写死 3080。保存端口后旧进程仍使用旧端口；进程重启公告新 URL/Token 后旧 streams 失效，用户重连获取新 generation。
+
+运行时接入细化：`LauncherHarnessService` 提供仅 main 可订阅的实际 launch 状态事件及快照；启动公告、错误、退出和停止在同一 owner 更新，保存端口不发布替代运行公告。`PeerRuntimeOwner` 订阅此源而非轮询 Git/界面状态，为每次实际 running 身份分配递增 generation；离开 running 时同步退役旧绑定并通知连接 owner。多个连接请求共享一个受管启动，已由其他入口发起的 starting 只等待真实公告。每个等待者可独立取消并受 70 秒预算约束，不停止已经接受的 DSH 启动；直接启动的前置失败保留原 typed error。关闭解除订阅、拒绝等待者且不停止 DSH。该模块必须通过正式 main/helper callback composition 才构成完整桥接，不单独计作端到端完成。
 
 业务 DataChannel 采用可靠、有序传输。每个浏览器连接分配 streamId，用版本化 `OPEN/DATA/FIN/RESET/WINDOW_UPDATE` 帧复用；帧包含 attempt 与 runtime generation。最大单数据帧 16 KiB、每 peer 最多 64 条 streams、所有发送排队总和最多 8 MiB，读端受 credit/背压约束，不依赖无限缓冲。控制消息最多 64 KiB，未知 stream、超预算和无效序列明确失败并释放资源。
 
@@ -144,6 +152,10 @@ peer 控制 DataChannel 暴露 `runtime.connect` / `runtime.state` / `runtime.in
 
 新 P2P 服务配置和已配对电脑写入已登记 settings root 下严格版本化的 `p2p-devices.json`；临时 ICE 地址、DSH Token、helper PID、本地转发端口和失败状态不持久化。新功能首次启用才能创建初始记录；已有记录缺失、损坏、版本未知时明确失败。SSH v1 catalog 保持原格式，不按 IP 自动转成 P2P；仅用户明确的 SSH 编辑可原子更新选定记录的已允许字段。
 
+`PeerServices` 承接已验证服务的登记与重开准入：首次添加只向 helper 发送显式端点和空 pinnedKey，由 Go 正常 TLS/新鲜挑战签名验证取得身份，main 再验证端点/CA/key/版本并按 catalog revision 提交。重开使用已保存公钥，不接受调用者传入替代 key；已忘记服务即使 helper 内存尚有客户端，也不得重新准入。验证期间发生目录版本变化时拒绝覆盖；尚未启用时不启动网络操作。该模块不替代未验证配置草稿、共享服务器编辑、完整登记或忘记清理工作流，后续接入仍须实现这些明确 UI/持久化语义。
+
+目录落盘细化：`dsh-launcher/p2p-enabled.json` 保存 v1 启用标记及随机 catalogId，与 `p2p-devices.json` 中的 catalogId 必须一致；只有两者均不存在才表示尚未启用，单文件缺失拒绝初始化或覆盖。首次启用按完整临时文件同步后排他发布，分步故障保留不完整状态而非自动修复。目录提交按原始文件 SHA-256 revision 校验并串行原子替换，排队前复制输入、写后重新读取；无变化不写盘。服务证书须为规范 Base64 DER、自签 Ed25519 CA，实际公钥及其 SHA-256 serviceId 必须吻合；证书到期不删除记录，在线认证仍由协议客户端校验。持久层禁止修改既有 connectionId 下的服务/网络/配对/设备/用户/固定公钥身份、回退 pairRevision 或将 revoked 恢复 active。普通电脑删除要求先持久 revoked；服务忘记要求先单独持久 tombstone，后续才能移除记录，tombstone 不可删除或用于重新引入旧服务。命名业务层仍负责实时授权、锁定影响集合和停止连接，此存储层不替代它们。
+
 新增 named IPC 包含配置/检查服务、登记、邀请、批准/拒绝、撤销、列出、测试、连接、断开、移除，以及 `remoteConnections.update`、`p2pDevices.updateDisplayName`、`p2pService.updateConfig` 和命名的授权根管理、远端目录列表、工程打开/结果读回操作。逐项编写 sender/未知字段/越权 admission 测试。网络请求和 helper 全在 main 侧；renderer 不得指定 executable、原始文件访问路径、原始 SDP、候选地址或任意转发目标；工程选择仅传回属于当前授权上下文的不透明引用。bridge 版本与 helper protocol 版本匹配后才启用能力，缺版本报错。
 
 helper 由 main 使用固定打包路径启动；主机匹配 darwin-arm64/darwin-amd64/windows-amd64/windows-arm64，缺失制品不能寻找系统程序或另一个架构。main 与 helper 使用应用专用的 Unix domain socket / Windows named pipe，限制当前用户与进程会话访问并验证启动握手；不暴露 TCP 管理口，也不复用 `service/node/` 或遗留 SDK/VFS 传输。
@@ -155,6 +167,10 @@ helper 由 main 使用固定打包路径启动；主机匹配 darwin-arm64/darwi
 ### 8. 远程 Tab 操作界面与编辑合约
 
 #### 页面与入口
+
+用户/网络管理区由用户明确选择固定 serviceId 后打开，跨服务状态隔离，不默认选择首个网络。密码在提交后立即从输入框清除，不进入共享状态。用户身份读回变化清除旧网络列表、选择与编辑状态；网络列表读取失败保留上次读回并显示失败，不能解释为空。创建/改名显示服务器实际返回的 ID/名称，删除先确认准确网络 ID 和授权后果。写入失败除能证明未接受的准入错误外，标为待网络读回，禁止重复写；读取用户不解除网络写入的不确定状态，成功读取网络列表才允许后续操作。删除读回确认后关闭确认区，目标已删除时焦点回到该服务管理标题。服务器明确拒绝用户会话时 main 清除该服务内存登录凭据，允许用户显式重新登录；普通连接故障不擅自清会话。
+
+Renderer 管理适配由 remote-connections domain 的共享 owner 持有文档级递增请求序号、按服务隔离的 pending/outcome 与无秘密的服务草稿。组件重挂载不重置序号，不把其他服务锁住，也不把密码放入共享操作状态。服务区以显式未加载、读取失败、未启用和实际已保存目录区分状态；启用与“验证身份并添加”均是公开按钮，重新读取是结果未确认后的安全操作。取消仅请求 main 终止原操作，原结果未返回前仍占用 pending；迟到取消回复不能覆盖新请求结果。保存失败保留草稿，成功只清理与本次提交仍相同的字段，不擦除期间新输入。该适配仍需接入用户/网络/登记/配对所有控件，服务列表不得显示为已连接电脑。
 
 沿用现有桌面工具页的表单、设备列表、按钮、状态和 typed locale 样式，不引入新的视觉主题。目标是多电脑用户在一次页面访问内配置、配对、连接及修正错误；鼠标和键盘均有完整路径。主入口继续是左侧“远程连接”，Run 中各固定标签只承载会话与针对该电脑的快捷操作，不复制另一套管理状态。
 
@@ -211,6 +227,8 @@ DSH 实际端口从运行公告读取，只作为连接详情，不在此表单�
 列表刷新保留已存在目标的选择和滚动；空列表展示新增/配对入口，加载和失败不伪装为空列表。Enter 提交当前表单、Escape 执行上述关闭规则，保存/取消/编辑均有可见按钮和正常键盘焦点。安全敏感登记凭证不适用一般草稿保留规则。拒绝自动保存、删除重建实现编辑、共享全局 pending 锁、按名称重用 tab、失效 URL 占位加载以及修改参数后静默连接等方案。
 
 ### 9. 验收及部署先后顺序
+
+用户最新确认先完成本地功能与验证，发布明确的 GitHub 预发布版，再进行 Win/Mac 联测。预发布使用独立 prerelease 版本、禁止 latest/稳定更新源晋级，附本地证据和物理平台待测清单。正式版仍须完成下述跨平台/公网矩阵，不降低现有验收阈值；缺实现、缺本地端到端或包完整性仍阻止预发布。
 
 本地先行验证（2026-09-07）：按用户追加要求，先运行一个独立服务器二进制和两个独立 Go peer 进程，验证真实 TLS/mTLS/WSS、双向批准、公钥固定、ICE/DTLS 直连、压力及断连。客户端仅通过 `GET /v1/pairs/:pairId/identity` 获取自己参与的配对双方公开身份及 presence，不开放设备目录。该层结果只证明控制面与 peer 数据传输，不替代 Electron UI、受管 DSH HTTP/WS 或 Windows 实机验证。后者仍保留未完成任务，不在本地压力结果中冒称完成。
 

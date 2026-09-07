@@ -19,6 +19,7 @@ import {
 import { isLoopbackAddress, runtimeBrowser, type RuntimeTabId } from '../runtimeBrowserState'
 import EmptyState from './EmptyState.vue'
 import RemoteRunActions from './RemoteRunActions.vue'
+import P2PRunActions from './P2PRunActions.vue'
 
 /** The Electron <webview> members this panel drives. */
 interface RuntimeWebview extends HTMLElement {
@@ -607,6 +608,23 @@ onUnmounted(() => {
           >
             {{ t('runtime.notRunning.action') }}
           </button>
+        </template>
+      </EmptyState>
+      <EmptyState
+        v-if="
+          browser.activeTab.value?.url === undefined && browser.activeTab.value?.source === 'peer'
+        "
+        icon="plug"
+        fill
+        :title="t('runtime.remoteUnavailable')"
+        :description="t('runtime.remoteUnavailable.description')"
+      >
+        <template #actions>
+          <P2PRunActions
+            v-if="browser.activeTab.value?.connectionId"
+            :connection-id="browser.activeTab.value.connectionId"
+            @edit="emit('navigate', 'remote')"
+          />
         </template>
       </EmptyState>
       <EmptyState

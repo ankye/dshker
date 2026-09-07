@@ -1,0 +1,171 @@
+{
+  "schema_version": 1,
+  "change": "Self-hosted P2P DSH connections: pairing, connection, isolation, remote projects, shared config, reconciliation",
+  "acceptance_stage": "planning",
+  "implementation_complete": false,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "prerequisites": [
+    "A self-hosted coordination server reachable over HTTPS/WSS with public UDP, deployed per task 6.2.",
+    "A second physical computer with its own device identity, per task 7.3. Loopback self-connection cannot substitute.",
+    "Both computers running matching desktop builds with the architecture-matched Go peer, per task 6.3."
+  ],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "workflows": [
+    {
+      "id": "review-pair-fingerprint",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-pair-review']",
+      "expected_state": {
+        "shows_remote_fingerprint": true,
+        "requires_typed_confirmation": true
+      },
+      "expected_native_event": "Fingerprint review pane becomes visible and receives focus",
+      "requires_persistence": false,
+      "invariants": [
+        "the displayed fingerprint is derived locally from the real remote public key",
+        "approval is impossible without an explicit typed confirmation",
+        "no public key, token or DSH URL appears in the pane"
+      ],
+      "required_content_checks": ["text_order", "focus_order"]
+    },
+    {
+      "id": "approve-pair",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-pair-approve']",
+      "expected_state": { "pins_identity_only_when_active": true },
+      "expected_native_event": "Pair becomes active on both computers",
+      "requires_persistence": true,
+      "invariants": [
+        "a pending result never reports success",
+        "an identity substituted between confirmation and readback is refused",
+        "an unknown write outcome blocks further writes until a readback"
+      ],
+      "required_content_checks": ["text_order"]
+    },
+    {
+      "id": "connect-paired-computer",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-connection-connect']",
+      "expected_state": { "reaches_stage": "ready", "path_is_direct": true },
+      "expected_native_event": "Remote workbench becomes usable in its own Run tab",
+      "requires_persistence": false,
+      "invariants": [
+        "punching and starting-runtime are never presented as connected",
+        "the local DSH entry URL never appears in renderer state",
+        "no relay is used; a non-direct path is reported as direct_unavailable"
+      ],
+      "required_content_checks": ["text_order", "stage_labels"]
+    },
+    {
+      "id": "browse-remote-authorized-root",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-remote-read-roots']",
+      "expected_state": { "lists_only_authorized_roots": true },
+      "expected_native_event": "Authorized roots from the other computer become visible",
+      "requires_persistence": false,
+      "invariants": [
+        "path resolution happens on the remote computer using its own platform rules",
+        "navigation uses only opaque references issued by the remote side",
+        "a location outside an authorized root is refused, never clamped",
+        "missing, forbidden and empty directories are distinct states"
+      ],
+      "required_content_checks": ["text_order", "pagination"]
+    },
+    {
+      "id": "open-remote-project-and-run-task",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-remote-projects']",
+      "expected_state": { "opens_chosen_project": true },
+      "expected_native_event": "Remote DSH opens the chosen project and completes a verification task",
+      "requires_persistence": true,
+      "invariants": [
+        "remote file changes and task results are read back independently on the remote computer",
+        "the local computer's files are unchanged",
+        "DSH's own permission and approval policy is not bypassed"
+      ],
+      "required_content_checks": ["text_order", "content_errors"]
+    },
+    {
+      "id": "reconcile-after-disconnect",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-work-reconcile']",
+      "expected_state": { "distinguishes_loss_from_stop": true },
+      "expected_native_event": "Disconnect warning appears and survives a reconnect",
+      "requires_persistence": false,
+      "invariants": [
+        "a lost connection is never reported as a stopped or finished task",
+        "reconnecting does not clear the warning",
+        "nothing is retried, resubmitted or inferred automatically"
+      ],
+      "required_content_checks": ["text_order"]
+    },
+    {
+      "id": "edit-shared-service-config",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-service-editor']",
+      "expected_state": { "refuses_while_any_peer_busy": true },
+      "expected_native_event": "New endpoints are saved and the old test result is invalidated",
+      "requires_persistence": true,
+      "invariants": [
+        "a new address is accepted only when it proves the same pinned identity",
+        "any busy computer sharing the service blocks the save",
+        "a failed save leaves the stored configuration byte-identical and triggers no reconnect",
+        "input is preserved on every failure"
+      ],
+      "required_content_checks": ["text_order", "focus_order"]
+    },
+    {
+      "id": "revoke-and-verify-isolation",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='p2p-pair-revoke']",
+      "expected_state": { "revoked_cannot_reconnect": true },
+      "expected_native_event": "Revoked computer loses access while Local and other peers keep working",
+      "requires_persistence": true,
+      "invariants": [
+        "a revoked pair keeps its record but can never reconnect",
+        "its fixed session partition is not reused by another computer",
+        "Local and other peers are unaffected",
+        "no listener, process or credential is left behind"
+      ],
+      "required_content_checks": ["text_order"]
+    }
+  ]
+}

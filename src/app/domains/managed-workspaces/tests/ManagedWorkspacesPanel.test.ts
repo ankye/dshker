@@ -216,8 +216,41 @@ function readyState(workspaces: readonly ManagedWorkspaceView[] = []): ManagedLa
 }
 
 function installDesktopApi(managed: DesktopApi['managed']): void {
+  const unusedP2P = async (): Promise<never> => {
+    throw new Error('P2P is not used in this workspace test.')
+  }
   window.dshLauncher = {
     apiVersion: 1,
+    p2pManagement: {
+      enable: unusedP2P,
+      catalog: unusedP2P,
+      addService: unusedP2P,
+      login: unusedP2P,
+      currentUser: unusedP2P,
+      logout: unusedP2P,
+      networks: unusedP2P,
+      createNetwork: unusedP2P,
+      renameNetwork: unusedP2P,
+      deleteNetwork: unusedP2P,
+      registration: unusedP2P,
+      registerDevice: unusedP2P,
+      submitEnrollment: unusedP2P,
+      recoverEnrollment: unusedP2P,
+      pairs: unusedP2P,
+      pairIdentity: unusedP2P,
+      createInvite: unusedP2P,
+      acceptInvite: unusedP2P,
+      approvePair: unusedP2P,
+      rejectPair: unusedP2P,
+      revokePair: unusedP2P,
+      connections: unusedP2P,
+      connect: unusedP2P,
+      disconnect: unusedP2P,
+      updateServiceConfig: unusedP2P,
+      remoteRoots: unusedP2P,
+      remoteDirectory: unusedP2P,
+      cancel: unusedP2P
+    },
     bootstrap: {
       getInfo: async () =>
         apiFail('bootstrap.main_unavailable', 'Bootstrap is not used in this test.')

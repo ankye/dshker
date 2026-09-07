@@ -78,13 +78,21 @@ func NewTransport(parent context.Context, options TransportOptions) (*Transport,
 	channel, err := pc.CreateDataChannel(subprotocol, &webrtc.DataChannelInit{Ordered: &ordered, Negotiated: &negotiated, ID: &id, Protocol: &subprotocol})
 	if err != nil {
 		cancel()
-		pc.Close()
+		pc.GracefulClose()
 		return nil, err
 	}
 	transport.channel = channel
 	transport.bindEvents()
-	go func() { <-ctx.Done(); pc.Close(); close(transport.closed) }()
-	go transport.enforceLease()
+	leaseDone := make(chan struct{})
+	go func() { defer close(leaseDone); transport.enforceLease() }()
+	// Normal Pion Close releases sockets but does not join its workers. Join
+	// outside all Pion callbacks before acknowledging transport cleanup.
+	go func() {
+		<-ctx.Done()
+		pc.GracefulClose()
+		<-leaseDone
+		close(transport.closed)
+	}()
 	return transport, nil
 }
 

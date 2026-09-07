@@ -235,6 +235,19 @@ The Run page SHALL 保留一个不可关闭的 Local 标签和每个已登记远
 
 ### Requirement: Named IPC confines network and secret authority
 
+管理入口 v1 SHALL 分别命名为 enable、catalog、addService、login、currentUser、logout、networks、createNetwork、renameNetwork、deleteNetwork、registration、registerDevice、submitEnrollment、recoverEnrollment 和 cancel。每次请求携带 version=1 与当前顶层页面内严格递增的正整数 requestId；cancel 指向同页面的原 requestId，不能取消其他窗口。每页最多 16 个进行中请求，页面退役时终止等待，不自动重试。写操作已接受后取消/超时 SHALL 报告结果未确认并要求读回，不承诺回滚。目录 projection 不包含证书、密文或运行地址；登记 projection 仅含公开身份与 revision。密码只允许 login，登记凭证由 main 账户工作流取得，不作为通用 renderer 参数。
+
+#### Scenario: Cancel an owned management request
+
+- **WHEN** 当前可信顶层页面取消自己的进行中请求，或该页面导航/销毁
+- **THEN** 只终止该页面所属等待；已接收写操作结果不明时要求显式读回，不自动重放，不影响其他页面请求
+- **AND** 单项管理工作流在 120 秒外层预算到期时请求取消；该预算不延长 helper 或控制面的更短单步预算，业务 owner 完成清理前不释放并发占用
+
+#### Scenario: Replay or overload management IPC
+
+- **WHEN** 请求重用旧编号、未知版本、超出并发预算或取消其他页面的请求
+- **THEN** main 拒绝该操作且不调用业务服务；重载页面不会恢复原请求或秘密
+
 The Launcher SHALL 仅通过版本化命名操作开放配置/检查/编辑服务、登记、配对申请处理、撤销、列表、测试、连接、断开、记录编辑与移除，以及获授权的目录选择和工程打开/结果读回；主进程 SHALL 验证调用者、严格 payload、配置版本及当前操作准入状态。普通 renderer SHALL NOT 获得 shell、任意网络/文件访问、私钥、SDP/ICE 或远端原始 DSH URL；只有受限 guest 经主进程获得使用该会话所必需的本地入口。目录选择 SHALL 使用绑定当前授权与会话的不透明引用，而不是任意文件路径参数。
 
 #### Scenario: Renderer bypasses a disabled edit control
@@ -390,6 +403,8 @@ The feature SHALL 经真实 DSH HTTP/WebSocket 支持所选远端工程的对话
 - **THEN** 明示无法确认及可用人工操作，不猜成功/失败/已取消，不复活旧 generation 或将旧任务投射到新工程
 
 ### Requirement: Formal releases prove the complete remote workbench
+
+完整实现并通过本地生产组合与包门禁后 MAY 发布显式标识的联测 prerelease；SHALL NOT 标记 latest 或向稳定更新源推送。预发布说明 SHALL 列明未完成的物理平台和网络矩阵；下述完整跨平台验收继续约束正式稳定版晋级。
 
 The release SHALL 在完整用户流程、所有必需质量门禁、四架构最终制品及跨机平台验证通过后才公开。验收 SHALL 包含至少一小时真实 DSH 持续会话、多 peer/多流/慢读背压、断线恢复、公开 UI 原始交互 ledger、远端文件/任务独立读回、mock 依赖零可达及包扫描。存在未实现、失败、未测或缺设备证据时 SHALL 阻止正式发布。
 

@@ -1,14 +1,18 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
-import { remoteConnectionsState } from '@/app/domains/remote-connections'
+import {
+  p2pConnections,
+  p2pManagement,
+  remoteConnectionsState
+} from '@/app/domains/remote-connections'
 import type { RemoteConnectionStatus } from '@/shared/contracts'
 
-export type RuntimeTabId = 'local' | `remote:${string}`
+export type RuntimeTabId = 'local' | `remote:${string}` | `peer:${string}`
 
-/** One fixed local or registered-computer browser workspace. */
+/** One fixed local, SSH-registered or paired-computer browser workspace. */
 export interface RuntimeTab {
   readonly id: RuntimeTabId
-  readonly source: 'local' | 'remote'
+  readonly source: 'local' | 'remote' | 'peer'
   readonly connectionId?: string
   url: string | undefined
   title: string
@@ -49,9 +53,36 @@ const tabs = computed<readonly RuntimeTab[]>(() => {
         title: current?.title ?? connection.displayName,
         status: connection.status
       }
-    })
+    }),
+    ...peerTabs()
   ]
 })
+
+/**
+ * Tabs for paired computers.
+ *
+ * A revoked pair keeps its tab so the user can see why it stopped working, but
+ * it can never carry a URL. The DSH entry point itself stays in the main
+ * process: a peer tab is `ready` only as a stage, and the actual address is
+ * supplied to the guest by main rather than held here.
+ */
+function peerTabs(): RuntimeTab[] {
+  const computers = p2pManagement.catalog.value?.computers ?? []
+  return computers.map((computer): RuntimeTab => {
+    const id = `peer:${computer.connectionId}` as const
+    const ready =
+      computer.pairState === 'active' && p2pConnections.isReady(computer.serviceId, computer.pairId)
+    const current = navigation[id]
+    return {
+      id,
+      source: 'peer',
+      connectionId: computer.connectionId,
+      url: ready ? current?.url : undefined,
+      title: current?.title ?? computer.displayName,
+      status: undefined
+    }
+  })
+}
 
 const activeTab = computed(
   () => tabs.value.find((tab) => tab.id === activeTabId.value) ?? tabs.value[0]
@@ -113,6 +144,30 @@ watch(
         remoteSourceUrls.delete(id)
         remoteDisplayNames.delete(id)
       }
+    }
+    if (!tabs.value.some((tab) => tab.id === activeTabId.value)) activeTabId.value = 'local'
+  },
+  { deep: true }
+)
+
+watch(
+  () => ({
+    computers: p2pManagement.catalog.value?.computers,
+    peers: p2pConnections.state.peers
+  }),
+  ({ computers }) => {
+    const retained = new Set<string>()
+    for (const computer of computers ?? []) {
+      const id = `peer:${computer.connectionId}`
+      const usable =
+        computer.pairState === 'active' &&
+        p2pConnections.isReady(computer.serviceId, computer.pairId)
+      // A revoked or disconnected peer must not keep a loadable address.
+      if (!usable) delete navigation[id]
+      else retained.add(id)
+    }
+    for (const id of Object.keys(navigation)) {
+      if (id.startsWith('peer:') && !retained.has(id)) delete navigation[id]
     }
     if (!tabs.value.some((tab) => tab.id === activeTabId.value)) activeTabId.value = 'local'
   },

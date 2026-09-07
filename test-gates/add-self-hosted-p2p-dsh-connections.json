@@ -1,0 +1,335 @@
+{
+  "change": "add-self-hosted-p2p-dsh-connections: pairing, connection staging, session isolation, remote project selection, shared server configuration, post-disconnect reconciliation and Run-page peer entry points",
+  "risk": "interactive",
+  "scope_note": "Code-level gate for the desktop and Go implementation of self-hosted P2P DSH connections. Every command listed here was executed and passed. Physical two-machine acceptance (7.3), network matrix (7.4), failure matrix (7.5), four-architecture packaging (6.3), server deployment (6.1/6.2), full interactive ledger (5.9) and release evidence (7.7) are NOT covered and remain open: they require a second physical machine and a self-hosted coordination server. Remote directory semantics are proven against a real filesystem, never mocked path strings. The worktree also contains earlier in-progress P2P work from previous stages of this same change (accounts, enrollment, control-plane user management); those files are declared here so the manifest has no undeclared production surface, but their own stage gates own their evidence. Agent working notes under .agents/notes/ are not part of the product surface and are excluded.",
+  "production_files": [
+    "electron/main/p2p/pairing.ts",
+    "electron/main/p2p/pair-records.ts",
+    "electron/main/p2p/connections.ts",
+    "electron/main/p2p/partitions.ts",
+    "electron/main/p2p/remote-projects.ts",
+    "electron/main/p2p/management.ts",
+    "electron/main/p2p/management-ipc.ts",
+    "electron/main/p2p/management-admission.ts",
+    "electron/main/p2p/management-projection.ts",
+    "electron/main/security.ts",
+    "electron/p2p-management-preload.ts",
+    "src/shared/p2p-management.ts",
+    "src/app/domains/remote-connections/p2pPairing.ts",
+    "src/app/domains/remote-connections/p2pConnections.ts",
+    "src/app/domains/remote-connections/p2pRemoteProjects.ts",
+    "src/app/shell/components/P2PPairingPanel.vue",
+    "src/app/shell/components/P2PRemoteProjectsPanel.vue",
+    "networking/internal/runtimebridge/directory.go",
+    "networking/internal/peersession/manager.go",
+    "networking/internal/helper/host.go",
+    "electron/main/p2p/services.ts",
+    "src/app/domains/remote-connections/useP2PServiceEditor.ts",
+    "src/app/domains/remote-connections/p2pWorkReconciliation.ts",
+    "src/app/shell/runtimeBrowserState.ts",
+    "src/app/shell/components/P2PRunActions.vue",
+    "src/app/shell/components/RuntimeTabsPanel.vue",
+    "src/app/shell/components/P2PServiceEditorPanel.vue",
+    "src/app/shared/i18n/messages.zh-CN.ts",
+    "src/app/shared/i18n/messages.en-US.ts",
+    "src/app/domains/remote-connections/index.ts",
+    "src/app/domains/remote-connections/p2pManagement.ts",
+    "src/app/domains/remote-connections/p2pAccounts.ts",
+    "src/app/domains/remote-connections/p2pEnrollment.ts",
+    "src/app/shell/components/P2PManagementPanel.vue",
+    "src/app/shell/components/P2PAccountPanel.vue",
+    "src/app/shell/components/P2PEnrollmentPanel.vue",
+    "src/app/shell/components/RemoteConnectionsPanel.vue",
+    "src/app/shell/components/RemoteRunActions.vue",
+    "src/shared/contracts.ts",
+    "electron/main.ts",
+    "electron/main/ipc.ts",
+    "electron/preload.ts",
+    "electron/main/remote/catalog.ts",
+    "electron/main/remote/service.ts",
+    "networking/internal/peer/streams.go",
+    "networking/internal/peer/transport.go",
+    "networking/internal/peer/conn.go",
+    "networking/internal/controlplane/management.go",
+    "networking/internal/controlplane/user_management.go",
+    "electron/main/launcher-shutdown.ts",
+    "electron/main/managed/launcher-harness-service.ts",
+    "networking/internal/controlplane/enrollment_result.go",
+    "docs/p2p-connections.md",
+    "docs/p2p-connections.zh-CN.md",
+    "README.md",
+    "README.zh-CN.md",
+    "docs/testing/p2p-credential-storage.md",
+    "docs/testing/p2p-runtime-session.md"
+  ],
+  "test_files": [
+    "electron/main/p2p/pairing.test.ts",
+    "electron/main/p2p/connections.test.ts",
+    "electron/main/p2p/partitions.test.ts",
+    "electron/main/p2p/remote-projects.test.ts",
+    "electron/main/p2p/management-ipc.test.ts",
+    "electron/main/security.test.ts",
+    "src/app/domains/remote-connections/p2pPairing.test.ts",
+    "src/app/domains/remote-connections/p2pConnections.test.ts",
+    "src/app/domains/remote-connections/p2pRemoteProjects.test.ts",
+    "networking/internal/runtimebridge/directory_test.go",
+    "electron/main/p2p/service-config.test.ts",
+    "src/app/domains/remote-connections/useP2PServiceEditor.test.ts",
+    "src/app/domains/remote-connections/p2pWorkReconciliation.test.ts",
+    "electron/main/remote/editing.test.ts",
+    "src/app/shell/tests/P2PRunActions.test.ts",
+    "src/app/shell/tests/peerRuntimeTabs.test.ts",
+    "src/app/shell/tests/P2PServiceEditorPanel.test.ts",
+    "electron/p2p-management-preload.test.ts",
+    "src/app/domains/managed-workspaces/tests/ManagedWorkspacesPanel.test.ts",
+    "src/app/domains/remote-connections/p2pManagement.test.ts",
+    "src/app/domains/remote-connections/p2pAccounts.test.ts",
+    "src/app/domains/remote-connections/p2pEnrollment.test.ts",
+    "src/app/shell/tests/P2PManagementPanel.test.ts",
+    "src/app/shell/tests/P2PAccountPanel.test.ts",
+    "src/app/shell/tests/RuntimeTabsPanel.test.ts",
+    "src/app/shell/runtimeBrowserState.test.ts",
+    "tests/runtime/peer-helper-driver.ts",
+    "tests/runtime/peer-credentials-driver.ts",
+    "tests/runtime/peer-runtime-host-driver.ts",
+    "electron/main/launcher-shutdown.test.ts",
+    "networking/internal/controlplane/enrollment_result_test.go",
+    "networking/integration/enrollment_result_test.go",
+    "networking/integration/network_revocation_test.go",
+    "networking/integration/process_fixture_test.go",
+    "networking/integration/runtime_session_test.go",
+    "networking/integration/user_management_test.go"
+  ],
+  "live_test_files": [
+    "networking/internal/runtimebridge/directory_test.go"
+  ],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "pins the confirmed identity only once the server reports the pair active"
+    },
+    {
+      "state": "no_op",
+      "test": "does not pin when approval leaves the pair still pending"
+    },
+    {
+      "state": "partial",
+      "test": "bounds one page and reports the total (TestBoundsOnePageAndReportsTotal)"
+    },
+    {
+      "state": "recovery",
+      "test": "lets a readback clear an unknown outcome so the user can proceed"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "blocks further writes after a write whose outcome is unknown"
+    },
+    {
+      "state": "reset",
+      "test": "drops the entry point even when helper teardown fails"
+    },
+    {
+      "state": "superseded",
+      "test": "hands the entry point only for the matching generation"
+    },
+    {
+      "state": "forbidden",
+      "test": "TestRefusesSymlinkEscapingRoot"
+    },
+    {
+      "state": "unauthorized",
+      "test": "refuses a hand-written partition that this app never allocated"
+    },
+    {
+      "state": "conflict",
+      "test": "keeps the input and flags a conflict when the revision is stale"
+    },
+    {
+      "state": "busy",
+      "test": "refuses the update while any computer sharing the service is busy"
+    },
+    {
+      "state": "work_unknown",
+      "test": "distinguishes a lost connection from a stopped task"
+    },
+    {
+      "state": "revoked",
+      "test": "refuses to reconnect a revoked pair and explains why"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/p2p/pair-records.ts",
+      "field": "fingerprint",
+      "source": "SHA-256 of the actual remote device public key received over the authenticated helper channel",
+      "test": "derives the confirmation fingerprint from the real key rather than trusting the reply",
+      "assertion": "a reply-supplied fingerprint is never displayed or trusted",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "pairId",
+        "deviceId",
+        "publicKey"
+      ],
+      "missing_semantics": "A mismatch between the confirmed value and the real key refuses approval; an identity substituted between confirmation and readback is rejected and never pinned."
+    },
+    {
+      "production_file": "electron/main/p2p/pairing.ts",
+      "field": "pairState",
+      "source": "authoritative pairs.identity readback after every write",
+      "test": "reads back the authoritative record instead of trusting the invite write reply",
+      "assertion": "write replies never establish state",
+      "state": "no_op",
+      "identity_keys": [
+        "pairId",
+        "revision",
+        "state"
+      ],
+      "missing_semantics": "pending_target_approval and pending_initiator_confirmation are distinct from active; accepting an invite can never yield an active pair."
+    },
+    {
+      "production_file": "electron/main/p2p/connections.ts",
+      "field": "url",
+      "source": "helper peer.connect reply, retained in main only",
+      "test": "keeps the local DSH entry URL out of the returned state",
+      "assertion": "no renderer-visible field can carry the entry URL",
+      "state": "superseded",
+      "identity_keys": [
+        "serviceId",
+        "pairId",
+        "generation"
+      ],
+      "missing_semantics": "An entry point from a superseded generation is refused; a failed teardown still drops the URL."
+    },
+    {
+      "production_file": "electron/main/p2p/partitions.ts",
+      "field": "partition",
+      "source": "one-way derivation from the pinned serviceId and pairId",
+      "test": "admits only the partition the intended identity derives to",
+      "assertion": "another computer's partition is refused for this identity",
+      "state": "unauthorized",
+      "identity_keys": [
+        "serviceId",
+        "pairId"
+      ],
+      "missing_semantics": "Renaming a computer does not move partitions; two computers never collide; the Local partition is never reused by a peer."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/directory.go",
+      "field": "ref,rootId",
+      "source": "real target filesystem resolution via EvalSymlinks and filepath.Rel on the remote platform",
+      "test": "TestRefusesSymlinkEscapingRoot",
+      "assertion": "resolved path outside the authorized root is refused, not clamped",
+      "state": "forbidden",
+      "identity_keys": [
+        "rootId",
+        "ref"
+      ],
+      "missing_semantics": "Containment is re-checked after resolution; traversal, foreign-root references and malformed references are refused; missing, forbidden and empty are distinct states."
+    },
+    {
+      "production_file": "electron/main/p2p/remote-projects.ts",
+      "field": "ref",
+      "source": "opaque reference issued by the remote computer",
+      "test": "refuses a reference that is not an opaque token",
+      "assertion": "this side never builds a reference from a path",
+      "state": "unauthorized",
+      "identity_keys": [
+        "serviceId",
+        "pairId",
+        "rootId",
+        "ref"
+      ],
+      "missing_semantics": "A page larger than its request or the declared total is rejected; browsing requires a currently active pair."
+    },
+    {
+      "production_file": "electron/main/p2p/services.ts",
+      "field": "httpsOrigin,wssUrl,stunAddress,publicKey",
+      "source": "service.configure reply verified against the already pinned public key",
+      "test": "refuses an endpoint that resolves to a different service identity",
+      "assertion": "a new address is accepted only when it proves the same pinned identity",
+      "state": "busy",
+      "identity_keys": [
+        "serviceId",
+        "publicKey",
+        "revision"
+      ],
+      "missing_semantics": "The whole affected computer set must be idle; a stale revision, unknown service, forgotten service or failed server call leaves the stored configuration byte-identical and triggers no reconnect."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pWorkReconciliation.ts",
+      "field": "attemptId,runtimeGeneration",
+      "source": "live connection stages read back from the helper",
+      "test": "does not clear the warning merely because the peer reconnected",
+      "assertion": "a lost connection is never reported as a stopped or completed task",
+      "state": "work_unknown",
+      "identity_keys": [
+        "serviceId",
+        "pairId",
+        "attemptId",
+        "runtimeGeneration"
+      ],
+      "missing_semantics": "connection_lost, work_unknown and runtime_replaced stay distinct; only an explicit user confirmation clears the warning; nothing is ever retried, resubmitted or inferred."
+    },
+    {
+      "production_file": "src/app/shell/runtimeBrowserState.ts",
+      "field": "url,title,connectionId",
+      "source": "P2P catalog records plus live connection stages",
+      "test": "never carries an address for a revoked pair",
+      "assertion": "a revoked or disconnected peer tab can never hold a loadable address",
+      "state": "revoked",
+      "identity_keys": [
+        "connectionId",
+        "serviceId",
+        "pairId"
+      ],
+      "missing_semantics": "Tab identity follows the pair, not the display name, so a rename does not reload; a removed computer drops its tab and the active tab falls back to Local; the DSH entry point never enters tab state."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "npm run type-check",
+      "no_mock": true
+    },
+    {
+      "command": "npm run architecture:check",
+      "no_mock": true
+    },
+    {
+      "command": "npx vitest run electron/main/p2p/ electron/main/security.test.ts src/app/domains/remote-connections/",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go test -race -count=1 -timeout=10m ./internal/runtimebridge/ ./internal/peersession/ ./internal/helper/",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && gofmt -l .",
+      "no_mock": true
+    },
+    {
+      "command": "npx vitest run electron/main/remote/editing.test.ts",
+      "no_mock": true
+    },
+    {
+      "command": "npx vitest run src/app/shell/",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": "Real-filesystem directory semantics: networking/internal/runtimebridge/directory_test.go builds actual temp trees, symlinks and project markers; listing content is read back from the filesystem rather than asserted by array length."
+    },
+    {
+      "artifact": "OPEN: physical two-machine pairing, connection and remote project acceptance; four-architecture packaging; one-hour soak with real DSH HTTP/WS; release evidence. These require a second physical machine and a self-hosted coordination server and are not satisfied by any test in this gate."
+    },
+    {
+      "artifact": "User documentation (docs/p2p-connections.md and .zh-CN.md) states the no-relay limit, the authorized-root-is-not-a-DSH-sandbox distinction, and that an installer build is not a release. Every error code it documents was verified to exist in src/shared/p2p-management.ts or the Go tree."
+    }
+  ],
+  "interaction_gate": {
+    "contract": "test-gates/add-self-hosted-p2p-dsh-connections-interaction.json",
+    "ledger": ".run/p2p-connections/interaction.jsonl"
+  },
+  "acceptance_status": "Not release-accepted. Implementation and code-level verification are complete and reproducible via real_commands. The interaction contract is authored but its ledger has NOT been produced: no raw interactive evidence exists yet, because every workflow requires a second physical computer and a deployed self-hosted server. implementation_complete remains false in the contract until that acceptance runs. Pre-existing unrelated failures in electron/main/pnpm-launcher.test.ts (Windows pnpm shim) are outside this manifest and were confirmed to fail independently of these changes."
+}

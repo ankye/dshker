@@ -75,6 +75,7 @@ type fixture struct {
 	devices            [2]*controlplane.Client
 	server             *process
 	ctx                context.Context
+	userSession        controlplane.UserSession
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -130,6 +131,7 @@ func newFixture(t *testing.T) *fixture {
 	f.startServer(t)
 	session, err := client.Login(ctx, "process-test", password)
 	must(t, err)
+	f.userSession = session
 	network, err := client.CreateNetwork(ctx, session.Token, "two-process-network")
 	must(t, err)
 	for i := range 2 {
