@@ -47,16 +47,16 @@ const stageLabels: Record<P2PConnectionView['stage'], MessageKey> = {
 }
 
 const stateLabels: Record<P2PPairView['state'], MessageKey> = {
-  pending_target_approval: 'p2p.pairing.statePendingTarget',
-  pending_initiator_confirmation: 'p2p.pairing.statePendingInitiator',
+  invited: 'p2p.pairing.statePendingTarget',
+  approved: 'p2p.pairing.statePendingInitiator',
   active: 'p2p.pairing.stateActive',
   revoked: 'p2p.pairing.stateRevoked',
-  expired: 'p2p.pairing.stateExpired'
+  rejected: 'p2p.pairing.stateRevoked'
 }
 
-/** Approval is only offered while the pair is still pending. */
+/** Approval is only offered while the pair is still pending on this side. */
 function awaitingConfirmation(pair: P2PPairView): boolean {
-  return pair.state === 'pending_target_approval' || pair.state === 'pending_initiator_confirmation'
+  return pair.state === 'invited' || pair.state === 'approved'
 }
 
 function expiry(seconds: number): string {

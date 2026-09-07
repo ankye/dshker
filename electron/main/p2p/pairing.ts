@@ -116,15 +116,17 @@ export class PeerPairing {
       const remote = before.localIsInitiator ? before.target : before.initiator
       if (remote.fingerprint !== confirmed)
         throw new PeerHelperError('p2p.pair_fingerprint_mismatch')
-      if (
-        before.state !== 'pending_target_approval' &&
-        before.state !== 'pending_initiator_confirmation'
-      )
-        throw new PeerHelperError('p2p.pair_state_mismatch')
+      // Server choreography: the invite creator (pair target) approves an
+      // invited pair; the invite submitter (initiator) confirms an approved
+      // pair, and the server independently verifies the fingerprint equals the
+      // creator's key id.
+      const expected = before.localIsInitiator ? 'approved' : 'invited'
+      if (before.state !== expected) throw new PeerHelperError('p2p.pair_state_mismatch')
+      const action = before.localIsInitiator ? 'confirm' : 'approve'
       await this.#call(
         serviceId,
         'pairs.action',
-        { pairId, action: 'approve', fingerprint: confirmed },
+        { pairId, action, fingerprint: confirmed },
         signal
       )
       const after = await this.#identity(serviceId, pairId, local, signal)

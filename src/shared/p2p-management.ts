@@ -102,19 +102,17 @@ export interface P2PPairDeviceView {
 /**
  * A pairing relationship in its authoritative server state.
  *
- * `pending_target_approval` means this device must approve; `pending_initiator_confirmation`
- * means this device must confirm the remote fingerprint before the pair is usable.
- * Both are distinct from `active`, so no UI can present an unapproved pair as ready.
+ * The server state machine is `invited` → `approved` → `active`, with
+ * `rejected`/`revoked` as terminal refusals. The invite *creator* is the pair
+ * target and approves an `invited` pair; the invite *submitter* is the
+ * initiator and confirms an `approved` pair by matching the creator's
+ * fingerprint. Only `active` is usable, so no UI can present a pending pair as
+ * ready.
  */
 export interface P2PPairView {
   pairId: string
   networkId: string
-  state:
-    | 'pending_target_approval'
-    | 'pending_initiator_confirmation'
-    | 'active'
-    | 'revoked'
-    | 'expired'
+  state: 'invited' | 'approved' | 'active' | 'rejected' | 'revoked'
   revision: number
   expiresAt: number
   initiator: P2PPairDeviceView

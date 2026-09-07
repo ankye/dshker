@@ -174,7 +174,6 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.pairing.statePendingInitiator': 'Waiting for you to confirm the fingerprint and approve',
   'p2p.pairing.stateActive': 'Pair is valid (not necessarily connected)',
   'p2p.pairing.stateRevoked': 'Revoked',
-  'p2p.pairing.stateExpired': 'Expired',
   'p2p.pairing.presenceOnline': 'Server reports online',
   'p2p.pairing.presenceOffline': 'Server reports offline',
   'p2p.pairing.presenceHint':

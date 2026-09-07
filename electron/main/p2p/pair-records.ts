@@ -13,13 +13,8 @@ import { exactPeerObject, PeerHelperError } from './wire'
  */
 
 /** Server-declared pair states, mapped 1:1 from the Go coordinator. */
-const PAIR_STATES = [
-  'pending_target_approval',
-  'pending_initiator_confirmation',
-  'active',
-  'revoked',
-  'expired'
-] as const
+/** Server state machine values; anything else is a broken reply. */
+const PAIR_STATES = ['invited', 'approved', 'active', 'rejected', 'revoked'] as const
 export type PeerPairState = (typeof PAIR_STATES)[number]
 
 const PRESENCE = ['online', 'offline'] as const

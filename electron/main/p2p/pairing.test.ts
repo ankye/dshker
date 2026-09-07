@@ -64,7 +64,7 @@ describe('main-owned P2P pairing', () => {
 
   it('refuses approval when the confirmed fingerprint does not match the remote key', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce(identity('pending_target_approval'))
+    f.call.mockResolvedValueOnce(identity('approved'))
     await expect(
       f.pairing.approve(serviceId, pairId, substitutedFingerprint, signal())
     ).rejects.toMatchObject({ code: 'p2p.pair_fingerprint_mismatch' })
@@ -75,7 +75,7 @@ describe('main-owned P2P pairing', () => {
   it('rejects an identity substituted between confirmation and readback', async () => {
     const f = fixture()
     f.call
-      .mockResolvedValueOnce(identity('pending_target_approval'))
+      .mockResolvedValueOnce(identity('approved'))
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce(identity('active', substitutedKey))
     await expect(
@@ -88,7 +88,7 @@ describe('main-owned P2P pairing', () => {
   it('pins the confirmed identity only once the server reports the pair active', async () => {
     const f = fixture()
     f.call
-      .mockResolvedValueOnce(identity('pending_target_approval'))
+      .mockResolvedValueOnce(identity('approved'))
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce(identity('active'))
       .mockResolvedValueOnce({})
@@ -105,11 +105,11 @@ describe('main-owned P2P pairing', () => {
   it('does not pin when approval leaves the pair still pending', async () => {
     const f = fixture()
     f.call
-      .mockResolvedValueOnce(identity('pending_target_approval'))
+      .mockResolvedValueOnce(identity('approved'))
       .mockResolvedValueOnce({})
-      .mockResolvedValueOnce(identity('pending_initiator_confirmation'))
+      .mockResolvedValueOnce(identity('approved'))
     const pair = await f.pairing.approve(serviceId, pairId, remoteFingerprint, signal())
-    expect(pair.state).toBe('pending_initiator_confirmation')
+    expect(pair.state).toBe('approved')
     expect(f.call.mock.calls.map((call) => call[0])).not.toContain('pairs.pin')
   })
 
@@ -125,9 +125,9 @@ describe('main-owned P2P pairing', () => {
     const f = fixture()
     f.call
       .mockResolvedValueOnce({ pairId })
-      .mockResolvedValueOnce(identity('pending_target_approval'))
+      .mockResolvedValueOnce(identity('invited'))
     const pair = await f.pairing.acceptInvite(serviceId, networkId, 'A'.repeat(24), signal())
-    expect(pair.state).toBe('pending_target_approval')
+    expect(pair.state).toBe('invited')
     expect(f.call.mock.calls.map((call) => call[0])).toEqual(['pairs.invite', 'pairs.identity'])
   })
 
@@ -135,7 +135,7 @@ describe('main-owned P2P pairing', () => {
     const f = fixture()
     f.call
       .mockResolvedValueOnce({ pairId })
-      .mockResolvedValueOnce(identity('pending_target_approval'))
+      .mockResolvedValueOnce(identity('approved'))
     const pair = await f.pairing.acceptInvite(serviceId, networkId, 'A'.repeat(24), signal())
     expect(pair.state).not.toBe('active')
   })

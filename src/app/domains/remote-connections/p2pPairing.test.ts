@@ -31,14 +31,14 @@ function setup() {
       .mockResolvedValue({ ok: true, data: [pair('active')] }),
     pairIdentity: vi
       .fn<P2PManagementApi['pairIdentity']>()
-      .mockResolvedValue({ ok: true, data: pair('pending_target_approval') }),
+      .mockResolvedValue({ ok: true, data: pair('invited') }),
     createInvite: vi.fn<P2PManagementApi['createInvite']>().mockResolvedValue({
       ok: true,
       data: { code: 'ABCDEFGHIJKLMNOP', networkId, expiresAt: 1_800_000_000 }
     }),
     acceptInvite: vi
       .fn<P2PManagementApi['acceptInvite']>()
-      .mockResolvedValue({ ok: true, data: pair('pending_target_approval') }),
+      .mockResolvedValue({ ok: true, data: pair('invited') }),
     approvePair: vi
       .fn<P2PManagementApi['approvePair']>()
       .mockResolvedValue({ ok: true, data: pair('active') }),
@@ -145,7 +145,7 @@ describe('renderer P2P pairing domain', () => {
     const state = pairing.state(serviceId)
     state.codeDraft = 'ABCDEFGHIJKLMNOP'
     await pairing.acceptInvite(serviceId, networkId)
-    expect(state.reviewing?.state).toBe('pending_target_approval')
+    expect(state.reviewing?.state).toBe('invited')
   })
 
   it('resolves the remote side regardless of which end this device is', () => {
@@ -168,12 +168,12 @@ describe('renderer P2P pairing domain', () => {
     const { api, pairing } = setup()
     api.approvePair.mockResolvedValue({
       ok: true,
-      data: pair('pending_initiator_confirmation')
+      data: pair('approved')
     })
     await pairing.review(serviceId, pairId)
     pairing.state(serviceId).confirmDraft = fingerprint
     await pairing.approve(serviceId)
-    expect(pairing.state(serviceId).reviewing?.state).toBe('pending_initiator_confirmation')
+    expect(pairing.state(serviceId).reviewing?.state).toBe('approved')
   })
 
   it('refreshes the list after a revocation so no stale active pair remains', async () => {

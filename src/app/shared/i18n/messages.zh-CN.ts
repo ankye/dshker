@@ -143,7 +143,6 @@ export const zhCN = {
   'p2p.pairing.statePendingInitiator': '等待你核对指纹并批准',
   'p2p.pairing.stateActive': '配对有效（不代表已连接）',
   'p2p.pairing.stateRevoked': '已撤销',
-  'p2p.pairing.stateExpired': '已过期',
   'p2p.pairing.presenceOnline': '服务器报告在线',
   'p2p.pairing.presenceOffline': '服务器报告离线',
   'p2p.pairing.presenceHint': '在线状态由服务器心跳提供，仅供参考，不代表可直连。',
