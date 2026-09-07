@@ -116,6 +116,21 @@ describe('launcher update shared state', () => {
 })
 
 describe('Launcher update Settings card', () => {
+  it('supports the home announcement heading without changing update identity or actions', async () => {
+    const api = installApi(states.available)
+    const wrapper = mount(LauncherUpdateSettingsCard, {
+      props: { title: '版本更新公告', description: '查看 Launcher 最新版本与更新状态。' }
+    })
+    await flushPromises()
+    expect(wrapper.get('h3').text()).toBe('版本更新公告')
+    expect(wrapper.text()).toContain(states.available.latestVersion)
+    expect(wrapper.text()).toContain(states.available.assetName)
+    await wrapper.get('[data-testid="settings-check-update"]').trigger('click')
+    await flushPromises()
+    expect(api.check).toHaveBeenCalledWith()
+    wrapper.unmount()
+  })
+
   it.each([
     [states.idle, '尚未检查'],
     [states.checking, '正在检查 GitHub Releases'],

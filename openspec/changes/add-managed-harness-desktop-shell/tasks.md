@@ -74,3 +74,11 @@ repositories.
 
 - [x] 9.1 Raise both hidden-sidebar floating controls by 4rem while keeping their gap and expanded/collapsed positions unchanged. Evidence: 14 focused tests; full regression 95 files / 559 tests; Web and Electron builds; source-size, type, architecture, environment, static visual, service isolation, strict specification, and desktop workspace checks. Native isolated shell smoke covers seven routes and three heights.
 - [ ] 9.2 Verify clicks on the actual DSH guest footer with hidden controls, including macOS/Windows interaction evidence. Native shell smoke and CSS readback do not prove that guest click. Default test-integrity verification also remains blocked by unrelated dirty production changes outside this scoped CSS manifest. No installed application replacement or release is included.
+## 10. Launch home information layout
+
+- [x] 10.1 Arrange version, project and shared Launcher update cards in a responsive three-column layout; preserve version recovery, update actions and the persistent launch footer. Evidence: 22 focused tests, Electron build, real renderer bounds at wide/compact native window sizes, and public version-navigation click passed.
+- [x] 10.2 Integrate the approved otter workbench hero background and remove the old orbit/icon decorations. Evidence: packaged renderer output contains the new PNG and real Electron screenshots show the new artwork without baked-in title text.
+
+- [x] 10.3 Replace the shared launcher icon with the approved otter design. The sidebar, development window/Dock and package configuration reference the same PNG. Native icons in already installed executables require repackaging.
+
+- [x] 10.4 Refine hero copy and typography, soften card surfaces, and reduce secondary-button weight. Evidence: 22 focused tests, Electron build, native-window renderer screenshots at compact/standard/wide widths, no overflowing cards and public version-navigation click.

@@ -18,6 +18,17 @@ const styles = readFileSync(path.join(appRoot, 'src/styles/routes.css'), 'utf8')
 const shellStyles = readFileSync(path.join(appRoot, 'src/styles/base-shell.css'), 'utf8')
 
 describe('launch home hierarchy', () => {
+  it('orders version, project, and live update cards beneath the hero', () => {
+    const version = panel.indexOf('class="launch-version-column"')
+    const project = panel.indexOf('class="launch-introduction"')
+    const updates = panel.indexOf('<LauncherUpdateSettingsCard')
+    expect(version).toBeGreaterThan(panel.indexOf('class="launch-hero"'))
+    expect(project).toBeGreaterThan(version)
+    expect(updates).toBeGreaterThan(project)
+    expect(panel).not.toContain('launch.introduction.coreVersionValue')
+    expect(panel).toContain('harness.state.value.revision')
+  })
+
   it('keeps one start action beside an explicit route to version management', () => {
     expect(action).toContain(
       'class="prototype-button prototype-button--primary launch-primary-action"'

@@ -366,3 +366,19 @@ All Launcher surfaces SHALL provide distinguishable loading, empty, progress, su
 - **WHEN** an older clone, validation, or lifecycle operation completes after the user selected another workspace or generation
 - **THEN** the launcher ignores or labels the stale result
 - **AND** it does not overwrite the newer selection state
+
+### Requirement: Launch home groups related information into three cards
+
+The launch home SHALL show version, project/open-source information, and live Launcher update status as three ordered peer cards below the hero. At widths of 980px or less, the cards SHALL stack in the same order. Missing or preparing Harness state SHALL not hide the other cards. The selected commit SHALL display a 12-character summary with its full value retained in the title and accessible label; installer names SHALL wrap inside their card. Existing update checking, retry and download operations SHALL remain authoritative, and the UI SHALL not fabricate release notes absent from the update contract.
+
+#### Scenario: Desktop has sufficient width
+
+- **WHEN** the Launcher window is wider than 980px
+- **THEN** version, project and update cards appear side by side without overflow
+- **AND** the start action remains in the persistent route footer
+
+#### Scenario: Compact window or unavailable Harness
+
+- **WHEN** the window is compact or the Harness is not ready
+- **THEN** responsive cards retain their order and the version card retains its recovery action
+- **AND** project information and Launcher update state remain available

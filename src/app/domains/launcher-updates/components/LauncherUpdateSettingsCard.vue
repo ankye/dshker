@@ -5,6 +5,8 @@ import type { MessageKey } from '@/app/shared/i18n/i18n'
 import { locale, useTranslator } from '@/app/shared/i18n/useLocale'
 import { useLauncherUpdates } from '../useLauncherUpdates'
 
+defineProps<{ readonly title?: string; readonly description?: string }>()
+
 const t = useTranslator()
 const updates = useLauncherUpdates()
 const updateState = updates.state
@@ -79,8 +81,8 @@ const statusLabel = computed(() => {
   >
     <header class="settings-section-header">
       <div class="settings-section-title">
-        <h3 id="launcher-update-title">{{ t('settings.update.title') }}</h3>
-        <p>{{ t('settings.update.description') }}</p>
+        <h3 id="launcher-update-title">{{ title ?? t('settings.update.title') }}</h3>
+        <p>{{ description ?? t('settings.update.description') }}</p>
       </div>
       <span
         class="settings-section-meta settings-update-status-badge"
