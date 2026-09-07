@@ -161,22 +161,112 @@ STUN 通过只能证明本机能通过 UDP 到达服务器，**不能**证明两
 
 ## 故障排查
 
-| 现象                           | 含义                                     | 处理                                                 |
-| ------------------------------ | ---------------------------------------- | ---------------------------------------------------- |
-| `direct_unavailable`           | 两个网络之间不存在可用的直连 UDP 路径。  | 换用其他网络。本功能不使用中继，这是限制而非缺陷。   |
-| `p2p.identity_mismatch`        | 服务器或对端出示的身份与已固定的不一致。 | 不要批准。确认你连接的是正确的服务器/电脑。          |
-| 配对时指纹不一致               | 你正要批准的密钥不是对方实际持有的密钥。 | 拒绝该请求并重新开始。                               |
-| `p2p.service_busy`             | 共用该服务器配置的某台电脑正在操作中。   | 等其空闲后重新保存。                                 |
-| `p2p.catalog_conflict`         | 你编辑期间记录已被其他操作更改。         | 重新读取记录后再应用你的修改。                       |
-| `p2p.remote_path_forbidden`    | 该位置在对方授权目录之外。               | 请对方授权该目录。这不代表目录为空。                 |
-| `p2p.remote_roots_unavailable` | 对方无法报告其授权目录。                 | 检查它是否仍在连接、应用是否仍在运行。               |
-| `p2p.pair_not_found`           | 配对已失效，通常是对方撤销了。           | 如仍需访问请重新配对。                               |
-| `p2p.not_enabled`              | 本机尚未显式启用 P2P。                   | 在**远程连接 → P2P** 中启用。                        |
-| 长时间停在*正在尝试直连*       | 信令或 STUN 不可达。                     | 检查 WSS 与 STUN 地址，以及服务器 UDP 端口是否开放。 |
-| 已连接但工作台加载不出来       | 远端 DSH 未启动。                        | 检查对方电脑上的 DSH。                               |
+按你卡住的步骤查，而不是按错误码字母序。同一个码在不同步骤含义相同，但该做的事不同。
 
-**测试**失败与**连接**失败是不同的事件，连接失败与任务失败同样不同。应用会把它们
-分开呈现；排查时也请分开判断。
+### 装不上 / 起不来
+
+| 错误码                                               | 含义与处理                                                                                                                                                     |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.helper_platform_unsupported`                    | 当前系统或架构不支持。仅支持 macOS 与 Windows 的 arm64/x64。                                                                                                   |
+| `p2p.helper_resource_unavailable`                    | 找不到本机架构的 helper。**每台机器要各自构建**，不能从别的机器拷。跑 `node tools/build-peer-helper.mjs --platform <darwin\|win32> --arch <arm64\|x64>`。      |
+| `p2p.helper_integrity_failed` / `p2p.helper_invalid` | helper 与 manifest 校验和不符，或不是普通文件。删掉 `build/p2p/` 下对应目录重新构建。                                                                          |
+| `p2p.secure_storage_unavailable`                     | 系统安全存储不可用，凭据无法加密保存，因此登录会被拒绝。Windows 上通常是账户或策略限制了 DPAPI；请用正常登录的桌面会话运行，不要在服务账户或无桌面会话下运行。 |
+| `p2p.settings_root_required`                         | 尚未确定设置目录。先完成 Launcher 首次启动流程。                                                                                                               |
+| `p2p.not_enabled`                                    | 本机尚未显式启用 P2P。在**远程连接 → P2P** 中启用。                                                                                                            |
+
+### 加服务器 / 登录
+
+| 错误码                                                                                       | 含义与处理                                                                                                              |
+| -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `p2p.invalid_service_endpoint` / `p2p.invalid_signal_endpoint` / `p2p.invalid_stun_endpoint` | 地址格式不合要求。HTTPS 必须 `https:`，信令必须 `wss:`，STUN 为 `主机:端口`。先用 `node tools/p2p-preflight.mjs` 验证。 |
+| `p2p.invalid_service_identity` / `p2p.identity_mismatch`                                     | 服务器出示的身份与已固定的不一致。**不要批准。** 确认你连的是正确服务器；若确实更换了服务器身份，需要重新建立信任。     |
+| `p2p.server_unavailable`                                                                     | 服务器不可达或未响应。用预检确认 HTTPS/WSS/STUN 三项。                                                                  |
+| `p2p.trust_restore_rejected`                                                                 | 该服务器身份此前被你移除过，已永久标记不可信。这是刻意的，不能撤销。                                                    |
+| `p2p.service_exists`                                                                         | 该地址已被另一条服务器记录占用。                                                                                        |
+| `p2p.user_login_required` / `p2p.user_session_expired`                                       | 未登录或会话过期。重新登录。                                                                                            |
+| `p2p.user_already_logged_in`                                                                 | 已有登录会话。先登出再切换账号。                                                                                        |
+| `p2p.user_unauthorized` / `p2p.user_scope_mismatch`                                          | 账号无权访问该资源，或资源属于别的账号。确认两台机器登录的是**同一账号**。                                              |
+
+### 登记设备
+
+| 错误码                                                                          | 含义与处理                                                               |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `p2p.device_unregistered`                                                       | 本机还没登记为设备。先完成登记。                                         |
+| `p2p.enrollment_not_found` / `p2p.invalid_enrollment_grant`                     | 登记请求不存在或授权无效，通常是超时或已被处理。重新发起登记。           |
+| `p2p.enrollment_state_mismatch` / `p2p.invalid_device_state`                    | 登记状态与你的操作不匹配，通常是另一端已推进了状态。重新读取后再操作。   |
+| `p2p.enrollment_result_unconfirmed`                                             | 登记结果**未确认**，可能已生效。重新读取登记状态核对，**不要**直接重试。 |
+| `p2p.invalid_device_key` / `p2p.invalid_csr` / `p2p.invalid_device_certificate` | 设备密钥或证书材料无效。这属于异常情况，请把完整错误发我。               |
+
+### 配对
+
+| 错误码                                           | 含义与处理                                                                                   |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------- |
+| `p2p.invite_invalid`                             | 邀请码无效——输错、已被用过，或不属于该服务器。重新生成邀请。邀请码只显示一次。               |
+| `p2p.invite_expired` / `p2p.pair_expired`        | 邀请或配对请求已过期。重新发起。                                                             |
+| **指纹不一致** / `p2p.pair_fingerprint_mismatch` | 你正要批准的密钥**不是**对方实际持有的密钥。**拒绝**并重新开始。这是防身份替换的最后一道关。 |
+| `p2p.pair_state_mismatch`                        | 配对状态与操作不匹配，通常是对方已批准或已撤销。重新读取后再操作。                           |
+| `p2p.pair_not_found`                             | 配对已失效，通常是对方撤销了。如仍需访问请重新配对。                                         |
+| `p2p.management_result_unconfirmed`              | 写入结果**未确认**，可能已生效。重新读取记录核对，**不要**重复提交。                         |
+
+### 连接
+
+| 错误码                                                         | 含义与处理                                                                                        |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `direct_unavailable`                                           | 两个网络之间没有可用的直连 UDP 路径。**本功能不使用中继**，这种网络就是连不上。这是限制而非缺陷。 |
+| 长时间停在*正在尝试直连*                                       | 信令或 STUN 不可达。用预检确认 WSS 与 STUN。                                                      |
+| `p2p.not_connected`                                            | 该操作需要已连接。先连接。                                                                        |
+| `p2p.connection_busy` / `p2p.helper_busy` / `p2p.service_busy` | 有操作正在进行。等它结束，**不要**反复点击。                                                      |
+| `p2p.stale_generation` / `p2p.attempt_mismatch`                | 旧的连接尝试的回调到达。这是**正常的防护**，旧尝试不能复活新连接；重新连接即可。                  |
+| 已连接但工作台加载不出来                                       | 远端 DSH 未启动。检查对方电脑上的 DSH。                                                           |
+| `p2p.helper_unavailable` / `p2p.helper_closed`                 | 本机 helper 进程不可用或已退出。重启 App；若反复出现请发我日志。                                  |
+| `p2p.helper_authentication_failed`                             | helper 私有通道认证失败。这属于异常情况，请发我完整错误。                                         |
+
+### 浏览远端目录 / 打开工程
+
+| 错误码                         | 含义与处理                                                                              |
+| ------------------------------ | --------------------------------------------------------------------------------------- |
+| `p2p.remote_roots_unavailable` | 对方无法报告其授权目录。确认它仍在连接、App 仍在运行。                                  |
+| `p2p.remote_root_unauthorized` | 该目录不在对方授权范围内。                                                              |
+| `p2p.remote_path_forbidden`    | 该位置在授权目录之外（含指向外部的符号链接）。**这不代表目录为空。** 请对方授权该目录。 |
+| `p2p.remote_path_missing`      | 该位置在对方电脑上已不存在。                                                            |
+| `p2p.remote_reference_invalid` | 目录引用无效或已过期。返回授权目录根重新进入。                                          |
+| `p2p.remote_directory_failed`  | 对方读取目录失败（权限、卷已卸载等）。在对方电脑上检查该目录。                          |
+
+### 编辑配置
+
+| 错误码                                               | 含义与处理                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------ |
+| `p2p.service_busy`                                   | 共用该服务器配置的某台电脑正在操作中。等其空闲后重新保存。         |
+| `p2p.catalog_conflict`                               | 记录已被其他操作更改。重新读取后再应用你的修改。你的输入会被保留。 |
+| `p2p.service_not_found` / `p2p.connection_not_found` | 目标记录不存在，通常是已被移除。重新读取列表。                     |
+
+### 存储与内部错误
+
+这些通常意味着环境问题或缺陷，遇到请把完整错误发我：
+
+`p2p.catalog_invalid`、`p2p.catalog_incomplete`、`p2p.catalog_unavailable`、
+`p2p.catalog_write_failed`、`p2p.catalog_exists`、`p2p.credential_invalid`、
+`p2p.credential_unavailable`、`p2p.credential_write_failed`、
+`p2p.credential_create_failed`、`p2p.credential_conflict`、
+`p2p.credential_cleanup_failed`、`p2p.authorization_cleanup_failed`、
+`p2p.helper_cleanup_failed`、`p2p.helper_shutdown_failed`、
+`p2p.helper_parent_unavailable`、`p2p.insecure_socket_directory`、
+`p2p.invalid_socket`、`p2p.internal_error`、`p2p.operation_failed`、
+`p2p.invalid_server_response`、`p2p.invalid_payload`、`p2p.protocol_mismatch`、
+`p2p.protocol_limit`、`p2p.partition_mismatch`、`p2p.runtime_request_unscoped`、
+`p2p.ipc_invalid_sender`、`p2p.request_replayed`、`p2p.request_limit`、
+`p2p.invalid_peer_state`、`p2p.invalid_user_session`、`p2p.invalid_network_list`、
+`p2p.network_unavailable`、`p2p.service_unconfigured`、`p2p.invalid_operation`、
+`p2p.invalid_request`、`p2p.request_unavailable`、`p2p.request_timeout`、
+`p2p.request_cancelled`、`p2p.catalog_incomplete`
+
+带 `_cleanup_failed` 的码有个共同点：**主操作已成功，但清理没做完**。App 会如实显示这种部分成功，而不会假称完全完成。
+
+### 三条通用原则
+
+- **测试失败 ≠ 连接失败 ≠ 任务失败。** 三者是不同事件，排查时请分开判断。
+- **凡是 `_unconfirmed`（结果未确认）的，先读回核对，不要重试。** 重复提交可能造成重复生效。
+- **凡是 `_busy` 的，等待而不是反复点。**
 
 ## 服务器升级与备份
 

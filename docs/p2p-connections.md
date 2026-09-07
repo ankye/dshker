@@ -198,23 +198,117 @@ Verify the actual outcome in DSH on the other computer, then mark it as checked.
 
 ## Troubleshooting
 
-| What you see                               | What it means                                                          | What to do                                                                   |
-| ------------------------------------------ | ---------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| `direct_unavailable`                       | No direct UDP path exists between the two networks.                    | Try a different network. There is no relay; this is a limitation, not a bug. |
-| `p2p.identity_mismatch`                    | The server or peer presented a different identity than the pinned one. | Do not approve. Confirm you are talking to the right server/computer.        |
-| Fingerprints differ during pairing         | The key being approved is not the key the other computer holds.        | Reject the request and start over.                                           |
-| `p2p.service_busy`                         | A computer sharing this server configuration is mid-operation.         | Wait until it is idle, then save again.                                      |
-| `p2p.catalog_conflict`                     | The record changed elsewhere while you were editing.                   | Re-read the record, then re-apply your change.                               |
-| `p2p.remote_path_forbidden`                | The location is outside the other computer's authorized directories.   | Ask its user to authorize the folder. It is not an empty folder.             |
-| `p2p.remote_roots_unavailable`             | The other computer could not report its authorized directories.        | Check that it is still connected and its app is running.                     |
-| `p2p.pair_not_found`                       | The pair is no longer active, usually revoked from the other side.     | Pair again if you still want access.                                         |
-| `p2p.not_enabled`                          | P2P has not been explicitly enabled on this computer.                  | Enable it in **Remote connections → P2P**.                                   |
-| Stuck at _attempting a direct connection_  | Signalling or STUN is not reachable.                                   | Verify the WSS and STUN addresses and that the server's UDP port is open.    |
-| Connected, but the workbench does not load | The remote DSH did not start.                                          | Check DSH on the other computer.                                             |
+Look up the step you are stuck on, not the code alphabetically. The same code
+means the same thing everywhere, but what to do about it depends on the step.
 
-A failed **test** and a failed **connection** are different events, and so are a
-failed connection and a failed task. The app keeps them separate; when
-diagnosing, do too.
+### Installing / starting
+
+| Code                                                 | Meaning and what to do                                                                                                                                                                                                                       |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.helper_platform_unsupported`                    | This OS or architecture is not supported. Only macOS and Windows on arm64/x64.                                                                                                                                                               |
+| `p2p.helper_resource_unavailable`                    | No helper for this machine's architecture. **Each machine builds its own**; one built elsewhere cannot be copied in. Run `node tools/build-peer-helper.mjs --platform <darwin\|win32> --arch <arm64\|x64>`.                                  |
+| `p2p.helper_integrity_failed` / `p2p.helper_invalid` | The helper does not match its manifest checksum, or is not a regular file. Delete the directory under `build/p2p/` and rebuild.                                                                                                              |
+| `p2p.secure_storage_unavailable`                     | OS secure storage is unavailable, so credentials cannot be encrypted and sign-in is refused. On Windows this usually means DPAPI is restricted by the account or policy; run in a normal interactive desktop session, not a service account. |
+| `p2p.settings_root_required`                         | The settings directory is not established yet. Complete Launcher first-run setup.                                                                                                                                                            |
+| `p2p.not_enabled`                                    | P2P has not been explicitly enabled on this computer. Enable it under **Remote connections → P2P**.                                                                                                                                          |
+
+### Adding a server / signing in
+
+| Code                                                                                         | Meaning and what to do                                                                                                                             |
+| -------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.invalid_service_endpoint` / `p2p.invalid_signal_endpoint` / `p2p.invalid_stun_endpoint` | Address format is wrong. HTTPS must be `https:`, signalling must be `wss:`, STUN is `host:port`. Verify with `node tools/p2p-preflight.mjs` first. |
+| `p2p.invalid_service_identity` / `p2p.identity_mismatch`                                     | The server presented a different identity than the pinned one. **Do not approve.** Confirm you are talking to the right server.                    |
+| `p2p.server_unavailable`                                                                     | The server is unreachable or did not respond. Check all three endpoints with the preflight tool.                                                   |
+| `p2p.trust_restore_rejected`                                                                 | You removed this server identity before, so it is permanently untrusted here. This is deliberate and cannot be undone.                             |
+| `p2p.service_exists`                                                                         | Another server record already uses this address.                                                                                                   |
+| `p2p.user_login_required` / `p2p.user_session_expired`                                       | Not signed in, or the session expired. Sign in again.                                                                                              |
+| `p2p.user_already_logged_in`                                                                 | A session already exists. Sign out before switching accounts.                                                                                      |
+| `p2p.user_unauthorized` / `p2p.user_scope_mismatch`                                          | The account lacks access, or the resource belongs to another account. Confirm both machines use the **same account**.                              |
+
+### Registering this device
+
+| Code                                                                            | Meaning and what to do                                                                                                    |
+| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.device_unregistered`                                                       | This machine is not registered yet. Complete registration first.                                                          |
+| `p2p.enrollment_not_found` / `p2p.invalid_enrollment_grant`                     | The registration request is gone or the grant is invalid, usually a timeout or already handled. Start registration again. |
+| `p2p.enrollment_state_mismatch` / `p2p.invalid_device_state`                    | State does not match your action, usually because the other side advanced it. Re-read, then act.                          |
+| `p2p.enrollment_result_unconfirmed`                                             | The result is **unconfirmed** and may already have taken effect. Re-read the state rather than retrying.                  |
+| `p2p.invalid_device_key` / `p2p.invalid_csr` / `p2p.invalid_device_certificate` | Device key or certificate material is invalid. This is abnormal; send the full error.                                     |
+
+### Pairing
+
+| Code                                                      | Meaning and what to do                                                                                                                                                    |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.invite_invalid`                                      | The invite code is wrong, already used, or belongs to another server. Create a new invite; the code is shown only once.                                                   |
+| `p2p.invite_expired` / `p2p.pair_expired`                 | The invite or pairing request expired. Start again.                                                                                                                       |
+| **Fingerprints differ** / `p2p.pair_fingerprint_mismatch` | The key you are about to approve is **not** the key the other computer holds. **Reject** and start over. This is the last line of defence against a substituted identity. |
+| `p2p.pair_state_mismatch`                                 | State does not match your action, usually because the other side approved or revoked. Re-read, then act.                                                                  |
+| `p2p.pair_not_found`                                      | The pair is gone, usually revoked from the other side. Pair again if you still want access.                                                                               |
+| `p2p.management_result_unconfirmed`                       | The write is **unconfirmed** and may have taken effect. Re-read the record; do not submit again.                                                                          |
+
+### Connecting
+
+| Code                                                           | Meaning and what to do                                                                                                                       |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `direct_unavailable`                                           | No usable direct UDP path between the two networks. **There is no relay**, so this network cannot work. A limitation, not a bug.             |
+| Stuck at _attempting a direct connection_                      | Signalling or STUN is unreachable. Verify WSS and STUN with the preflight tool.                                                              |
+| `p2p.not_connected`                                            | The operation needs a live connection. Connect first.                                                                                        |
+| `p2p.connection_busy` / `p2p.helper_busy` / `p2p.service_busy` | An operation is in flight. Wait; do not click repeatedly.                                                                                    |
+| `p2p.stale_generation` / `p2p.attempt_mismatch`                | A callback from an older attempt arrived. This is **the protection working**: an old attempt cannot revive a new connection. Just reconnect. |
+| Connected, but the workbench does not load                     | The remote DSH did not start. Check DSH on the other computer.                                                                               |
+| `p2p.helper_unavailable` / `p2p.helper_closed`                 | The local helper process is unavailable or exited. Restart the app; if it recurs, send the logs.                                             |
+| `p2p.helper_authentication_failed`                             | The helper's private channel failed authentication. Abnormal; send the full error.                                                           |
+
+### Browsing remote directories / opening a project
+
+| Code                           | Meaning and what to do                                                                                                                                            |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.remote_roots_unavailable` | The other computer could not report its authorized directories. Check it is still connected and running.                                                          |
+| `p2p.remote_root_unauthorized` | That directory is outside the other computer's authorized set.                                                                                                    |
+| `p2p.remote_path_forbidden`    | The location is outside the authorized roots, including via a symlink pointing outward. **This does not mean the folder is empty.** Ask its user to authorize it. |
+| `p2p.remote_path_missing`      | The location no longer exists on the other computer.                                                                                                              |
+| `p2p.remote_reference_invalid` | The directory reference is invalid or stale. Go back to the root and navigate again.                                                                              |
+| `p2p.remote_directory_failed`  | The other side failed to read the directory (permissions, unmounted volume). Check it there.                                                                      |
+
+### Editing configuration
+
+| Code                                                 | Meaning and what to do                                                                |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `p2p.service_busy`                                   | A computer sharing this server configuration is mid-operation. Wait, then save again. |
+| `p2p.catalog_conflict`                               | The record changed elsewhere. Re-read, then re-apply. Your input is preserved.        |
+| `p2p.service_not_found` / `p2p.connection_not_found` | The target record is gone, usually removed. Re-read the list.                         |
+
+### Storage and internal errors
+
+These usually indicate an environment problem or a defect. Send the full error:
+
+`p2p.catalog_invalid`, `p2p.catalog_incomplete`, `p2p.catalog_unavailable`,
+`p2p.catalog_write_failed`, `p2p.catalog_exists`, `p2p.credential_invalid`,
+`p2p.credential_unavailable`, `p2p.credential_write_failed`,
+`p2p.credential_create_failed`, `p2p.credential_conflict`,
+`p2p.credential_cleanup_failed`, `p2p.authorization_cleanup_failed`,
+`p2p.helper_cleanup_failed`, `p2p.helper_shutdown_failed`,
+`p2p.helper_parent_unavailable`, `p2p.insecure_socket_directory`,
+`p2p.invalid_socket`, `p2p.internal_error`, `p2p.operation_failed`,
+`p2p.invalid_server_response`, `p2p.invalid_payload`, `p2p.protocol_mismatch`,
+`p2p.protocol_limit`, `p2p.partition_mismatch`, `p2p.runtime_request_unscoped`,
+`p2p.ipc_invalid_sender`, `p2p.request_replayed`, `p2p.request_limit`,
+`p2p.invalid_peer_state`, `p2p.invalid_user_session`, `p2p.invalid_network_list`,
+`p2p.network_unavailable`, `p2p.service_unconfigured`, `p2p.invalid_operation`,
+`p2p.invalid_request`, `p2p.request_unavailable`, `p2p.request_timeout`,
+`p2p.request_cancelled`
+
+Codes ending in `_cleanup_failed` share one meaning: **the main operation
+succeeded but cleanup did not finish.** The app shows that partial success
+honestly instead of claiming full completion.
+
+### Three general rules
+
+- **A failed test, a failed connection and a failed task are different events.**
+  Diagnose them separately.
+- **Anything `_unconfirmed` means read back before retrying.** Submitting again
+  may apply the change twice.
+- **Anything `_busy` means wait**, not click again.
 
 ## Server upgrades and backups
 

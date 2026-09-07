@@ -101,7 +101,8 @@
     "networking/integration/process_fixture_test.go",
     "networking/integration/runtime_session_test.go",
     "networking/integration/user_management_test.go",
-    "tools/p2p-preflight.test.mjs"
+    "tools/p2p-preflight.test.mjs",
+    "tools/p2p-docs-coverage.test.mjs"
   ],
   "live_test_files": [
     "networking/internal/runtimebridge/directory_test.go"
@@ -321,6 +322,10 @@
     {
       "command": "npx vitest run tools/p2p-preflight.test.mjs",
       "no_mock": true
+    },
+    {
+      "command": "npx vitest run tools/p2p-docs-coverage.test.mjs",
+      "no_mock": true
     }
   ],
   "runtime_evidence": [
@@ -335,6 +340,9 @@
     },
     {
       "artifact": "tools/p2p-preflight.mjs was exercised against real endpoints on this machine: a genuine STUN Binding to stun.l.google.com:19302 succeeded, a dead UDP port timed out, an untrusted certificate (self-signed.badssl.com) was identified as a TLS trust failure, a real wss handshake completed, and a tampered helper binary was caught by checksum."
+    },
+    {
+      "artifact": "All 92 user-facing p2p error codes in src/shared/p2p-management.ts are explained in docs/p2p-connections.md and .zh-CN.md, enforced by tools/p2p-docs-coverage.test.mjs. The guard was verified to fail by name when an undocumented code is introduced."
     }
   ],
   "interaction_gate": {
