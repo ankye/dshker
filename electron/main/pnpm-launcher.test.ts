@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -32,9 +32,15 @@ describe('Windows pnpm installation layouts', () => {
     writeFileSync(script, '')
     writeFileSync(path.join(bin, 'pnpm.cmd'), `@echo off\r\n"%_prog%" "%dp0%/${relative}" %*`)
     const launcher = resolveWindowsPnpmLauncher([bin])
-    expect(launcher.executable).toBe(path.join(bin, 'node.exe'))
-    expect(launcher.prefixArguments).toEqual([script])
-    expect(resolvePnpmCommand('', launcher, ['--version']).arguments).toEqual([script, '--version'])
+    // The resolver canonicalises through realpathSync, which on macOS maps
+    // /var to /private/var. Compare against the same canonical form so the
+    // assertion tests the resolution rather than this machine's symlink layout.
+    expect(launcher.executable).toBe(path.join(realpathSync(bin), 'node.exe'))
+    expect(launcher.prefixArguments).toEqual([realpathSync(script)])
+    expect(resolvePnpmCommand('', launcher, ['--version']).arguments).toEqual([
+      realpathSync(script),
+      '--version'
+    ])
   })
 
   it('runs a standalone pnpm executable without a Node script', () => {
