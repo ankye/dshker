@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import launcherIcon from '../../../../resources/dsh-launcher-logo-launcher.png'
-import launcherSplash from '../../../../resources/dsh-launcher-splash-orange.png'
+import launcherSplash from '../../../../resources/dshker-hero-workbench.png'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { useLauncherHarness } from '@/app/domains/launcher-harness'
+import { LauncherUpdateSettingsCard } from '@/app/domains/launcher-updates'
 import { type LauncherExternalLinkId } from '@/shared/contracts'
 import EmptyState from './EmptyState.vue'
 
@@ -38,8 +38,6 @@ async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
 <template>
   <section class="launch-panel" :aria-busy="harness.loading.value">
     <header class="launch-hero" :style="{ '--launch-hero-art': `url(${launcherSplash})` }">
-      <div class="launch-hero-orbit" aria-hidden="true" />
-      <img class="launch-hero-icon" :src="launcherIcon" alt="" />
       <div class="launch-hero-content">
         <p class="eyebrow">{{ t('launch.hero.kicker') }}</p>
         <h3>{{ t('launch.hero.title') }}</h3>
@@ -47,118 +45,131 @@ async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
       </div>
     </header>
 
-    <EmptyState
-      v-if="
-        (harness.loading.value && !harness.state.value) || harness.state.value?.kind === 'preparing'
-      "
-      icon="spinner"
-      tone="progress"
-      :title="t('launch.preparing')"
-      :description="t('launch.preparing.description')"
-    />
-    <EmptyState
-      v-else-if="harness.state.value?.kind === 'missing' || harness.state.value?.kind === 'invalid'"
-      icon="alert"
-      tone="danger"
-      :title="t('launch.unavailable')"
-      :description="t('launch.unavailable.description')"
-    >
-      <template #actions>
-        <button
-          type="button"
-          class="prototype-button prototype-button--primary"
-          :disabled="harness.loading.value"
-          @click="harness.refresh"
+    <div class="launch-workbench launch-home-grid">
+      <section class="launch-version-column" :aria-label="t('launch.version')">
+        <EmptyState
+          v-if="
+            (harness.loading.value && !harness.state.value) ||
+            harness.state.value?.kind === 'preparing'
+          "
+          icon="spinner"
+          tone="progress"
+          :title="t('launch.preparing')"
+          :description="t('launch.preparing.description')"
+        />
+        <EmptyState
+          v-else-if="
+            harness.state.value?.kind === 'missing' || harness.state.value?.kind === 'invalid'
+          "
+          icon="alert"
+          tone="danger"
+          :title="t('launch.unavailable')"
+          :description="t('launch.unavailable.description')"
         >
-          {{ t('launch.unavailable.retry') }}
-        </button>
-        <button
-          type="button"
-          class="prototype-button prototype-button--secondary"
-          @click="emit('navigate', 'settings')"
+          <template #actions>
+            <button
+              type="button"
+              class="prototype-button prototype-button--primary"
+              :disabled="harness.loading.value"
+              @click="harness.refresh"
+            >
+              {{ t('launch.unavailable.retry') }}
+            </button>
+            <button
+              type="button"
+              class="prototype-button prototype-button--secondary"
+              @click="emit('navigate', 'settings')"
+            >
+              {{ t('launch.unavailable.settings') }}
+            </button>
+          </template>
+        </EmptyState>
+        <EmptyState
+          v-else-if="harness.state.value?.kind !== 'ready'"
+          icon="inbox"
+          :title="t('launch.empty')"
+          :description="t('launch.empty.description')"
         >
-          {{ t('launch.unavailable.settings') }}
-        </button>
-      </template>
-    </EmptyState>
-    <EmptyState
-      v-else-if="harness.state.value?.kind !== 'ready'"
-      icon="inbox"
-      :title="t('launch.empty')"
-      :description="t('launch.empty.description')"
-    >
-      <template #actions>
-        <button
-          type="button"
-          class="prototype-button prototype-button--primary"
-          @click="emit('navigate', 'versions')"
-        >
-          {{ t('launch.empty.action') }}
-        </button>
-      </template>
-    </EmptyState>
+          <template #actions>
+            <button
+              type="button"
+              class="prototype-button prototype-button--primary"
+              @click="emit('navigate', 'versions')"
+            >
+              {{ t('launch.empty.action') }}
+            </button>
+          </template>
+        </EmptyState>
 
-    <div v-else class="launch-workbench">
-      <article class="launch-version" data-selected="true">
-        <div class="launch-version-identity">
-          <p class="eyebrow">{{ t('launch.version') }}</p>
-          <h4>{{ harness.state.value.currentBranch }}</h4>
-          <p class="launch-version-label">{{ t('launch.commit') }}</p>
-          <strong>{{ harness.state.value.revision }}</strong>
+        <article v-else class="launch-version" data-selected="true">
+          <div class="launch-version-identity">
+            <p class="eyebrow">{{ t('launch.version') }}</p>
+            <h4>{{ harness.state.value.currentBranch }}</h4>
+            <p class="launch-version-label">{{ t('launch.commit') }}</p>
+            <strong
+              class="launch-revision"
+              :title="harness.state.value.revision"
+              :aria-label="harness.state.value.revision"
+              >{{ harness.state.value.revision?.slice(0, 12) }}</strong
+            >
+            <dl class="launch-version-facts">
+              <div>
+                <dt>{{ t('launch.introduction.nativeHome') }}</dt>
+                <dd>{{ t('launch.introduction.nativeHomeValue') }}</dd>
+              </div>
+            </dl>
+          </div>
+          <button
+            type="button"
+            class="prototype-button prototype-button--secondary launch-version-manage"
+            @click="emit('navigate', 'versions')"
+          >
+            {{ t('launch.version.manage') }}
+          </button>
+        </article>
+      </section>
+
+      <section class="launch-introduction" :aria-label="t('launch.introduction.title')">
+        <div class="launch-introduction-copy">
+          <p class="eyebrow">{{ t('launch.project.title') }}</p>
+          <h4>{{ t('launch.introduction.title') }}</h4>
+          <p>{{ t('launch.introduction.description') }}</p>
         </div>
-        <button
-          type="button"
-          class="prototype-button prototype-button--secondary launch-version-manage"
-          @click="emit('navigate', 'versions')"
-        >
-          {{ t('launch.version.manage') }}
-        </button>
-      </article>
+        <div class="launch-open-source">
+          <div>
+            <strong>{{ t('launch.openSource.title') }}</strong>
+            <p>{{ t('launch.openSource.description') }}</p>
+          </div>
+          <div class="launch-open-source-actions">
+            <button
+              type="button"
+              class="prototype-button prototype-button--secondary launch-source-action"
+              :disabled="openingLink !== undefined"
+              @click="openSourceLink('launcher-repository')"
+            >
+              {{ t('launch.openSource.launcher') }}
+            </button>
+            <button
+              type="button"
+              class="prototype-button prototype-button--secondary launch-source-action"
+              :disabled="openingLink !== undefined"
+              @click="openSourceLink('harness-repository')"
+            >
+              {{ t('launch.openSource.harness') }}
+            </button>
+          </div>
+          <p v-if="sourceLinkFailed" class="launch-open-source-error" role="status">
+            {{ t('launch.openSource.failure') }}
+          </p>
+        </div>
+      </section>
+      <LauncherUpdateSettingsCard
+        class="launch-announcements"
+        :title="t('launch.announcements.title')"
+        :description="t('launch.announcements.description')"
+      />
     </div>
-
-    <section class="launch-introduction" :aria-label="t('launch.introduction.title')">
-      <div class="launch-introduction-copy">
-        <p class="eyebrow">{{ t('launch.introduction.kicker') }}</p>
-        <h4>{{ t('launch.introduction.title') }}</h4>
-        <p>{{ t('launch.introduction.description') }}</p>
-      </div>
-      <dl class="launch-introduction-facts">
-        <div>
-          <dt>{{ t('launch.introduction.coreVersion') }}</dt>
-          <dd>{{ t('launch.introduction.coreVersionValue') }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('launch.introduction.nativeHome') }}</dt>
-          <dd>{{ t('launch.introduction.nativeHomeValue') }}</dd>
-        </div>
-      </dl>
-      <div class="launch-open-source">
-        <div>
-          <strong>{{ t('launch.openSource.title') }}</strong>
-          <p>{{ t('launch.openSource.description') }}</p>
-        </div>
-        <div class="launch-open-source-actions">
-          <button
-            type="button"
-            class="prototype-button prototype-button--secondary launch-source-action"
-            :disabled="openingLink !== undefined"
-            @click="openSourceLink('launcher-repository')"
-          >
-            {{ t('launch.openSource.launcher') }}
-          </button>
-          <button
-            type="button"
-            class="prototype-button prototype-button--secondary launch-source-action"
-            :disabled="openingLink !== undefined"
-            @click="openSourceLink('harness-repository')"
-          >
-            {{ t('launch.openSource.harness') }}
-          </button>
-        </div>
-        <p v-if="sourceLinkFailed" class="launch-open-source-error" role="status">
-          {{ t('launch.openSource.failure') }}
-        </p>
-      </div>
-    </section>
   </section>
 </template>
+
+<style scoped src="../../../styles/launch-home.css"></style>

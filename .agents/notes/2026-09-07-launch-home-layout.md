@@ -1,0 +1,9 @@
+# Launch home layout and approved hero artwork
+
+User direction: three peer cards below the hero (version, project/open source, release updates), followed by explicitly requesting the latest generated background.
+
+Implementation uses scoped launch-home.css so the existing oversized global route stylesheet is untouched. The shared update Settings card accepts optional title/description while retaining its defaults and authoritative check/download states. The commit wraps in the version card; project/update information remains available when Harness is absent. At 980px or narrower the cards stack. The hero consumes resources/dshker-hero-workbench.png; old corner icon/orbit are removed. The user additionally requested the approved otter icon. resources/dsh-launcher-logo-launcher.png now contains that image, retaining the shared reference used by the sidebar, development window/Dock and electron-builder. Existing executable icons are not rewritten; packaging remains required.
+
+Validation: 22 focused tests; full suite 499 passed, two pre-existing skips; type, architecture, environment, service, visual and build checks. Diagnostic Electron screenshots and native window bounds are under .run/launch-home-layout. Actual views include 744x495 and 1584x935. Three cards have no internal horizontal overflow; the persistent footer stays in view; public version-management click navigates successfully. Earlier CDP viewport emulation retained stale viewport-unit measurements; native resize plus a captured frame was used for the final diagnostic evidence. This does not claim a full release/performance interaction ledger or distribution artifact acceptance.
+
+The update protocol contains no release-note body; none is invented. Prior design/brand files are preserved. No Git submission, public release or installed-package replacement is part of this change.

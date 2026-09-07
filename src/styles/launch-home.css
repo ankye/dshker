@@ -1,0 +1,304 @@
+.launch-panel .launch-hero {
+  flex-shrink: 0;
+  min-height: 13rem;
+  align-items: center;
+  padding: 2rem;
+  border-color: color-mix(in srgb, var(--color-border), transparent 45%);
+  border-radius: 1rem;
+  background-color: #061220;
+  background-image: var(--launch-hero-art);
+  background-position: right center;
+  background-size: auto 100%;
+  background-repeat: no-repeat;
+}
+
+.launch-panel .launch-hero-content {
+  max-width: min(62%, 32rem);
+  color: #f4f8ff;
+}
+
+.launch-panel .launch-hero-content .eyebrow {
+  margin-bottom: 0.9rem;
+  color: #92acbf;
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.16em;
+}
+
+.launch-panel .launch-hero h3 {
+  font-size: clamp(1.5rem, 2.5vw, 1.875rem);
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1.4;
+}
+
+.launch-panel .launch-hero-content > p:last-child {
+  margin-top: 0.65rem;
+  color: #aebfd0;
+  font-size: var(--type-ui);
+  line-height: 1.7;
+}
+
+@media (max-width: 980px) {
+  .launch-panel .launch-hero {
+    background-image:
+      linear-gradient(90deg, #061220 0%, rgb(6 18 32 / 80%) 48%, rgb(6 18 32 / 20%) 100%),
+      var(--launch-hero-art);
+    background-size:
+      100% 100%,
+      auto 100%;
+  }
+
+  .launch-panel .launch-hero-content {
+    max-width: 78%;
+  }
+}
+
+/* Scoped to LaunchPanel: three peer cards, keeping global route styles intact. */
+.launch-home-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: stretch;
+  margin-top: var(--space-4);
+  padding-bottom: var(--space-4);
+}
+
+.launch-home-grid > * {
+  min-width: 0;
+  margin: 0;
+}
+
+.launch-version-column {
+  display: flex;
+}
+
+.launch-version-column > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.launch-home-grid .launch-version {
+  flex-direction: column;
+  min-height: 0;
+  padding: var(--space-5);
+  gap: var(--space-5);
+  border-color: color-mix(in srgb, var(--color-border), transparent 45%);
+  box-shadow: none;
+}
+
+.launch-version-identity {
+  width: 100%;
+}
+
+.launch-version-identity h4 {
+  margin: var(--space-2) 0 var(--space-5);
+  font-size: var(--type-title);
+  overflow-wrap: anywhere;
+}
+
+.launch-revision {
+  padding-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.6;
+}
+
+.launch-version-facts {
+  margin: var(--space-5) 0 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+  font-size: var(--type-caption);
+}
+
+.launch-version-facts dt {
+  color: var(--color-text-muted);
+}
+
+.launch-version-facts dd {
+  margin: var(--space-2) 0 0;
+  font-family: var(--font-mono);
+}
+
+.launch-version-manage {
+  width: fit-content;
+  margin-top: auto;
+}
+
+.launch-home-grid .launch-introduction {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+}
+
+.launch-introduction-copy > p:last-child {
+  line-height: 1.75;
+}
+
+.launch-home-grid .launch-open-source {
+  width: 100%;
+  margin-top: auto;
+  padding: var(--space-4) 0 0;
+  border-top: 1px solid var(--color-border);
+  border-left: 0;
+}
+
+.launch-open-source-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.launch-source-action {
+  white-space: normal;
+}
+
+.launch-home-grid .launch-announcements {
+  display: flex;
+  flex-direction: column;
+  grid-column: auto;
+  gap: 0;
+  padding: 0;
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.launch-announcements :deep(.settings-section-header) {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-5);
+}
+
+.launch-announcements :deep(.settings-section-body) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  padding: var(--space-5);
+}
+
+.launch-announcements :deep(.settings-section-title h3) {
+  font-size: var(--type-section);
+}
+
+.launch-announcements :deep(.settings-update-actions) {
+  align-items: stretch;
+  margin-top: auto;
+}
+
+.launch-announcements :deep(.settings-update-actions button) {
+  flex: 1 1 auto;
+  white-space: normal;
+}
+
+@media (max-width: 980px) {
+  .launch-home-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Quiet card surfaces leave the artwork and launch action as the focal points. */
+.launch-home-grid .launch-version,
+.launch-home-grid .launch-introduction,
+.launch-home-grid .launch-announcements {
+  border-color: color-mix(in srgb, var(--color-border), transparent 45%);
+  border-radius: 0.875rem;
+  background: color-mix(in srgb, var(--color-surface-raised), var(--color-bg) 38%);
+}
+
+.launch-home-grid .eyebrow {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-weight: 500;
+  letter-spacing: 0.035em;
+}
+
+.launch-version-identity h4 {
+  font-size: 1.375rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.launch-home-grid .launch-introduction h4,
+.launch-announcements :deep(.settings-section-title h3) {
+  font-size: var(--type-body);
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.launch-home-grid .launch-introduction h4 {
+  margin-top: var(--space-3);
+}
+
+.launch-home-grid .launch-open-source strong {
+  font-size: var(--type-caption);
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.launch-home-grid .launch-open-source,
+.launch-version-facts {
+  border-color: color-mix(in srgb, var(--color-border), transparent 50%);
+}
+
+.launch-home-grid .launch-source-action {
+  display: flex;
+  justify-content: space-between;
+  min-height: 2.25rem;
+  padding: 0.5rem 0;
+  border-color: transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  font-weight: 500;
+  text-align: left;
+}
+
+.launch-source-action::after {
+  content: '↗';
+  color: var(--color-text-muted);
+}
+
+.launch-home-grid .launch-source-action:hover:not(:disabled) {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent), transparent 94%);
+}
+
+.launch-home-grid .launch-version-manage,
+.launch-announcements :deep(.settings-update-actions button) {
+  flex: 0 1 auto;
+  min-height: 2.25rem;
+  padding: 0.5rem 0.9rem;
+  border-color: color-mix(in srgb, var(--color-border), transparent 30%);
+  background: transparent;
+  font-size: var(--type-caption);
+  font-weight: 500;
+}
+
+.launch-announcements :deep(.settings-section-header) {
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 0;
+}
+
+.launch-announcements :deep(.settings-section-body) {
+  padding-top: var(--space-3);
+}
+
+.launch-announcements :deep(.settings-update-message) {
+  font-size: var(--type-caption);
+}
+
+.launch-announcements :deep(.settings-update-status-badge) {
+  padding: 0.2rem 0.55rem;
+  border-color: transparent;
+  font-size: 0.6875rem;
+}
+
+@media (max-height: 42rem) {
+  .launch-panel .launch-hero {
+    min-height: 10rem;
+    padding: var(--space-5);
+  }
+}

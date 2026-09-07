@@ -63,3 +63,12 @@ repositories.
 
 - [x] 7.1 Resolve native pnpm and npm/Corepack shim targets, including adjacent/parent layouts, using an absolute Node path. Evidence: six focused cases and a real pnpm version probe.
 - [x] 7.2 Verify repaired installed Launcher starts the selected Harness. Evidence: authenticated HTTP 200, original archive retained under .run/pnpm-startup-repair/. Local repair only; no public release.
+
+## 8. Launch home information layout
+
+- [x] 8.1 Arrange version, project and shared Launcher update cards in a responsive three-column layout; preserve version recovery, update actions and the persistent launch footer. Evidence: 22 focused tests, Electron build, real renderer bounds at wide/compact native window sizes, and public version-navigation click passed.
+- [x] 8.2 Integrate the approved otter workbench hero background and remove the old orbit/icon decorations. Evidence: packaged renderer output contains the new PNG and real Electron screenshots show the new artwork without baked-in title text.
+
+- [x] 8.3 Replace the shared launcher icon with the approved otter design. The sidebar, development window/Dock and package configuration reference the same PNG. Native icons in already installed executables require repackaging.
+
+- [x] 8.4 Refine hero copy and typography, soften card surfaces, and reduce secondary-button weight. Evidence: 22 focused tests, Electron build, native-window renderer screenshots at compact/standard/wide widths, no overflowing cards and public version-navigation click.
