@@ -1,4 +1,5 @@
 import { runText } from './process-utils'
+import { ManagedHarnessRuntimeError } from './runtime-errors'
 
 /**
  * Platform-safe argument prefix for the Launcher's own Git commands.
@@ -13,6 +14,7 @@ export function launcherGitArguments(arguments_: readonly string[]): readonly st
 
 /** Direct pnpm launch facts for platforms whose registered pnpm is a shell shim. */
 export interface PnpmCommandLauncher {
+  readonly resolutionError?: string
   readonly executable: string
   readonly prefixArguments: readonly string[]
   /** PATH required by pnpm's shell entrypoint and its subprocesses. */
@@ -25,6 +27,9 @@ export function resolvePnpmCommand(
   launcher: PnpmCommandLauncher | undefined,
   arguments_: readonly string[]
 ): Readonly<{ executable: string; arguments: readonly string[] }> {
+  if (launcher?.resolutionError !== undefined) {
+    throw new ManagedHarnessRuntimeError('runtime.spawn_failed', launcher.resolutionError)
+  }
   if (launcher === undefined) {
     return { executable: pnpmExecutable, arguments: arguments_ }
   }

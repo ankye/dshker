@@ -153,3 +153,17 @@ Packaged macOS and Windows applications SHALL apply the same root-containment, e
 - **WHEN** a platform cannot validate the selected path, executable, process ownership, or announced readiness
 - **THEN** the launcher reports a blocking platform-specific error
 - **AND** it does not weaken the shared lifecycle rules
+
+### Requirement: Windows pnpm commands preserve installed tool identity
+
+The existing Launcher pnpm command path SHALL resolve native pnpm or the JS entry declared by an installed npm/Corepack CMD shim, including adjacent and parent node_modules layouts and symlinked shims. It SHALL support spaces in paths and named Windows package-manager search locations. Script launches SHALL use an absolute Node executable and argument array without executing the CMD shim through a shell.
+
+#### Scenario: Installed shim declares an adjacent package
+
+- **WHEN** the shim points to node_modules/pnpm/bin/pnpm.mjs beneath its own directory
+- **THEN** Launcher starts that existing script using the resolved Node executable
+
+#### Scenario: Required tool is absent
+
+- **WHEN** no runnable pnpm and required Node installation can be resolved
+- **THEN** the command fails before spawn with an actionable typed error

@@ -146,3 +146,7 @@ Current comparison evidence shows Chrome has a persisted `125` percent page zoom
 ## Migration Plan
 
 This is a pre-release format replacement. The launcher accepts only the four-root registry formats defined by this change. A persisted record that describes an unrecognized role, a launcher-managed `.dsh`, an unknown field, or an unsupported version is rejected and requires explicit fresh Launcher-root registration. Native Harness state is never part of that migration and remains untouched.
+
+## Windows pnpm compatibility repair (2026-09-07)
+
+The existing Launcher pnpm path reads the selected Windows CMD shim target instead of assuming a relative layout. It follows shim symlinks, preserves PATH precedence, checks PNPM_HOME and named npm/Scoop/Node installation locations for GUI startup, and uses an absolute Node executable. Native pnpm.exe needs no JS entry. Missing tools produce a typed failure before spawn. macOS, renderer capabilities, and managed roots are unchanged.

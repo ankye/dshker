@@ -1,0 +1,60 @@
+{
+  "change": "Windows pnpm startup compatibility",
+  "risk": "standard",
+  "production_files": [
+    "electron/main/pnpm-launcher.ts",
+    "electron/main/managed/launcher-harness-commands.ts"
+  ],
+  "test_files": ["electron/main/pnpm-launcher.test.ts"],
+  "live_test_files": ["electron/main/pnpm-launcher.e2e.test.mjs"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "runs a standalone pnpm executable without a Node script"
+    },
+    {
+      "state": "recovery",
+      "test": "rejects a missing tool before spawning and recovers after installation"
+    },
+    {
+      "state": "rejected",
+      "test": "rejects a shim whose declared target is missing"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/pnpm-launcher.ts",
+      "field": "executable and prefixArguments",
+      "source": "installed shim target and Node path",
+      "assertion": "expect(launcher.prefixArguments).toEqual([])",
+      "test": "runs a standalone pnpm executable without a Node script",
+      "state": "success",
+      "identity_keys": ["shim path", "Node path"],
+      "missing_semantics": "typed failure before spawn"
+    },
+    {
+      "production_file": "electron/main/managed/launcher-harness-commands.ts",
+      "field": "executable and prefixArguments",
+      "source": "installed shim target and Node path",
+      "assertion": "'No runnable pnpm'",
+      "test": "rejects a missing tool before spawning and recovers after installation",
+      "state": "recovery",
+      "identity_keys": ["shim path", "Node path"],
+      "missing_semantics": "typed failure before spawn"
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "node electron/main/pnpm-launcher.e2e.test.mjs",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/pnpm-startup-repair/probe.json"
+    },
+    {
+      "artifact": ".run/pnpm-startup-repair/runtime.json"
+    }
+  ]
+}

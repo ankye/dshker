@@ -1,12 +1,10 @@
-import { statSync } from 'node:fs'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
-/** The pnpm Node script a Windows `.CMD` shim forwards to. */
-const PNPM_NODE_SCRIPT_RELATIVE_PATH = ['..', 'node_modules', 'pnpm', 'bin', 'pnpm.mjs'] as const
-
 /** A direct executable invocation suitable for Node's shell-free spawn. */
 export interface PnpmLauncher {
+  readonly resolutionError?: string
   readonly executable: string
   readonly prefixArguments: readonly string[]
   /** PATH supplied to pnpm, whose POSIX entry script resolves `node` through env. */
@@ -47,15 +45,39 @@ function findPosixPnpmExecutable(): string | undefined {
 }
 
 /** Resolves the PATH-registered Windows pnpm `.CMD` shim to its pnpm.mjs entry. */
-function resolveWindowsPnpmLauncher(): PnpmLauncher {
-  const scriptPath = findWindowsPnpmNodeScript()
-  if (scriptPath === undefined) {
-    return { executable: 'pnpm', prefixArguments: [], commandSearchPath: process.env.PATH ?? '' }
+export function resolveWindowsPnpmLauncher(
+  directories: readonly string[] = windowsCommandDirectories()
+): PnpmLauncher {
+  for (const directory of directories) {
+    const native = path.join(directory, 'pnpm.exe')
+    if (isRegularFile(native)) {
+      return {
+        executable: native,
+        prefixArguments: [],
+        commandSearchPath: directories.join(path.delimiter)
+      }
+    }
+    const shim = path.join(directory, 'pnpm.cmd')
+    if (!isRegularFile(shim)) continue
+    const scriptPath = readWindowsShimScript(shim)
+    const node = [
+      path.join(path.dirname(realpathSync(shim)), 'node.exe'),
+      ...directories.map((entry) => path.join(entry, 'node.exe'))
+    ].find(isRegularFile)
+    if (scriptPath !== undefined && node !== undefined) {
+      return {
+        executable: node,
+        prefixArguments: [scriptPath],
+        commandSearchPath: [path.dirname(node), ...directories].join(path.delimiter)
+      }
+    }
   }
   return {
-    executable: 'node',
-    prefixArguments: [scriptPath],
-    commandSearchPath: process.env.PATH ?? ''
+    executable: '',
+    prefixArguments: [],
+    commandSearchPath: directories.join(path.delimiter),
+    resolutionError:
+      'No runnable pnpm installation was found. Check Node.js and pnpm installation and restart Launcher.'
   }
 }
 
@@ -82,21 +104,34 @@ function buildCommandSearchPath(pnpmExecutable: string | undefined): string {
     .join(path.delimiter)
 }
 
-/** Finds the `pnpm.mjs` entry beside the PATH-registered Windows pnpm shim, if any. */
-function findWindowsPnpmNodeScript(): string | undefined {
-  const pathExtensions = (process.env.PATHEXT ?? '.EXE;.CMD;.BAT;.COM')
-    .split(';')
-    .map((entry) => entry.toLowerCase())
-    .filter((entry) => entry.length > 0)
-  for (const directory of splitPath(process.env.PATH)) {
-    for (const extension of pathExtensions) {
-      const shim = path.join(directory, `pnpm${extension}`)
-      if (!isRegularFile(shim)) continue
-      const script = path.resolve(directory, ...PNPM_NODE_SCRIPT_RELATIVE_PATH)
-      if (isRegularFile(script)) return script
-    }
-  }
-  return undefined
+/** Reads the actual npm/Corepack shim target without executing a command shell. */
+function readWindowsShimScript(shim: string): string | undefined {
+  const canonical = realpathSync(shim)
+  const text = readFileSync(canonical, 'utf8')
+  const match = /%(?:dp0|~dp0)%?[\\/]([^"\r\n]*pnpm\.(?:mjs|cjs|js))/iu.exec(text)
+  if (match === null) return undefined
+  const script = path.resolve(path.dirname(canonical), match[1]!.replace(/\\/gu, path.sep))
+  return isRegularFile(script) ? script : undefined
+}
+
+/** Preserves PATH order and checks explicit package-manager installation locations. */
+function windowsCommandDirectories(): string[] {
+  const candidates = [
+    ...splitPath(process.env.PATH),
+    process.env.PNPM_HOME,
+    process.env.APPDATA && path.join(process.env.APPDATA, 'npm'),
+    process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'pnpm'),
+    path.join(homedir(), 'scoop', 'apps', 'nodejs', 'current'),
+    path.join(homedir(), 'scoop', 'apps', 'nodejs', 'current', 'bin'),
+    process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'nodejs')
+  ]
+  return [
+    ...new Set(
+      candidates
+        .filter((entry): entry is string => Boolean(entry))
+        .map((entry) => entry.replace(/^"|"$/gu, ''))
+    )
+  ]
 }
 
 /** Splits the platform's command search path, ignoring blank entries. */
