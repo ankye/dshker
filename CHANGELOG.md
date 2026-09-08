@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.25 — 2026-09-08
+
+- Deleting a configured P2P coordinator server is now tolerant: it is a
+  purely local operation, so a server that is no longer reachable (or a legacy
+  service record that no longer passes strict certificate re-validation) does
+  not block removal. The record is stripped, its computers dropped, and the
+  identity forgotten; previously this surfaced as p2p.internal_error.
+- App icons are regenerated from the otter brand mark (dshker-otter-icon-v1)
+  as rounded-corner, transparent-corner marks for the installer/bundle, the
+  in-app sidebar logo, and the repo-root icon.png.
+- Account registration form added to the Network & account tab (email +
+  password) alongside login, with localized handling for duplicate email,
+  invalid credentials, and the per-user 2-network limit.
+- This candidate remains an interop-testing prerelease: not marked latest,
+  not in the stable update feed.
+
 ## 0.1.24 — 2026-09-08
 
 - Network & account tab is now a **login + register page** when signed out:
