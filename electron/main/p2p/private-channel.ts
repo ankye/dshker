@@ -12,7 +12,10 @@ export function peerPipeName(nonce: string): string {
 /** Returned directory is owned solely by this helper launch, never user-selected. */
 export async function createPeerChannel(): Promise<{ path: string; directory?: string }> {
   if (process.platform === 'win32') return { path: peerPipeName(randomBytes(16).toString('hex')) }
-  if (process.platform !== 'darwin') throw new PeerHelperError('p2p.helper_platform_unsupported')
+  // macOS and Linux both use an exclusive Unix-socket directory owned by the
+  // helper launch. Linux is a first-class platform, never a skip target.
+  if (process.platform !== 'darwin' && process.platform !== 'linux')
+    throw new PeerHelperError('p2p.helper_platform_unsupported')
   const directory = await mkdtemp(join(tmpdir(), 'dp-'))
   try {
     await chmod(directory, 0o700)

@@ -25,7 +25,11 @@ describe('private helper channel ownership', () => {
       expect(() => peerPipeName(value)).toThrow('p2p.invalid_socket')
   })
 
-  it('removes a crashed process channel and only its owned directory', async () => {
+  // macOS and Linux both use the owned Unix-socket directory, so this runs on
+  // both; Windows uses a named pipe (covered by peerPipeName) and is skipped.
+  it.skipIf(process.platform === 'win32')(
+    'removes a crashed process channel and only its owned directory',
+    async () => {
     const channel = await createPeerChannel()
     if (channel.directory) roots.push(channel.directory)
     const child = spawn(
@@ -62,7 +66,8 @@ describe('private helper channel ownership', () => {
       child.kill('SIGKILL')
       await exited
     }
-  })
+    }
+  )
 
   it('refuses substituted regular files and preserves their bytes', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'peer-channel-test-'))
