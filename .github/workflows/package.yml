@@ -312,11 +312,15 @@ jobs:
           gh release create "$GITHUB_REF_NAME" \
             publish/*.dmg \
             publish/*.exe \
+            publish/*.AppImage \
+            publish/*.deb \
             publish/checksums.txt \
             publish/release-manifest-macos-arm64.json \
             publish/release-manifest-macos-x64.json \
             publish/release-manifest-windows-x64.json \
             publish/release-manifest-windows-arm64.json \
+            publish/release-manifest-linux-x64.json \
+            publish/release-manifest-linux-arm64.json \
             --verify-tag \
             --generate-notes \
             --notes 'These macOS and Windows installers are currently unsigned. Download the exact package for your platform, verify it with `checksums.txt`, and run the installer manually. macOS may require **Open** from Finder context menu; Windows may show SmartScreen. DSHKer Launcher can notify you about this release, but it does not install or replace the application silently.' \
