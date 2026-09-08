@@ -28,13 +28,7 @@ export function loadRenderer(window: ElectronBrowserWindow): Promise<void> {
  */
 function unpackagedAppIcon(): string | undefined {
   if (app.isPackaged) return undefined
-  const candidate = nodePath.resolve(
-    __dirname,
-    '..',
-    '..',
-    'resources',
-    'icon-512.png'
-  )
+  const candidate = nodePath.resolve(__dirname, '..', '..', 'resources', 'icon-512.png')
   return existsSync(candidate) ? candidate : undefined
 }
 
