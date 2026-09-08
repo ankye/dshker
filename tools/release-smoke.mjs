@@ -84,13 +84,16 @@ function executableCandidates(releaseDir, manifest) {
     )
   }
 
-  // linux uses the explicit executableName; productName/packageName spellings
-  // are kept as fallbacks for older layouts.
-  return [
-    path.join(releaseDir, 'linux-unpacked', 'dshker-launcher'),
-    path.join(releaseDir, 'linux-unpacked', manifest.productName),
-    path.join(releaseDir, 'linux-unpacked', manifest.packageName)
-  ]
+  // linux uses the explicit executableName; electron-builder emits
+  // `linux-unpacked` for a plain build and appends the arch otherwise,
+  // so an arm64 build lands in linux-arm64-unpacked. productName/packageName
+  // spellings are kept as fallbacks for older layouts.
+  const directories = ['linux-unpacked', 'linux-x64-unpacked', 'linux-arm64-unpacked']
+  return directories.flatMap((directory) => [
+    path.join(releaseDir, directory, 'dshker-launcher'),
+    path.join(releaseDir, directory, manifest.productName),
+    path.join(releaseDir, directory, manifest.packageName)
+  ])
 }
 
 function artifactNamesLookVersioned(manifest) {
