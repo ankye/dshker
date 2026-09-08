@@ -33,7 +33,7 @@ function unpackagedAppIcon(): string | undefined {
     '..',
     '..',
     'resources',
-    'dsh-launcher-logo-launcher.png'
+    'icon-512.png'
   )
   return existsSync(candidate) ? candidate : undefined
 }

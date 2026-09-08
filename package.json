@@ -95,7 +95,7 @@
   "build": {
     "appId": "com.ankye.dsh-launcher",
     "productName": "DSHKer Launcher",
-    "icon": "resources/dsh-launcher-logo-launcher.png",
+    "icon": "resources/icon-512.png",
     "asar": true,
     "artifactName": "dshker-launcher-${version}-${os}-${arch}.${ext}",
     "directories": {
