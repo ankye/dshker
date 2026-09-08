@@ -233,6 +233,59 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.management.verifyAdd': 'Verify identity and add',
   'p2p.management.addHint':
     'Enter every endpoint exactly as announced by your server. TLS is verified; addresses are never guessed and certificates are never bypassed.',
+  'p2p.tabs.remoteLabel': 'Remote connections',
+  'p2p.tabs.connect': 'Connect',
+  'p2p.tabs.connectDescription':
+    'No login needed: SSH hosts, P2P server configuration, and joining a network by its networkId.',
+  'p2p.tabs.account': 'Network & account',
+  'p2p.tabs.accountDescription':
+    'Login is required to create/manage networks, enroll this device, mesh paired devices, and review registered computers.',
+  'p2p.join.title': 'Join a network',
+  'p2p.join.description':
+    'Enter the networkId published by the other network. This device enrolls login-free; login and authorization are only required later to mesh (connect) devices.',
+  'p2p.join.networkIdLabel': 'Network ID (networkId)',
+  'p2p.join.nameLabel': 'Name of this device in the network',
+  'p2p.join.action': 'Join network',
+  'p2p.join.joining': 'Joining…',
+  'p2p.join.registered': 'Registered — not meshed yet',
+  'p2p.join.registeredHint':
+    'This device joined the network. Log in and select this network under “Network & account” before you can mesh with other devices.',
+  'p2p.join.pending': 'The join request was submitted and is waiting for the server to confirm.',
+  'p2p.join.pendingHint':
+    'It is not shown as registered until the server confirms; do not submit again.',
+  'p2p.join.noService': 'Add and select a coordinator server above before joining a network.',
+  'p2p.join.selectService':
+    'Select a coordinator server first (click “Manage user and networks” on its row) before joining a network.',
+  'p2p.join.error.unavailable':
+    'This build cannot join yet: the login-free enrollment endpoint is still being implemented on the server side.',
+  'p2p.join.error.networkFull':
+    'That network has reached its device capacity, so the join was refused. Ask the network owner to log in and raise the limit to 20 or 30 first.',
+  'p2p.join.error.invalid':
+    'The networkId or enrollment proof is invalid, so the join was refused and this device was not enrolled.',
+  'p2p.join.error.unknownNetwork':
+    'That network was not found (unknown or unavailable networkId), so the join was refused.',
+  'p2p.join.error.generic': 'Joining failed and this device was not enrolled.',
+  'p2p.join.error.unconfirmed':
+    'The server result is unconfirmed and the device may already be enrolled. Read the local enrollment before retrying.',
+  'p2p.join.goAccount': 'Open “Network & account”',
+  'p2p.accountTab.noService': 'There is no server to manage yet.',
+  'p2p.accountTab.noServiceDescription':
+    'Add and select a coordinator server in the “Connect” tab first, then log in here to manage networks and devices.',
+  'p2p.accountTab.goConnect': 'Go to “Connect”',
+  'p2p.accountTab.meshGate':
+    'This device enrolled in a network but is not logged in, so it cannot mesh with other devices yet.',
+  'p2p.accountTab.meshGateDescription':
+    'Log in and select that network to enable pairing and connections.',
+  'p2p.accountTab.goLogin': 'Go to login',
+  'p2p.management.editService': 'Edit configuration',
+  'p2p.management.manageHint':
+    'To manage this server’s users, networks and devices, open the “Network & account” tab.',
+  'p2p.account.capacity': 'Device capacity limit',
+  'p2p.account.capacityHint':
+    'As the logged-in network owner you can raise the limit from 10 to 20 or 30. Lowering it never silently removes enrolled devices.',
+  'p2p.account.raiseTo': 'Raise to',
+  'p2p.account.saveLimit': 'Save limit',
+  'p2p.account.capacityMaxed': 'Already at the maximum of 30.',
   'app.title': 'DSHKer Launcher',
   'nav.application': 'Application',
   'nav.launch': 'Launch',

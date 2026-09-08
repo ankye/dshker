@@ -4,7 +4,7 @@ import { P2PManagementDomain } from './p2pManagement'
 import { P2PAccountsDomain } from './p2pAccounts'
 
 const user = { userId: 'user-a', username: 'alice' }
-const network = { userId: user.userId, networkId: 'net-a', name: 'Office' }
+const network = { userId: user.userId, networkId: 'net-a', name: 'Office', maxDevices: 10 }
 function setup(overrides: Partial<P2PManagementApi> = {}) {
   const api = {
     currentUser: vi.fn(async () => ({ ok: true as const, data: user })),
@@ -122,5 +122,45 @@ describe('P2P user and network domain', () => {
     expect(accounts.state('service-a').networks).toBeUndefined()
     await accounts.currentUser('service-a')
     expect(accounts.state('service-a').user).toEqual(user)
+  })
+
+  describe('P2P network device capacity', () => {
+    it('dispatches updateNetworkLimit for the signed-in owner and applies the readback', async () => {
+      const raised = { ...network, maxDevices: 20 }
+      const updateNetworkLimit = vi.fn<P2PManagementApi['updateNetworkLimit']>().mockResolvedValue({
+        ok: true,
+        data: raised
+      })
+      const { accounts } = setup({ updateNetworkLimit })
+      await accounts.networks('service-a')
+      await accounts.raiseNetworkLimit('service-a', 'net-a', 20)
+      expect(updateNetworkLimit).toHaveBeenCalledWith(
+        expect.objectContaining({ serviceId: 'service-a', networkId: 'net-a', maxDevices: 20 })
+      )
+      expect(accounts.state('service-a').networks).toEqual([raised])
+    })
+
+    it('never sends a lowering or equal capacity update', async () => {
+      const updateNetworkLimit = vi.fn<P2PManagementApi['updateNetworkLimit']>()
+      const { accounts } = setup({ updateNetworkLimit })
+      await accounts.networks('service-a')
+      await accounts.raiseNetworkLimit('service-a', 'net-a', 10)
+      await accounts.raiseNetworkLimit('service-a', 'net-a', 5)
+      expect(updateNetworkLimit).not.toHaveBeenCalled()
+    })
+
+    it('treats an unadmitted capacity refusal as retryable, not unconfirmed', async () => {
+      const updateNetworkLimit = vi.fn<P2PManagementApi['updateNetworkLimit']>().mockResolvedValue({
+        ok: false,
+        code: 'p2p.invalid_operation',
+        message: 'not exposed by the helper yet'
+      })
+      const { accounts } = setup({ updateNetworkLimit })
+      await accounts.networks('service-a')
+      await accounts.raiseNetworkLimit('service-a', 'net-a', 30)
+      const state = accounts.state('service-a')
+      expect(state.networks).toEqual([network])
+      expect(state.networkWriteUnconfirmed).toBe(false)
+    })
   })
 })

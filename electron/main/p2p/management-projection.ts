@@ -16,7 +16,12 @@ export function projectPeerUser(value: P2PUserView): P2PUserView {
   return { userId: value.userId, username: value.username }
 }
 export function projectPeerNetwork(value: P2PNetworkView): P2PNetworkView {
-  return { networkId: value.networkId, userId: value.userId, name: value.name }
+  return {
+    networkId: value.networkId,
+    userId: value.userId,
+    name: value.name,
+    maxDevices: value.maxDevices
+  }
 }
 export function projectPeerRegistration(value: P2PRegistrationView): P2PRegistrationView {
   const identity = {

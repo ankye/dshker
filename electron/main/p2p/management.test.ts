@@ -65,8 +65,8 @@ function fixture() {
     forgottenServiceIds: []
   }
   let networks = [
-    { networkId, userId: user.userId, name: 'Work' },
-    { networkId: otherNetworkId, userId: user.userId, name: 'Other' }
+    { networkId, userId: user.userId, name: 'Work', maxDevices: 10 },
+    { networkId: otherNetworkId, userId: user.userId, name: 'Other', maxDevices: 10 }
   ]
   vi.spyOn(PeerCatalog.prototype, 'inspect').mockImplementation(async () => ({
     revision: 'f'.repeat(64),

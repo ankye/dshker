@@ -12,7 +12,10 @@ export const P2P_MANAGEMENT_CHANNELS = {
   networks: 'dsh-launcher:p2p:networks',
   createNetwork: 'dsh-launcher:p2p:create-network',
   renameNetwork: 'dsh-launcher:p2p:rename-network',
+  updateNetworkLimit: 'dsh-launcher:p2p:update-network-limit',
   deleteNetwork: 'dsh-launcher:p2p:delete-network',
+  /** Login-free enrollment of this device into a network by its networkId. */
+  joinNetwork: 'dsh-launcher:p2p:join-network',
   registration: 'dsh-launcher:p2p:registration',
   registerDevice: 'dsh-launcher:p2p:register-device',
   submitEnrollment: 'dsh-launcher:p2p:submit-enrollment',
@@ -43,11 +46,25 @@ export interface P2PUserView {
   userId: string
   username: string
 }
+/**
+ * Device capacity of a network: how many enrolled devices it accepts.
+ *
+ * New networks start at P2P_NETWORK_DEFAULT_DEVICE_LIMIT; the logged-in owner
+ * may raise the limit through `updateNetworkLimit` to one of
+ * P2P_NETWORK_DEVICE_LIMITS. The server is authoritative and rejects a join
+ * once the network is full with `p2p.network_full`.
+ */
 export interface P2PNetworkView {
   networkId: string
   userId: string
   name: string
+  maxDevices: number
 }
+
+export const P2P_NETWORK_DEFAULT_DEVICE_LIMIT = 10 as const
+/** The only device limits a network owner may choose when raising the cap. */
+export const P2P_NETWORK_DEVICE_LIMITS = [10, 20, 30] as const
+export type P2PNetworkDeviceLimit = (typeof P2P_NETWORK_DEVICE_LIMITS)[number]
 export interface P2PComputerView {
   connectionId: string
   serviceId: string
@@ -199,9 +216,19 @@ export interface P2PManagementInputs {
   networks: ServiceRequest
   createNetwork: ServiceRequest & { name: string }
   renameNetwork: NetworkRequest & { name: string }
+  /** Raises the device capacity of a network the signed-in owner manages. */
+  updateNetworkLimit: NetworkRequest & { maxDevices: number }
   deleteNetwork: NetworkRequest
   registration: ServiceRequest
+  /** Owner-gated enrollment of this device into a selected network. */
   registerDevice: NetworkRequest & { name: string }
+  /**
+   * Login-free enrollment of this device into a network by its networkId.
+   *
+   * The local device identity already exists (generated at startup), so the
+   * renderer only supplies the coordinator, the networkId and a display name.
+   */
+  joinNetwork: NetworkRequest & { name: string }
   submitEnrollment: RevisionRequest
   recoverEnrollment: RevisionRequest
   pairs: ServiceRequest
@@ -247,9 +274,12 @@ export interface P2PManagementResults {
   networks: P2PNetworkView[]
   createNetwork: P2PNetworkView
   renameNetwork: P2PNetworkView
+  updateNetworkLimit: P2PNetworkView
   deleteNetwork: void
   registration: P2PRegistrationView
   registerDevice: P2PRegistrationView
+  /** Registered once the server confirms the login-free enrollment. */
+  joinNetwork: P2PRegistrationView
   submitEnrollment: P2PRegistrationView
   recoverEnrollment: P2PRegistrationView
   pairs: P2PPairView[]
@@ -325,6 +355,7 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.invalid_device_key',
   'p2p.invalid_device_state',
   'p2p.invalid_enrollment_grant',
+  'p2p.invalid_network_limit',
   'p2p.invalid_network_list',
   'p2p.invalid_operation',
   'p2p.invalid_payload',
@@ -337,6 +368,7 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.invalid_stun_endpoint',
   'p2p.invalid_user_session',
   'p2p.management_result_unconfirmed',
+  'p2p.network_full',
   'p2p.network_unavailable',
   'p2p.not_enabled',
   'p2p.operation_failed',

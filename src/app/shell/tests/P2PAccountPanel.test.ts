@@ -4,7 +4,7 @@ import type { DesktopApi } from '@/shared/contracts'
 import type { P2PManagementApi } from '@/shared/p2p-management'
 
 const user = { userId: 'user-a', username: 'alice' }
-const network = { networkId: 'net-a', userId: user.userId, name: 'Office' }
+const network = { networkId: 'net-a', userId: user.userId, name: 'Office', maxDevices: 10 }
 let previous: DesktopApi | undefined
 let wrapper: VueWrapper | undefined
 let container: HTMLDivElement | undefined
@@ -162,5 +162,59 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(
       ui.findAll('input[type="radio"]').every((node) => !(node.element as HTMLInputElement).checked)
     ).toBe(true)
+  })
+
+  describe('P2P network device capacity control', () => {
+    it('raises an owned network limit through the dedicated control and applies the readback', async () => {
+      const raised = { ...network, maxDevices: 20 }
+      const updateNetworkLimit = vi
+        .fn<P2PManagementApi['updateNetworkLimit']>()
+        .mockResolvedValue({ ok: true, data: raised })
+      const ui = await render({
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: true, data: [network] }),
+        updateNetworkLimit
+      })
+      await button(ui, '读取网络列表').trigger('click')
+      await flushPromises()
+      expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
+      const select = ui.get('[data-testid="p2p-limit-select"]').element as HTMLSelectElement
+      expect(Array.from(select.options).map((option) => option.value)).toEqual(['20', '30'])
+      await ui.get('[data-testid="p2p-limit-save"]').trigger('click')
+      await flushPromises()
+      expect(updateNetworkLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serviceId: 'service-a',
+          networkId: 'net-a',
+          maxDevices: 20
+        })
+      )
+      expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('20')
+    })
+
+    it('offers no raise control once a network is at the maximum of 30', async () => {
+      const atMax = { ...network, maxDevices: 30 }
+      const ui = await render({
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: true, data: [atMax] })
+      })
+      await button(ui, '读取网络列表').trigger('click')
+      await flushPromises()
+      expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('30')
+      expect(ui.find('[data-testid="p2p-limit-select"]').exists()).toBe(false)
+      expect(ui.text()).toContain('已达最大上限 30')
+    })
+
+    it('never shows the raise control for a network owned by someone else', async () => {
+      const foreign = { ...network, userId: 'other-user' }
+      const ui = await render({
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: true, data: [foreign] })
+      })
+      await button(ui, '读取网络列表').trigger('click')
+      await flushPromises()
+      expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
+      expect(ui.find('[data-testid="p2p-limit-select"]').exists()).toBe(false)
+    })
   })
 })

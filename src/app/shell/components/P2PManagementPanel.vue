@@ -1,11 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
-import { p2pAccounts, p2pManagement as domain } from '@/app/domains/remote-connections'
+import {
+  p2pManagement as domain,
+  p2pServiceEditor as editor
+} from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
-import P2PAccountPanel from './P2PAccountPanel.vue'
-import P2PEnrollmentPanel from './P2PEnrollmentPanel.vue'
-import P2PPairingPanel from './P2PPairingPanel.vue'
+import type { P2PServiceView } from '@/shared/p2p-management'
+import P2PServiceEditorPanel from './P2PServiceEditorPanel.vue'
 
+/**
+ * P2P coordinator/server configuration (Connect tab).
+ *
+ * This is the login-free half of P2P management: the endpoint list, add and
+ * edit forms, plus choosing which server the login-gated Network & account
+ * tab operates on. Account, enrollment and pairing panels live in
+ * P2PNetworkAccountPanel and are never mounted here.
+ */
 const t = useTranslator()
 const state = computed(() => domain.operations.catalog)
 const catalog = domain.catalog
@@ -22,6 +32,14 @@ const uncertain = computed(
 onMounted(() => {
   void domain.readCatalog()
 })
+
+function choose(service: P2PServiceView): void {
+  domain.selectedServiceId.value = service.serviceId
+}
+function edit(service: P2PServiceView): void {
+  if (!catalog.value) return
+  editor.open(service, catalog.value.revision)
+}
 </script>
 
 <template>
@@ -96,16 +114,30 @@ onMounted(() => {
             </dd>
           </dl>
           <p>{{ t('p2p.management.notConnected') }}</p>
-          <button
-            class="prototype-button"
-            type="button"
-            :disabled="catalog.forgottenServiceIds.includes(service.serviceId)"
-            @click="domain.selectedServiceId.value = service.serviceId"
-          >
-            {{ t('p2p.account.manage') }}
-          </button>
+          <div class="p2p-row-actions">
+            <button
+              class="prototype-button"
+              type="button"
+              :disabled="catalog.forgottenServiceIds.includes(service.serviceId)"
+              @click="choose(service)"
+            >
+              {{ t('p2p.account.manage') }}
+            </button>
+            <button
+              class="prototype-button"
+              type="button"
+              :disabled="catalog.forgottenServiceIds.includes(service.serviceId)"
+              @click="edit(service)"
+            >
+              {{ t('p2p.management.editService') }}
+            </button>
+          </div>
+          <p v-if="selectedService?.serviceId === service.serviceId" class="remote-form-hint">
+            {{ service.displayName }} · {{ t('p2p.management.manageHint') }}
+          </p>
         </li>
       </ul>
+      <P2PServiceEditorPanel />
       <form @submit.prevent="domain.addService()" data-testid="p2p-service-form">
         <fieldset :disabled="busy" class="p2p-service-fields">
           <legend>{{ t('p2p.management.addService') }}</legend>
@@ -133,23 +165,6 @@ onMounted(() => {
         </fieldset>
         <p class="remote-form-hint">{{ t('p2p.management.addHint') }}</p>
       </form>
-      <P2PAccountPanel
-        v-if="selectedService"
-        :key="selectedService.serviceId"
-        :service-id="selectedService.serviceId"
-        :display-name="selectedService.displayName"
-      />
-      <P2PEnrollmentPanel
-        v-if="selectedService"
-        :key="selectedService.serviceId"
-        :service-id="selectedService.serviceId"
-      />
-      <P2PPairingPanel
-        v-if="selectedService"
-        :key="`pairing-${selectedService.serviceId}`"
-        :service-id="selectedService.serviceId"
-        :network-id="p2pAccounts.state(selectedService.serviceId).selectedNetworkId"
-      />
     </template>
   </section>
 </template>
@@ -185,6 +200,12 @@ onMounted(() => {
 .p2p-services dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+.p2p-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
 }
 .remote-error code {
   overflow-wrap: anywhere;

@@ -42,9 +42,11 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   networks: { serviceId },
   createNetwork: { serviceId, name: 'Office' },
   renameNetwork: { serviceId, networkId, name: 'Office' },
+  updateNetworkLimit: { serviceId, networkId, maxDevices: 20 },
   deleteNetwork: { serviceId, networkId },
   registration: { serviceId },
   registerDevice: { serviceId, networkId, name: 'Mac' },
+  joinNetwork: { serviceId, networkId, name: 'Mac' },
   submitEnrollment: { serviceId, revision },
   recoverEnrollment: { serviceId, revision },
   pairs: { serviceId },
@@ -85,7 +87,7 @@ function page() {
 }
 function fixture() {
   const user = { userId: 'd'.repeat(32), username: 'alice' }
-  const network = { userId: user.userId, networkId, name: 'Office' }
+  const network = { userId: user.userId, networkId, name: 'Office', maxDevices: 10 }
   const registration = {
     kind: 'registered' as const,
     serviceId,
@@ -253,7 +255,10 @@ describe('P2P named management admission', () => {
     const { owner, invoke, user, network, registration } = fixture()
     const { event } = page()
     let sequence = 0
-    for (const method of Object.keys(owner) as Exclude<P2PManagementOperation, 'cancel'>[]) {
+    for (const method of Object.keys(owner) as Exclude<
+      P2PManagementOperation,
+      'cancel' | 'updateNetworkLimit' | 'joinNetwork'
+    >[]) {
       const result = await invoke(method, event, request(method, ++sequence))
       expect(result.ok, method).toBe(true)
       expect(owner[method]).toHaveBeenCalledTimes(1)

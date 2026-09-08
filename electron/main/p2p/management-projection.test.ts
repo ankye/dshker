@@ -19,8 +19,14 @@ describe('management public projections', () => {
       username: 'alice'
     })
     expect(
-      projectPeerNetwork({ networkId: 'net', userId: 'user', name: 'Office', ...secrets })
-    ).toEqual({ networkId: 'net', userId: 'user', name: 'Office' })
+      projectPeerNetwork({
+        networkId: 'net',
+        userId: 'user',
+        name: 'Office',
+        maxDevices: 10,
+        ...secrets
+      })
+    ).toEqual({ networkId: 'net', userId: 'user', name: 'Office', maxDevices: 10 })
     const identity = {
       serviceId: 'service',
       userId: 'user',

@@ -25,7 +25,17 @@ import {
 import { PeerManagementRequests } from './management-requests'
 import { PeerHelperError } from './wire'
 
-export type PeerManagementOwner = Pick<PeerManagement, Exclude<P2PManagementOperation, 'cancel'>>
+/**
+ * Owner methods the IPC may dispatch to.
+ *
+ * `updateNetworkLimit` and `joinNetwork` are deliberately excluded: the Go
+ * coordinator does not expose those RPCs yet, so they are admitted at this
+ * boundary but dispatched as typed stubs below until the helper lands.
+ */
+export type PeerManagementOwner = Pick<
+  PeerManagement,
+  Exclude<P2PManagementOperation, 'cancel' | 'updateNetworkLimit' | 'joinNetwork'>
+>
 
 /** No raw RPC dispatch, paths, keys or tokens cross this boundary. */
 export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
@@ -88,6 +98,16 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('renameNetwork', true, async (r, s) =>
     projectPeerNetwork(await owner.renameNetwork(r.serviceId, r.networkId, r.name, s))
   )
+  //
+  // updateNetworkLimit: the self-hosted Go coordinator (ankye/dshker-server,
+  // add-dshker-user-networks) does not expose a network capacity RPC yet, so
+  // there is no owner dispatch to wire. The typed channel and admission are
+  // live; this stub refuses cleanly instead of faking a result.
+  // TODO(p2p-capacity): once the helper exposes the capacity update, route to
+  // owner.updateNetworkLimit and complete Task 10.2 (raise 10 -> 20/30).
+  register('updateNetworkLimit', true, async () => {
+    throw new PeerHelperError('p2p.invalid_operation')
+  })
   register('deleteNetwork', true, (r, s) => owner.deleteNetwork(r.serviceId, r.networkId, s))
   register('registration', false, async (r, s) =>
     projectPeerRegistration(await owner.registration(r.serviceId, s))
@@ -95,6 +115,16 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('registerDevice', true, async (r, s) =>
     projectPeerRegistration(await owner.registerDevice(r.serviceId, r.networkId, r.name, s))
   )
+  //
+  // joinNetwork: login-free enrollment needs a server flow that proves local
+  // public-key ownership against a bare networkId. The Go coordinator
+  // (ankye/dshker-server, add-dshker-user-networks) does not expose it yet, so
+  // there is no owner dispatch to wire.
+  // TODO(p2p-join): when the helper lands, route to owner.joinNetwork and
+  // complete Task 10.1. Never resolve this stub as registered.
+  register('joinNetwork', true, async () => {
+    throw new PeerHelperError('p2p.invalid_operation')
+  })
   register('submitEnrollment', true, async (r, s) =>
     projectPeerRegistration(await owner.submitEnrollment(r.serviceId, r.revision, s))
   )

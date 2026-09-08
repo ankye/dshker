@@ -111,6 +111,33 @@ export class P2PAccountsDomain {
     if (state.renameDrafts[networkId] === name) delete state.renameDrafts[networkId]
   }
 
+  /**
+   * Raises the device capacity of one owned network (10 -> 20/30).
+   *
+   * The server remains authoritative: it rejects a limit that is not a raise
+   * for the signed-in owner with a typed error, and only a confirmed result
+   * replaces the listed network view.
+   */
+  async raiseNetworkLimit(serviceId: string, networkId: string, maxDevices: number): Promise<void> {
+    const state = this.state(serviceId)
+    if (state.networkWriteUnconfirmed) return
+    const current = state.networks?.find((network) => network.networkId === networkId)
+    if (!current || current.maxDevices >= maxDevices) return
+    const result = await this.management.run('updateNetworkLimit', {
+      serviceId,
+      networkId,
+      maxDevices
+    })
+    if (!result.ok) {
+      this.#networkFailure(state, result.code)
+      return
+    }
+    if (state.networks !== undefined)
+      state.networks = state.networks.map((network) =>
+        network.networkId === networkId ? result.data : network
+      )
+  }
+
   async deleteNetwork(serviceId: string, networkId: string): Promise<boolean> {
     const state = this.state(serviceId)
     if (state.networkWriteUnconfirmed) return false
@@ -151,6 +178,8 @@ export class P2PAccountsDomain {
         'bridge',
         'p2p.service_busy',
         'p2p.invalid_request',
+        'p2p.invalid_operation',
+        'p2p.invalid_network_limit',
         'p2p.user_login_required',
         'p2p.not_enabled'
       ].includes(code)

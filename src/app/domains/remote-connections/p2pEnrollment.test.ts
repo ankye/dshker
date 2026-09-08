@@ -35,7 +35,8 @@ function setup() {
     submitEnrollment: vi
       .fn<P2PManagementApi['submitEnrollment']>()
       .mockResolvedValue({ ok: true, data: issued }),
-    registerDevice: vi.fn<P2PManagementApi['registerDevice']>()
+    registerDevice: vi.fn<P2PManagementApi['registerDevice']>(),
+    joinNetwork: vi.fn<P2PManagementApi['joinNetwork']>()
   }
   const management = new P2PManagementDomain(() => api as unknown as P2PManagementApi)
   return { api, management, enrollment: new P2PEnrollmentDomain(management) }
@@ -153,5 +154,72 @@ describe('P2P enrollment reconciliation', () => {
     expect(enrollment.state('service-a').resultUnconfirmed).toBe(false)
     expect(api.registerDevice).not.toHaveBeenCalled()
     expect(api.submitEnrollment).not.toHaveBeenCalled()
+  })
+
+  describe('P2P login-free join enrollment', () => {
+    it('stores only a server-confirmed registered join result', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: issued })
+      await enrollment.join('service-a', 'network-b', 'My computer')
+      expect(api.joinNetwork).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serviceId: 'service-a',
+          networkId: 'network-b',
+          name: 'My computer'
+        })
+      )
+      expect(enrollment.state('service-a').registration).toEqual(issued)
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(false)
+      expect(api.registerDevice).not.toHaveBeenCalled()
+    })
+
+    it('never turns a network_full refusal into a registration and stays retryable', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.network_full',
+        message: 'network is full'
+      })
+      await enrollment.join('service-a', 'network-full', 'My computer')
+      expect(enrollment.state('service-a').registration).toBeUndefined()
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(false)
+      expect(enrollment.state('service-a').joinNetworkIdDraft).toBe('')
+    })
+
+    it('treats invalid_enrollment as a typed refusal without blocking readback', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.invalid_enrollment',
+        message: 'bad enrollment'
+      })
+      await enrollment.join('service-a', 'network-b', 'My computer')
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(false)
+      expect(api.registration).toHaveBeenCalledTimes(0)
+    })
+
+    it('marks a lost join reply as unconfirmed instead of inventing a registration', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockRejectedValueOnce(new Error('reply lost'))
+      await enrollment.join('service-a', 'network-b', 'My computer')
+      expect(enrollment.state('service-a').registration).toBeUndefined()
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(true)
+    })
+
+    it('refuses a second join while a local registration already exists', async () => {
+      const { enrollment, api } = setup()
+      await enrollment.read('service-a')
+      await enrollment.join('service-a', 'network-b', 'My computer')
+      expect(api.joinNetwork).not.toHaveBeenCalled()
+    })
+
+    it('surfaces a pending join result as unconfirmed, not registered', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: pending })
+      await enrollment.join('service-a', pending.networkId, pending.name)
+      const state = enrollment.state('service-a')
+      expect(state.registration).toEqual(pending)
+      expect(state.resultUnconfirmed).toBe(true)
+    })
   })
 })

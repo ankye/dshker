@@ -192,6 +192,52 @@ export const zhCN = {
   'p2p.management.verifyAdd': '验证身份并添加',
   'p2p.management.addHint':
     '请填写服务器实际公告的全部地址。使用正常 TLS 验证；不会猜测地址、忽略证书或切换服务。',
+  'p2p.tabs.remoteLabel': '远程连接',
+  'p2p.tabs.connect': '连接',
+  'p2p.tabs.connectDescription':
+    '无需登录：SSH 主机、P2P 服务器配置，以及按 networkId 免登录加入网络。',
+  'p2p.tabs.account': '网络与账户',
+  'p2p.tabs.accountDescription': '登录后创建/管理网络、登记本机、组网配对与查看已登记设备。',
+  'p2p.join.title': '加入网络',
+  'p2p.join.description':
+    '输入对方网络公开的 networkId，本机即可免登录登记进该网络。登录与授权只在“组网”（连接设备）前才需要。',
+  'p2p.join.networkIdLabel': '网络 ID（networkId）',
+  'p2p.join.nameLabel': '本机在此网络中的名称',
+  'p2p.join.action': '加入网络',
+  'p2p.join.joining': '正在加入…',
+  'p2p.join.registered': '已登记，尚未组网',
+  'p2p.join.registeredHint':
+    '本机已加入该网络。需要在「网络与账户」中登录并选择该网络后，才能与其他设备组网。',
+  'p2p.join.pending': '加入请求已提交，等待服务器确认。',
+  'p2p.join.pendingHint': '服务器确认前不会显示为已登记；请不要重复提交。',
+  'p2p.join.noService': '请先在上方添加并选择一台协调服务器，再加入网络。',
+  'p2p.join.selectService':
+    '请先在“服务器配置”列表中点击“管理用户与网络”选中一台服务器，再加入网络。',
+  'p2p.join.error.unavailable':
+    '本机构建尚未接入服务器的免登录登记接口（服务端契约实现中），加入被拒绝。',
+  'p2p.join.error.networkFull':
+    '该网络已达到组网设备数上限，加入被拒绝。请让网络创建者登录并把上限提高到 20 或 30 后再试。',
+  'p2p.join.error.invalid': 'networkId 或登记证明无效，加入被拒绝；本机没有被登记。',
+  'p2p.join.error.unknownNetwork': '找不到该网络（networkId 未知或不可用），加入被拒绝。',
+  'p2p.join.error.generic': '加入网络失败，本机没有被登记。',
+  'p2p.join.error.unconfirmed':
+    '服务器结果未确认，可能已经登记。请读取本机登记状态核对，不要重复提交。',
+  'p2p.join.goAccount': '前往「网络与账户」',
+  'p2p.accountTab.noService': '还没有可管理的服务器。',
+  'p2p.accountTab.noServiceDescription':
+    '请先在「连接」标签页添加并选择一台协调服务器，再回来登录并管理网络与设备。',
+  'p2p.accountTab.goConnect': '前往「连接」',
+  'p2p.accountTab.meshGate': '本机已登记（加入网络），但尚未登录，因此还不能与其他设备组网。',
+  'p2p.accountTab.meshGateDescription': '请登录并选择该网络，之后即可配对与连接设备。',
+  'p2p.accountTab.goLogin': '前往登录',
+  'p2p.management.editService': '编辑配置',
+  'p2p.management.manageHint': '管理此服务器的用户、网络与设备，请前往「网络与账户」标签页。',
+  'p2p.account.capacity': '组网设备数上限',
+  'p2p.account.capacityHint':
+    '作为网络创建者登录后，可把上限从 10 提高到 20 或 30；降低上限不会移除已登记设备。',
+  'p2p.account.raiseTo': '提高到',
+  'p2p.account.saveLimit': '保存上限',
+  'p2p.account.capacityMaxed': '已达最大上限 30。',
   'app.title': 'DSHKer Launcher',
   'nav.application': '应用',
   'nav.launch': '一键启动',

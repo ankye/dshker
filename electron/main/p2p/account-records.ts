@@ -1,3 +1,7 @@
+import {
+  P2P_NETWORK_DEVICE_LIMITS,
+  type P2PNetworkDeviceLimit
+} from '../../../src/shared/p2p-management'
 import { exactPeerObject, PeerHelperError } from './wire'
 
 export interface PeerUser {
@@ -8,6 +12,8 @@ export interface PeerNetwork {
   networkId: string
   userId: string
   name: string
+  /** Server-confirmed device capacity; the server is authoritative. */
+  maxDevices: P2PNetworkDeviceLimit
 }
 /** Private main memory only. Never return this type from renderer-facing methods. */
 export interface PeerUserSession {
@@ -36,11 +42,18 @@ export function peerUserSession(value: unknown): PeerUserSession {
 }
 
 export function peerNetwork(value: unknown, userId: string): PeerNetwork {
-  const record = exactPeerObject(value, ['networkId', 'userId', 'name'])
+  const record = exactPeerObject(value, ['networkId', 'userId', 'name', 'maxDevices'])
   assertAccountId(record.networkId)
   assertAccountText(record.name)
   if (record.userId !== userId) throw new PeerHelperError('p2p.user_scope_mismatch')
-  return { networkId: record.networkId, userId, name: record.name }
+  if (!(P2P_NETWORK_DEVICE_LIMITS as readonly number[]).includes(record.maxDevices as number))
+    throw new PeerHelperError('p2p.invalid_network_limit')
+  return {
+    networkId: record.networkId,
+    userId,
+    name: record.name,
+    maxDevices: record.maxDevices as P2PNetworkDeviceLimit
+  }
 }
 
 export function peerNetworks(value: unknown, userId: string): PeerNetwork[] {

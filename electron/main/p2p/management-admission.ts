@@ -1,5 +1,6 @@
 import {
   P2P_MANAGEMENT_VERSION,
+  P2P_NETWORK_DEVICE_LIMITS,
   type P2PManagementOperation,
   type P2PManagementRequest
 } from '../../../src/shared/p2p-management'
@@ -17,9 +18,11 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   networks: ['serviceId'],
   createNetwork: ['serviceId', 'name'],
   renameNetwork: ['serviceId', 'networkId', 'name'],
+  updateNetworkLimit: ['serviceId', 'networkId', 'maxDevices'],
   deleteNetwork: ['serviceId', 'networkId'],
   registration: ['serviceId'],
   registerDevice: ['serviceId', 'networkId', 'name'],
+  joinNetwork: ['serviceId', 'networkId', 'name'],
   submitEnrollment: ['serviceId', 'revision'],
   recoverEnrollment: ['serviceId', 'revision'],
   pairs: ['serviceId'],
@@ -105,6 +108,12 @@ function validateField(field: string, value: unknown): void {
   if (field === 'password') {
     if (typeof value !== 'string' || !value || Buffer.byteLength(value) > 72)
       throw new PeerHelperError('p2p.invalid_request')
+    return
+  }
+  if (field === 'maxDevices') {
+    // Only the limits the server accepts for a capacity raise are admitted.
+    if (!(P2P_NETWORK_DEVICE_LIMITS as readonly number[]).includes(value as number))
+      throw new PeerHelperError('p2p.invalid_network_limit')
     return
   }
   if (typeof value !== 'string' || !value || Buffer.byteLength(value) > 2048)

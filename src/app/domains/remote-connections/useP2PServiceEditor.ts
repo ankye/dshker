@@ -115,6 +115,8 @@ async function save(): Promise<boolean> {
     stunAddress: current.stunAddress
   })
   if (result.ok) {
+    // Keep the shared catalog in sync so the server list shows the confirmed endpoints.
+    p2pManagement.catalog.value = result.data
     const saved = result.data.services.find((entry) => entry.serviceId === service.serviceId)
     if (saved) {
       original.value = { ...saved }

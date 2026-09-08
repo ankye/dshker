@@ -7,9 +7,9 @@ import { fileURLToPath } from 'node:url'
 
 const args = process.argv.slice(2)
 if (args.length !== 4 || args[0] !== '--platform' || args[2] !== '--arch')
-  throw new Error('Explicit --platform darwin|win32 --arch arm64|x64 required')
+  throw new Error('Explicit --platform darwin|linux|win32 --arch arm64|x64 required')
 const [, platform, , arch] = args
-if (!['darwin', 'win32'].includes(platform) || !['arm64', 'x64'].includes(arch))
+if (!['darwin', 'linux', 'win32'].includes(platform) || !['arm64', 'x64'].includes(arch))
   throw new Error('Unsupported helper target')
 const root = fileURLToPath(new URL('..', import.meta.url))
 const target = `${platform}-${arch}`
@@ -19,7 +19,7 @@ await mkdir(directory, { recursive: true })
 const run = promisify(execFile)
 const environment = {
   ...process.env,
-  GOOS: platform === 'win32' ? 'windows' : 'darwin',
+  GOOS: platform === 'win32' ? 'windows' : platform === 'linux' ? 'linux' : 'darwin',
   GOARCH: arch === 'x64' ? 'amd64' : 'arm64',
   CGO_ENABLED: '0'
 }

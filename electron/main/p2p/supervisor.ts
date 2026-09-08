@@ -113,7 +113,7 @@ function exitedWithin(exit: Promise<void>, milliseconds: number): Promise<boolea
 async function verifyPeerResource(root: string): Promise<string> {
   if (
     !isAbsolute(root) ||
-    !['darwin', 'win32'].includes(process.platform) ||
+    !['darwin', 'linux', 'win32'].includes(process.platform) ||
     !['arm64', 'x64'].includes(process.arch)
   )
     throw new PeerHelperError('p2p.helper_platform_unsupported')

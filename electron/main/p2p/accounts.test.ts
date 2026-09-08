@@ -5,7 +5,7 @@ import { PeerHelperError } from './wire'
 const serviceId = 'a'.repeat(64)
 const otherServiceId = 'b'.repeat(64)
 const user = { userId: '1'.repeat(32), username: 'test-user' }
-const network = { networkId: '2'.repeat(32), userId: user.userId, name: 'Work' }
+const network = { networkId: '2'.repeat(32), userId: user.userId, name: 'Work', maxDevices: 10 }
 const signal = () => AbortSignal.timeout(5000)
 const session = () => ({
   user,

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import {
   p2pAccounts as accounts,
   p2pManagement as management
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
-import type { P2PNetworkView } from '@/shared/p2p-management'
+import { P2P_NETWORK_DEVICE_LIMITS, type P2PNetworkView } from '@/shared/p2p-management'
 
 const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
@@ -22,6 +22,8 @@ const uncertain = computed(
 )
 const deletion = ref<P2PNetworkView>()
 const confirmButton = ref<HTMLButtonElement>()
+/** Per-network target for the capacity raise; cleared once the list readback shows it. */
+const limitDrafts = reactive<Record<string, number>>({})
 const title = ref<HTMLHeadingElement>()
 let invoker: HTMLElement | undefined
 watch(
@@ -70,6 +72,26 @@ async function confirmDelete() {
   const target = deletion.value
   if (!target || pending.value || uncertain.value) return
   if (await accounts.deleteNetwork(props.serviceId, target.networkId)) await closeDelete()
+}
+
+/** Raising is only offered to the signed-in owner, and only for values above 10. */
+function limitOptions(network: P2PNetworkView): number[] {
+  return P2P_NETWORK_DEVICE_LIMITS.filter((limit) => limit > network.maxDevices)
+}
+function limitTarget(network: P2PNetworkView): number {
+  return limitDrafts[network.networkId] ?? limitOptions(network)[0] ?? network.maxDevices
+}
+async function saveLimit(network: P2PNetworkView): Promise<void> {
+  const target = limitDrafts[network.networkId] ?? limitOptions(network)[0]
+  if (!target || pending.value || uncertain.value) return
+  await accounts.raiseNetworkLimit(props.serviceId, network.networkId, target)
+  // Confirmed readback replaces the row; the draft is then obsolete.
+  if (
+    state.networks?.some(
+      (entry) => entry.networkId === network.networkId && entry.maxDevices >= target
+    )
+  )
+    delete limitDrafts[network.networkId]
 }
 </script>
 
@@ -129,7 +151,11 @@ async function confirmDelete() {
         <legend>{{ t('p2p.account.login') }}</legend>
         <label
           ><span>{{ t('p2p.account.username') }}</span
-          ><input v-model="state.usernameDraft" required autocomplete="username"
+          ><input
+            :id="`p2p-login-username-${serviceId}`"
+            v-model="state.usernameDraft"
+            required
+            autocomplete="username"
         /></label>
         <label
           ><span>{{ t('p2p.account.password') }}</span
@@ -205,6 +231,50 @@ async function confirmDelete() {
                 </button>
               </fieldset>
             </form>
+            <div class="p2p-network-capacity" :data-owned="network.userId === state.user?.userId">
+              <p data-testid="p2p-network-limit">
+                {{ t('p2p.account.capacity') }}: <code>{{ network.maxDevices }}</code>
+              </p>
+              <p
+                v-if="network.userId === state.user?.userId && network.maxDevices >= 30"
+                class="remote-form-hint"
+              >
+                {{ t('p2p.account.capacityMaxed') }}
+              </p>
+              <div
+                v-else-if="
+                  network.userId === state.user?.userId && limitOptions(network).length > 0
+                "
+                class="p2p-limit-control"
+              >
+                <label>
+                  <span>{{ t('p2p.account.raiseTo') }}</span>
+                  <select
+                    :value="limitTarget(network)"
+                    data-testid="p2p-limit-select"
+                    :disabled="pending || uncertain"
+                    @change="
+                      limitDrafts[network.networkId] = Number(
+                        ($event.target as HTMLSelectElement).value
+                      )
+                    "
+                  >
+                    <option v-for="option in limitOptions(network)" :key="option" :value="option">
+                      {{ option }}
+                    </option>
+                  </select>
+                </label>
+                <button
+                  class="prototype-button"
+                  type="button"
+                  data-testid="p2p-limit-save"
+                  :disabled="pending || uncertain"
+                  @click="saveLimit(network)"
+                >
+                  {{ t('p2p.account.saveLimit') }}
+                </button>
+              </div>
+            </div>
           </li>
         </ul>
         <p v-if="state.selectedNetworkId">
@@ -301,5 +371,24 @@ async function confirmDelete() {
   padding: var(--space-4);
   border: 1px solid var(--color-danger);
   border-radius: var(--radius-sm);
+}
+.p2p-network-capacity {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+}
+.p2p-network-capacity p {
+  margin: 0;
+}
+.p2p-limit-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.p2p-limit-control label {
+  display: grid;
+  gap: var(--space-1);
 }
 </style>

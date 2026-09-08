@@ -5,6 +5,9 @@ import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
 export interface P2PEnrollmentState {
   registration: P2PRegistrationView | undefined
   nameDraft: string
+  /** Drafts of the login-free join form, preserved across tab switches. */
+  joinNetworkIdDraft: string
+  joinNameDraft: string
   resultUnconfirmed: boolean
   retryRevision: string | undefined
 }
@@ -19,6 +22,8 @@ export class P2PEnrollmentDomain {
       this.#states[serviceId] = {
         registration: undefined,
         nameDraft: '',
+        joinNetworkIdDraft: '',
+        joinNameDraft: '',
         resultUnconfirmed: false,
         retryRevision: undefined
       }
@@ -51,6 +56,31 @@ export class P2PEnrollmentDomain {
     ) {
       state.resultUnconfirmed = true
     }
+  }
+
+  /**
+   * Login-free join: enrolls the local device into a network by networkId.
+   *
+   * The device identity already exists locally, so no login or network
+   * selection is required. Only a server-confirmed result is stored as
+   * 'registered'; a typed refusal (for example 'p2p.network_full') never
+   * manufactures a registration and leaves the form retryable.
+   */
+  async join(serviceId: string, networkId: string, name: string): Promise<void> {
+    const state = this.state(serviceId)
+    if (state.registration || state.resultUnconfirmed || this.management.busy(serviceId)) return
+    const result = await this.management.run('joinNetwork', { serviceId, networkId, name })
+    if (result.ok) {
+      state.registration = result.data
+      state.retryRevision = undefined
+      // A pending reply is not a registration; keep requiring explicit readback.
+      state.resultUnconfirmed = result.data.kind === 'pending'
+      // Drafts are kept so the Connect card can echo which network was joined.
+      return
+    }
+    // Only these errors prove no write was admitted. Anything else may have
+    // happened during readback after the server already enrolled the device.
+    if (!refusedBeforeEffect(result.code)) state.resultUnconfirmed = true
   }
 
   async recover(serviceId: string): Promise<void> {
@@ -94,3 +124,27 @@ export class P2PEnrollmentDomain {
 }
 
 export const p2pEnrollment = new P2PEnrollmentDomain(p2pManagement)
+
+/**
+ * Codes that prove the server admitted no enrollment write at all.
+ *
+ * Any other failure may have happened after the server already recorded the
+ * device, so it is surfaced as unconfirmed and never silently retried.
+ */
+function refusedBeforeEffect(code: string): boolean {
+  return [
+    'bridge',
+    'p2p.service_busy',
+    'p2p.invalid_request',
+    'p2p.invalid_operation',
+    'p2p.not_enabled',
+    'p2p.user_login_required',
+    'p2p.network_full',
+    'p2p.invalid_network_limit',
+    'p2p.invalid_enrollment',
+    'p2p.invalid_enrollment_token',
+    'p2p.invalid_enrollment_grant',
+    'p2p.device_already_enrolled',
+    'p2p.enrollment_state_mismatch'
+  ].includes(code)
+}
