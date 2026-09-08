@@ -33,10 +33,13 @@ const INTERNAL_OUTPUT_NAMES = new Set([
   // does not ship an electron-updater channel.
   'latest.yml',
   'latest-mac.yml',
-  'latest-linux.yml'
+  'latest-linux.yml',
+  'latest-linux-arm64.yml'
 ])
 const UNPACKED_ARTIFACT_DIRECTORIES = new Set([
   'linux-unpacked',
+  'linux-arm64-unpacked',
+  'linux-x64-unpacked',
   'mac',
   'mac-arm64',
   'mac-universal',
