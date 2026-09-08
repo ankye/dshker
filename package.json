@@ -2,7 +2,8 @@
   "name": "@ankye/dshker-launcher",
   "version": "0.1.22",
   "description": "Managed desktop shell for DeepSeek Harness.",
-  "author": "ankye",
+  "author": "ankye <shengxiehua@gmail.com>",
+  "homepage": "https://github.com/ankye/dshker",
   "private": true,
   "type": "module",
   "main": "out/main/index.cjs",
@@ -43,10 +44,12 @@
     "bundled-source:verify": "npm run seed:verify",
     "package": "npm run bundled-source:verify && electron-vite build && electron-builder --dir --publish never && npm run release:metadata -- --mode package",
     "dist": "npm run bundled-source:verify && electron-vite build && electron-builder --publish never && npm run release:metadata -- --mode dist",
-    "dist:mac-arm64": "npm run bundled-source:verify && electron-vite build && electron-builder --mac --arm64 --publish never && npm run release:metadata -- --mode dist-mac-arm64",
-    "dist:mac-x64": "npm run bundled-source:verify && electron-vite build && electron-builder --mac --x64 --publish never && npm run release:metadata -- --mode dist-mac-x64",
-    "dist:win-x64": "npm run bundled-source:verify && electron-vite build && electron-builder --win --x64 --publish never && npm run release:metadata -- --mode dist-win-x64",
-    "dist:win-arm64": "npm run bundled-source:verify && electron-vite build && electron-builder --win --arm64 --publish never && npm run release:metadata -- --mode dist-win-arm64",
+    "dist:mac-arm64": "node tools/build-peer-helper.mjs --platform darwin --arch arm64 && npm run bundled-source:verify && electron-vite build && electron-builder --mac --arm64 --publish never && npm run release:metadata -- --mode dist-mac-arm64",
+    "dist:mac-x64": "node tools/build-peer-helper.mjs --platform darwin --arch x64 && npm run bundled-source:verify && electron-vite build && electron-builder --mac --x64 --publish never && npm run release:metadata -- --mode dist-mac-x64",
+    "dist:win-x64": "node tools/build-peer-helper.mjs --platform win32 --arch x64 && npm run bundled-source:verify && electron-vite build && electron-builder --win --x64 --publish never && npm run release:metadata -- --mode dist-win-x64",
+    "dist:win-arm64": "node tools/build-peer-helper.mjs --platform win32 --arch arm64 && npm run bundled-source:verify && electron-vite build && electron-builder --win --arm64 --publish never && npm run release:metadata -- --mode dist-win-arm64",
+    "dist:linux-x64": "node tools/build-peer-helper.mjs --platform linux --arch x64 && npm run bundled-source:verify && electron-vite build && electron-builder --linux --x64 --publish never && npm run release:metadata -- --mode dist-linux-x64",
+    "dist:linux-arm64": "node tools/build-peer-helper.mjs --platform linux --arch arm64 && npm run bundled-source:verify && electron-vite build && electron-builder --linux --arm64 --publish never && npm run release:metadata -- --mode dist-linux-arm64",
     "performance:check": "node tools/performance-check.mjs --mode release-dry-run --json",
     "release:metadata": "node tools/release-artifacts.mjs --release-dir release",
     "release:verify": "node tools/release-artifacts.mjs --release-dir release --verify",
@@ -114,6 +117,13 @@
       {
         "from": "resources/dsh-launcher-verbose-logging.patch.yml",
         "to": "dsh-launcher-verbose-logging.patch.yml"
+      },
+      {
+        "from": "build/p2p",
+        "to": "p2p",
+        "filter": [
+          "${os}-${arch}/**"
+        ]
       }
     ],
     "mac": {
@@ -126,6 +136,15 @@
       "target": [
         "nsis"
       ]
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "executableName": "dshker-launcher",
+      "maintainer": "ankye <shengxiehua@gmail.com>"
     },
     "nsis": {
       "oneClick": false,

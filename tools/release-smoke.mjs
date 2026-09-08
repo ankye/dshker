@@ -84,7 +84,10 @@ function executableCandidates(releaseDir, manifest) {
     )
   }
 
+  // linux uses the explicit executableName; productName/packageName spellings
+  // are kept as fallbacks for older layouts.
   return [
+    path.join(releaseDir, 'linux-unpacked', 'dshker-launcher'),
     path.join(releaseDir, 'linux-unpacked', manifest.productName),
     path.join(releaseDir, 'linux-unpacked', manifest.packageName)
   ]
