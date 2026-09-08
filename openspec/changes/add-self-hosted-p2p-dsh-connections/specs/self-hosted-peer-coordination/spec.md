@@ -6,7 +6,7 @@
 
 ### Requirement: Independently deployed Go coordination service
 
-The system SHALL 通过独立 `ankye/dshker-server` 仓库提供 Go 服务端，具有用户/网络/设备管理 HTTPS API、WSS 信令和 UDP STUN 地址发现能力。The system SHALL 要求显式配置服务地址、监听端口、TLS 和持久状态根，且 SHALL NOT 依赖 ZeroTier、NetHopper、OneIsland、NATS、其他项目账号/配置、DSHKer 源码、上层 go.work 或公开协调/STUN 服务。客户端与服务端 SHALL 只通过版本化协议对接，不共享运行时源码依赖。
+The system SHALL 通过独立 `ankye/dshker-server` 仓库提供 Go 服务端，具有用户/网络/设备管理 HTTPS API、WSS 信令和 UDP STUN 地址发现能力。用户注册与登录 SHALL 使用**邮箱 + 密码**（密码 12–72 字节提供 bcrypt 哈希），支持公开注册（无需管理员 CLI）。每个用户 SHALL 最多拥有 2 个网络（创建第 3 个时拒绝）。The system SHALL 要求显式配置服务地址、监听端口、TLS 和持久状态根，且 SHALL NOT 依赖 ZeroTier、NetHopper、OneIsland、NATS、其他项目账号/配置、DSHKer 源码、上层 go.work 或公开协调/STUN 服务。客户端与服务端 SHALL 只通过版本化协议对接，不共享运行时源码依赖。
 
 #### Scenario: Start a configured server
 
