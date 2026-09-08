@@ -412,7 +412,7 @@ jobs:
               ;;
           esac
 
-      - name: Create public latest GitHub Release
+      - name: Create public prerelease GitHub Release (interop testing)
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -429,4 +429,4 @@ jobs:
             --generate-notes \
             --notes 'These macOS and Windows installers are currently unsigned. Download the exact package for your platform, verify it with `checksums.txt`, and run the installer manually. macOS may require **Open** from Finder context menu; Windows may show SmartScreen. DSHKer Launcher can notify you about this release, but it does not install or replace the application silently.' \
             --title "DSHKer Launcher ${GITHUB_REF_NAME}" \
-            --latest
+            --prerelease

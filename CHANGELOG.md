@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.22 — 2026-09-08
+
+- **P2P interop prerelease.** Add self-hosted peer-to-peer DSH connections so two
+  paired computers talk directly (Pion WebRTC ICE + DTLS + DataChannel) over a
+  user-deployed Go coordinator (HTTPS/WSS/STUN), without SSH, port forwarding or
+  copying DSH tokens.
+- Pairing is membership-based: configure the shared service, enroll this
+  computer, approve the peer, and pin the confirmed fingerprint before anything
+  connects. Revocation is persisted and a revoked computer can never reconnect.
+- Remote workbench: browse only user-authorized remote roots (real platform
+  path rules, symlink/junction escape refused), open and run tasks on the remote
+  DSH, and read back results from the remote authority. Remote work survives a
+  disconnect; a lost link is never reported as a stopped task and nothing is
+  auto-retried.
+- Shared service editing is transactionally locked: a new address is accepted
+  only when it proves the same pinned identity, any busy peer blocks the save,
+  and a failed save leaves the stored config byte-identical.
+- **Experience improvements in this candidate:** member rows are identity-first
+  (name + remote device id), connection stages live-poll every two seconds, and
+  the three fixable connect failures (`peer_offline`,`direct_unavailable`,`connection_busy`)
+  explain themselves inline, with a one-click "open workbench" entry once ready.
+- This is a Win/Mac interop-testing prerelease: it does not mark `latest` and is
+  not in the stable update feed. All 92 user-facing P2P error codes are
+  documented and covered by a guard test.
+
 ## 0.1.21 — 2026-09-06
 
 - Add managed DSHKer-to-DSHKer remote connections over supervised loopback SSH
