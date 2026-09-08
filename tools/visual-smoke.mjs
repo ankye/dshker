@@ -30,6 +30,7 @@ async function readSources(root) {
     'src/app/shell/components/ShellSidebar.vue',
     'src/app/shell/components/RuntimeTabsPanel.vue',
     'src/app/shell/components/RemoteConnectionsPanel.vue',
+    'src/app/shell/components/RemoteSSHManagementPanel.vue',
     'src/app/shell/runtimeBrowserState.ts',
     'src/app/shell/components/SettingsPanel.vue',
     'src/app/shell/components/VersionManagementPanel.vue',
@@ -60,7 +61,7 @@ function evaluateSources(sources) {
   const sidebar = sourceByPath.get('src/app/shell/components/ShellSidebar.vue')
   const runtimePanel = sourceByPath.get('src/app/shell/components/RuntimeTabsPanel.vue')
   const runtimeState = sourceByPath.get('src/app/shell/runtimeBrowserState.ts')
-  const remotePanel = sourceByPath.get('src/app/shell/components/RemoteConnectionsPanel.vue')
+  const remotePanel = sourceByPath.get('src/app/shell/components/RemoteSSHManagementPanel.vue')
   const electronWindow = sourceByPath.get('electron/main/window.ts')
   const settingsPanel = sourceByPath.get('src/app/shell/components/SettingsPanel.vue')
   const versionPanel = sourceByPath.get('src/app/shell/components/VersionManagementPanel.vue')
