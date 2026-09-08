@@ -219,24 +219,19 @@ export class PeerManagement {
     signal: AbortSignal
   ): Promise<void> {
     const token = await this.#sessionToken(serviceId, session, signal)
-    const networks = exactPeerObject(
-      await session.rpc.call('networks.list', { serviceId, data: { token } }, signal),
-      ['networks']
-    )
-    const list = Array.isArray(networks.networks) ? networks.networks : []
+    // The helper returns bare arrays for these listing RPCs.
+    const list = await session.rpc.call('networks.list', { serviceId, data: { token } }, signal)
+    if (!Array.isArray(list)) return
     const memberByNetwork: { networkId: string; device: Record<string, unknown> }[] = []
     for (const entry of list) {
       const networkId = (entry as { networkId?: unknown }).networkId
       if (typeof networkId !== 'string') continue
-      const reply = exactPeerObject(
-        await session.rpc.call(
-          'networks.devices',
-          { serviceId, data: { token, networkId } },
-          signal
-        ),
-        ['devices']
+      const devices = await session.rpc.call(
+        'networks.devices',
+        { serviceId, data: { token, networkId } },
+        signal
       )
-      for (const device of Array.isArray(reply.devices) ? reply.devices : []) {
+      for (const device of Array.isArray(devices) ? devices : []) {
         const record = device as Record<string, unknown>
         if (record.deviceId === credential.deviceId) continue
         if (typeof record.deviceId !== 'string' || typeof record.publicKey !== 'string') continue
