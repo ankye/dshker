@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.23 — 2026-09-08
+
+- Remote connections is now two sub-tabs inside the remote route: **连接/Connect**
+  (SSH management, P2P server configuration and login-free **join by networkId**
+  that enrolls the local device without an account) and **网络与账户/Network &
+  account** (login page; once signed in: network management, device pairing, and
+  the registered computers list). A joined-but-signed-out device cannot mesh and
+  is guided to the login form; tabs never auto-switch and no state is faked.
+- Networks carry a **device capacity limit** (default 10). The signed-in owner
+  can raise it to 20 or 30 in the network management panel; joins to a full
+  network are refused with a clear error and never evict bound devices.
+- **Linux support**: macOS, Windows and Linux are all first-class. Peer channels
+  use the same owned Unix socket on Linux as on macOS; the Go peer helper builds
+  for linux x64/arm64; installers are produced as **AppImage and deb** for both
+  Linux architectures, plus the existing macOS DMGs and Windows NSIS installers.
+- This candidate remains an interop-testing prerelease: it is not marked latest
+  and does not enter the stable update feed.
+
 ## 0.1.22 — 2026-09-08
 
 - **P2P interop prerelease.** Add self-hosted peer-to-peer DSH connections so two
