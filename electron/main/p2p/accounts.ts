@@ -22,7 +22,12 @@ export class PeerAccounts {
   constructor(
     private readonly rpc: Pick<PeerRpc, 'call'>,
     /** Required owner cleanup after confirmed authorization removal. */
-    private readonly onNetworkRemoved: (serviceId: string, networkId: string) => Promise<void>
+    private readonly onNetworkRemoved: (serviceId: string, networkId: string) => Promise<void>,
+    /** Optional persistence hook so a restart reuses the server session. */
+    private readonly onSessionPersisted?: (
+      serviceId: string,
+      session: { token: string; expiresAt: number }
+    ) => Promise<void>
   ) {}
 
   close(): void {
@@ -54,7 +59,45 @@ export class PeerAccounts {
       this.#checkExpiry(session)
       if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
       this.#sessions.set(serviceId, session)
+      // Persist so a restart does not ask for the password again.
+      await this.onSessionPersisted?.(serviceId, {
+        token: session.token,
+        expiresAt: session.expiresAt
+      })
       return { ...user }
+    })
+  }
+
+  /** Current session token, for main-side RPCs; never crosses to the renderer. */
+  sessionToken(serviceId: string): string | undefined {
+    return this.#sessions.get(serviceId)?.token
+  }
+
+  hasSession(serviceId: string): boolean {
+    const session = this.#sessions.get(serviceId)
+    return session !== undefined && session.expiresAt * 1000 > Date.now()
+  }
+
+  /**
+   * Adopts a persisted session token after the server confirms it.
+   *
+   * Returns the user on success. Any refusal (expired, revoked) is thrown so
+   * the caller can drop the persisted token; it never fabricates a session.
+   */
+  adoptPersistedSession(
+    serviceId: string,
+    token: string,
+    expiresAt: number,
+    signal: AbortSignal
+  ): Promise<PeerUser> {
+    return this.#operation(serviceId, signal, async () => {
+      const current = peerUser(await this.#call(serviceId, 'user.current', { token }, signal))
+      this.#sessions.set(serviceId, {
+        user: current,
+        token,
+        expiresAt
+      })
+      return { ...current }
     })
   }
 

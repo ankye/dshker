@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { LauncherHarnessService } from '../managed/launcher-harness-service'
 import { PeerAccounts } from './accounts'
 import { PeerCatalog } from './catalog'
@@ -6,7 +7,6 @@ import { PeerCredentialStore } from './credentials'
 import { PeerEnrollment } from './enrollment'
 import { PeerPairing } from './pairing'
 import { PeerRemoteProjects } from './remote-projects'
-import type { PeerComputerRecord } from './catalog-schema'
 import type { PeerRpc } from './rpc'
 import { PeerRuntimeHost } from './runtime-host'
 import { PeerServices, type PeerServiceInput } from './services'
@@ -141,11 +141,11 @@ export class PeerManagement {
   async #readyAsDevice(serviceId: string, signal: AbortSignal): Promise<Session> {
     const session = await this.#ready(signal)
     await session.services.activate(serviceId, this.#signal(signal))
+    await this.#restoreUserSession(serviceId, session, signal)
     if (this.#restored.has(serviceId)) return session
     const saved = await this.#credentials.load(serviceId).catch(() => undefined)
     if (!saved || saved.credential.serviceId !== serviceId)
       throw new PeerHelperError('p2p.device_unregistered')
-    const catalog = await this.#catalog.inspect()
     try {
       exactPeerObject(
         await session.rpc.call(
@@ -161,7 +161,8 @@ export class PeerManagement {
                 certificate: saved.credential.certificate
               },
               privateKey: saved.credential.privateKey,
-              pins: catalog ? restorePins(catalog.record.computers, serviceId) : []
+              // Pins come from live network membership, synced right after restore.
+              pins: []
             }
           },
           this.#signal(signal)
@@ -174,14 +175,163 @@ export class PeerManagement {
         throw error
     }
     this.#restored.add(serviceId)
+    await this.#syncMembers(serviceId, session, saved.credential, this.#signal(signal)).catch(
+      () => undefined
+    )
     return session
   }
 
-  async pairs(serviceId: string, signal: AbortSignal) {
-    return (await this.#readyAsDevice(serviceId, signal)).pairing.list(
-      serviceId,
-      this.#signal(signal)
+  /**
+   * Reuses the persisted login session so a restart does not ask for the
+   * password again. The server stays authoritative: any refusal drops the
+   * persisted token and the user simply signs in again.
+   */
+  async #restoreUserSession(
+    serviceId: string,
+    session: Session,
+    signal: AbortSignal
+  ): Promise<void> {
+    if (session.accounts.hasSession(serviceId)) return
+    const persisted = await this.#credentials.loadUserSession(serviceId).catch(() => undefined)
+    if (!persisted) return
+    try {
+      await session.accounts.adoptPersistedSession(
+        serviceId,
+        persisted.token,
+        persisted.expiresAt,
+        signal
+      )
+    } catch {
+      await this.#credentials.removeUserSession(serviceId).catch(() => undefined)
+    }
+  }
+
+  /**
+   * Trusts network membership instead of per-pair invites: every other device
+   * bound to one of this user's networks is pinned (with its real server-vouched
+   * key) and recorded in the catalog, so the Run tabs and the member list render
+   * it and direct connections are authorized by co-membership on the server.
+   */
+  async #syncMembers(
+    serviceId: string,
+    session: Session,
+    credential: { deviceId: string; userId: string; name: string; publicKey: string },
+    signal: AbortSignal
+  ): Promise<void> {
+    const token = await this.#sessionToken(serviceId, session, signal)
+    const networks = exactPeerObject(
+      await session.rpc.call('networks.list', { serviceId, data: { token } }, signal),
+      ['networks']
     )
+    const list = Array.isArray(networks.networks) ? networks.networks : []
+    const memberByNetwork: { networkId: string; device: Record<string, unknown> }[] = []
+    for (const entry of list) {
+      const networkId = (entry as { networkId?: unknown }).networkId
+      if (typeof networkId !== 'string') continue
+      const reply = exactPeerObject(
+        await session.rpc.call(
+          'networks.devices',
+          { serviceId, data: { token, networkId } },
+          signal
+        ),
+        ['devices']
+      )
+      for (const device of Array.isArray(reply.devices) ? reply.devices : []) {
+        const record = device as Record<string, unknown>
+        if (record.deviceId === credential.deviceId) continue
+        if (typeof record.deviceId !== 'string' || typeof record.publicKey !== 'string') continue
+        memberByNetwork.push({ networkId, device: record })
+      }
+    }
+    // Pin each member individually; pairs.pin is callable at any time.
+    for (const { networkId, device } of memberByNetwork) {
+      await session.rpc.call(
+        'pairs.pin',
+        {
+          serviceId,
+          data: {
+            pair: {
+              pairId: String(device.deviceId),
+              networkId,
+              initiator: credential.deviceId,
+              target: String(device.deviceId),
+              state: 'active',
+              revision: 1,
+              expiresAt: 0
+            },
+            initiator: {
+              deviceId: credential.deviceId,
+              userId: credential.userId,
+              publicKey: credential.publicKey,
+              name: credential.name,
+              presence: 'offline'
+            },
+            target: {
+              deviceId: String(device.deviceId),
+              userId: String(device.userId ?? credential.userId),
+              publicKey: String(device.publicKey),
+              name: String(device.name ?? ''),
+              presence: 'offline'
+            }
+          }
+        },
+        this.#lifetime.signal
+      )
+    }
+    await this.#recordMembers(serviceId, credential, memberByNetwork)
+  }
+
+  async #sessionToken(serviceId: string, session: Session, signal: AbortSignal): Promise<string> {
+    await session.accounts.currentUser(serviceId, signal)
+    const token = session.accounts.sessionToken(serviceId)
+    if (!token) throw new PeerHelperError('p2p.user_login_required')
+    return token
+  }
+
+  /** Persists members as computer records so tabs and lists survive restarts. */
+  async #recordMembers(
+    serviceId: string,
+    credential: { deviceId: string; userId: string; publicKey: string },
+    members: { networkId: string; device: Record<string, unknown> }[]
+  ): Promise<void> {
+    const saved = await this.#catalog.inspect()
+    if (!saved) throw new PeerHelperError('p2p.not_enabled')
+    const computers = saved.record.computers.filter((computer) => computer.serviceId !== serviceId)
+    for (const { networkId, device } of members) {
+      const remoteKey = String(device.publicKey)
+      if (remoteKey === credential.publicKey) continue
+      computers.push({
+        connectionId: String(device.deviceId),
+        serviceId,
+        displayName: String(device.name ?? device.deviceId),
+        pairId: String(device.deviceId),
+        networkId,
+        localDeviceId: credential.deviceId,
+        remoteDeviceId: String(device.deviceId),
+        userId: credential.userId,
+        localPublicKey: credential.publicKey,
+        remotePublicKey: remoteKey,
+        pairRevision: 1,
+        pairState: 'active' as const
+      })
+    }
+    await this.#catalog.commit(saved.revision, { ...saved.record, computers })
+  }
+
+  /**
+   * Lists network members as the pairing surface.
+   *
+   * Trust is network membership: every bound device appears as an active
+   * member offering a direct connection, rather than an invite flow. Read from
+   * the locally synced catalog; no server round-trip.
+   */
+  async pairs(serviceId: string, signal: AbortSignal) {
+    await this.#readyAsDevice(serviceId, signal)
+    const saved = await this.#catalog.inspect()
+    if (!saved) throw new PeerHelperError('p2p.not_enabled')
+    return saved.record.computers
+      .filter((computer) => computer.serviceId === serviceId && computer.pairState === 'active')
+      .map((computer) => memberAsPair(computer))
   }
   async pairIdentity(serviceId: string, pairId: string, signal: AbortSignal) {
     return (await this.#readyAsDevice(serviceId, signal)).pairing.identity(
@@ -334,8 +484,12 @@ export class PeerManagement {
     this.#admit()
     if (this.#session) return this.#session
     const services = new PeerServices(this.#catalog, rpc)
-    const accounts = new PeerAccounts(rpc, (serviceId, networkId) =>
-      this.#removeNetworkAuthority(rpc, serviceId, networkId)
+    const accounts = new PeerAccounts(
+      rpc,
+      (serviceId, networkId) => this.#removeNetworkAuthority(rpc, serviceId, networkId),
+      async (serviceId, session) => {
+        await this.#credentials.saveUserSession(serviceId, session).catch(() => undefined)
+      }
     )
     const enrollment = new PeerEnrollment({
       services,
@@ -437,45 +591,45 @@ export class PeerManagement {
   }
 }
 
-/**
- * Rebuilds helper pins from persisted computer records.
- *
- * The helper keeps pins in memory, so a restart would otherwise silently drop
- * authorization for every established pair. Records carry both device
- * identities; entries for other services or revoked pairs are skipped.
- */
-function restorePins(
-  computers: readonly PeerComputerRecord[],
+/** Formats one network member as an always-active pair view entry. */
+function memberAsPair(computer: {
+  connectionId: string
   serviceId: string
-): readonly unknown[] {
-  const pins: unknown[] = []
-  for (const computer of computers) {
-    if (computer.serviceId !== serviceId || computer.pairState !== 'active') continue
-    pins.push({
-      pair: {
-        pairId: computer.pairId,
-        networkId: computer.networkId,
-        initiator: computer.localDeviceId,
-        target: computer.remoteDeviceId,
-        state: 'active',
-        revision: computer.pairRevision,
-        expiresAt: 0
-      },
-      initiator: {
-        deviceId: computer.localDeviceId,
-        userId: computer.userId,
-        publicKey: computer.localPublicKey,
-        name: computer.displayName,
-        presence: 'offline'
-      },
-      target: {
-        deviceId: computer.remoteDeviceId,
-        userId: computer.userId,
-        publicKey: computer.remotePublicKey,
-        name: computer.displayName,
-        presence: 'offline'
-      }
-    })
+  displayName: string
+  pairId: string
+  networkId: string
+  localDeviceId: string
+  remoteDeviceId: string
+  userId: string
+  localPublicKey: string
+  remotePublicKey: string
+  pairRevision: number
+  pairState: 'active' | 'revoked'
+}) {
+  const fingerprintOf = (base64: string): string => {
+    const digest = createHash('sha256').update(Buffer.from(base64, 'base64')).digest('hex')
+    return (digest.slice(0, 32).match(/.{4}/g) ?? []).join(' ')
   }
-  return pins
+  return {
+    pairId: computer.pairId,
+    networkId: computer.networkId,
+    state: 'active' as const,
+    revision: computer.pairRevision,
+    expiresAt: 0,
+    initiator: {
+      deviceId: computer.localDeviceId,
+      userId: computer.userId,
+      name: computer.displayName,
+      fingerprint: fingerprintOf(computer.localPublicKey),
+      presence: 'offline' as const
+    },
+    target: {
+      deviceId: computer.remoteDeviceId,
+      userId: computer.userId,
+      name: computer.displayName,
+      fingerprint: fingerprintOf(computer.remotePublicKey),
+      presence: 'offline' as const
+    },
+    localIsInitiator: true
+  }
 }

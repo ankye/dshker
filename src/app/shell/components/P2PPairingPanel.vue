@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   p2pConnections as connections,
   p2pManagement as management,
@@ -25,11 +25,7 @@ const uncertain = computed(
 const mismatch = computed(() => operation.value?.error === 'p2p.pair_fingerprint_mismatch')
 /** Writes need a selected network; reads never do. */
 const canWrite = computed(() => !pending.value && !uncertain.value && props.networkId !== undefined)
-const revoking = ref<P2PPairView>()
-const confirmButton = ref<HTMLButtonElement>()
-const reviewHeading = ref<HTMLHeadingElement>()
 const title = ref<HTMLHeadingElement>()
-let invoker: HTMLElement | undefined
 
 const live = computed(() => connections.state)
 
@@ -52,50 +48,6 @@ const stateLabels: Record<P2PPairView['state'], MessageKey> = {
   active: 'p2p.pairing.stateActive',
   revoked: 'p2p.pairing.stateRevoked',
   rejected: 'p2p.pairing.stateRevoked'
-}
-
-/** Approval is only offered while the pair is still pending on this side. */
-function awaitingConfirmation(pair: P2PPairView): boolean {
-  return pair.state === 'invited' || pair.state === 'approved'
-}
-
-function expiry(seconds: number): string {
-  return new Date(seconds * 1000).toLocaleString()
-}
-
-async function review(pair: P2PPairView, event: Event) {
-  invoker = event.currentTarget as HTMLElement
-  await pairing.review(props.serviceId, pair.pairId)
-  await nextTick()
-  reviewHeading.value?.focus()
-}
-
-async function closeReview() {
-  pairing.closeReview(props.serviceId)
-  await nextTick()
-  if (invoker?.isConnected) invoker.focus()
-  else title.value?.focus()
-}
-
-async function askRevoke(pair: P2PPairView, event: Event) {
-  invoker = event.currentTarget as HTMLElement
-  revoking.value = { ...pair }
-  await nextTick()
-  confirmButton.value?.focus()
-}
-
-async function closeRevoke() {
-  revoking.value = undefined
-  await nextTick()
-  if (invoker?.isConnected) invoker.focus()
-  else title.value?.focus()
-}
-
-async function confirmRevoke() {
-  const target = revoking.value
-  if (!target || !canWrite.value) return
-  await pairing.revoke(props.serviceId, target.pairId)
-  await closeRevoke()
 }
 </script>
 
@@ -126,35 +78,8 @@ async function confirmRevoke() {
       {{ t('p2p.connection.helperError') }} <code>{{ live.helperError }}</code>
     </p>
 
-    <!-- Invite creation: the code is a one-time secret, so it gets its own region. -->
-    <div class="p2p-pairing-invite">
-      <button
-        type="button"
-        class="prototype-button"
-        :disabled="!canWrite"
-        data-testid="p2p-create-invite"
-        @click="networkId && pairing.createInvite(serviceId, networkId)"
-      >
-        {{ t('p2p.pairing.createInvite') }}
-      </button>
-      <p v-if="!networkId" class="remote-form-hint">{{ t('p2p.account.selectRequired') }}</p>
-      <div v-if="state.issuedInvite" class="p2p-pairing-code" role="group">
-        <p role="alert">{{ t('p2p.pairing.inviteIssued') }}</p>
-        <dl>
-          <dt>{{ t('p2p.pairing.inviteCode') }}</dt>
-          <dd>
-            <code data-testid="p2p-invite-code">{{ state.issuedInvite.code }}</code>
-          </dd>
-          <dt>{{ t('p2p.pairing.inviteExpires') }}</dt>
-          <dd>{{ expiry(state.issuedInvite.expiresAt) }}</dd>
-        </dl>
-        <button type="button" class="prototype-button" @click="pairing.dismissInvite(serviceId)">
-          {{ t('p2p.pairing.dismissInvite') }}
-        </button>
-      </div>
-    </div>
-
     <form
+      v-if="false"
       class="p2p-pairing-accept"
       data-testid="p2p-accept-invite-form"
       @submit.prevent="networkId && pairing.acceptInvite(serviceId, networkId)"
@@ -271,117 +196,8 @@ async function confirmRevoke() {
             </button>
           </div>
         </div>
-        <div class="p2p-pair-actions">
-          <button
-            v-if="awaitingConfirmation(pair)"
-            type="button"
-            class="prototype-button"
-            :disabled="pending"
-            data-testid="p2p-pair-review"
-            @click="review(pair, $event)"
-          >
-            {{ t('p2p.pairing.review') }}
-          </button>
-          <button
-            v-if="awaitingConfirmation(pair)"
-            type="button"
-            class="prototype-button"
-            :disabled="!canWrite"
-            @click="pairing.reject(serviceId, pair.pairId)"
-          >
-            {{ t('p2p.pairing.reject') }}
-          </button>
-          <button
-            v-if="pair.state === 'active'"
-            type="button"
-            class="prototype-button"
-            :disabled="pending"
-            data-testid="p2p-pair-revoke"
-            @click="askRevoke(pair, $event)"
-          >
-            {{ t('p2p.pairing.revoke') }}
-          </button>
-        </div>
       </li>
     </ul>
-
-    <!-- Fingerprint confirmation: the only path that can authorize a device. -->
-    <div
-      v-if="state.reviewing"
-      class="p2p-pairing-review"
-      role="group"
-      :aria-label="t('p2p.pairing.reviewTitle')"
-      data-testid="p2p-pair-review-pane"
-    >
-      <h4 ref="reviewHeading" tabindex="-1">{{ t('p2p.pairing.reviewTitle') }}</h4>
-      <p>{{ t('p2p.pairing.reviewHint') }}</p>
-      <dl>
-        <dt>{{ t('p2p.pairing.remoteName') }}</dt>
-        <dd>{{ pairing.remoteOf(state.reviewing).name }}</dd>
-        <dt>{{ t('p2p.pairing.remoteFingerprint') }}</dt>
-        <dd>
-          <code data-testid="p2p-remote-fingerprint">{{
-            pairing.remoteOf(state.reviewing).fingerprint
-          }}</code>
-        </dd>
-        <dt>{{ t('p2p.pairing.presenceHint') }}</dt>
-        <dd>
-          {{
-            pairing.remoteOf(state.reviewing).presence === 'online'
-              ? t('p2p.pairing.presenceOnline')
-              : t('p2p.pairing.presenceOffline')
-          }}
-        </dd>
-      </dl>
-      <label>
-        <span>{{ t('p2p.pairing.confirmLabel') }}</span>
-        <input
-          v-model="state.confirmDraft"
-          autocomplete="off"
-          spellcheck="false"
-          data-testid="p2p-confirm-input"
-        />
-      </label>
-      <p class="remote-form-hint">{{ t('p2p.pairing.confirmHint') }}</p>
-      <div class="p2p-pair-actions">
-        <button
-          type="button"
-          class="prototype-button prototype-button--primary"
-          :disabled="!canWrite || !state.confirmDraft"
-          data-testid="p2p-pair-approve"
-          @click="pairing.approve(serviceId)"
-        >
-          {{ t('p2p.pairing.approve') }}
-        </button>
-        <button type="button" class="prototype-button" @click="closeReview()">
-          {{ t('p2p.pairing.closeReview') }}
-        </button>
-      </div>
-    </div>
-
-    <div
-      v-if="revoking"
-      class="p2p-pairing-revoke"
-      role="group"
-      :aria-label="t('p2p.pairing.revoke')"
-      data-testid="p2p-pair-revoke-confirm"
-    >
-      <p role="alert">{{ t('p2p.pairing.revokeWarning') }}</p>
-      <div class="p2p-pair-actions">
-        <button
-          ref="confirmButton"
-          type="button"
-          class="prototype-button prototype-button--primary"
-          :disabled="!canWrite"
-          @click="confirmRevoke()"
-        >
-          {{ t('p2p.pairing.revoke') }}
-        </button>
-        <button type="button" class="prototype-button" @click="closeRevoke()">
-          {{ t('p2p.pairing.closeReview') }}
-        </button>
-      </div>
-    </div>
   </section>
 </template>
 

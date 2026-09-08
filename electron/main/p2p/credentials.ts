@@ -153,6 +153,54 @@ export class PeerCredentialStore {
     })
   }
 
+  /**
+   * Persists the user session token for one service so a restart does not
+   * demand the password again. Encrypted like every other secret; the server
+   * remains authoritative for expiry.
+   */
+  saveUserSession(serviceId: string, session: PeerUserSessionSecret): Promise<void> {
+    return this.#serialize(async () => {
+      const path = await this.#path(serviceId, true)
+      await publishSecret(
+        path + '.session',
+        encryptSecret(session, 'dshker.peer-user-session'),
+        false
+      )
+    })
+  }
+
+  loadUserSession(serviceId: string): Promise<PeerUserSessionSecret | undefined> {
+    return this.#serialize(async () => {
+      const path = await this.#path(serviceId, false)
+      const encoded = await readFile(path + '.session', 'utf8').catch(() => undefined)
+      if (encoded === undefined) return undefined
+      const record = exactPeerObject(parsePeerJson(encoded), ['format', 'version', 'ciphertext'])
+      if (record.format !== 'dshker.peer-user-session' || typeof record.ciphertext !== 'string')
+        return undefined
+      const value = parsePeerJson(
+        safeStorage.decryptString(decodeBase64(record.ciphertext as string))
+      )
+      if (typeof value !== 'object' || value === null) return undefined
+      const secret = value as Record<string, unknown>
+      if (
+        typeof secret.token !== 'string' ||
+        !/^[a-f0-9]{64}$/.test(secret.token) ||
+        !Number.isSafeInteger(secret.expiresAt)
+      )
+        return undefined
+      return { token: secret.token, expiresAt: secret.expiresAt as number }
+    })
+  }
+
+  removeUserSession(serviceId: string): Promise<void> {
+    return this.#serialize(async () => {
+      const path = await this.#path(serviceId, false)
+      await unlink(path + '.session').catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error
+      })
+    })
+  }
+
   async #path(serviceId: string, create: boolean): Promise<string> {
     if (!/^[0-9a-f]{64}$/.test(serviceId)) throw new PeerHelperError('p2p.invalid_service_identity')
     const root = await this.resolveSettingsRoot()
@@ -310,7 +358,10 @@ function encryptCredential(value: PeerCredential): string {
   return encryptSecret(value, 'dshker.peer-credential')
 }
 
-function encryptSecret(value: PeerCredential | PeerPendingEnrollment, format: string): string {
+function encryptSecret(
+  value: PeerCredential | PeerPendingEnrollment | PeerUserSessionSecret,
+  format: string
+): string {
   requireEncryption()
   const ciphertext = safeStorage.encryptString(JSON.stringify(value)).toString('base64')
   return JSON.stringify({ format, version: 1, ciphertext }) + '\n'
@@ -335,4 +386,10 @@ async function publishSecret(path: string, encoded: string, replace: boolean): P
         if (error.code !== 'ENOENT') throw new PeerHelperError('p2p.credential_cleanup_failed')
       })
   }
+}
+
+/** Persisted login session: the token only; never the password. */
+export interface PeerUserSessionSecret {
+  token: string
+  expiresAt: number
 }
