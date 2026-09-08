@@ -273,7 +273,7 @@ function buildChecksumText(artifacts) {
 function targetIdentity(mode) {
   const match = /^dist-(mac|win|linux)-(arm64|x64)$/.exec(mode || '')
   if (!match) return { platform: process.platform, architecture: process.arch }
-  const platform = match[1] === 'mac' ? 'darwin' : match[1]
+  const platform = match[1] === 'mac' ? 'darwin' : match[1] === 'win' ? 'win32' : match[1]
   return { platform, architecture: match[2] }
 }
 
