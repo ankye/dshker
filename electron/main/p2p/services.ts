@@ -141,6 +141,11 @@ export class PeerServices {
     }
   }
 
+  /** Drops the live helper binding once a service is removed from the catalog. */
+  forget(serviceId: string): void {
+    this.#active.delete(serviceId)
+  }
+
   async activate(serviceId: string, signal: AbortSignal): Promise<PeerServiceRecord> {
     assertAccountId(serviceId, 64)
     this.#admit(signal)

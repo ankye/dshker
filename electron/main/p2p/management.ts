@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import type { LauncherHarnessService } from '../managed/launcher-harness-service'
+import { assertAccountId } from './account-records'
 import { PeerAccounts } from './accounts'
 import { PeerCatalog } from './catalog'
 import { PeerConnections } from './connections'
@@ -70,6 +71,42 @@ export class PeerManagement {
   async addService(revision: string, input: PeerServiceInput, signal: AbortSignal) {
     const session = await this.#ready(signal)
     return session.services.add(revision, input, this.#signal(signal))
+  }
+
+  /**
+   * Removes one saved coordinator service and everything bound to it.
+   *
+   * This is a purely local catalog transition: the identity is forgotten (so a
+   * removed server can never be silently re-trusted under the same identity),
+   * the service and every computer record under it are dropped, and the live
+   * session binding is cleared so no in-flight entry point outlives the record.
+   * No helper round-trip is needed, so removing a server never starts or
+   * reconfigures the helper.
+   */
+  async removeService(serviceId: string, signal: AbortSignal) {
+    assertAccountId(serviceId, 64)
+    this.#admit()
+    if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
+    const saved = await this.#catalog.inspect()
+    if (!saved) throw new PeerHelperError('p2p.not_enabled')
+    if (saved.record.forgottenServiceIds.includes(serviceId))
+      throw new PeerHelperError('p2p.trust_restore_rejected')
+    if (!saved.record.services.some((value) => value.serviceId === serviceId))
+      throw new PeerHelperError('p2p.service_not_found')
+    const committed = await this.#catalog.commit(saved.revision, {
+      ...saved.record,
+      services: saved.record.services.filter((value) => value.serviceId !== serviceId),
+      computers: saved.record.computers.filter((value) => value.serviceId !== serviceId),
+      forgottenServiceIds: [...saved.record.forgottenServiceIds, serviceId]
+    })
+    // The service is gone from the catalog: drop its live binding and entry
+    // points so nothing continues speaking as the removed service.
+    if (this.#session) {
+      this.#session.connections.invalidate(serviceId)
+      this.#session.services.forget(serviceId)
+    }
+    this.#restored.delete(serviceId)
+    return committed
   }
 
   login(serviceId: string, username: string, password: string, signal: AbortSignal) {

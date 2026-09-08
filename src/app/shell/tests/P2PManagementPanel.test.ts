@@ -138,4 +138,106 @@ describe('P2P service management public controls (component diagnostics)', () =>
     expect(ui.get('[role="alert"]').text()).toContain('p2p.request_cancelled')
     expect(ui.get('.remote-section-heading button').attributes('disabled')).toBeUndefined()
   })
+
+  it('deletes a configured server only after an explicit inline confirmation', async () => {
+    const service = {
+      serviceId: 'service-a',
+      publicKey: 'public-key',
+      displayName: 'Home',
+      httpsOrigin: 'https://peer.example',
+      wssUrl: 'wss://peer.example/v1/signals',
+      stunAddress: 'peer.example:3478'
+    }
+    const catalog = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, services: [service] }
+    }))
+    const removeService = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, revision: 'r2', services: [], forgottenServiceIds: ['service-a'] }
+    }))
+    const ui = await render({ catalog, removeService })
+    expect(removeService).not.toHaveBeenCalled()
+    await ui.get('[data-testid="p2p-remove-service"]').trigger('click')
+    await flushPromises()
+    const confirm = ui.get('[data-testid="p2p-remove-confirm"]')
+    expect(confirm.text()).toContain('确定删除此服务器')
+    expect(removeService).not.toHaveBeenCalled()
+    await confirm.get('[data-testid="p2p-remove-confirm-action"]').trigger('click')
+    await flushPromises()
+    expect(removeService).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'service-a', version: 1 })
+    )
+    expect(ui.find('[data-testid="p2p-remove-confirm"]').exists()).toBe(false)
+    expect(ui.find('.p2p-services').exists()).toBe(false)
+    expect(removeService).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps the confirmation open with the code when removal is refused', async () => {
+    const service = {
+      serviceId: 'service-a',
+      publicKey: 'public-key',
+      displayName: 'Home',
+      httpsOrigin: 'https://peer.example',
+      wssUrl: 'wss://peer.example/v1/signals',
+      stunAddress: 'peer.example:3478'
+    }
+    const catalog = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, services: [service] }
+    }))
+    const removeService = vi.fn(async () => ({
+      ok: false as const,
+      code: 'p2p.service_not_found' as const,
+      message: 'p2p.service_not_found'
+    }))
+    const ui = await render({ catalog, removeService })
+    await ui.get('[data-testid="p2p-remove-service"]').trigger('click')
+    await flushPromises()
+    await ui.get('[data-testid="p2p-remove-confirm-action"]').trigger('click')
+    await flushPromises()
+    const confirm = ui.get('[data-testid="p2p-remove-confirm"]')
+    expect(confirm.get('[role="alert"]').text()).toContain('p2p.service_not_found')
+    expect(
+      confirm.get('[data-testid="p2p-remove-confirm-action"]').attributes('disabled')
+    ).toBeUndefined()
+    await confirm.get('[data-testid="p2p-remove-cancel"]').trigger('click')
+    await flushPromises()
+    expect(ui.find('[data-testid="p2p-remove-confirm"]').exists()).toBe(false)
+    expect(removeService).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks a blind retry after a lost remove reply until readback resolves it', async () => {
+    const service = {
+      serviceId: 'service-a',
+      publicKey: 'public-key',
+      displayName: 'Home',
+      httpsOrigin: 'https://peer.example',
+      wssUrl: 'wss://peer.example/v1/signals',
+      stunAddress: 'peer.example:3478'
+    }
+    const catalog = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, services: [service] }
+    }))
+    const removeService = vi.fn(async () => {
+      throw new Error('reply lost')
+    })
+    const ui = await render({ catalog, removeService })
+    await ui.get('[data-testid="p2p-remove-service"]').trigger('click')
+    await flushPromises()
+    await ui.get('[data-testid="p2p-remove-confirm-action"]').trigger('click')
+    await flushPromises()
+    const confirm = ui.get('[data-testid="p2p-remove-confirm"]')
+    expect(confirm.get('[role="alert"]').text()).toContain('结果未确认')
+    expect(
+      confirm.get('[data-testid="p2p-remove-confirm-action"]').attributes('disabled')
+    ).toBeDefined()
+    expect(ui.get('.p2p-services strong').text()).toBe('Home')
+    // Readback resolves the uncertainty; the keep action closes the dialog.
+    await confirm.get('[data-testid="p2p-remove-cancel"]').trigger('click')
+    await flushPromises()
+    expect(ui.find('[data-testid="p2p-remove-confirm"]').exists()).toBe(false)
+    expect(removeService).toHaveBeenCalledTimes(1)
+  })
 })

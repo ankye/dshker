@@ -27,6 +27,7 @@ export const P2P_MANAGEMENT_CHANNELS = {
   approvePair: 'dsh-launcher:p2p:approve-pair',
   rejectPair: 'dsh-launcher:p2p:reject-pair',
   revokePair: 'dsh-launcher:p2p:revoke-pair',
+  removeService: 'dsh-launcher:p2p:remove-service',
   connections: 'dsh-launcher:p2p:connections',
   updateServiceConfig: 'dsh-launcher:p2p:update-service-config',
   remoteRoots: 'dsh-launcher:p2p:remote-roots',
@@ -244,6 +245,7 @@ export interface P2PManagementInputs {
   rejectPair: ServiceRequest & { pairId: string }
   revokePair: ServiceRequest & { pairId: string }
   connections: Record<never, never>
+  removeService: ServiceRequest,
   updateServiceConfig: ServiceRequest & {
     revision: string
     displayName: string
@@ -292,6 +294,7 @@ export interface P2PManagementResults {
   /** Live stages plus the last helper-level error, both read-only. */
   connections: { error: string; peers: P2PConnectionView[] }
   /** The whole catalog, because a shared endpoint change affects every peer. */
+  removeService: P2PCatalogView,
   updateServiceConfig: P2PCatalogView
   remoteRoots: P2PRemoteRootView[]
   /** One bounded page plus the true total, so paging never guesses. */

@@ -226,12 +226,14 @@ export const zhCN = {
   'p2p.accountTab.noService': '还没有可管理的服务器。',
   'p2p.accountTab.noServiceDescription':
     '请先在「连接」标签页添加并选择一台协调服务器，再回来登录并管理网络与设备。',
-  'p2p.accountTab.goConnect': '前往「连接」',
+  'p2p.accountTab.loginRegister': '登录并登记设备',
   'p2p.accountTab.meshGate': '本机已登记（加入网络），但尚未登录，因此还不能与其他设备组网。',
   'p2p.accountTab.meshGateDescription': '请登录并选择该网络，之后即可配对与连接设备。',
-  'p2p.accountTab.goLogin': '前往登录',
+  'p2p.accountTab.leaveNetwork': '离开网络',
   'p2p.management.editService': '编辑配置',
   'p2p.management.manageHint': '管理此服务器的用户、网络与设备，请前往「网络与账户」标签页。',
+  'p2p.management.removeService': '删除',
+  'p2p.management.removeConfirm': '确定删除此服务器？',
   'p2p.account.capacity': '组网设备数上限',
   'p2p.account.capacityHint':
     '作为网络创建者登录后，可把上限从 10 提高到 20 或 30；降低上限不会移除已登记设备。',

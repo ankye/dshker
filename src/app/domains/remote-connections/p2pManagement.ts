@@ -141,6 +141,13 @@ export class P2PManagementDomain {
     }
   }
 
+  async removeService(serviceId: string): Promise<void> {
+    const saved = this.catalog.value
+    if (!saved || this.busy(serviceId)) return
+    const result = await this.run('removeService', { serviceId })
+    if (result.ok) this.catalog.value = result.data
+  }
+
   #fail<K extends Operation>(scope: string, requestId: number, code: Failure): P2PDomainResult<K> {
     const current = this.#operations[scope]
     if (current?.requestId === requestId)

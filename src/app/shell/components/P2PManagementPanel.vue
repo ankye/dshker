@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import {
   p2pManagement as domain,
   p2pServiceEditor as editor
@@ -40,6 +40,56 @@ function edit(service: P2PServiceView): void {
   if (!catalog.value) return
   editor.open(service, catalog.value.revision)
 }
+
+/** Service whose removal awaits an explicit inline confirmation. */
+const removing = ref<P2PServiceView>()
+const removeConfirmButton = ref<HTMLButtonElement>()
+let removeInvoker: HTMLElement | undefined
+const removeOperation = computed(() => {
+  const target = removing.value
+  if (!target) return undefined
+  const current = domain.operations[target.serviceId]
+  return current?.method === 'removeService' ? current : undefined
+})
+const removeError = computed(() =>
+  removeOperation.value?.phase === 'failed' ? removeOperation.value.error : undefined
+)
+/** An unknown outcome must block a blind retry until readback resolves it. */
+const removeUncertain = computed(
+  () =>
+    removeError.value === 'unconfirmed' || removeError.value === 'p2p.management_result_unconfirmed'
+)
+async function askRemove(service: P2PServiceView, event: Event): Promise<void> {
+  if (domain.busy(service.serviceId)) return
+  removeInvoker = event.currentTarget as HTMLElement
+  removing.value = { ...service }
+  await nextTick()
+  removeConfirmButton.value?.focus()
+}
+async function closeRemove(): Promise<void> {
+  removing.value = undefined
+  await nextTick()
+  if (removeInvoker?.isConnected) removeInvoker.focus()
+}
+async function confirmRemove(): Promise<void> {
+  const target = removing.value
+  if (!target || domain.busy(target.serviceId) || removeUncertain.value) return
+  await domain.removeService(target.serviceId)
+  // A confirmed removal drops the row (the domain committed the readback); a
+  // refused or unconfirmed one keeps the dialog open with its error so the
+  // user can read back and retry explicitly instead of double-submitting.
+  const current = catalog.value
+  if (current && !current.services.some((service) => service.serviceId === target.serviceId))
+    await closeRemove()
+}
+watch(catalog, (value) => {
+  if (
+    removing.value &&
+    value &&
+    !value.services.some((service) => service.serviceId === removing.value?.serviceId)
+  )
+    void closeRemove()
+})
 </script>
 
 <template>
@@ -118,7 +168,10 @@ function edit(service: P2PServiceView): void {
             <button
               class="prototype-button"
               type="button"
-              :disabled="catalog.forgottenServiceIds.includes(service.serviceId)"
+              :disabled="
+                catalog.forgottenServiceIds.includes(service.serviceId) ||
+                domain.busy(service.serviceId)
+              "
               @click="choose(service)"
             >
               {{ t('p2p.account.manage') }}
@@ -126,10 +179,26 @@ function edit(service: P2PServiceView): void {
             <button
               class="prototype-button"
               type="button"
-              :disabled="catalog.forgottenServiceIds.includes(service.serviceId)"
+              :disabled="
+                catalog.forgottenServiceIds.includes(service.serviceId) ||
+                domain.busy(service.serviceId)
+              "
               @click="edit(service)"
             >
               {{ t('p2p.management.editService') }}
+            </button>
+            <button
+              class="prototype-button prototype-button--danger"
+              type="button"
+              :disabled="
+                catalog.forgottenServiceIds.includes(service.serviceId) ||
+                domain.busy(service.serviceId) ||
+                removing?.serviceId === service.serviceId
+              "
+              data-testid="p2p-remove-service"
+              @click="askRemove(service, $event)"
+            >
+              {{ t('p2p.management.removeService') }}
             </button>
           </div>
           <p v-if="selectedService?.serviceId === service.serviceId" class="remote-form-hint">
@@ -137,6 +206,43 @@ function edit(service: P2PServiceView): void {
           </p>
         </li>
       </ul>
+      <section
+        v-if="removing"
+        class="p2p-remove-confirm"
+        :aria-label="t('p2p.management.removeConfirm')"
+        data-testid="p2p-remove-confirm"
+      >
+        <h3>{{ t('p2p.management.removeConfirm') }}</h3>
+        <p>
+          <strong>{{ removing.displayName }}</strong> ·
+          <code>{{ removing.serviceId }}</code>
+        </p>
+        <div class="p2p-row-actions">
+          <button
+            ref="removeConfirmButton"
+            type="button"
+            class="prototype-button prototype-button--danger"
+            :disabled="domain.busy(removing.serviceId) || removeUncertain"
+            data-testid="p2p-remove-confirm-action"
+            @click="confirmRemove"
+          >
+            {{ t('p2p.management.removeService') }}
+          </button>
+          <button
+            type="button"
+            class="prototype-button"
+            :disabled="domain.busy(removing.serviceId)"
+            data-testid="p2p-remove-cancel"
+            @click="closeRemove"
+          >
+            {{ t('p2p.account.keep') }}
+          </button>
+        </div>
+        <p v-if="removeError" role="alert" class="remote-error">
+          {{ removeUncertain ? t('p2p.management.unconfirmed') : t('p2p.management.failed') }}
+          <code>{{ removeError }}</code>
+        </p>
+      </section>
       <P2PServiceEditorPanel />
       <form @submit.prevent="domain.addService()" data-testid="p2p-service-form">
         <fieldset :disabled="busy" class="p2p-service-fields">
@@ -205,6 +311,12 @@ function edit(service: P2PServiceView): void {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.p2p-remove-confirm {
+  padding: var(--space-3);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
   margin-top: var(--space-2);
 }
 .remote-error code {

@@ -271,15 +271,17 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.accountTab.noService': 'There is no server to manage yet.',
   'p2p.accountTab.noServiceDescription':
     'Add and select a coordinator server in the “Connect” tab first, then log in here to manage networks and devices.',
-  'p2p.accountTab.goConnect': 'Go to “Connect”',
+  'p2p.accountTab.loginRegister': 'Log in and register this device',
   'p2p.accountTab.meshGate':
     'This device enrolled in a network but is not logged in, so it cannot mesh with other devices yet.',
   'p2p.accountTab.meshGateDescription':
     'Log in and select that network to enable pairing and connections.',
-  'p2p.accountTab.goLogin': 'Go to login',
+  'p2p.accountTab.leaveNetwork': 'Leave network',
   'p2p.management.editService': 'Edit configuration',
   'p2p.management.manageHint':
     'To manage this server’s users, networks and devices, open the “Network & account” tab.',
+  'p2p.management.removeService': 'Remove',
+  'p2p.management.removeConfirm': 'Remove this server?',
   'p2p.account.capacity': 'Device capacity limit',
   'p2p.account.capacityHint':
     'As the logged-in network owner you can raise the limit from 10 to 20 or 30. Lowering it never silently removes enrolled devices.',

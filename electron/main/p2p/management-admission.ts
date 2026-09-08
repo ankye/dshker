@@ -32,6 +32,7 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   approvePair: ['serviceId', 'pairId', 'fingerprint'],
   rejectPair: ['serviceId', 'pairId'],
   revokePair: ['serviceId', 'pairId'],
+  removeService: ['serviceId'],
   connections: [],
   connect: ['serviceId', 'pairId'],
   disconnect: ['serviceId', 'pairId'],

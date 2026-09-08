@@ -245,6 +245,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       approvePair: unusedP2P,
       rejectPair: unusedP2P,
       revokePair: unusedP2P,
+      removeService: unusedP2P,
       connections: unusedP2P,
       connect: unusedP2P,
       disconnect: unusedP2P,

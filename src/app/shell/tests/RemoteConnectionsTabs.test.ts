@@ -137,22 +137,27 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     const accountPane = wrapper!.get('[data-testid="remote-pane-account"]')
     expect(accountPane.find('input[autocomplete="username"]').exists()).toBe(true)
     expect(accountPane.find('input[type="password"]').exists()).toBe(true)
+    // Signed out composes the login form and the login-free enrollment panel.
+    expect(wrapper!.find('[data-testid="p2p-login-register-heading"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
     expect(wrapper!.find('[data-testid="remote-pane-connect"]').exists()).toBe(false)
   })
 
-  it('shows a mesh-gate guidance for a joined-but-signed-out device and focuses the login form', async () => {
+  it('shows text-only mesh-gate guidance for a joined-but-signed-out device with the login form inline', async () => {
     const { domain } = await render(signedOutApi(), true, true)
     domain.p2pEnrollment.state(serviceId).registration = registration
     await flushPromises()
     await openAccountTab(wrapper!)
     const gate = wrapper!.get('[data-testid="p2p-account-mesh-gate"]')
     expect(gate.text()).toContain('尚未登录')
-    await wrapper!.get('[data-testid="p2p-mesh-gate-login"]').trigger('click')
-    await flushPromises()
-    expect(document.activeElement?.id).toBe('p2p-login-username-' + serviceId)
+    // The gate never navigates or switches tabs; the login form is right below.
+    expect(gate.find('button').exists()).toBe(false)
+    expect(wrapper!.find('[data-testid="p2p-mesh-gate-login"]').exists()).toBe(false)
+    expect(wrapper!.find('input[autocomplete="username"]').exists()).toBe(true)
   })
 
-  it('offers an explicit path back to Connect when no server is selected', async () => {
+  it('never bounces back to Connect when no server is selected: static message only', async () => {
     const { api: sshApi } = remoteApi()
     window.dshLauncher = {
       remoteConnections: sshApi,
@@ -169,11 +174,13 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     wrapper = mount(component)
     await flushPromises()
     await openAccountTab(wrapper!)
-    expect(wrapper!.find('[data-testid="p2p-account-go-connect"]').exists()).toBe(true)
-    await wrapper!.get('[data-testid="p2p-account-go-connect"]').trigger('click')
-    await flushPromises()
-    expect(wrapper!.find('[data-testid="remote-pane-connect"]').exists()).toBe(true)
-    expect(wrapper!.find('[data-testid="remote-pane-account"]').exists()).toBe(false)
+    const pane = wrapper!.get('[data-testid="remote-pane-account"]')
+    expect(pane.text()).toContain('还没有可管理的服务器')
+    // No jump button exists and no automatic tab switch happens.
+    expect(wrapper!.find('[data-testid="p2p-account-go-connect"]').exists()).toBe(false)
+    expect(pane.find('button').exists()).toBe(false)
+    expect(wrapper!.find('[data-testid="remote-pane-account"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="remote-pane-connect"]').exists()).toBe(false)
   })
 
   it('composes account, network, enrollment and pairing management once logged in', async () => {
@@ -195,7 +202,9 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
       true
     )
     await openAccountTab(wrapper!)
-    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(false)
+    // The login-free enrollment panel is visible even while signed out.
+    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
     const pane = wrapper!.get('[data-testid="remote-pane-account"]')
     await pane.get('input[autocomplete="username"]').setValue('alice')
     await pane.get('input[type="password"]').setValue('secret')

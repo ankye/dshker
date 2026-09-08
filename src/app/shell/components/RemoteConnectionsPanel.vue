@@ -69,7 +69,7 @@ const activeTab = ref<RemoteTab>('connect')
       aria-labelledby="remote-tab-account"
       data-testid="remote-pane-account"
     >
-      <P2PNetworkAccountPanel @navigate-connect="activeTab = 'connect'" />
+      <P2PNetworkAccountPanel />
     </section>
   </div>
 </template>

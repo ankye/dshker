@@ -29,6 +29,7 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
   approvePair: (request) => ipcRenderer.invoke(channels.approvePair, request),
   rejectPair: (request) => ipcRenderer.invoke(channels.rejectPair, request),
   revokePair: (request) => ipcRenderer.invoke(channels.revokePair, request),
+  removeService: (request) => ipcRenderer.invoke(channels.removeService, request),
   connections: (request) => ipcRenderer.invoke(channels.connections, request),
   updateServiceConfig: (request) => ipcRenderer.invoke(channels.updateServiceConfig, request),
   remoteRoots: (request) => ipcRenderer.invoke(channels.remoteRoots, request),

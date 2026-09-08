@@ -166,4 +166,61 @@ describe('P2P management renderer owner', () => {
       expect.objectContaining({ ...service, revision: 'revision', version: 1 })
     )
   })
+
+  it('removes a service and commits the returned catalog on a confirmed result', async () => {
+    const withService: P2PCatalogView = {
+      ...saved,
+      services: [{ ...service, serviceId: 'actual-id', publicKey: 'actual-public-key' }]
+    }
+    const withoutService: P2PCatalogView = {
+      ...saved,
+      revision: 'after-remove',
+      services: [],
+      forgottenServiceIds: ['actual-id']
+    }
+    const removeService = vi.fn(async () => ({ ok: true as const, data: withoutService }))
+    const { domain } = setup({ removeService })
+    domain.catalog.value = withService
+    await domain.removeService('actual-id')
+    expect(removeService).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'actual-id', version: 1 })
+    )
+    expect(domain.catalog.value).toEqual(withoutService)
+  })
+
+  it('keeps the catalog unchanged on a typed refusal and surfaces the code', async () => {
+    const withService: P2PCatalogView = {
+      ...saved,
+      services: [{ ...service, serviceId: 'actual-id', publicKey: 'actual-public-key' }]
+    }
+    const removeService = vi.fn(async () => ({
+      ok: false as const,
+      code: 'p2p.service_not_found' as const,
+      message: 'p2p.service_not_found'
+    }))
+    const { domain } = setup({ removeService })
+    domain.catalog.value = withService
+    await domain.removeService('actual-id')
+    expect(domain.catalog.value).toEqual(withService)
+    expect(domain.operations['actual-id']).toMatchObject({
+      phase: 'failed',
+      error: 'p2p.service_not_found'
+    })
+  })
+
+  it('treats a lost remove reply as unconfirmed and never retries it', async () => {
+    const withService: P2PCatalogView = {
+      ...saved,
+      services: [{ ...service, serviceId: 'actual-id', publicKey: 'actual-public-key' }]
+    }
+    const removeService = vi.fn(async () => {
+      throw new Error('reply lost')
+    })
+    const { domain } = setup({ removeService })
+    domain.catalog.value = withService
+    await domain.removeService('actual-id')
+    expect(domain.operations['actual-id'].error).toBe('unconfirmed')
+    expect(domain.catalog.value).toEqual(withService)
+    expect(removeService).toHaveBeenCalledTimes(1)
+  })
 })

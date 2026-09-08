@@ -151,6 +151,10 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('revokePair', true, async (r, s) =>
     projectPeerCatalog(await owner.revokePair(r.serviceId, r.pairId, s))
   )
+  // Removing a configured server rewrites the whole catalog projection.
+  register('removeService', true, async (r, s) =>
+    projectPeerCatalog(await owner.removeService(r.serviceId, s))
+  )
   register('connections', false, async () => projectPeerConnections(owner.connections()))
   // Starting a connection is a write: it consumes an attempt and a generation.
   register('connect', true, async (r, s) =>

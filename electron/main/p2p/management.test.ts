@@ -203,4 +203,50 @@ describe('formal P2P management composition', () => {
     ).rejects.toMatchObject({ code: 'p2p.helper_unavailable' })
     expect(f.spawn).toHaveBeenCalledTimes(1)
   })
+
+  describe('removing a configured service', () => {
+    it('forgets the identity, drops its computers and commits once without starting the helper', async () => {
+      const f = fixture()
+      const result = await f.owner.removeService(serviceId, new AbortController().signal)
+      expect(result.record.services).toHaveLength(0)
+      expect(result.record.computers).toHaveLength(0)
+      expect(result.record.forgottenServiceIds).toEqual([serviceId])
+      expect(f.commit).toHaveBeenCalledTimes(1)
+      // Purely local: no helper process or RPC traffic.
+      expect(f.spawn).not.toHaveBeenCalled()
+      expect(f.call).not.toHaveBeenCalled()
+      expect(f.runtimeStart).not.toHaveBeenCalled()
+      // The catalog readback is exactly what a later projection would show.
+      expect(f.record().services).toHaveLength(0)
+    })
+
+    it('never re-trusts an identity that was already forgotten', async () => {
+      const f = fixture()
+      await f.owner.removeService(serviceId, new AbortController().signal)
+      await expect(
+        f.owner.removeService(serviceId, new AbortController().signal)
+      ).rejects.toMatchObject({ code: 'p2p.trust_restore_rejected' })
+      expect(f.commit).toHaveBeenCalledTimes(1)
+    })
+
+    it('refuses to remove an unknown service without touching the catalog', async () => {
+      const f = fixture()
+      await expect(
+        f.owner.removeService('b'.repeat(64), new AbortController().signal)
+      ).rejects.toMatchObject({ code: 'p2p.service_not_found' })
+      expect(f.commit).not.toHaveBeenCalled()
+      expect(f.record().services).toHaveLength(1)
+    })
+
+    it('surfaces a failed catalog write and keeps the removed service intact', async () => {
+      const f = fixture()
+      f.commit.mockRejectedValueOnce(new PeerHelperError('p2p.catalog_write_failed'))
+      await expect(
+        f.owner.removeService(serviceId, new AbortController().signal)
+      ).rejects.toMatchObject({ code: 'p2p.catalog_write_failed' })
+      expect(f.record().services).toHaveLength(1)
+      expect(f.record().computers).toHaveLength(2)
+      expect(f.record().forgottenServiceIds).toHaveLength(0)
+    })
+  })
 })
