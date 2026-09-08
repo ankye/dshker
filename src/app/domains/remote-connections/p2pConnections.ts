@@ -26,7 +26,27 @@ export class P2PConnectionsDomain {
     helperError: '',
     resultUnconfirmed: false
   })
+  #polling: ReturnType<typeof setTimeout> | undefined
   constructor(private readonly management: P2PManagementDomain) {}
+
+  /**
+   * Keeps stages current while an attempt is in flight.
+   *
+   * Stages advance asynchronously in the helper; without a follow-up read the
+   * UI would keep showing the first stage until the user clicks something.
+   * Polling stops as soon as no peer is negotiating.
+   */
+  #scheduleFollowUp(): void {
+    if (this.#polling !== undefined) return
+    this.#polling = setTimeout(() => {
+      this.#polling = undefined
+      const inFlight = (this.#state.peers ?? []).some(
+        (peer) => peer.stage === 'punching' || peer.stage === 'starting-runtime'
+      )
+      if (!inFlight) return
+      void this.read().then(() => this.#scheduleFollowUp())
+    }, 2000)
+  }
 
   get state(): P2PConnectionsState {
     return this.#state
@@ -39,6 +59,7 @@ export class P2PConnectionsDomain {
       this.#state.peers = result.data.peers
       this.#state.helperError = result.data.error
       this.#state.resultUnconfirmed = false
+      this.#scheduleFollowUp()
     }
   }
 

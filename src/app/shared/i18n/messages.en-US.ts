@@ -169,10 +169,11 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.pairing.accept': 'Submit invite code',
   'p2p.pairing.acceptHint':
     'After submitting, the other side still has to approve and confirm the fingerprint before the pair becomes usable.',
+  'p2p.member.state': 'Network member',
   'p2p.pairing.state': 'Pair state',
   'p2p.pairing.statePendingTarget': 'Waiting for the other side to approve',
   'p2p.pairing.statePendingInitiator': 'Waiting for you to confirm the fingerprint and approve',
-  'p2p.pairing.stateActive': 'Pair is valid (not necessarily connected)',
+  'p2p.pairing.stateActive': 'Member is valid (not necessarily connected)',
   'p2p.pairing.stateRevoked': 'Revoked',
   'p2p.pairing.presenceOnline': 'Server reports online',
   'p2p.pairing.presenceOffline': 'Server reports offline',

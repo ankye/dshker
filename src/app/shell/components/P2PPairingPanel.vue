@@ -30,6 +30,7 @@ const title = ref<HTMLHeadingElement>()
 const live = computed(() => connections.state)
 
 onMounted(() => {
+  // Reads are safe and cheap: load automatically instead of demanding a click.
   void pairing.read(props.serviceId)
   void connections.read()
 })
@@ -106,8 +107,15 @@ const stateLabels: Record<P2PPairView['state'], MessageKey> = {
     <p v-else-if="state.pairs.length === 0">{{ t('p2p.pairing.empty') }}</p>
     <ul v-else class="p2p-pairs">
       <li v-for="pair in state.pairs" :key="pair.pairId" :data-state="pair.state">
+        <!-- Identity first: which computer this row is. -->
+        <h4 class="p2p-member-name" data-testid="p2p-member-name">
+          {{ pairing.remoteOf(pair).name || pairing.remoteOf(pair).deviceId }}
+        </h4>
+        <p class="p2p-member-id">
+          <code>{{ pairing.remoteOf(pair).deviceId }}</code>
+        </p>
         <dl>
-          <dt>{{ t('p2p.pairing.state') }}</dt>
+          <dt>{{ t('p2p.member.state') }}</dt>
           <!-- State is carried by text, never by colour alone. -->
           <dd data-testid="p2p-pair-state">{{ t(stateLabels[pair.state]) }}</dd>
         </dl>
@@ -237,6 +245,19 @@ const stateLabels: Record<P2PPairView['state'], MessageKey> = {
   padding: var(--space-3);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
+}
+.p2p-member-name {
+  margin: 0;
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-semibold);
+}
+.p2p-member-id {
+  margin: 0;
+}
+.p2p-member-id code {
+  font-size: var(--type-caption);
+  color: var(--color-text-muted);
+  overflow-wrap: anywhere;
 }
 .p2p-pairing dl {
   display: grid;
