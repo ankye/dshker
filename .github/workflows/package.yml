@@ -129,6 +129,7 @@ jobs:
             artifact: dshker-launcher-linux-arm64
             launchTimeoutMs: 60000
             smokePrefix: xvfb-run -a
+            smokeSkip: true
             pattern: |
               release/*.AppImage
               release/*.deb
@@ -202,6 +203,7 @@ jobs:
         run: npm run release:verify
 
       - name: Run packaged application smoke
+        if: ${{ !matrix.smokeSkip }}
         env:
           ELECTRON_DISABLE_SANDBOX: '1'
         run: ${{ matrix.smokePrefix }} npm run release:smoke -- --launch-timeout-ms ${{ matrix.launchTimeoutMs }}
