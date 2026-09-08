@@ -23,14 +23,34 @@ The Launcher SHALL 提供显式 P2P 服务配置和设备登记，使用已登�
 - **WHEN** 用户升级而未启用 P2P
 - **THEN** Local 和原 SSH 记录继续按原合约工作，不触发登记、配对或网络变更
 
-### Requirement: Remote tab exposes complete management workflows
+### Requirement: Remote tab exposes two management sub-tabs gated by login
 
-The Launcher SHALL 在左侧远程连接 Tab 提供协调服务器配置/检查/编辑、用户登录/登出、自己的网络创建/改名/删除、设备绑定/解绑、本机登记、配对申请处理和已登记电脑列表。电脑列表 SHALL 按 SSH/P2P 模式提供明确的新增、测试、连接/取消/断开、编辑、打开固定标签、撤销配对及移除操作，并显示适用条件和实际操作状态，不能要求用户手工编辑配置文件完成这些流程。网络必须显式选择，SHALL NOT 猜测默认网络或把用户会话作为设备身份。
+The Launcher SHALL 在左侧远程连接 Tab 内部提供两个子 Tab，按“是否需要登录”划分边界：
 
-#### Scenario: Manage a private network in the remote tab
+- **Tab 1「连接」（默认，免登录）** SHALL 承载 SSH 主机管理（新增/测试/连接/断开/编辑/移除/固定标签）、P2P 协调服务器配置（服务端点列表 + 添加/编辑 https/wss/stun 并校验身份）以及**加入网络**：输入 networkId 后自动登记本机设备（本机设备身份已在启动时生成），无需登录。
+- **Tab 2「网络与账户」（需登录）** SHALL 在未登录时显示登录页（用户名 + 密码，密码提交即清空）；登录后显示当前用户与登出、网络管理（创建/改名/删除/选择/**组网设备数上限**）、本机登记、设备配对处理（成员列表 / 批准 / 指纹确认 / 撤销）和已登记电脑列表。
 
-- **WHEN** 用户登录独立服务器并创建、选择或修改自己的网络
-- **THEN** 显示服务端返回的实际网络身份和操作结果，绑定与配对限定该网络，不显示其他用户资源；用户会话秘密不进入普通 renderer 状态
+电脑列表 SHALL 按 SSH/P2P 模式提供明确的新增、测试、连接/取消/断开、编辑、打开固定标签、撤销配对及移除操作，并显示适用条件和实际操作状态，不能要求用户手工编辑配置文件完成这些流程。网络必须显式选择，SHALL NOT 猜测默认网络或把用户会话作为设备身份。跨子 Tab 依赖 SHALL 以引导态处理：Tab 1 中需要登录/已选网络才能进行的操作（登记后的组网）显示“请先在「网络与账户」登录并选择网络”并带跳转入口，不自动切 Tab、不要求重复输入。
+
+#### Scenario: Join a network from the connection tab without login
+
+- **WHEN** 用户在 Tab 1「连接」输入有效 networkId，本机设备身份已生成，网络未达设备数上限
+- **THEN** 本机设备自动登记加入该网络，显示已登记状态；无需登录即可完成本步骤，设备处于已登记但未组网状态
+
+#### Scenario: Group devices after login grants authorization
+
+- **WHEN** 设备已登记后，用户在 Tab 2「网络与账户」登录并获得该网络授权，随后批准配对/确认指纹
+- **THEN** 双方完成组网并可建立 DSH 连接；未登录/未获授权时只能登记，不能组网或连接
+
+#### Scenario: Manage a private network after login
+
+- **WHEN** 用户登录独立服务器并创建、选择或修改自己的网络，包括设置或调整组网设备数上限
+- **THEN** 显示服务端返回的实际网络身份和操作结果，绑定与配对限定该网络，不显示其他用户资源；上限持久化并读回一致；用户会话秘密不进入普通 renderer 状态
+
+#### Scenario: Join a network that has reached its capacity
+
+- **WHEN** 用户在 Tab 1 输入 networkId 登记，但该网络已登记设备数等于其组网设备数上限
+- **THEN** 登记被拒绝并返回明确“网络已满”错误，设备不加入网络；网络创建者登录后可在 Tab 2 提高上限（10 → 20/30）后重新加入
 
 #### Scenario: Remove network authorization
 
@@ -235,7 +255,7 @@ The Run page SHALL 保留一个不可关闭的 Local 标签和每个已登记远
 
 ### Requirement: Named IPC confines network and secret authority
 
-管理入口 v1 SHALL 分别命名为 enable、catalog、addService、login、currentUser、logout、networks、createNetwork、renameNetwork、deleteNetwork、registration、registerDevice、submitEnrollment、recoverEnrollment 和 cancel。每次请求携带 version=1 与当前顶层页面内严格递增的正整数 requestId；cancel 指向同页面的原 requestId，不能取消其他窗口。每页最多 16 个进行中请求，页面退役时终止等待，不自动重试。写操作已接受后取消/超时 SHALL 报告结果未确认并要求读回，不承诺回滚。目录 projection 不包含证书、密文或运行地址；登记 projection 仅含公开身份与 revision。密码只允许 login，登记凭证由 main 账户工作流取得，不作为通用 renderer 参数。
+管理入口 v1 SHALL 分别命名为 enable、catalog、addService、login、currentUser、logout、networks、createNetwork、renameNetwork、deleteNetwork、registration、registerDevice、submitEnrollment、recoverEnrollment 和 cancel。每次请求携带 version=1 与当前顶层页面内严格递增的正整数 requestId；cancel 指向同页面的原 requestId，不能取消其他窗口。每页最多 16 个进行中请求，页面退役时终止等待，不自动重试。写操作已接受后取消/超时 SHALL 报告结果未确认并要求读回，不承诺回滚。目录 projection 不包含证书、密文或运行地址；登记 projection 仅含公开身份与 revision。密码只允许 login。registerDevice 由 renderer 提交 networkId 与本机公钥持有证明、在未登录状态下完成登记（免登录加入），登记凭证不作为通用 renderer 参数；登录仅约束需要授权的组网/配对/网络管理操作。
 
 #### Scenario: Cancel an owned management request
 

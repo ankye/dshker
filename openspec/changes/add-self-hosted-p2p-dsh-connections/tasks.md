@@ -325,3 +325,12 @@ Go race 在工具链支持的真实平台运行；不支持的架构需明确记
 
 - [x] 9.1 实现独立客户端插件的版本化导航、真实 public service 适配、身份读回、取消/并发和测试，并针对显式选定 Harness 构建。Owner: Launcher extension；依赖: 1.4 的源码审计；验证: `Navigate through the supported client extension`、`Cancel a pending client navigation`、`Selection readback does not match the requested project`，拒绝错误路径/会话、过期序号、迟到结果；类型引用来自实际 Harness，生产 bundle 不含测试或未解析依赖；真实 DSH 客户端运行读回后方可完成。
 - [ ] 9.2 实现安全 guest preload/main 准入、插件安装/版本检查与远端工程操作接入。Owner: Electron/runtime + renderer；依赖: 9.1、4.5–4.7；验证: `Reject an incompatible or foreign navigation channel`，假 sender/subframe/错误 guest、attempt/runtime 变化、销毁/超时/重复回执拒绝；只加载固定资源路径，原任意 preload 拒绝策略不削弱；Local/SSH 回归及真实双 peer UI 完成，纳入 5.10/7.8 发布前置。
+
+## 10. 边界修订：登记免登录 + 组网数上限 + 双子 Tab 远程连接（2026-09-08）
+
+用户确认的最终边界：本机设备身份在启动时已生成；加入网络（登记）凭 networkId 免登录完成；登录与授权确认仅在“组网”（建立设备间 DSH 连接）前要求；网络创建/管理需登录；单个 network 设置组网设备数上限，默认 10、可由网络创建者提高到 20/30。对应 spec 已更新：`self-hosted-peer-coordination/spec.md` 的登记 requirement 与新增 “Network device capacity is bounded”；`direct-peer-dsh-sessions/spec.md` 的远程连接 Tab 拆为 Tab 1「连接」（免登录）+ Tab 2「网络与账户」（登录）。以下任务在相应既有任务通过前不提前勾选；涉及 `ankye/dshker-server` 的服务器契约由该仓库的 `add-dshker-user-networks` 承接。
+
+- [ ] 10.1 将 registerDevice 契约改为凭 networkId 免登录登记：renderer 提交 networkId + 本机公钥持有证明即登记，移除“已登录用户申请凭证”的前置；保留设备私钥本机生成、结果原子持久化/读回、凭证原子消费与防重放；未提供 networkId 或超限返回明确错误。Owner: client p2p + server；依赖: 5.2、6.2；验证: 未登录状态下凭 networkId 完成登记并读回一致，无登录/选网络的设备正常加入；跨仓 server 契约同步更新。
+- [ ] 10.2 为 network 增加组网设备数上限：创建网络时可设置（默认 10），已登录拥有者可编辑提高到 20/30；登记/加入时校验上限，超限返回“网络已满”并拒绝，降低上限不静默踢出已登记设备。Owner: client p2p + server；依赖: 5.3、6.2、10.1；验证: 上限持久化读回一致，满员拒绝/提高后可加入的场景在真实客户端+服务器通过。
+- [ ] 10.3 将远程连接 Tab 拆为两个子 Tab：Tab 1「连接」（免登录：SSH 管理 + 服务器配置 + 输入 networkId 加入网络）；Tab 2「网络与账户」（未登录显示登录页，登录后显示用户/网络管理含设备数上限/登记/设备配对/已登记电脑列表）。跨子 Tab 依赖以引导态+跳转处理，不自动切 Tab、不重复输入。Owner: renderer remote-connections + shell；依赖: 5.2、5.3、5.4、10.1、10.2；验证: 窄/常规窗口全流程、未登录/已登录/空态/错误/超限态逐项可操作，中英文文案 typed locale，真实 macOS/Windows 验收。
+

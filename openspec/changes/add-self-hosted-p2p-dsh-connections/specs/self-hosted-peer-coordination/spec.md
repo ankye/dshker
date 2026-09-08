@@ -20,17 +20,41 @@ The system SHALL 通过独立 `ankye/dshker-server` 仓库提供 Go 服务端，
 
 ### Requirement: Device enrollment proves local identity ownership
 
-The system SHALL 使用限定 userId/networkId、一次性且 5 分钟有效的登记凭证和客户端私钥持有证明登记设备，为该设备颁发后续认证所需的身份凭据。凭证 SHALL 由已登录用户针对自己的有效网络申请，不能代替用户登录或设备 mTLS。设备私钥 SHALL 在本机生成且不上传；登记凭证 SHALL 被原子消费，持久记录中仅保留其不可逆摘要。
+The system SHALL 允许设备凭有效的 networkId 免登录加入网络并登记本机设备身份，把该设备纳入网络的设备目录。登记 SHALL NOT 要求登录：本机设备身份在客户端启动时即已生成，凭 networkId 提交本机公钥持有证明即可登记；登录与授权确认 SHALL 仅在“组网”（建立设备间 DSH 连接）之前要求，不能代替设备 mTLS。设备私钥/证书/密文 SHALL 仅留本机、不上传、不进入 renderer；登记结果 SHALL 原子持久化且可按原设备身份读回，凭证/凭据 SHALL 被原子消费，持久记录中仅保留其不可逆摘要。加入网络 SHALL 受该网络的组网设备数上限约束（见 “Network device capacity is bounded”）。
 
 #### Scenario: Enroll a new device
 
-- **WHEN** 客户端提交有效登记凭证与公钥持有证明
-- **THEN** 服务生成一个稳定 deviceId 并绑定该公钥，后续请求要求匹配的设备认证
+- **WHEN** 客户端在未登录状态下凭有效 networkId 提交本机公钥持有证明
+- **THEN** 服务把该设备登记到该网络，生成稳定 deviceId 并绑定该公钥，设备处于已登记但未组网状态；后续请求要求匹配的设备认证
+
+#### Scenario: Enroll without a network id or over the capacity limit
+
+- **WHEN** 客户端未提供有效 networkId、或该网络已达到组网设备数上限
+- **THEN** 登记被拒绝并返回明确错误（缺网络 id / 网络已满），不创建部分登记或可用设备会话
 
 #### Scenario: Reuse or forge enrollment
 
-- **WHEN** 凭证过期、已消费、无效，或请求未证明所提交公钥的私钥持有权
-- **THEN** 登记被拒绝且不存在部分登记或可用设备会话
+- **WHEN** 登记结果已消费、请求重复，或请求未证明所提交公钥的私钥持有权
+- **THEN** 登记被拒绝且不存在部分登记或可用设备会话，不生成第二个设备身份，不公开其他登记信息
+
+### Requirement: Network device capacity is bounded
+
+The system SHALL 为每个 network 维护组网设备数上限，限制可加入该网络的已登记设备数量。默认上限 SHALL 为 10，服务端 SHALL 允许由网络创建者（已登录、拥有该网络）在客户端编辑时把上限提高到 20 或 30。已达上限的网络 SHALL 拒绝新设备登记并返回明确错误；降低上限 SHALL NOT 静默踢出已登记设备，只能拒绝新增。上限字段 SHALL 属于网络的持久配置，创建网络时确定、编辑网络时读回一致。
+
+#### Scenario: Join a network within the capacity limit
+
+- **WHEN** 客户端凭有效 networkId 登记，且该网络已登记设备数低于上限
+- **THEN** 设备被登记并纳入网络设备目录，计数 +1
+
+#### Scenario: Join a network at the capacity limit
+
+- **WHEN** 客户端凭有效 networkId 登记，且该网络已登记设备数等于上限
+- **THEN** 登记被拒绝并返回明确的“网络已满”错误，不创建部分登记，不替换或移除既有设备
+
+#### Scenario: Raise the capacity limit
+
+- **WHEN** 网络创建者（已登录且拥有该网络）在客户端编辑网络，把上限从 10 提高到 20 或 30 并保存
+- **THEN** 新上限持久化并读回一致，此前因满员被拒的设备可重新登记
 
 ### Requirement: Pairing and device visibility require explicit authorization
 
