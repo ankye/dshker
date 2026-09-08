@@ -210,6 +210,15 @@ The Launcher SHALL 只为获授权 peer 的当前 DSH 提供本地 loopback 浏�
 - **WHEN** 输入超出帧/stream/排队预算，或要求访问非当前 DSH authority
 - **THEN** 适用流或连接被明确拒绝并释放资源，不无限缓冲或扩展转发权限
 
+### Requirement: Connection supervision with exponential-backoff reconnection
+
+The Launcher SHALL 在客户端启动后自动连接已配置的协调服务器，获取本机设备在该服务器的登记状态与网络 membership，并按照服务器返回的真实状态驱动 UI 显示（等待审核 / online / offline / 离开）。Launcher SHALL 定时检测与服务器的连接健康状态（通过 /health/https 或等效心跳），检测间隔 SHALL 动态调整：
+
+- 连接正常时按固定间隔（>= 30 秒）检测；
+- 检测失败后立即启动指数退避重连，初始间隔 1 秒，每次倍增，上限 60 秒，重连成功后退回正常间隔；
+- 重连期间 SHALL 保持 UI 状态为断线前最后一次已知状态（不凭空变绿或变红），重连成功后重新从服务器获取权威状态并更新 UI；
+- 应用退出或用户主动断开时 SHALL 停止检测与重连，不残留定时器。
+
 ### Requirement: Connection and test states prove application readiness
 
 The Launcher SHALL 分别显示设备 presence、连接状态和 testStatus。绿色 ready SHALL 要求直连、身份、版本、DSH 认证 HTTP 和实际 WebSocket 检查通过；失败 SHALL 显示红色与阶段化 typed 错误，协商中使用非成功颜色且有文本。
