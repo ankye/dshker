@@ -219,6 +219,26 @@ The Launcher SHALL 在客户端启动后自动连接已配置的协调服务器�
 - 重连期间 SHALL 保持 UI 状态为断线前最后一次已知状态（不凭空变绿或变红），重连成功后重新从服务器获取权威状态并更新 UI；
 - 应用退出或用户主动断开时 SHALL 停止检测与重连，不残留定时器。
 
+#### Scenario: Fetch membership state on startup
+
+- **WHEN** 客户端启动且已配置协调服务器，本机设备曾加入网络
+- **THEN** 客户端连接服务器并按其权威回复显示登记状态（等待审核/online/offline/离开），不依据本地缓存臆造状态
+
+#### Scenario: Healthy connection is polled periodically
+
+- **WHEN** 与服务器连接正常
+- **THEN** 按固定间隔（>= 30 秒）执行健康检测，状态保持服务器最近一次权威值
+
+#### Scenario: Connection drops and recovers with backoff
+
+- **WHEN** 健康检测失败或连接中断
+- **THEN** 以指数退避重连（1 秒起、每次倍增、上限 60 秒），重连期间 UI 保持断线前最后一次已知状态；重连成功后重新获取服务器权威状态刷新，并回落到正常检测间隔
+
+#### Scenario: Shutdown or explicit disconnect stops supervision
+
+- **WHEN** 应用退出或用户主动断开
+- **THEN** 停止健康检测与重连定时器，不残留后台任务
+
 ### Requirement: Connection and test states prove application readiness
 
 The Launcher SHALL 分别显示设备 presence、连接状态和 testStatus。绿色 ready SHALL 要求直连、身份、版本、DSH 认证 HTTP 和实际 WebSocket 检查通过；失败 SHALL 显示红色与阶段化 typed 错误，协商中使用非成功颜色且有文本。
