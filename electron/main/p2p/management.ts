@@ -141,7 +141,7 @@ export class PeerManagement {
   async #readyAsDevice(serviceId: string, signal: AbortSignal): Promise<Session> {
     const session = await this.#ready(signal)
     await session.services.activate(serviceId, this.#signal(signal))
-    await this.#restoreUserSession(serviceId, session, signal)
+    await this.#restoreUserSession(serviceId, session, this.#signal(signal)).catch(() => undefined)
     if (this.#restored.has(serviceId)) return session
     const saved = await this.#credentials.load(serviceId).catch(() => undefined)
     if (!saved || saved.credential.serviceId !== serviceId)
@@ -517,6 +517,9 @@ export class PeerManagement {
     const session = await this.#ready(signal)
     const active = this.#signal(signal)
     await session.services.activate(serviceId, active)
+    // The first account operation after a restart adopts the persisted login,
+    // so opening the panel does not demand the password again.
+    await this.#restoreUserSession(serviceId, session, active).catch(() => undefined)
     this.#admit()
     return operation(session.accounts, active)
   }
