@@ -1,9 +1,12 @@
 package runtimebridge
 
 import (
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"testing"
 )
 
@@ -110,14 +113,16 @@ func TestRefusesTraversalOutsideRoot(t *testing.T) {
 }
 
 func TestRefusesSymlinkEscapingRoot(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink creation needs elevation on Windows")
-	}
 	root := authorizedRoot(t)
 	outside := t.TempDir()
 	link := filepath.Join(root.Path, "escape")
-	if err := os.Symlink(outside, link); err != nil {
-		t.Fatalf("symlink: %v", err)
+	linkDirectory(t, outside, link)
+	resolved, err := resolvePath(link)
+	if err != nil {
+		t.Fatalf("resolve symlink: %v", err)
+	}
+	if runtime.GOOS == "windows" && resolved == link {
+		t.Fatalf("junction was not resolved: %s", link)
 	}
 	ref := encodeRef(root.RootID, link)
 	_, _, code := listDirectory(directoryRequest{Version: 1, RootID: root.RootID, Ref: ref}, []Root{root})
@@ -127,17 +132,30 @@ func TestRefusesSymlinkEscapingRoot(t *testing.T) {
 }
 
 func TestAllowsSymlinkStayingInsideRoot(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("symlink creation needs elevation on Windows")
-	}
 	root := authorizedRoot(t)
 	link := filepath.Join(root.Path, "inside")
-	if err := os.Symlink(filepath.Join(root.Path, "beta"), link); err != nil {
-		t.Fatalf("symlink: %v", err)
-	}
+	linkDirectory(t, filepath.Join(root.Path, "beta"), link)
 	ref := encodeRef(root.RootID, link)
 	if _, _, code := listDirectory(directoryRequest{Version: 1, RootID: root.RootID, Ref: ref}, []Root{root}); code != "" {
 		t.Fatalf("in-root symlink was refused: %q", code)
+	}
+}
+
+// linkDirectory uses a junction when Windows blocks ordinary symlink creation.
+// Junctions exercise the same containment boundary without requiring Developer
+// Mode or elevation.
+func linkDirectory(t *testing.T, target, link string) {
+	t.Helper()
+	if err := os.Symlink(target, link); err == nil {
+		return
+	} else if runtime.GOOS != "windows" ||
+		(!errors.Is(err, syscall.EPERM) &&
+			!errors.Is(err, syscall.EACCES) &&
+			!errors.Is(err, syscall.ERROR_PRIVILEGE_NOT_HELD)) {
+		t.Fatalf("symlink: %v", err)
+	}
+	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
+		t.Fatalf("junction: %v (%s)", err, output)
 	}
 }
 

@@ -420,6 +420,7 @@ real DSH/session wiring in Electron are not complete. A complete committed test-
 manifest, production-composition E2E, real DSH soak/stress and package gates are
 still missing. No completion checkbox or release readiness is inferred from
 these module results. No release was published by this implementation step.
+
 ## Versioned management IPC and frozen preload continuation
 
 ### Renderer management continuation
@@ -447,3 +448,21 @@ these module results. No release was published by this implementation step.
 - New tests use test-only owners/Electron boundaries; sender admission exercises the production policy, and the preload test imports the actual production preload. These remain contract/regression diagnostics, not two-App/UI/server acceptance.
 - Full Go race suite completed successfully: integration 195.448 seconds, including actual server network deletion and direct-gateway invalidation. Final app full regression passed 113 files / 775 tests (including 46 new management IPC/lifecycle/projection/preload tests); type and Electron build passed, and the changed-code size gate measured 82 files with no failures. Tests use the canonical macOS TMPDIR to preserve filesystem path identity, without changing assertions.
 - Still missing: renderer domain and complete management UI, pairing/connection/browser/project composition, full interactive manifest/ledger, two-App production E2E, one-hour stress and final package/platform gates. No release or completion claim.
+
+### Windows compatibility continuation
+
+Windows cannot always create ordinary directory symlinks without Developer
+Mode or elevation, so the catalog and runtimebridge security tests fall back to
+junctions while retaining the same containment assertions. The runtimebridge
+now resolves Windows reparse points through the kernel final-handle path before
+checking root containment; the non-Windows path keeps EvalSymlinks. Catalog
+replacement also preserves the old record while swapping files on Windows,
+where rename cannot overwrite an existing destination.
+
+The rebuilt win32-x64 helper passed its checksum preflight. Full application
+regression passed 1000 tests with two unrelated environment skips; the focused
+P2P subset passed 384 tests. Runtimebridge, peersession and helper race tests,
+type-check, architecture, formatting, builds and strict OpenSpec validation
+passed. A live Electron development window mounted the P2P management panel;
+the Windows host still needs a reachable WSS/STUN coordinator and a second
+physical computer for end-to-end pairing acceptance.

@@ -130,7 +130,7 @@ async function publish(path: string, text: string, replace: boolean): Promise<vo
     await file.writeFile(text)
     await file.sync()
     await file.close()
-    if (replace) await rename(temporary, path)
+    if (replace) await replaceFile(temporary, path)
     else {
       await link(temporary, path)
       await unlink(temporary)
@@ -140,4 +140,26 @@ async function publish(path: string, text: string, replace: boolean): Promise<vo
     if (await exists(temporary)) await unlink(temporary)
     throw new PeerHelperError('p2p.catalog_write_failed')
   }
+}
+
+/** Node's rename cannot replace an existing file on Windows; preserve the old record while swapping. */
+async function replaceFile(temporary: string, target: string): Promise<void> {
+  try {
+    await rename(temporary, target)
+    return
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (process.platform !== 'win32' || !['EACCES', 'EEXIST', 'EPERM'].includes(code ?? ''))
+      throw error
+  }
+
+  const backup = `${target}.${randomBytes(16).toString('hex')}.bak`
+  await rename(target, backup)
+  try {
+    await rename(temporary, target)
+  } catch (error) {
+    await rename(backup, target).catch(() => undefined)
+    throw error
+  }
+  await unlink(backup)
 }

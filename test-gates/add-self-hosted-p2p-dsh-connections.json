@@ -21,6 +21,8 @@
     "src/app/shell/components/P2PPairingPanel.vue",
     "src/app/shell/components/P2PRemoteProjectsPanel.vue",
     "networking/internal/runtimebridge/directory.go",
+    "networking/internal/runtimebridge/path_windows.go",
+    "networking/internal/runtimebridge/path_nonwindows.go",
     "networking/internal/peersession/manager.go",
     "networking/internal/helper/host.go",
     "electron/main/p2p/services.ts",
@@ -104,9 +106,7 @@
     "tools/p2p-preflight.test.mjs",
     "tools/p2p-docs-coverage.test.mjs"
   ],
-  "live_test_files": [
-    "networking/internal/runtimebridge/directory_test.go"
-  ],
+  "live_test_files": ["networking/internal/runtimebridge/directory_test.go"],
   "state_matrix": [
     {
       "state": "success",
@@ -118,7 +118,7 @@
     },
     {
       "state": "partial",
-      "test": "bounds one page and reports the total (TestBoundsOnePageAndReportsTotal)"
+      "test": "TestBoundsOnePageAndReportsTotal"
     },
     {
       "state": "recovery",
@@ -167,14 +167,9 @@
       "field": "fingerprint",
       "source": "SHA-256 of the actual remote device public key received over the authenticated helper channel",
       "test": "derives the confirmation fingerprint from the real key rather than trusting the reply",
-      "assertion": "a reply-supplied fingerprint is never displayed or trusted",
+      "assertion": "A reply cannot smuggle its own fingerprint",
       "state": "success",
-      "identity_keys": [
-        "serviceId",
-        "pairId",
-        "deviceId",
-        "publicKey"
-      ],
+      "identity_keys": ["serviceId", "pairId", "deviceId", "publicKey"],
       "missing_semantics": "A mismatch between the confirmed value and the real key refuses approval; an identity substituted between confirmation and readback is rejected and never pinned."
     },
     {
@@ -182,13 +177,9 @@
       "field": "pairState",
       "source": "authoritative pairs.identity readback after every write",
       "test": "reads back the authoritative record instead of trusting the invite write reply",
-      "assertion": "write replies never establish state",
+      "assertion": "expect(pair.state).toBe('pending_target_approval')",
       "state": "no_op",
-      "identity_keys": [
-        "pairId",
-        "revision",
-        "state"
-      ],
+      "identity_keys": ["pairId", "revision", "state"],
       "missing_semantics": "pending_target_approval and pending_initiator_confirmation are distinct from active; accepting an invite can never yield an active pair."
     },
     {
@@ -196,13 +187,9 @@
       "field": "url",
       "source": "helper peer.connect reply, retained in main only",
       "test": "keeps the local DSH entry URL out of the returned state",
-      "assertion": "no renderer-visible field can carry the entry URL",
+      "assertion": "expect(JSON.stringify(accepted)).not.toContain('127.0.0.1')",
       "state": "superseded",
-      "identity_keys": [
-        "serviceId",
-        "pairId",
-        "generation"
-      ],
+      "identity_keys": ["serviceId", "pairId", "generation"],
       "missing_semantics": "An entry point from a superseded generation is refused; a failed teardown still drops the URL."
     },
     {
@@ -210,40 +197,49 @@
       "field": "partition",
       "source": "one-way derivation from the pinned serviceId and pairId",
       "test": "admits only the partition the intended identity derives to",
-      "assertion": "another computer's partition is refused for this identity",
+      "assertion": "Another computer's label must not be accepted for this identity.",
       "state": "unauthorized",
-      "identity_keys": [
-        "serviceId",
-        "pairId"
-      ],
+      "identity_keys": ["serviceId", "pairId"],
       "missing_semantics": "Renaming a computer does not move partitions; two computers never collide; the Local partition is never reused by a peer."
     },
     {
       "production_file": "networking/internal/runtimebridge/directory.go",
       "field": "ref,rootId",
-      "source": "real target filesystem resolution via EvalSymlinks and filepath.Rel on the remote platform",
+      "source": "real target filesystem resolution via the platform-native resolver and filepath.Rel on the remote platform",
       "test": "TestRefusesSymlinkEscapingRoot",
-      "assertion": "resolved path outside the authorized root is refused, not clamped",
+      "assertion": "expected symlink escape refusal",
       "state": "forbidden",
-      "identity_keys": [
-        "rootId",
-        "ref"
-      ],
+      "identity_keys": ["rootId", "ref"],
       "missing_semantics": "Containment is re-checked after resolution; traversal, foreign-root references and malformed references are refused; missing, forbidden and empty are distinct states."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/path_windows.go",
+      "field": "resolvedPath",
+      "source": "Windows kernel final path returned for the opened filesystem handle, including junction targets",
+      "test": "TestRefusesSymlinkEscapingRoot",
+      "assertion": "expected symlink escape refusal",
+      "state": "forbidden",
+      "identity_keys": ["rootId", "ref"],
+      "missing_semantics": "Directory junctions are resolved before containment is checked; a Windows host without symlink creation privilege still exercises this boundary."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/path_nonwindows.go",
+      "field": "resolvedPath",
+      "source": "filepath.EvalSymlinks on the remote platform",
+      "test": "TestRefusesSymlinkEscapingRoot",
+      "assertion": "expected symlink escape refusal",
+      "state": "forbidden",
+      "identity_keys": ["rootId", "ref"],
+      "missing_semantics": "Containment is re-checked after platform-native symlink resolution."
     },
     {
       "production_file": "electron/main/p2p/remote-projects.ts",
       "field": "ref",
       "source": "opaque reference issued by the remote computer",
       "test": "refuses a reference that is not an opaque token",
-      "assertion": "this side never builds a reference from a path",
+      "assertion": "never builds a reference from a path",
       "state": "unauthorized",
-      "identity_keys": [
-        "serviceId",
-        "pairId",
-        "rootId",
-        "ref"
-      ],
+      "identity_keys": ["serviceId", "pairId", "rootId", "ref"],
       "missing_semantics": "A page larger than its request or the declared total is rejected; browsing requires a currently active pair."
     },
     {
@@ -251,13 +247,9 @@
       "field": "httpsOrigin,wssUrl,stunAddress,publicKey",
       "source": "service.configure reply verified against the already pinned public key",
       "test": "refuses an endpoint that resolves to a different service identity",
-      "assertion": "a new address is accepted only when it proves the same pinned identity",
+      "assertion": "same pinned identity",
       "state": "busy",
-      "identity_keys": [
-        "serviceId",
-        "publicKey",
-        "revision"
-      ],
+      "identity_keys": ["serviceId", "publicKey", "revision"],
       "missing_semantics": "The whole affected computer set must be idle; a stale revision, unknown service, forgotten service or failed server call leaves the stored configuration byte-identical and triggers no reconnect."
     },
     {
@@ -265,14 +257,9 @@
       "field": "attemptId,runtimeGeneration",
       "source": "live connection stages read back from the helper",
       "test": "does not clear the warning merely because the peer reconnected",
-      "assertion": "a lost connection is never reported as a stopped or completed task",
+      "assertion": "distinguishes a lost connection from a stopped task",
       "state": "work_unknown",
-      "identity_keys": [
-        "serviceId",
-        "pairId",
-        "attemptId",
-        "runtimeGeneration"
-      ],
+      "identity_keys": ["serviceId", "pairId", "attemptId", "runtimeGeneration"],
       "missing_semantics": "connection_lost, work_unknown and runtime_replaced stay distinct; only an explicit user confirmation clears the warning; nothing is ever retried, resubmitted or inferred."
     },
     {
@@ -280,13 +267,9 @@
       "field": "url,title,connectionId",
       "source": "P2P catalog records plus live connection stages",
       "test": "never carries an address for a revoked pair",
-      "assertion": "a revoked or disconnected peer tab can never hold a loadable address",
+      "assertion": "never carries an address for a revoked pair",
       "state": "revoked",
-      "identity_keys": [
-        "connectionId",
-        "serviceId",
-        "pairId"
-      ],
+      "identity_keys": ["connectionId", "serviceId", "pairId"],
       "missing_semantics": "Tab identity follows the pair, not the display name, so a rename does not reload; a removed computer drops its tab and the active tab falls back to Local; the DSH entry point never enters tab state."
     }
   ],

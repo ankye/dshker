@@ -123,9 +123,7 @@ describe('main-owned P2P pairing', () => {
 
   it('reads back the authoritative record instead of trusting the invite write reply', async () => {
     const f = fixture()
-    f.call
-      .mockResolvedValueOnce({ pairId })
-      .mockResolvedValueOnce(identity('invited'))
+    f.call.mockResolvedValueOnce({ pairId }).mockResolvedValueOnce(identity('invited'))
     const pair = await f.pairing.acceptInvite(serviceId, networkId, 'A'.repeat(24), signal())
     expect(pair.state).toBe('invited')
     expect(f.call.mock.calls.map((call) => call[0])).toEqual(['pairs.invite', 'pairs.identity'])
@@ -133,9 +131,7 @@ describe('main-owned P2P pairing', () => {
 
   it('never returns an active pair straight from accepting an invite', async () => {
     const f = fixture()
-    f.call
-      .mockResolvedValueOnce({ pairId })
-      .mockResolvedValueOnce(identity('approved'))
+    f.call.mockResolvedValueOnce({ pairId }).mockResolvedValueOnce(identity('approved'))
     const pair = await f.pairing.acceptInvite(serviceId, networkId, 'A'.repeat(24), signal())
     expect(pair.state).not.toBe('active')
   })

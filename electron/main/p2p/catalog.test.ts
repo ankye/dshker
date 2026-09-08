@@ -23,6 +23,23 @@ async function fixture() {
   return { root, parent, catalog: new PeerCatalog(async () => root) }
 }
 
+/** Windows may deny file symlink creation even for an Administrator token. */
+async function createRecordLink(target: string, link: string): Promise<void> {
+  try {
+    await symlink(target, link)
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code
+    if (process.platform !== 'win32' || !['EPERM', 'EACCES'].includes(code ?? '')) throw error
+
+    // A junction requires no symlink privilege and is still reported as a
+    // symbolic link by lstat, which is the security property under test.
+    const junctionTarget = target + '.junction'
+    await mkdir(junctionTarget)
+    await writeFile(join(junctionTarget, 'record.json'), await readFile(target, 'utf8'))
+    await symlink(junctionTarget, link, 'junction')
+  }
+}
+
 function paired(record: PeerCatalogRecord): PeerCatalogRecord {
   const publicKey = 'dkqr/6uPC3xduT+vo12XY5kmreQ7So8jibpB2bIEeHw='
   const serviceId = createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('hex')
@@ -132,7 +149,7 @@ describe('registered P2P catalog', () => {
     const target = join(root, 'outside.json')
     await writeFile(target, JSON.stringify(enabled.record))
     await unlink(join(parent, 'p2p-devices.json'))
-    await symlink(target, join(parent, 'p2p-devices.json'))
+    await createRecordLink(target, join(parent, 'p2p-devices.json'))
     await expect(catalog.inspect()).rejects.toMatchObject({ code: 'p2p.catalog_invalid' })
     expect(JSON.parse(await readFile(target, 'utf8'))).toEqual(enabled.record)
   })

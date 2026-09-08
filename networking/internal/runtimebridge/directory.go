@@ -168,7 +168,7 @@ func listDirectory(request directoryRequest, available []Root) ([]Entry, int, st
 // resolveWithin turns an opaque reference into a real local path inside root.
 func resolveWithin(root Root, ref string) (string, string) {
 	if ref == "" {
-		resolved, err := filepath.EvalSymlinks(root.Path)
+		resolved, err := resolvePath(root.Path)
 		if err != nil {
 			return "", "p2p.remote_path_missing"
 		}
@@ -178,7 +178,7 @@ func resolveWithin(root Root, ref string) (string, string) {
 	if !ok || rootID != root.RootID {
 		return "", "p2p.remote_reference_invalid"
 	}
-	resolved, err := filepath.EvalSymlinks(path)
+	resolved, err := resolvePath(path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return "", "p2p.remote_path_missing"
@@ -191,7 +191,7 @@ func resolveWithin(root Root, ref string) (string, string) {
 // assertContained proves the resolved path really sits inside the resolved root
 // using path semantics rather than a string prefix comparison.
 func assertContained(root Root, target string) string {
-	base, err := filepath.EvalSymlinks(root.Path)
+	base, err := resolvePath(root.Path)
 	if err != nil {
 		return "p2p.remote_roots_unavailable"
 	}
