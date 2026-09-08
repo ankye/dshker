@@ -87,18 +87,10 @@ export class PeerManagement {
     assertAccountId(serviceId, 64)
     this.#admit()
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
-    const saved = await this.#catalog.inspect()
-    if (!saved) throw new PeerHelperError('p2p.not_enabled')
-    if (saved.record.forgottenServiceIds.includes(serviceId))
-      throw new PeerHelperError('p2p.trust_restore_rejected')
-    if (!saved.record.services.some((value) => value.serviceId === serviceId))
-      throw new PeerHelperError('p2p.service_not_found')
-    const committed = await this.#catalog.commit(saved.revision, {
-      ...saved.record,
-      services: saved.record.services.filter((value) => value.serviceId !== serviceId),
-      computers: saved.record.computers.filter((value) => value.serviceId !== serviceId),
-      forgottenServiceIds: [...saved.record.forgottenServiceIds, serviceId]
-    })
+    // Local-only, tolerant removal: never contacts the coordinator, so a server
+    // the user no longer runs (or a legacy record that no longer passes strict
+    // re-validation) does not block deleting it.
+    const committed = await this.#catalog.removeService(serviceId)
     // The service is gone from the catalog: drop its live binding and entry
     // points so nothing continues speaking as the removed service.
     if (this.#session) {

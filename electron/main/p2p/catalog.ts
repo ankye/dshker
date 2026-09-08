@@ -69,6 +69,59 @@ export class PeerCatalog {
     })
   }
 
+  /**
+   * Removes one service by id with a deliberately tolerant read/write so a
+   * legacy or partially-corrupt record (e.g. an old certificate that no longer
+   * passes strict re-validation) cannot block deleting it.
+   *
+   * Purely local: no server is contacted, so removing a coordinator the user no
+   * longer runs succeeds. The final file still round-trips through
+   * parsePeerCatalog so it can never be written in a state the app cannot read.
+   */
+  removeService(serviceId: string): Promise<PeerCatalogSnapshot> {
+    return this.#serialize(async () => {
+      const parent = await this.#parent()
+      const file = join(parent, 'p2p-devices.json')
+      const raw = await readRecord(file)
+      // Tolerant: keep only the fields we need, drop the target service and its
+      // computers, and forget the identity. Rejects if the identity was already
+      // forgotten, mirroring the strict path.
+      let parsed: PeerCatalogRecord
+      try {
+        parsed = parsePeerCatalog(raw)
+      } catch {
+        // The record failed strict validation. Fall through to a minimal,
+        // forward-only removal rather than blocking deletion forever.
+        const obj = exactPeerObject(parsePeerJson(raw), [
+          'format', 'version', 'catalogId', 'services', 'computers', 'forgottenServiceIds'
+        ]) as unknown as PeerCatalogRecord
+        if (
+          obj.format !== 'dshker.p2p-devices' ||
+          obj.version !== 1 ||
+          !Array.isArray(obj.services) ||
+          !Array.isArray(obj.computers) ||
+          !Array.isArray(obj.forgottenServiceIds)
+        )
+          throw new PeerHelperError('p2p.catalog_invalid')
+        parsed = obj
+      }
+      if (parsed.forgottenServiceIds.includes(serviceId))
+        throw new PeerHelperError('p2p.trust_restore_rejected')
+      if (!parsed.services.some((value) => value.serviceId === serviceId))
+        throw new PeerHelperError('p2p.service_not_found')
+      const next: PeerCatalogRecord = {
+        ...parsed,
+        services: parsed.services.filter((value) => value.serviceId !== serviceId),
+        computers: parsed.computers.filter((value) => value.serviceId !== serviceId),
+        forgottenServiceIds: [...parsed.forgottenServiceIds, serviceId]
+      }
+      // Re-validate the result so the file can never be written unreadable.
+      const validated = parsePeerCatalog(JSON.stringify(next))
+      await publish(file, JSON.stringify(validated), true)
+      return this.#read(parent)
+    })
+  }
+
   async #parent(): Promise<string> {
     const root = await this.resolveSettingsRoot()
     if (!isAbsolute(root)) throw new PeerHelperError('p2p.settings_root_required')

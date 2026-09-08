@@ -78,6 +78,22 @@ function fixture() {
       record = structuredClone(next)
       return { revision: '7'.repeat(64), record: structuredClone(record) }
     })
+  const removeService = vi.spyOn(PeerCatalog.prototype, 'removeService').mockImplementation(
+    async (serviceIdToDrop) => {
+      // Mirror the real tolerant-removal validation so its business rules hold.
+      if (record.forgottenServiceIds.includes(serviceIdToDrop))
+        throw new PeerHelperError('p2p.trust_restore_rejected')
+      if (!record.services.some((value) => value.serviceId === serviceIdToDrop))
+        throw new PeerHelperError('p2p.service_not_found')
+      record = {
+        ...record,
+        services: record.services.filter((value) => value.serviceId !== serviceIdToDrop),
+        computers: record.computers.filter((value) => value.serviceId !== serviceIdToDrop),
+        forgottenServiceIds: [...record.forgottenServiceIds, serviceIdToDrop]
+      }
+      return { revision: '9'.repeat(64), record: structuredClone(record) }
+    }
+  )
   const activate = vi.spyOn(PeerServices.prototype, 'activate').mockResolvedValue(service)
   const clearAccounts = vi.spyOn(PeerAccounts.prototype, 'close')
   const clearEnrollment = vi.spyOn(PeerEnrollment.prototype, 'close')
@@ -117,6 +133,7 @@ function fixture() {
     call,
     close,
     commit,
+    removeService,
     spawn,
     activate,
     clearAccounts,
@@ -211,7 +228,7 @@ describe('formal P2P management composition', () => {
       expect(result.record.services).toHaveLength(0)
       expect(result.record.computers).toHaveLength(0)
       expect(result.record.forgottenServiceIds).toEqual([serviceId])
-      expect(f.commit).toHaveBeenCalledTimes(1)
+      expect(f.removeService).toHaveBeenCalledTimes(1)
       // Purely local: no helper process or RPC traffic.
       expect(f.spawn).not.toHaveBeenCalled()
       expect(f.call).not.toHaveBeenCalled()
@@ -226,7 +243,10 @@ describe('formal P2P management composition', () => {
       await expect(
         f.owner.removeService(serviceId, new AbortController().signal)
       ).rejects.toMatchObject({ code: 'p2p.trust_restore_rejected' })
-      expect(f.commit).toHaveBeenCalledTimes(1)
+      // The second call delegates to catalog.removeService, which refuses the
+      // re-trust without writing; so it is reached twice (once to remove, once
+      // to refuse) but the file is only changed by the first.
+      expect(f.removeService).toHaveBeenCalledTimes(2)
     })
 
     it('refuses to remove an unknown service without touching the catalog', async () => {
@@ -234,13 +254,13 @@ describe('formal P2P management composition', () => {
       await expect(
         f.owner.removeService('b'.repeat(64), new AbortController().signal)
       ).rejects.toMatchObject({ code: 'p2p.service_not_found' })
-      expect(f.commit).not.toHaveBeenCalled()
+      expect(f.removeService).toHaveBeenCalledTimes(1)
       expect(f.record().services).toHaveLength(1)
     })
 
     it('surfaces a failed catalog write and keeps the removed service intact', async () => {
       const f = fixture()
-      f.commit.mockRejectedValueOnce(new PeerHelperError('p2p.catalog_write_failed'))
+      f.removeService.mockRejectedValueOnce(new PeerHelperError('p2p.catalog_write_failed'))
       await expect(
         f.owner.removeService(serviceId, new AbortController().signal)
       ).rejects.toMatchObject({ code: 'p2p.catalog_write_failed' })
