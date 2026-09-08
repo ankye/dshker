@@ -266,6 +266,17 @@ function buildChecksumText(artifacts) {
   return `${artifacts.map((artifact) => `${artifact.sha256}  ${artifact.relativePath}`).join('\n')}\n`
 }
 
+// A dist:<os>-<arch> build mode names its target (e.g. dist-linux-arm64), which
+// matters when the runner cross-compiles (an x64 ubuntu runner emitting arm64).
+// Plain modes (package/dist/local) run on the native platform, so they fall back
+// to process.platform/process.arch.
+function targetIdentity(mode) {
+  const match = /^dist-(mac|win|linux)-(arm64|x64)$/.exec(mode || '')
+  if (!match) return { platform: process.platform, architecture: process.arch }
+  const platform = match[1] === 'mac' ? 'darwin' : match[1]
+  return { platform, architecture: match[2] }
+}
+
 export async function generate(args) {
   const releaseDir = path.resolve(appRoot, args.releaseDir)
   assertInside(appRoot, releaseDir, 'Release directory')
@@ -287,8 +298,8 @@ export async function generate(args) {
     buildMode: args.mode,
     buildTimestamp: new Date().toISOString(),
     gitRevision: await getGitRevision(),
-    platform: process.platform,
-    architecture: process.arch,
+    platform: targetIdentity(args.mode).platform,
+    architecture: targetIdentity(args.mode).architecture,
     nodeVersion: process.version,
     osRelease: os.release(),
     signingStatus: getSigningStatus(),
