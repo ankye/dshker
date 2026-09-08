@@ -28,13 +28,14 @@ import { PeerHelperError } from './wire'
 /**
  * Owner methods the IPC may dispatch to.
  *
- * `updateNetworkLimit` and `joinNetwork` are deliberately excluded: the Go
- * coordinator does not expose those RPCs yet, so they are admitted at this
- * boundary but dispatched as typed stubs below until the helper lands.
+ * `register`, `updateNetworkLimit` and `joinNetwork` are deliberately
+ * excluded: the local Go helper does not expose those RPCs yet, so they are
+ * admitted at this boundary but dispatched as typed stubs below until the
+ * helper lands.
  */
 export type PeerManagementOwner = Pick<
   PeerManagement,
-  Exclude<P2PManagementOperation, 'cancel' | 'updateNetworkLimit' | 'joinNetwork'>
+  Exclude<P2PManagementOperation, 'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork'>
 >
 
 /** No raw RPC dispatch, paths, keys or tokens cross this boundary. */
@@ -85,6 +86,16 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('login', true, async (r, s) =>
     projectPeerUser(await owner.login(r.serviceId, r.username, r.password, s))
   )
+  //
+  // register: the self-hosted Go coordinator (ankye/dshker-server) exposes
+  // POST /v1/register, but the local Go helper does not expose a user.register
+  // RPC yet. The typed channel and admission are live; this stub refuses
+  // cleanly instead of faking a result.
+  // TODO(p2p-register): once the helper exposes the user.register RPC, route
+  // to owner.register and complete the account registration flow.
+  register('register', true, async () => {
+    throw new PeerHelperError('p2p.invalid_operation')
+  })
   register('currentUser', false, async (r, s) =>
     projectPeerUser(await owner.currentUser(r.serviceId, s))
   )

@@ -37,6 +37,7 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
     stunAddress: 'peer.example:3478'
   },
   login: { serviceId, username: 'alice', password: 'secret-login-password' },
+  register: { serviceId, email: 'alice@example.com', password: 'secret-register-password' },
   currentUser: { serviceId },
   logout: { serviceId },
   networks: { serviceId },
@@ -259,7 +260,7 @@ describe('P2P named management admission', () => {
     let sequence = 0
     for (const method of Object.keys(owner) as Exclude<
       P2PManagementOperation,
-      'cancel' | 'updateNetworkLimit' | 'joinNetwork'
+      'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork'
     >[]) {
       const result = await invoke(method, event, request(method, ++sequence))
       expect(result.ok, method).toBe(true)
@@ -317,6 +318,16 @@ describe('P2P named management admission', () => {
     Object.assign(draft, { displayName: 'changed', privateKey: 'injected' })
     expect(admitted.displayName).toBe('Home')
     expect(admitted).not.toHaveProperty('privateKey')
+  })
+
+  it('refuses register at dispatch until the helper exposes the user.register RPC', async () => {
+    const { invoke } = fixture()
+    const result = await invoke('register', page().event, request('register'))
+    expect(result).toEqual({
+      ok: false,
+      code: 'p2p.invalid_operation',
+      message: 'p2p.invalid_operation'
+    })
   })
 
   it('returns only allowlisted errors and never exception or helper text', async () => {

@@ -31,6 +31,13 @@ export const zhCN = {
   'p2p.account.username': '用户名',
   'p2p.account.password': '密码',
   'p2p.account.passwordHint': '密码提交后立即清空，不保留到草稿或页面状态。',
+  'p2p.account.email': '邮箱',
+  'p2p.account.confirmPassword': '确认密码（可选）',
+  'p2p.account.register': '注册账号',
+  'p2p.account.registerHint':
+    '注册会用邮箱和密码在此服务器创建账号。密码提交后立即清空，不保留到草稿或页面状态。',
+  'p2p.account.networkLimit': '每个账号最多创建 2 个网络',
+  'p2p.account.userConflict': '该邮箱已注册过账号，请直接登录或更换邮箱注册。',
   'p2p.account.unknown': '用户状态尚未确认，请读取服务器结果。',
   'p2p.account.user': '已读回用户',
   'p2p.account.readNetworks': '读取网络列表',
@@ -226,7 +233,7 @@ export const zhCN = {
   'p2p.accountTab.noService': '还没有可管理的服务器。',
   'p2p.accountTab.noServiceDescription':
     '请先在「连接」标签页添加并选择一台协调服务器，再回来登录并管理网络与设备。',
-  'p2p.accountTab.loginRegister': '登录并登记设备',
+  'p2p.accountTab.loginRegister': '登录或注册账号',
   'p2p.accountTab.meshGate': '本机已登记（加入网络），但尚未登录，因此还不能与其他设备组网。',
   'p2p.accountTab.meshGateDescription': '请登录并选择该网络，之后即可配对与连接设备。',
   'p2p.accountTab.leaveNetwork': '离开网络',

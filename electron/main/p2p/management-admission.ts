@@ -13,6 +13,7 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   catalog: [],
   addService: ['revision', 'displayName', 'httpsOrigin', 'wssUrl', 'stunAddress'],
   login: ['serviceId', 'username', 'password'],
+  register: ['serviceId', 'email', 'password'],
   currentUser: ['serviceId'],
   logout: ['serviceId'],
   networks: ['serviceId'],
@@ -104,6 +105,16 @@ function validateField(field: string, value: unknown): void {
     // Exactly the grouped-hex form the UI displayed, so confirmation is comparable.
     if (typeof value !== 'string' || !/^([a-f0-9]{4} ){7}[a-f0-9]{4}$/.test(value))
       throw new PeerHelperError('p2p.pair_fingerprint_mismatch')
+    return
+  }
+  if (field === 'email') {
+    if (
+      typeof value !== 'string' ||
+      !value ||
+      value.length > 320 ||
+      Buffer.byteLength(value) > 2048
+    )
+      throw new PeerHelperError('p2p.invalid_request')
     return
   }
   if (field === 'password') {

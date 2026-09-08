@@ -52,9 +52,10 @@ describe('P2P account public controls (component diagnostics)', () => {
       login,
       networks
     })
-    await ui.get('input[autocomplete="username"]').setValue('alice')
-    await ui.get('input[type="password"]').setValue('secret-login')
-    await ui.get('form').trigger('submit')
+    const loginForm = ui.get('[data-testid="p2p-login-form"]')
+    await loginForm.get('input[autocomplete="username"]').setValue('alice')
+    await loginForm.get('input[type="password"]').setValue('secret-login')
+    await loginForm.trigger('submit')
     await flushPromises()
     expect(login).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -66,6 +67,8 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(ui.find('input[type="password"]').exists()).toBe(false)
     expect(ui.text()).toContain(user.userId)
     expect(networks).not.toHaveBeenCalled()
+    expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
+    expect(ui.find('[data-testid="p2p-register-form"]').exists()).toBe(false)
     await button(ui, '读取网络列表').trigger('click')
     await flushPromises()
     expect(ui.get('.p2p-network-list').text()).toContain(network.networkId)
@@ -215,6 +218,86 @@ describe('P2P account public controls (component diagnostics)', () => {
       await flushPromises()
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
       expect(ui.find('[data-testid="p2p-limit-select"]').exists()).toBe(false)
+    })
+  })
+
+  describe('Account registration form', () => {
+    it('renders a register form alongside login when signed out and adopts the registered user', async () => {
+      const register = vi.fn<P2PManagementApi['register']>().mockResolvedValue({
+        ok: true,
+        data: user
+      })
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        }),
+        register
+      })
+      const form = ui.get('[data-testid="p2p-register-form"]')
+      expect(form.text()).toContain('注册账号')
+      await form.get('input[autocomplete="email"]').setValue('alice@example.com')
+      await form.get('[data-testid="p2p-register-password"]').setValue('new-secret')
+      await form.trigger('submit')
+      await flushPromises()
+      expect(register).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serviceId: 'service-a',
+          email: 'alice@example.com',
+          password: 'new-secret'
+        })
+      )
+      expect(ui.text()).toContain(user.userId)
+      expect(ui.find('[data-testid="p2p-register-password"]').exists()).toBe(false)
+      const { p2pAccounts } = await import('@/app/domains/remote-connections')
+      expect(JSON.stringify(p2pAccounts.state('service-a'))).not.toContain('new-secret')
+    })
+
+    it('shows a localized message when create-network is refused due to the network limit', async () => {
+      const createNetwork = vi.fn<P2PManagementApi['createNetwork']>().mockResolvedValue({
+        ok: false,
+        code: 'p2p.network_limit_reached',
+        message: 'limit'
+      })
+      const ui = await render({
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: true, data: [network] }),
+        createNetwork
+      })
+      await button(ui, '读取网络列表').trigger('click')
+      await flushPromises()
+      const create = ui.findAll('form').at(-1)!
+      await create.get('input').setValue('Third')
+      await create.trigger('submit')
+      await flushPromises()
+      const error = ui.get('[data-testid="p2p-account-error"]')
+      expect(error.text()).toContain('每个账号最多创建 2 个网络')
+      expect(error.text()).toContain('p2p.network_limit_reached')
+    })
+
+    it('shows a localized message when registration is refused because the email exists', async () => {
+      const register = vi.fn<P2PManagementApi['register']>().mockResolvedValue({
+        ok: false,
+        code: 'p2p.user_conflict',
+        message: 'duplicate'
+      })
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        }),
+        register
+      })
+      const form = ui.get('[data-testid="p2p-register-form"]')
+      await form.get('input[autocomplete="email"]').setValue('existing@example.com')
+      await form.get('[data-testid="p2p-register-password"]').setValue('secret')
+      await form.trigger('submit')
+      await flushPromises()
+      const error = ui.get('[data-testid="p2p-account-error"]')
+      expect(error.text()).toContain('该邮箱已注册过账号')
+      expect(error.text()).toContain('p2p.user_conflict')
     })
   })
 })

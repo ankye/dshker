@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.24 — 2026-09-08
+
+- Network & account tab is now a **login + register page** when signed out:
+  register an account with an email and password, or log in with that email
+  (server identifies users by email; public POST /v1/register).
+- The signed-out heading and both forms are localized in zh-CN and en-US;
+  register failures (duplicate email, invalid credentials, network limit)
+  show typed localized messages instead of a bare code.
+- Deleting a configured P2P coordinator server is supported from the Connect
+  tab with an inline confirm (removeService); the account tab no longer
+  bounces to Connect when no server is selected; enrollment stays login-free
+  and visible while signed out.
+- This candidate remains an interop-testing prerelease: not marked latest,
+  not in the stable update feed.
+
 ## 0.1.23 — 2026-09-08
 
 - Remote connections is now two sub-tabs inside the remote route: **连接/Connect**

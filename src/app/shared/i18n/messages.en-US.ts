@@ -40,6 +40,14 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.account.password': 'Password',
   'p2p.account.passwordHint':
     'The password is cleared immediately after submission and is not kept in drafts or shared state.',
+  'p2p.account.email': 'Email address',
+  'p2p.account.confirmPassword': 'Repeat password (optional)',
+  'p2p.account.register': 'Register account',
+  'p2p.account.registerHint':
+    'Registration creates an account on this server with your email and password. The password is cleared immediately after submission.',
+  'p2p.account.networkLimit': 'Each account can create at most 2 networks on this server.',
+  'p2p.account.userConflict':
+    'An account with this email already exists. Log in instead, or use a different email to register.',
   'p2p.account.unknown': 'User state is unconfirmed. Read the server result.',
   'p2p.account.user': 'User readback',
   'p2p.account.readNetworks': 'Read networks',
@@ -271,7 +279,7 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.accountTab.noService': 'There is no server to manage yet.',
   'p2p.accountTab.noServiceDescription':
     'Add and select a coordinator server in the “Connect” tab first, then log in here to manage networks and devices.',
-  'p2p.accountTab.loginRegister': 'Log in and register this device',
+  'p2p.accountTab.loginRegister': 'Log in or register an account',
   'p2p.accountTab.meshGate':
     'This device enrolled in a network but is not logged in, so it cannot mesh with other devices yet.',
   'p2p.accountTab.meshGateDescription':

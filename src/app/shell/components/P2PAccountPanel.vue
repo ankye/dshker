@@ -5,12 +5,16 @@ import {
   p2pManagement as management
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
+import type { MessageKey } from '@/app/shared/i18n/i18n'
 import { P2P_NETWORK_DEVICE_LIMITS, type P2PNetworkView } from '@/shared/p2p-management'
 
 const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
 const state = accounts.state(props.serviceId)
 const password = ref('')
+/** Registration drafts stay local to the panel; only email may double as the login identifier. */
+const registerPassword = ref('')
+const registerConfirm = ref('')
 const pending = computed(() => management.busy(props.serviceId))
 const operation = computed(() => management.operations[props.serviceId])
 const uncertain = computed(
@@ -20,6 +24,20 @@ const uncertain = computed(
     operation.value?.error === 'p2p.management_result_unconfirmed' ||
     operation.value?.error === 'p2p.authorization_cleanup_failed'
 )
+/** Optional confirmation must match before a register submit is allowed. */
+const registerMismatch = computed(
+  () => registerConfirm.value !== '' && registerConfirm.value !== registerPassword.value
+)
+
+/** Account-operation refusals get a readable line instead of only the raw code. */
+const ACCOUNT_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
+  'p2p.network_limit_reached': 'p2p.account.networkLimit',
+  'p2p.user_conflict': 'p2p.account.userConflict'
+}
+const accountErrorKey = computed<MessageKey | undefined>(() => {
+  const error = operation.value?.error
+  return error ? ACCOUNT_ERROR_KEYS[error] : undefined
+})
 const deletion = ref<P2PNetworkView>()
 const confirmButton = ref<HTMLButtonElement>()
 /** Per-network target for the capacity raise; cleared once the list readback shows it. */
@@ -31,6 +49,8 @@ watch(
   () => {
     deletion.value = undefined
     password.value = ''
+    registerPassword.value = ''
+    registerConfirm.value = ''
   }
 )
 watch(
@@ -50,11 +70,20 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   password.value = ''
+  registerPassword.value = ''
+  registerConfirm.value = ''
 })
 async function login() {
   const supplied = password.value
   password.value = ''
   await accounts.login(props.serviceId, state.usernameDraft, supplied)
+}
+async function register() {
+  if (registerMismatch.value) return
+  const supplied = registerPassword.value
+  registerPassword.value = ''
+  registerConfirm.value = ''
+  await accounts.register(props.serviceId, state.usernameDraft, supplied)
 }
 async function askDelete(network: P2PNetworkView, event: Event) {
   invoker = event.currentTarget as HTMLElement
@@ -138,35 +167,87 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
         t('p2p.management.confirmed')
       }}</template>
     </p>
-    <p v-if="operation?.error || state.networkWriteUnconfirmed" class="remote-error" role="alert">
-      {{ uncertain ? t('p2p.management.unconfirmed') : t('p2p.management.failed') }}
+    <p
+      v-if="operation?.error || state.networkWriteUnconfirmed"
+      class="remote-error"
+      role="alert"
+      data-testid="p2p-account-error"
+    >
+      <template v-if="accountErrorKey">{{ t(accountErrorKey) }}</template>
+      <template v-else>{{
+        uncertain ? t('p2p.management.unconfirmed') : t('p2p.management.failed')
+      }}</template>
       <code>{{ operation.error }}</code>
     </p>
     <p v-if="operation?.cancelError" class="remote-error" role="alert">
       {{ t('p2p.management.cancelFailed') }} <code>{{ operation.cancelError }}</code>
     </p>
     <p v-if="state.user === undefined">{{ t('p2p.account.unknown') }}</p>
-    <form v-if="!state.user" @submit.prevent="login">
-      <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
-        <legend>{{ t('p2p.account.login') }}</legend>
-        <label
-          ><span>{{ t('p2p.account.username') }}</span
-          ><input
-            :id="`p2p-login-username-${serviceId}`"
-            v-model="state.usernameDraft"
-            required
-            autocomplete="username"
-        /></label>
-        <label
-          ><span>{{ t('p2p.account.password') }}</span
-          ><input v-model="password" type="password" required autocomplete="current-password"
-        /></label>
-        <button type="submit" class="prototype-button prototype-button--primary">
-          {{ t('p2p.account.login') }}
-        </button>
-      </fieldset>
-      <p>{{ t('p2p.account.passwordHint') }}</p>
-    </form>
+    <template v-if="!state.user">
+      <form data-testid="p2p-login-form" @submit.prevent="login">
+        <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
+          <legend>{{ t('p2p.account.login') }}</legend>
+          <label
+            ><span>{{ t('p2p.account.email') }}</span
+            ><input
+              :id="`p2p-login-email-${serviceId}`"
+              v-model="state.usernameDraft"
+              type="email"
+              required
+              autocomplete="username"
+              spellcheck="false"
+          /></label>
+          <label
+            ><span>{{ t('p2p.account.password') }}</span
+            ><input v-model="password" type="password" required autocomplete="current-password"
+          /></label>
+          <button type="submit" class="prototype-button prototype-button--primary">
+            {{ t('p2p.account.login') }}
+          </button>
+        </fieldset>
+        <p>{{ t('p2p.account.passwordHint') }}</p>
+      </form>
+      <form data-testid="p2p-register-form" @submit.prevent="register">
+        <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
+          <legend>{{ t('p2p.account.register') }}</legend>
+          <label
+            ><span>{{ t('p2p.account.email') }}</span
+            ><input
+              :id="`p2p-register-email-${serviceId}`"
+              v-model="state.usernameDraft"
+              type="email"
+              required
+              autocomplete="email"
+              spellcheck="false"
+          /></label>
+          <label
+            ><span>{{ t('p2p.account.password') }}</span
+            ><input
+              v-model="registerPassword"
+              type="password"
+              required
+              autocomplete="new-password"
+              data-testid="p2p-register-password"
+          /></label>
+          <label
+            ><span>{{ t('p2p.account.confirmPassword') }}</span
+            ><input
+              v-model="registerConfirm"
+              type="password"
+              autocomplete="new-password"
+              data-testid="p2p-register-confirm"
+          /></label>
+          <button
+            type="submit"
+            class="prototype-button prototype-button--primary"
+            :disabled="registerMismatch"
+          >
+            {{ t('p2p.account.register') }}
+          </button>
+        </fieldset>
+        <p>{{ t('p2p.account.registerHint') }}</p>
+      </form>
+    </template>
     <template v-else>
       <p>
         {{ t('p2p.account.user') }}: {{ state.user.username }} ·

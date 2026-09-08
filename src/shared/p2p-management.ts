@@ -7,6 +7,7 @@ export const P2P_MANAGEMENT_CHANNELS = {
   catalog: 'dsh-launcher:p2p:catalog',
   addService: 'dsh-launcher:p2p:add-service',
   login: 'dsh-launcher:p2p:login',
+  register: 'dsh-launcher:p2p:register',
   currentUser: 'dsh-launcher:p2p:current-user',
   logout: 'dsh-launcher:p2p:logout',
   networks: 'dsh-launcher:p2p:networks',
@@ -212,6 +213,7 @@ export interface P2PManagementInputs {
   catalog: Record<never, never>
   addService: P2PServiceInput & { revision: string }
   login: ServiceRequest & { username: string; password: string }
+  register: ServiceRequest & { email: string; password: string }
   currentUser: ServiceRequest
   logout: ServiceRequest
   networks: ServiceRequest
@@ -245,7 +247,7 @@ export interface P2PManagementInputs {
   rejectPair: ServiceRequest & { pairId: string }
   revokePair: ServiceRequest & { pairId: string }
   connections: Record<never, never>
-  removeService: ServiceRequest,
+  removeService: ServiceRequest
   updateServiceConfig: ServiceRequest & {
     revision: string
     displayName: string
@@ -271,6 +273,7 @@ export interface P2PManagementResults {
   catalog: P2PCatalogView | null
   addService: P2PCatalogView
   login: P2PUserView
+  register: P2PUserView
   currentUser: P2PUserView
   logout: void
   networks: P2PNetworkView[]
@@ -294,7 +297,7 @@ export interface P2PManagementResults {
   /** Live stages plus the last helper-level error, both read-only. */
   connections: { error: string; peers: P2PConnectionView[] }
   /** The whole catalog, because a shared endpoint change affects every peer. */
-  removeService: P2PCatalogView,
+  removeService: P2PCatalogView
   updateServiceConfig: P2PCatalogView
   remoteRoots: P2PRemoteRootView[]
   /** One bounded page plus the true total, so paging never guesses. */
@@ -372,6 +375,7 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.invalid_user_session',
   'p2p.management_result_unconfirmed',
   'p2p.network_full',
+  'p2p.network_limit_reached',
   'p2p.network_unavailable',
   'p2p.not_enabled',
   'p2p.operation_failed',

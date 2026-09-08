@@ -28,6 +28,42 @@ describe('P2P user and network domain', () => {
     expect(accounts.state('service-b').networks).toBeUndefined()
   })
 
+  it('registers an account and adopts the returned user like a login', async () => {
+    const register = vi.fn<P2PManagementApi['register']>().mockResolvedValue({
+      ok: true,
+      data: user
+    })
+    const { accounts } = setup({ register })
+    await accounts.register('service-a', 'alice@example.com', 'new-secret')
+    expect(register).toHaveBeenCalledWith(
+      expect.objectContaining({
+        serviceId: 'service-a',
+        email: 'alice@example.com',
+        password: 'new-secret'
+      })
+    )
+    expect(accounts.state('service-a').user).toEqual(user)
+    expect(accounts.state('service-a').networks).toBeUndefined()
+  })
+
+  it('keeps a create refused by the network limit retryable instead of uncertain', async () => {
+    const createNetwork = vi.fn<P2PManagementApi['createNetwork']>().mockResolvedValue({
+      ok: false,
+      code: 'p2p.network_limit_reached',
+      message: 'limit'
+    })
+    const { accounts } = setup({ createNetwork })
+    await accounts.currentUser('service-a')
+    const state = accounts.state('service-a')
+    state.networkNameDraft = 'Third'
+    await accounts.createNetwork('service-a')
+    expect(createNetwork).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'service-a', name: 'Third' })
+    )
+    expect(state.networkWriteUnconfirmed).toBe(false)
+    expect(state.networks).toBeUndefined()
+  })
+
   it('clears old user resources when authoritative user identity changes', async () => {
     const { accounts, api } = setup()
     await accounts.currentUser('service-a')

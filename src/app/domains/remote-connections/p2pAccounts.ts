@@ -48,6 +48,18 @@ export class P2PAccountsDomain {
     if (result.ok) this.#acceptUser(this.state(serviceId), result.data)
   }
 
+  /**
+   * Creates an account on the coordinator with an email identity.
+   *
+   * A confirmed registration returns the same user projection as a login, so
+   * the panel transitions to the signed-in view exactly like a successful
+   * sign-in. The server refuses a duplicate email (p2p.user_conflict).
+   */
+  async register(serviceId: string, email: string, password: string): Promise<void> {
+    const result = await this.management.run('register', { serviceId, email, password })
+    if (result.ok) this.#acceptUser(this.state(serviceId), result.data)
+  }
+
   async logout(serviceId: string): Promise<void> {
     if (this.management.busy(serviceId)) return
     const result = await this.management.run('logout', { serviceId })
@@ -180,6 +192,8 @@ export class P2PAccountsDomain {
         'p2p.invalid_request',
         'p2p.invalid_operation',
         'p2p.invalid_network_limit',
+        'p2p.network_limit_reached',
+        'p2p.user_conflict',
         'p2p.user_login_required',
         'p2p.not_enabled'
       ].includes(code)
