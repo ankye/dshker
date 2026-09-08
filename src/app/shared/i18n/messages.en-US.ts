@@ -151,6 +151,12 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.serviceEdit.discardPrompt': 'There are unsaved changes. Discard them?',
   'p2p.serviceEdit.keepEditing': 'Keep editing',
   'p2p.serviceEdit.discard': 'Discard changes',
+  'p2p.connect.offlineHint':
+    'The other computer is offline (its app is not running or signed in). Open DSHKer on it first.',
+  'p2p.connect.directHint':
+    'No usable direct UDP path between the two networks. There is no relay; use the same network or adjust the firewall.',
+  'p2p.connect.busyHint': 'A connection operation is already in progress. Wait for it to finish.',
+  'p2p.connect.openWorkbench': 'Open workbench',
   'p2p.pairing.title': 'Device pairing',
   'p2p.pairing.description':
     'Pair with another computer. A completed pair does not mean it is connected or that its DSH is reachable.',

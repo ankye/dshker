@@ -7,12 +7,14 @@ import {
   p2pWorkReconciliation as work
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
+import { useLauncherShell } from '../useLauncherShell'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
 import type { P2PConnectionView, P2PPairView } from '@/shared/p2p-management'
 import P2PRemoteProjectsPanel from './P2PRemoteProjectsPanel.vue'
 
 const props = defineProps<{ serviceId: string; networkId: string | undefined }>()
 const t = useTranslator()
+const shell = useLauncherShell()
 const state = pairing.state(props.serviceId)
 const pending = computed(() => management.busy(props.serviceId))
 const operation = computed(() => management.operations[props.serviceId])
@@ -28,6 +30,21 @@ const canWrite = computed(() => !pending.value && !uncertain.value && props.netw
 const title = ref<HTMLHeadingElement>()
 
 const live = computed(() => connections.state)
+/**
+ * Friendly diagnosis for the failures a user can actually fix. Anything else
+ * keeps the raw code, which the troubleshooting docs explain.
+ */
+const connectHints: Readonly<Record<string, MessageKey>> = {
+  'p2p.peer_offline': 'p2p.connect.offlineHint',
+  'p2p.direct_unavailable': 'p2p.connect.directHint',
+  'p2p.connection_busy': 'p2p.connect.busyHint'
+}
+const connectHint = computed(() => {
+  const error = management.operations[`connect:${props.serviceId}`]?.error
+  return error && typeof error === 'string' && connectHints[error]
+    ? t(connectHints[error])
+    : undefined
+})
 
 onMounted(() => {
   // Reads are safe and cheap: load automatically instead of demanding a click.
@@ -176,15 +193,27 @@ const stateLabels: Record<P2PPairView['state'], MessageKey> = {
             :service-id="serviceId"
             :pair-id="pair.pairId"
           />
+          <p v-if="connectHint" role="alert" class="remote-error" data-testid="p2p-connect-hint">
+            {{ connectHint }}
+          </p>
           <div class="p2p-pair-actions">
             <button
+              v-if="connections.isReady(serviceId, pair.pairId)"
+              type="button"
+              class="prototype-button prototype-button--primary"
+              data-testid="p2p-open-workbench"
+              @click="shell.selectRoute('runtime')"
+            >
+              {{ t('p2p.connect.openWorkbench') }}
+            </button>
+            <button
+              v-if="!connections.isReady(serviceId, pair.pairId)"
               type="button"
               class="prototype-button prototype-button--primary"
               :disabled="
                 pending ||
                 live.resultUnconfirmed ||
-                connections.isConnecting(serviceId, pair.pairId) ||
-                connections.isReady(serviceId, pair.pairId)
+                connections.isConnecting(serviceId, pair.pairId)
               "
               data-testid="p2p-connection-connect"
               @click="connections.connect(serviceId, pair.pairId)"

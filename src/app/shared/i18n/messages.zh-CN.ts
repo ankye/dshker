@@ -124,6 +124,11 @@ export const zhCN = {
   'p2p.serviceEdit.discardPrompt': '有未保存的修改。要放弃这些修改吗？',
   'p2p.serviceEdit.keepEditing': '继续编辑',
   'p2p.serviceEdit.discard': '放弃修改',
+  'p2p.connect.offlineHint': '对方电脑不在线（App 未运行或未登录）。请先在那台电脑上打开 DSHKer。',
+  'p2p.connect.directHint':
+    '两个网络之间没有可用的直连 UDP 路径。本功能不使用中继，请换到同一网络或调整防火墙。',
+  'p2p.connect.busyHint': '已有连接操作正在进行，请等待其结束。',
+  'p2p.connect.openWorkbench': '打开工作台',
   'p2p.pairing.title': '设备配对',
   'p2p.pairing.description': '与另一台电脑建立配对。配对成功不代表已连接，也不代表远程 DSH 可用。',
   'p2p.pairing.read': '读取配对列表',
