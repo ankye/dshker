@@ -30,42 +30,42 @@ describe('private helper channel ownership', () => {
   it.skipIf(process.platform === 'win32')(
     'removes a crashed process channel and only its owned directory',
     async () => {
-    const channel = await createPeerChannel()
-    if (channel.directory) roots.push(channel.directory)
-    const child = spawn(
-      process.execPath,
-      [
-        '-e',
-        'require("node:net").createServer().listen(process.argv[1], () => process.send("ready"))',
-        channel.path
-      ],
-      { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] }
-    )
-    const exited = once(child, 'exit')
-    try {
-      const ready = await once(child, 'message', { signal: AbortSignal.timeout(5000) })
-      expect(ready).toEqual(['ready', undefined])
-      if (channel.directory) {
-        expect((await lstat(channel.directory)).mode & 0o777).toBe(0o700)
-        expect((await lstat(channel.path)).isSocket()).toBe(true)
-      }
-      child.kill('SIGKILL')
-      await exited
-      if (channel.directory) {
-        await removePeerChannel(channel.directory)
-        await expect(lstat(channel.directory)).rejects.toMatchObject({ code: 'ENOENT' })
-      }
-      const socket = connect(channel.path)
+      const channel = await createPeerChannel()
+      if (channel.directory) roots.push(channel.directory)
+      const child = spawn(
+        process.execPath,
+        [
+          '-e',
+          'require("node:net").createServer().listen(process.argv[1], () => process.send("ready"))',
+          channel.path
+        ],
+        { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] }
+      )
+      const exited = once(child, 'exit')
       try {
-        const [error] = await once(socket, 'error')
-        expect(error.code).toMatch(/ENOENT|ECONNREFUSED/)
+        const ready = await once(child, 'message', { signal: AbortSignal.timeout(5000) })
+        expect(ready).toEqual(['ready', undefined])
+        if (channel.directory) {
+          expect((await lstat(channel.directory)).mode & 0o777).toBe(0o700)
+          expect((await lstat(channel.path)).isSocket()).toBe(true)
+        }
+        child.kill('SIGKILL')
+        await exited
+        if (channel.directory) {
+          await removePeerChannel(channel.directory)
+          await expect(lstat(channel.directory)).rejects.toMatchObject({ code: 'ENOENT' })
+        }
+        const socket = connect(channel.path)
+        try {
+          const [error] = await once(socket, 'error')
+          expect(error.code).toMatch(/ENOENT|ECONNREFUSED/)
+        } finally {
+          socket.destroy()
+        }
       } finally {
-        socket.destroy()
+        child.kill('SIGKILL')
+        await exited
       }
-    } finally {
-      child.kill('SIGKILL')
-      await exited
-    }
     }
   )
 
