@@ -93,7 +93,12 @@ export class PeerCatalog {
         // The record failed strict validation. Fall through to a minimal,
         // forward-only removal rather than blocking deletion forever.
         const obj = exactPeerObject(parsePeerJson(raw), [
-          'format', 'version', 'catalogId', 'services', 'computers', 'forgottenServiceIds'
+          'format',
+          'version',
+          'catalogId',
+          'services',
+          'computers',
+          'forgottenServiceIds'
         ]) as unknown as PeerCatalogRecord
         if (
           obj.format !== 'dshker.p2p-devices' ||

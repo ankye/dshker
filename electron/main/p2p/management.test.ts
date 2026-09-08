@@ -78,8 +78,9 @@ function fixture() {
       record = structuredClone(next)
       return { revision: '7'.repeat(64), record: structuredClone(record) }
     })
-  const removeService = vi.spyOn(PeerCatalog.prototype, 'removeService').mockImplementation(
-    async (serviceIdToDrop) => {
+  const removeService = vi
+    .spyOn(PeerCatalog.prototype, 'removeService')
+    .mockImplementation(async (serviceIdToDrop) => {
       // Mirror the real tolerant-removal validation so its business rules hold.
       if (record.forgottenServiceIds.includes(serviceIdToDrop))
         throw new PeerHelperError('p2p.trust_restore_rejected')
@@ -92,8 +93,7 @@ function fixture() {
         forgottenServiceIds: [...record.forgottenServiceIds, serviceIdToDrop]
       }
       return { revision: '9'.repeat(64), record: structuredClone(record) }
-    }
-  )
+    })
   const activate = vi.spyOn(PeerServices.prototype, 'activate').mockResolvedValue(service)
   const clearAccounts = vi.spyOn(PeerAccounts.prototype, 'close')
   const clearEnrollment = vi.spyOn(PeerEnrollment.prototype, 'close')
