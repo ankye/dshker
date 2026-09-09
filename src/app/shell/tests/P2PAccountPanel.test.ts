@@ -222,6 +222,33 @@ describe('P2P account public controls (component diagnostics)', () => {
   })
 
   describe('Account registration form', () => {
+    it('treats being signed out as a fact, not a failed operation', async () => {
+      const currentUser = vi.fn<P2PManagementApi['currentUser']>().mockResolvedValue({
+        ok: false,
+        code: 'p2p.user_login_required',
+        message: 'required'
+      })
+      const ui = await render({ currentUser })
+      expect(currentUser).toHaveBeenCalled()
+      // No alert: 'login required' is the normal state before signing in.
+      expect(ui.find('[data-testid="p2p-account-error"]').exists()).toBe(false)
+      expect(ui.text()).not.toContain('p2p.user_login_required')
+      // Re-reading the user is meaningless before a session exists.
+      expect(ui.find('[data-testid="p2p-account-read-user"]').exists()).toBe(false)
+    })
+
+    it('still reports a genuine failure and offers the user re-read once signed in', async () => {
+      const ui = await render({
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: false, code: 'p2p.helper_unavailable', message: 'down' })
+      })
+      expect(ui.find('[data-testid="p2p-account-read-user"]').exists()).toBe(true)
+      await button(ui, '读取网络列表').trigger('click')
+      await flushPromises()
+      const error = ui.get('[data-testid="p2p-account-error"]')
+      expect(error.text()).toContain('p2p.helper_unavailable')
+    })
+
     it('shows one auth form at a time and switches between login and register', async () => {
       const ui = await render({
         currentUser: async () => ({

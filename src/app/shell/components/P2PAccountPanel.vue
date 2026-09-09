@@ -42,6 +42,22 @@ const accountErrorKey = computed<MessageKey | undefined>(() => {
   const error = operation.value?.error
   return error ? ACCOUNT_ERROR_KEYS[error] : undefined
 })
+/**
+ * Being signed out is a fact, not a failure. The coordinator reports these
+ * codes whenever no session exists, which is the normal state before a login,
+ * and the domain already reflects them by clearing the user. Showing them as a
+ * red alert told the user to check a configuration that was never wrong.
+ */
+const SIGNED_OUT_CODES: readonly string[] = [
+  'p2p.user_login_required',
+  'p2p.user_session_expired',
+  'p2p.user_unauthorized'
+]
+const failure = computed(() => {
+  const error = operation.value?.error
+  if (!error || SIGNED_OUT_CODES.includes(error)) return undefined
+  return error
+})
 const deletion = ref<P2PNetworkView>()
 const confirmButton = ref<HTMLButtonElement>()
 /** Per-network target for the capacity raise; cleared once the list readback shows it. */
@@ -146,10 +162,14 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
       <code>{{ serviceId }}</code>
     </p>
     <div class="p2p-account-actions">
+      <!-- Re-reading the signed-in user is only meaningful once there is one;
+           signed out it could only repeat 'login required'. -->
       <button
+        v-if="state.user"
         type="button"
         class="prototype-button"
         :disabled="pending"
+        data-testid="p2p-account-read-user"
         @click="accounts.currentUser(serviceId)"
       >
         {{ t('p2p.account.readUser') }}
@@ -183,7 +203,7 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
       }}</template>
     </p>
     <p
-      v-if="operation?.error || state.networkWriteUnconfirmed"
+      v-if="failure || state.networkWriteUnconfirmed"
       class="remote-error"
       role="alert"
       data-testid="p2p-account-error"
@@ -192,7 +212,7 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
       <template v-else>{{
         uncertain ? t('p2p.management.unconfirmed') : t('p2p.management.failed')
       }}</template>
-      <code>{{ operation.error }}</code>
+      <code>{{ failure ?? operation?.error }}</code>
     </p>
     <p v-if="operation?.cancelError" class="remote-error" role="alert">
       {{ t('p2p.management.cancelFailed') }} <code>{{ operation.cancelError }}</code>
@@ -200,7 +220,10 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
     <p v-if="state.user === undefined">{{ t('p2p.account.unknown') }}</p>
     <template v-if="!state.user">
       <form v-if="mode === 'login'" data-testid="p2p-login-form" @submit.prevent="login">
-        <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
+        <fieldset
+          :disabled="pending || uncertain"
+          class="p2p-account-fields p2p-account-fields--stacked"
+        >
           <legend>{{ t('p2p.account.login') }}</legend>
           <label
             ><span>{{ t('p2p.account.email') }}</span
@@ -234,7 +257,10 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
         </p>
       </form>
       <form v-else data-testid="p2p-register-form" @submit.prevent="register">
-        <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
+        <fieldset
+          :disabled="pending || uncertain"
+          class="p2p-account-fields p2p-account-fields--stacked"
+        >
           <legend>{{ t('p2p.account.register') }}</legend>
           <label
             ><span>{{ t('p2p.account.email') }}</span
@@ -464,6 +490,21 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
   gap: var(--space-2);
   min-width: 0;
   flex: 1 1 12rem;
+}
+/* Credential forms read top to bottom: one field per row at a legible width,
+   unlike the inline rename and create-network forms that share the base class. */
+.p2p-account-fields--stacked {
+  display: grid;
+  gap: var(--space-3);
+  align-items: stretch;
+  max-width: 22rem;
+}
+.p2p-account-fields--stacked label {
+  flex: none;
+}
+.p2p-account-fields--stacked button {
+  justify-self: start;
+  margin-top: var(--space-1);
 }
 .p2p-account-fields input {
   width: 100%;
