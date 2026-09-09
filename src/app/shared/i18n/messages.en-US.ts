@@ -241,6 +241,8 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.management.verifyAdd': 'Verify identity and add',
   'p2p.management.addHint':
     'Enter every endpoint exactly as announced by your server. TLS is verified; addresses are never guessed and certificates are never bypassed.',
+  'p2p.management.builtinHint':
+    'Built-in coordinator preset. To point elsewhere, edit the built-in constant in code and rebuild.',
   'p2p.tabs.remoteLabel': 'Remote connections',
   'p2p.tabs.connect': 'Connect',
   'p2p.tabs.connectDescription':

@@ -247,29 +247,23 @@ watch(catalog, (value) => {
       <form @submit.prevent="domain.addService()" data-testid="p2p-service-form">
         <fieldset :disabled="busy" class="p2p-service-fields">
           <legend>{{ t('p2p.management.addService') }}</legend>
-          <div class="remote-add-form">
-            <label
-              ><span>{{ t('remote.field.name') }}</span
-              ><input v-model="draft.displayName" required autocomplete="off"
-            /></label>
-            <label
-              ><span>{{ t('p2p.management.https') }}</span
-              ><input v-model="draft.httpsOrigin" required autocomplete="off" spellcheck="false"
-            /></label>
-            <label
-              ><span>{{ t('p2p.management.wss') }}</span
-              ><input v-model="draft.wssUrl" required autocomplete="off" spellcheck="false"
-            /></label>
-            <label
-              ><span>{{ t('p2p.management.stun') }}</span
-              ><input v-model="draft.stunAddress" required autocomplete="off" spellcheck="false"
-            /></label>
+          <div class="p2p-builtin-service" data-testid="p2p-builtin-service">
+            <dl>
+              <dt>{{ t('remote.field.name') }}</dt>
+              <dd>{{ draft.displayName }}</dd>
+              <dt>{{ t('p2p.management.https') }}</dt>
+              <dd>{{ draft.httpsOrigin }}</dd>
+              <dt>{{ t('p2p.management.wss') }}</dt>
+              <dd>{{ draft.wssUrl }}</dd>
+              <dt>{{ t('p2p.management.stun') }}</dt>
+              <dd>{{ draft.stunAddress }}</dd>
+            </dl>
+            <p class="remote-form-hint">{{ t('p2p.management.builtinHint') }}</p>
             <button class="prototype-button prototype-button--primary" type="submit">
               {{ t('p2p.management.verifyAdd') }}
             </button>
           </div>
         </fieldset>
-        <p class="remote-form-hint">{{ t('p2p.management.addHint') }}</p>
       </form>
     </template>
   </section>
@@ -312,6 +306,27 @@ watch(catalog, (value) => {
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-2);
+}
+.p2p-builtin-service {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+.p2p-builtin-service dl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
+  gap: var(--space-2);
+  margin: 0;
+}
+.p2p-builtin-service dt {
+  color: var(--color-text-muted);
+}
+.p2p-builtin-service dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.p2p-builtin-service button {
+  justify-self: start;
 }
 .p2p-remove-confirm {
   padding: var(--space-3);

@@ -1,6 +1,7 @@
 import { reactive, readonly, ref } from 'vue'
 import type { ApiResult } from '@/shared/contracts'
 import {
+  P2P_BUILTIN_SERVICE,
   P2P_MANAGEMENT_VERSION,
   type P2PManagementApi,
   type P2PManagementInputs,
@@ -38,10 +39,7 @@ export class P2PManagementDomain {
   readonly catalog = ref<P2PCatalogView | null>()
   readonly selectedServiceId = ref<string>()
   readonly serviceDraft = reactive<P2PServiceInput>({
-    displayName: '',
-    httpsOrigin: '',
-    wssUrl: '',
-    stunAddress: ''
+    ...P2P_BUILTIN_SERVICE
   })
 
   constructor(private readonly bridge: () => P2PManagementApi | undefined) {}

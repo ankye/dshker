@@ -44,6 +44,19 @@ export interface P2PServiceInput {
   wssUrl: string
   stunAddress: string
 }
+
+/**
+ * The built-in coordinator service. The four fields (computer name, HTTPS
+ * service URL, WSS signaling URL, and UDP STUN host:port) are pre-filled so the
+ * user does not need to type them; changing the coordinator means editing this
+ * constant and rebuilding — the UI keeps them as read-only presets.
+ */
+export const P2P_BUILTIN_SERVICE: P2PServiceInput = {
+  displayName: 'DSHKer 服务器',
+  httpsOrigin: 'https://my.ffkey.com:8443',
+  wssUrl: 'wss://my.ffkey.com:8443/v1/signals',
+  stunAddress: 'my.ffkey.com:8443'
+} as const
 export interface P2PUserView {
   userId: string
   username: string

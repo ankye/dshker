@@ -199,6 +199,7 @@ export const zhCN = {
   'p2p.management.verifyAdd': '验证身份并添加',
   'p2p.management.addHint':
     '请填写服务器实际公告的全部地址。使用正常 TLS 验证；不会猜测地址、忽略证书或切换服务。',
+  'p2p.management.builtinHint': '这是内置服务器配置。如需更换，请修改代码中的内置常量后重新编译。',
   'p2p.tabs.remoteLabel': '远程连接',
   'p2p.tabs.connect': '连接',
   'p2p.tabs.connectDescription':
