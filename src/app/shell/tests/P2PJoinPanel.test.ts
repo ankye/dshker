@@ -173,29 +173,42 @@ describe('P2P 「我的网络」 card', () => {
     expect(ui.find('[data-testid="p2p-leave-network"]').exists()).toBe(true)
   })
 
-  it('surfaces a stub leave refusal honestly without leaving the network', async () => {
-    const leaveNetwork = vi.fn<P2PManagementApi['leaveNetwork']>().mockResolvedValue({
-      ok: false,
-      code: 'p2p.invalid_operation',
-      message: 'stub until the helper lands'
-    })
+  it('offers no leave without a session and says why, rather than failing on click', async () => {
+    const leaveNetwork = vi.fn<P2PManagementApi['leaveNetwork']>()
     const ui = await render({ leaveNetwork })
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pEnrollment.state(serviceId).registration = registered
+    await flushPromises()
+    // The coordinator has no login-free removal, so the action is unavailable
+    // until the owner signs in. The reason is stated, not left to be guessed.
+    expect(ui.get('[data-testid="p2p-leave-network"]').attributes('disabled')).toBeDefined()
+    expect(ui.find('[data-testid="p2p-leave-requires-login"]').exists()).toBe(true)
+    await ui.get('[data-testid="p2p-leave-network"]').trigger('click')
+    await flushPromises()
+    expect(leaveNetwork).not.toHaveBeenCalled()
+  })
+
+  it('leaves with the owner session and surfaces a refusal without dropping the registration', async () => {
+    const leaveNetwork = vi.fn<P2PManagementApi['leaveNetwork']>().mockResolvedValue({
+      ok: false,
+      code: 'p2p.network_unauthorized',
+      message: 'refused'
+    })
+    const ui = await render({ leaveNetwork })
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pAccounts.state(serviceId).user = { userId: 'u'.repeat(32), username: 'owner' }
+    domain.p2pEnrollment.state(serviceId).registration = registered
     domain.p2pEnrollment.state(serviceId).joinNetworkIdDraft = 'network-a'
     await flushPromises()
+    expect(ui.find('[data-testid="p2p-leave-requires-login"]').exists()).toBe(false)
     await ui.get('[data-testid="p2p-leave-network"]').trigger('click')
     await flushPromises()
     const error = ui.get('[data-testid="p2p-leave-error"]')
-    expect(error.text()).toContain('离开网络暂不可用')
-    expect(error.text()).toContain('p2p.invalid_operation')
+    expect(error.text()).toContain('p2p.network_unauthorized')
+    // A refused removal must not look like a completed one.
     expect(ui.find('[data-testid="p2p-joined-state"]').exists()).toBe(true)
     expect(leaveNetwork).toHaveBeenCalledWith(
-      expect.objectContaining({
-        serviceId,
-        networkId: 'network-a',
-        deviceId: 'device-a'
-      })
+      expect.objectContaining({ serviceId, networkId: 'network-a', deviceId: 'device-a' })
     )
   })
 

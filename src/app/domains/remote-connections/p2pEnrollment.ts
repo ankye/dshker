@@ -116,10 +116,14 @@ export class P2PEnrollmentDomain {
   /**
    * Leave a network the device joined.
    *
+   * Requires a signed-in owner. The coordinator has no login-free removal, and
+   * that asymmetry with join is deliberate: holding a networkId is enough to add
+   * a device, but without a cryptographic proof it must not be enough to evict
+   * one, or any holder of a deviceId could remove someone else's machine.
+   *
    * Only a server-confirmed removal clears the local registration. A typed
-   * refusal (for example the p2p.invalid_operation stub until the helper
-   * lands) never fakes a leave: the registration stays and the caller
-   * surfaces the error.
+   * refusal never fakes a leave: the registration stays and the caller surfaces
+   * the error.
    */
   async leave(serviceId: string, networkId: string, deviceId: string): Promise<void> {
     const state = this.state(serviceId)

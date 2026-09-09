@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, watch } from 'vue'
 import {
+  p2pAccounts as accounts,
   p2pConnections,
   p2pEnrollment as enrollment,
   p2pManagement as management
@@ -77,7 +78,18 @@ const deviceId = computed(() =>
     : (management.localDevice.value?.deviceId ?? '—')
 )
 
-/** Leaving is only wired to a server-confirmed path; the stub never fakes it. */
+/**
+ * Leaving needs a signed-in owner.
+ *
+ * The coordinator has no login-free removal, so the action is offered only when a
+ * session exists. Disabling it with a stated reason is honest; hiding it would
+ * leave the user unable to tell whether leaving is possible at all.
+ */
+const signedIn = computed(() => {
+  const id = serviceId.value
+  return id ? !!accounts.state(id).user : false
+})
+
 const leaveError = computed(() =>
   operation.value?.method === 'leaveNetwork' && operation.value?.phase === 'failed'
     ? operation.value.error
@@ -231,6 +243,9 @@ async function leave(): Promise<void> {
       {{ t('p2p.myNetwork.serviceUnavailable') }}
     </p>
     <template v-else>
+      <!-- This device's identity leads: it is the one fact that is true in every
+           phase, and it answers "which machine am I looking at" before anything
+           asks the user to act. -->
       <dl class="p2p-device-info" data-testid="p2p-device-info">
         <div>
           <dt>{{ t('p2p.myNetwork.deviceName') }}</dt>
@@ -244,7 +259,7 @@ async function leave(): Promise<void> {
         </div>
       </dl>
 
-      <!-- Joined: no input, only status and leave. -->
+      <!-- Joined: status and the one destructive action, no input to re-join. -->
       <div
         v-if="registration?.kind === 'registered'"
         class="p2p-joined"
@@ -261,15 +276,22 @@ async function leave(): Promise<void> {
         <p v-if="leaveError" role="alert" class="remote-error" data-testid="p2p-leave-error">
           {{ t('p2p.myNetwork.leaveError') }} <code>{{ leaveError }}</code>
         </p>
-        <button
-          class="prototype-button prototype-button--danger"
-          type="button"
-          :disabled="busy"
-          data-testid="p2p-leave-network"
-          @click="leave"
-        >
-          {{ t('p2p.myNetwork.leave') }}
-        </button>
+        <div class="p2p-joined__actions">
+          <button
+            class="prototype-button prototype-button--danger"
+            type="button"
+            :disabled="busy || !signedIn"
+            data-testid="p2p-leave-network"
+            @click="leave"
+          >
+            {{ t('p2p.myNetwork.leave') }}
+          </button>
+          <!-- Stated rather than implied: a disabled button with no reason reads
+               as a defect. -->
+          <p v-if="!signedIn" class="remote-form-hint" data-testid="p2p-leave-requires-login">
+            {{ t('p2p.devices.leaveRequiresLogin') }}
+          </p>
+        </div>
       </div>
 
       <!-- Pending: input disabled, cancel action, awaiting approval. -->
@@ -332,19 +354,35 @@ async function leave(): Promise<void> {
 </template>
 
 <style scoped>
+/* One vertical rhythm for the whole card, so each phase block is separated the
+   same way regardless of which one is showing. */
 .p2p-join {
+  display: grid;
+  gap: var(--space-4);
   min-width: 0;
 }
+/* Identity reads as a definition list: label above value at narrow widths, and
+   two aligned columns once there is room to compare them. */
 .p2p-device-info {
   display: grid;
   gap: var(--space-2);
   margin: 0;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
 }
-.p2p-device-info dl > div {
+.p2p-device-info > div {
   display: grid;
-  grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
-  gap: var(--space-3);
-  padding-block: var(--space-1);
+  gap: var(--space-1);
+  min-width: 0;
+}
+@media (width >= 30rem) {
+  .p2p-device-info > div {
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--space-3);
+  }
 }
 .p2p-device-info dt {
   color: var(--color-text-muted);
@@ -398,11 +436,29 @@ async function leave(): Promise<void> {
 .p2p-joined,
 .p2p-pending-state {
   display: grid;
+  gap: var(--space-3);
+}
+/* The destructive action and its explanation stay together, so the reason a
+   button is unavailable is never separated from the button. */
+.p2p-joined__actions {
+  display: grid;
+  justify-items: start;
   gap: var(--space-2);
 }
-.p2p-network-status {
+.p2p-joined__actions .remote-form-hint {
   margin: 0;
+}
+/* Status is a badge, not a sentence: it is scanned, so it needs a shape that
+   separates it from the body copy around it. */
+.p2p-network-status {
+  justify-self: start;
+  margin: 0;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  font-size: var(--type-label);
   font-weight: var(--font-weight-medium);
+  line-height: var(--size-control-sm);
 }
 .p2p-network-status[data-state='online'] {
   color: var(--color-success);
