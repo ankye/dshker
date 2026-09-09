@@ -10,14 +10,18 @@
     "src/app/shell/components/P2PEnrollmentPanel.vue",
     "electron/main/p2p/account-records.ts",
     "networking/integration/user_management_test.go",
-    "electron/main/p2p/accounts.ts"
+    "electron/main/p2p/accounts.ts",
+    "package.json",
+    "src/app/domains/remote-connections/p2pAccounts.ts"
   ],
   "test_files": [
     "electron/main/p2p/accounts.test.ts",
     "src/app/shell/tests/p2pRefusal.test.ts",
     "src/app/shell/tests/P2PAccountPanel.test.ts",
     "src/app/shared/i18n/i18n.test.ts",
-    "networking/integration/user_management_test.go"
+    "networking/integration/user_management_test.go",
+    "src/app/domains/remote-connections/p2pAccounts.test.ts",
+    "electron/main/p2p/packaging.test.ts"
   ],
   "live_test_files": ["tools/electron-renderer-smoke.mjs"],
   "state_matrix": [
@@ -55,6 +59,31 @@
       "state": "reset",
       "test": "classifies an unknown future code as a fault rather than throwing",
       "semantics": "A helper that grows a new code must not break the renderer or lose its message."
+    },
+    {
+      "state": "no_op",
+      "test": "never asks for a password while the account state is unknown",
+      "semantics": "Unknown is not signed out. The panel showed the unknown line and the password form together, asking for a secret it could not use."
+    },
+    {
+      "state": "recovery",
+      "test": "keeps a way out when the account state is unknown",
+      "semantics": "With no identity and no form, hiding the read control left no way to recover except restarting the app."
+    },
+    {
+      "state": "rejected",
+      "test": "offers the credential forms only once sign-out is confirmed",
+      "semantics": "A confirmed sign-out is exactly when asking for credentials is correct."
+    },
+    {
+      "state": "partial_execution",
+      "test": "does not claim a sign-out when the refusal says nothing about the session",
+      "semantics": "A missing helper is not evidence of sign-out; discarding authority there would drop a session the coordinator still honours."
+    },
+    {
+      "state": "success",
+      "test": "names every built helper directory the way the filter expects",
+      "semantics": "A helper directory the filter cannot express would be dropped from the package, which is how the macOS build shipped without a helper."
     }
   ],
   "field_bindings": [
@@ -147,6 +176,26 @@
       "state": "success",
       "identity_keys": ["DeviceID", "UserID"],
       "missing_semantics": "The directory withholds credential material, so identity is confirmed by the fields it carries; presence must be a usable value."
+    },
+    {
+      "production_file": "package.json",
+      "field": "build.extraResources filter for build/p2p",
+      "source": "The helper directory name produced by tools/build-peer-helper.mjs",
+      "assertion": "expect(resource.filter).toEqual(['${platform}-${arch}/**'])",
+      "test": "filters by the platform name the helper build actually produces",
+      "state": "success",
+      "identity_keys": ["platform", "arch"],
+      "missing_semantics": "electron-builder expands ${os} to \"mac\" while the build emits \"darwin-arm64\", so the old filter matched nothing and the helper was silently omitted from the package. Linux only worked because ${os} happened to equal \"linux\"."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "currentUser session-clearing decision",
+      "source": "The refusal code returned by the owner",
+      "assertion": "expect(accounts.state('service-a').user).toBeNull()",
+      "test": "clears authority for any refusal that means there is no session",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId"],
+      "missing_semantics": "A refusal unrelated to the session leaves authority intact rather than guessing a sign-out."
     }
   ],
   "real_commands": [
@@ -187,6 +236,14 @@
     {
       "artifact": ".run/p2p-refusal/signin-summary.json",
       "note": "Same run with the crash list, which is empty. Signed-out shows signedIn false with zero alerts; the registered email reaches signedIn true."
+    },
+    {
+      "artifact": ".run/p2p-refusal/lifecycle-ledger.jsonl",
+      "note": "Packaged app, clean session: signed out shows the password form, registration reaches signed in, sign-out returns to the form, and re-login succeeds. Zero alerts and no crash at every step."
+    },
+    {
+      "artifact": ".run/p2p-refusal/lifecycle-summary.json",
+      "note": "Same run with the captured exception and console-error list, which is empty."
     }
   ],
   "acceptance_status": "Accepted for the refusal-presentation and login-validator change. 1121 renderer tests, type-check, format and architecture gates pass; Go networking builds. networking/internal/runtimebridge fails to build on macOS from a pre-existing Windows-only syscall constant, outside this change. The integration package now compiles after correcting a DeviceEntry field reference this change made stale."
