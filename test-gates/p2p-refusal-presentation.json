@@ -1,0 +1,193 @@
+{
+  "change": "Readable P2P refusals: login accepts the email users register with, and every refusal gets a truthful message instead of one generic configuration warning",
+  "risk": "standard",
+  "production_files": [
+    "src/shared/p2p-refusal.ts",
+    "src/app/shared/i18n/i18n.refusals.ts",
+    "src/app/shared/i18n/messages.zh-CN.ts",
+    "src/app/shared/i18n/messages.en-US.ts",
+    "src/app/shell/components/P2PAccountPanel.vue",
+    "src/app/shell/components/P2PEnrollmentPanel.vue",
+    "electron/main/p2p/account-records.ts",
+    "networking/integration/user_management_test.go",
+    "electron/main/p2p/accounts.ts"
+  ],
+  "test_files": [
+    "electron/main/p2p/accounts.test.ts",
+    "src/app/shell/tests/p2pRefusal.test.ts",
+    "src/app/shell/tests/P2PAccountPanel.test.ts",
+    "src/app/shared/i18n/i18n.test.ts",
+    "networking/integration/user_management_test.go"
+  ],
+  "live_test_files": ["tools/electron-renderer-smoke.mjs"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "signs in with the address the coordinator keys the account by",
+      "semantics": "The login form is type=email and every account is keyed by email server side. assertAccountUsername previously refused '@', so sign-in was impossible for every real account."
+    },
+    {
+      "state": "rejected",
+      "test": "explains a rejected value instead of blaming the configuration",
+      "semantics": "A refused input is the user's to fix. It must not present as a configuration fault with only a raw code."
+    },
+    {
+      "state": "no_op",
+      "test": "does not report an unregistered device as a failure",
+      "semantics": "p2p.credential_unavailable means nothing is stored yet, which is the normal state before enrollment, not an error."
+    },
+    {
+      "state": "partial_execution",
+      "test": "never downgrades an unconfirmed result to a plain failure",
+      "semantics": "An unconfirmed write must keep claiming neither outcome; classification must not collapse it into a generic failure."
+    },
+    {
+      "state": "recovery",
+      "test": "marks transient refusals as retryable",
+      "semantics": "busy, limit, timeout and cancelled invite the same action again rather than a configuration audit."
+    },
+    {
+      "state": "stale_timeout",
+      "test": "separates being signed out from a failure",
+      "semantics": "An expired session reads as signed out, so the sign-in form is the answer rather than an alert."
+    },
+    {
+      "state": "reset",
+      "test": "classifies an unknown future code as a fault rather than throwing",
+      "semantics": "A helper that grows a new code must not break the renderer or lose its message."
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "src/shared/p2p-refusal.ts",
+      "field": "p2pRefusalKind(code)",
+      "source": "P2P_MANAGEMENT_ERROR_CODES, the full allowed set returned over IPC",
+      "assertion": "expect(p2pRefusalKind(code)).toBeTruthy()",
+      "test": "classifies every allowed code, so no refusal is left without a category",
+      "state": "success",
+      "identity_keys": ["code"],
+      "missing_semantics": "An unlisted or future code classifies as 'fault' and still yields a message; classification never throws."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PAccountPanel.vue",
+      "field": "failureMessage rendered in [data-testid=p2p-account-error]",
+      "source": "operation.error from the management domain, produced by a real owner refusal",
+      "assertion": "expect(error.text()).toContain(zhCN['p2p.account.invalidInput'])",
+      "test": "explains a rejected value instead of blaming the configuration",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "requestId"],
+      "missing_semantics": "The raw code remains visible for reporting; absence of a specific key falls back to the category line, never to a configuration warning."
+    },
+    {
+      "production_file": "electron/main/p2p/account-records.ts",
+      "field": "assertAccountUsername accepted forms",
+      "source": "The email a user registers with, as the coordinator stores and returns it",
+      "assertion": "expect(f.accounts.hasSession(serviceId)).toBe(true)",
+      "test": "signs in with the address the coordinator keys the account by",
+      "state": "success",
+      "identity_keys": ["userId", "username"],
+      "missing_semantics": "The narrower handle form stays accepted so a coordinator issuing one is not locked out; over-254-byte and control-character values are still refused."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PEnrollmentPanel.vue",
+      "field": "readFailure rendered in [data-testid=p2p-enrollment-error]",
+      "source": "operation.error for registration reads",
+      "assertion": "code: 'p2p.credential_unavailable',",
+      "test": "does not report an unregistered device as a failure",
+      "state": "no_op",
+      "identity_keys": ["serviceId"],
+      "missing_semantics": "Both codes mean nothing is stored for this service, which is what the registration panel below exists to resolve."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.refusals.ts",
+      "field": "zhCNRefusals and enUSRefusals category lines",
+      "source": "The refusal categories produced by p2pRefusalKind",
+      "assertion": "expect([...zh.keys()].sort()).toStrictEqual(englishKeys.sort())",
+      "test": "defines the same message keys in every catalog",
+      "state": "success",
+      "identity_keys": ["message key"],
+      "missing_semantics": "A category without copy in either catalog fails key parity; an empty string fails the non-empty check."
+    },
+    {
+      "production_file": "src/app/shared/i18n/messages.zh-CN.ts",
+      "field": "MessageKey union and merged catalog",
+      "source": "zhCNRefusals spread into the primary catalog",
+      "assertion": "expect([...zh.keys()].sort()).toStrictEqual(englishKeys.sort())",
+      "test": "defines the same message keys in every catalog",
+      "state": "success",
+      "identity_keys": ["message key"],
+      "missing_semantics": "A key present in one locale only is a failure, so a refusal cannot render as a raw key."
+    },
+    {
+      "production_file": "src/app/shared/i18n/messages.en-US.ts",
+      "field": "merged English catalog",
+      "source": "enUSRefusals spread into the primary catalog",
+      "assertion": "expect(untranslated).toStrictEqual([])",
+      "test": "translates every message rather than copying one catalog into the other",
+      "state": "success",
+      "identity_keys": ["message key"],
+      "missing_semantics": "Copying Chinese text into the English catalog fails; the file also stays inside the 1000-line budget enforced by architecture:check."
+    },
+    {
+      "production_file": "electron/main/p2p/accounts.ts",
+      "field": "login username admission",
+      "source": "The email the coordinator stores for the account",
+      "assertion": "expect(f.accounts.hasSession(serviceId)).toBe(true)",
+      "test": "signs in with the address the coordinator keys the account by",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId"],
+      "missing_semantics": "A refused value never reaches the helper, so the password does not leave the process."
+    },
+    {
+      "production_file": "networking/integration/user_management_test.go",
+      "field": "DeviceEntry directory row fields",
+      "source": "NetworkDevices readback from a real coordinator process",
+      "assertion": "t.Fatal(\"directory reported an unusable presence\")",
+      "test": "TestUserNetworkManagementReadback",
+      "state": "success",
+      "identity_keys": ["DeviceID", "UserID"],
+      "missing_semantics": "The directory withholds credential material, so identity is confirmed by the fields it carries; presence must be a usable value."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "npx vitest run",
+      "no_mock": true
+    },
+    {
+      "command": "npx vue-tsc --noEmit -p tsconfig.json",
+      "no_mock": true
+    },
+    {
+      "command": "npm run architecture:check",
+      "no_mock": true
+    },
+    {
+      "command": "npm run format:check",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && GOWORK=off go build ./...",
+      "no_mock": true
+    },
+    {
+      "command": "node tools/build-peer-helper.mjs --platform darwin --arch arm64",
+      "no_mock": true
+    },
+    {
+      "command": "npm run build:electron",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/p2p-refusal/signin-ledger.jsonl",
+      "note": "Public-UI run against the live coordinator: signed out, malformed input, then the registered email. Every step records alive, alert count and signedIn."
+    },
+    {
+      "artifact": ".run/p2p-refusal/signin-summary.json",
+      "note": "Same run with the crash list, which is empty. Signed-out shows signedIn false with zero alerts; the registered email reaches signedIn true."
+    }
+  ],
+  "acceptance_status": "Accepted for the refusal-presentation and login-validator change. 1121 renderer tests, type-check, format and architecture gates pass; Go networking builds. networking/internal/runtimebridge fails to build on macOS from a pre-existing Windows-only syscall constant, outside this change. The integration package now compiles after correcting a DeviceEntry field reference this change made stale."
+}
