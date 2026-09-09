@@ -137,9 +137,10 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     const accountPane = wrapper!.get('[data-testid="remote-pane-account"]')
     expect(accountPane.find('input[autocomplete="username"]').exists()).toBe(true)
     expect(accountPane.find('input[type="password"]').exists()).toBe(true)
-    // Signed out composes the login form and the login-free enrollment panel.
+    // Signed out shows the login form only: enrollment needs a signed-in owner
+    // and a selected network, so it must not appear as inert controls here.
     expect(wrapper!.find('[data-testid="p2p-login-register-heading"]').exists()).toBe(true)
-    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(false)
     expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
     expect(wrapper!.find('[data-testid="remote-pane-connect"]').exists()).toBe(false)
   })
@@ -202,8 +203,8 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
       true
     )
     await openAccountTab(wrapper!)
-    // The login-free enrollment panel is visible even while signed out.
-    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(true)
+    // Neither enrollment nor pairing is offered before sign-in.
+    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(false)
     expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
     const pane = wrapper!.get('[data-testid="remote-pane-account"]')
     await pane.get('input[autocomplete="username"]').setValue('alice')

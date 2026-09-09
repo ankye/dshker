@@ -7,7 +7,6 @@ export const zhCN = {
   'p2p.enrollment.register': '登记本机',
   'p2p.enrollment.registerHint':
     '登记会在本机生成设备密钥（私钥不离开本机），并向服务器提交登记请求。',
-  'p2p.enrollment.read': '读取本机登记',
   'p2p.enrollment.recover': '查询原登记结果',
   'p2p.enrollment.registered': '已读到本机登记凭据；这不代表证书仍有效、设备在线或 DSH 已连接。',
   'p2p.enrollment.pending': '本机保存了待确认的登记请求。',
@@ -34,6 +33,8 @@ export const zhCN = {
   'p2p.account.email': '邮箱',
   'p2p.account.confirmPassword': '确认密码（可选）',
   'p2p.account.register': '注册账号',
+  'p2p.account.noAccount': '还没有账号？',
+  'p2p.account.haveAccount': '已有账号？',
   'p2p.account.registerHint':
     '注册会用邮箱和密码在此服务器创建账号。密码提交后立即清空，不保留到草稿或页面状态。',
   'p2p.account.networkLimit': '每个账号最多创建 2 个网络',

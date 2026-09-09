@@ -85,7 +85,9 @@ const joinedNotLoggedIn = computed(
         {{ t('p2p.accountTab.loginRegister') }}
       </h3>
       <P2PAccountPanel :service-id="service.serviceId" :display-name="service.displayName" />
-      <P2PEnrollmentPanel :service-id="service.serviceId" />
+      <!-- Enrollment needs a signed-in owner and a selected network, so it stays
+           out of the signed-out view instead of showing inert controls. -->
+      <P2PEnrollmentPanel v-if="loggedIn" :service-id="service.serviceId" />
       <P2PPairingPanel
         v-if="loggedIn"
         :key="`pairing-${service.serviceId}`"

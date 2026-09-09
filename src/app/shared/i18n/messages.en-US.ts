@@ -9,7 +9,6 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.enrollment.register': 'Register this computer',
   'p2p.enrollment.registerHint':
     'Registration generates a device key locally (the private key never leaves this computer) and submits an enrollment request to the server.',
-  'p2p.enrollment.read': 'Read local enrollment',
   'p2p.enrollment.recover': 'Query original enrollment result',
   'p2p.enrollment.registered':
     'Local enrollment credential read. This does not confirm certificate validity, device presence or a DSH connection.',
@@ -43,6 +42,8 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.account.email': 'Email address',
   'p2p.account.confirmPassword': 'Repeat password (optional)',
   'p2p.account.register': 'Register account',
+  'p2p.account.noAccount': 'No account yet?',
+  'p2p.account.haveAccount': 'Already have an account?',
   'p2p.account.registerHint':
     'Registration creates an account on this server with your email and password. The password is cleared immediately after submission.',
   'p2p.account.networkLimit': 'Each account can create at most 2 networks on this server.',

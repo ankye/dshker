@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from 'vue'
+import { computed, nextTick, onMounted, ref } from 'vue'
 import {
   p2pEnrollment as enrollment,
   p2pManagement as management,
@@ -46,6 +46,12 @@ const canSubmit = computed(
     sameUser.value
 )
 
+// The local credential is read on open rather than behind a button: a manual
+// re-read produced nothing the panel had not already asked for.
+onMounted(() => {
+  if (!busy.value) void enrollment.read(props.serviceId)
+})
+
 async function submit() {
   if (!canSubmit.value || busy.value) return
   await enrollment.submit(props.serviceId)
@@ -89,14 +95,6 @@ async function submit() {
       <p class="remote-form-hint">{{ t('p2p.enrollment.registerHint') }}</p>
     </form>
     <div class="p2p-enrollment-actions">
-      <button
-        class="prototype-button"
-        type="button"
-        :disabled="busy"
-        @click="enrollment.read(serviceId)"
-      >
-        {{ t('p2p.enrollment.read') }}
-      </button>
       <button
         v-if="state.registration?.kind === 'pending'"
         class="prototype-button"

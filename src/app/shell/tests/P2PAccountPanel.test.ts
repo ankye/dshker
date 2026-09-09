@@ -222,7 +222,47 @@ describe('P2P account public controls (component diagnostics)', () => {
   })
 
   describe('Account registration form', () => {
-    it('renders a register form alongside login when signed out and adopts the registered user', async () => {
+    it('shows one auth form at a time and switches between login and register', async () => {
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        })
+      })
+      // Signed out opens on login alone; register is one link away.
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(true)
+      expect(ui.find('[data-testid="p2p-register-form"]').exists()).toBe(false)
+      await ui.get('[data-testid="p2p-account-switch-register"]').trigger('click')
+      expect(ui.find('[data-testid="p2p-register-form"]').exists()).toBe(true)
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
+      await ui.get('[data-testid="p2p-account-switch-login"]').trigger('click')
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(true)
+      expect(ui.find('[data-testid="p2p-register-form"]').exists()).toBe(false)
+    })
+
+    it('keeps the login and register email drafts independent', async () => {
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        })
+      })
+      await ui.get('input[autocomplete="username"]').setValue('login@example.com')
+      await ui.get('[data-testid="p2p-account-switch-register"]').trigger('click')
+      // A shared draft used to let one form silently rewrite the other's email.
+      expect((ui.get('[data-testid="p2p-register-email"]').element as HTMLInputElement).value).toBe(
+        ''
+      )
+      await ui.get('[data-testid="p2p-register-email"]').setValue('new@example.com')
+      await ui.get('[data-testid="p2p-account-switch-login"]').trigger('click')
+      expect((ui.get('input[autocomplete="username"]').element as HTMLInputElement).value).toBe(
+        'login@example.com'
+      )
+    })
+
+    it('registers with its own email and adopts the registered user', async () => {
       const register = vi.fn<P2PManagementApi['register']>().mockResolvedValue({
         ok: true,
         data: user
@@ -235,6 +275,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         }),
         register
       })
+      await ui.get('[data-testid="p2p-account-switch-register"]').trigger('click')
       const form = ui.get('[data-testid="p2p-register-form"]')
       expect(form.text()).toContain('注册账号')
       await form.get('input[autocomplete="email"]').setValue('alice@example.com')
@@ -290,6 +331,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         }),
         register
       })
+      await ui.get('[data-testid="p2p-account-switch-register"]').trigger('click')
       const form = ui.get('[data-testid="p2p-register-form"]')
       await form.get('input[autocomplete="email"]').setValue('existing@example.com')
       await form.get('[data-testid="p2p-register-password"]').setValue('secret')

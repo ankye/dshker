@@ -12,9 +12,13 @@ const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
 const state = accounts.state(props.serviceId)
 const password = ref('')
-/** Registration drafts stay local to the panel; only email may double as the login identifier. */
+/** Registration drafts stay local to the panel, including its own email field:
+ * sharing one draft let typing in one form silently rewrite the other. */
+const registerEmail = ref('')
 const registerPassword = ref('')
 const registerConfirm = ref('')
+/** Signed out shows one form at a time; the other is one link away. */
+const mode = ref<'login' | 'register'>('login')
 const pending = computed(() => management.busy(props.serviceId))
 const operation = computed(() => management.operations[props.serviceId])
 const uncertain = computed(
@@ -49,8 +53,10 @@ watch(
   () => {
     deletion.value = undefined
     password.value = ''
+    registerEmail.value = ''
     registerPassword.value = ''
     registerConfirm.value = ''
+    mode.value = 'login'
   }
 )
 watch(
@@ -70,6 +76,7 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   password.value = ''
+  registerEmail.value = ''
   registerPassword.value = ''
   registerConfirm.value = ''
 })
@@ -83,7 +90,15 @@ async function register() {
   const supplied = registerPassword.value
   registerPassword.value = ''
   registerConfirm.value = ''
-  await accounts.register(props.serviceId, state.usernameDraft, supplied)
+  await accounts.register(props.serviceId, registerEmail.value, supplied)
+}
+
+/** Switching forms discards only the secrets typed into the abandoned one. */
+function switchMode(next: 'login' | 'register'): void {
+  mode.value = next
+  password.value = ''
+  registerPassword.value = ''
+  registerConfirm.value = ''
 }
 async function askDelete(network: P2PNetworkView, event: Event) {
   invoker = event.currentTarget as HTMLElement
@@ -184,7 +199,7 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
     </p>
     <p v-if="state.user === undefined">{{ t('p2p.account.unknown') }}</p>
     <template v-if="!state.user">
-      <form data-testid="p2p-login-form" @submit.prevent="login">
+      <form v-if="mode === 'login'" data-testid="p2p-login-form" @submit.prevent="login">
         <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
           <legend>{{ t('p2p.account.login') }}</legend>
           <label
@@ -206,19 +221,31 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
           </button>
         </fieldset>
         <p>{{ t('p2p.account.passwordHint') }}</p>
+        <p class="p2p-account-switch">
+          <span>{{ t('p2p.account.noAccount') }}</span>
+          <button
+            type="button"
+            class="p2p-account-switch-link"
+            data-testid="p2p-account-switch-register"
+            @click="switchMode('register')"
+          >
+            {{ t('p2p.account.register') }}
+          </button>
+        </p>
       </form>
-      <form data-testid="p2p-register-form" @submit.prevent="register">
+      <form v-else data-testid="p2p-register-form" @submit.prevent="register">
         <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
           <legend>{{ t('p2p.account.register') }}</legend>
           <label
             ><span>{{ t('p2p.account.email') }}</span
             ><input
               :id="`p2p-register-email-${serviceId}`"
-              v-model="state.usernameDraft"
+              v-model="registerEmail"
               type="email"
               required
               autocomplete="email"
               spellcheck="false"
+              data-testid="p2p-register-email"
           /></label>
           <label
             ><span>{{ t('p2p.account.password') }}</span
@@ -246,6 +273,17 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
           </button>
         </fieldset>
         <p>{{ t('p2p.account.registerHint') }}</p>
+        <p class="p2p-account-switch">
+          <span>{{ t('p2p.account.haveAccount') }}</span>
+          <button
+            type="button"
+            class="p2p-account-switch-link"
+            data-testid="p2p-account-switch-login"
+            @click="switchMode('login')"
+          >
+            {{ t('p2p.account.login') }}
+          </button>
+        </p>
       </form>
     </template>
     <template v-else>
@@ -439,6 +477,28 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
 .p2p-account input:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
+}
+.p2p-account-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-account-switch-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.p2p-account-switch-link:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
 }
 .p2p-network-list {
   list-style: none;
