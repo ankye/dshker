@@ -44,14 +44,23 @@ export class PeerSupervisor {
     const executable = await verifyPeerResource(options.resourcesRoot)
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
     const { directory, path: socketPath } = await createPeerChannel()
-    const child = spawn(executable, [], { stdio: 'pipe', windowsHide: true })
+    const child = spawn(executable, [], {
+      stdio: 'pipe',
+      windowsHide: true,
+      env: { ...process.env }
+    })
     const exit = new Promise<void>((resolve) => {
       child.once('close', () => resolve())
     })
-    // No child output contains user-facing copy or trusted diagnostics.
+    // No child output contains user-facing copy or trusted diagnostics, so it is
+    // discarded by default. Under DSH_P2P_TRACE it is forwarded instead: the
+    // helper owns the coordinator conversation, and with its stderr dropped a
+    // failure there was invisible from the main process log.
     child.on('error', () => undefined)
     child.stdin.on('error', () => undefined)
-    child.stderr.resume()
+    if (process.env.DSH_P2P_TRACE === '1')
+      child.stderr.on('data', (chunk: Buffer) => process.stderr.write(chunk))
+    else child.stderr.resume()
     const budget = AbortSignal.any([signal, AbortSignal.timeout(30_000)])
     let rpc: PeerRpc | undefined
     try {
