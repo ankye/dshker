@@ -15,6 +15,23 @@ export interface PeerNetwork {
   /** Server-confirmed device capacity; the server is authoritative. */
   maxDevices: P2PNetworkDeviceLimit
 }
+/**
+ * A device bound to a network, as its owner sees it.
+ *
+ * No certificate: the coordinator withholds credential material from its
+ * directory, and nothing here needs it.
+ */
+export interface PeerNetworkDevice {
+  deviceId: string
+  userId: string
+  name: string
+  presence: 'online' | 'offline'
+  /** Unix seconds, 0 when never reported. Persisted at most once a minute. */
+  lastSeen: number
+  version: string
+  platform: string
+  architecture: string
+}
 /** Private main memory only. Never return this type from renderer-facing methods. */
 export interface PeerUserSession {
   user: PeerUser
@@ -57,6 +74,51 @@ export function peerNetwork(value: unknown, userId: string): PeerNetwork {
     name: record.name,
     maxDevices: record.maxDevices as P2PNetworkDeviceLimit
   }
+}
+
+/**
+ * One row of a network's device directory.
+ *
+ * Telemetry is self-declared, so it is validated for shape but never trusted for
+ * meaning: an over-long or control-character value is dropped to empty rather
+ * than refusing the whole directory, because a cosmetic field must not hide the
+ * device list. Presence follows the pair rule: stale is not usable, so it reads
+ * as offline.
+ */
+export function peerNetworkDevice(value: unknown, userId: string): PeerNetworkDevice {
+  const record = exactPeerObject(value, [
+    'deviceId',
+    'userId',
+    'name',
+    'presence',
+    'lastSeen',
+    'version',
+    'platform',
+    'architecture'
+  ])
+  assertAccountId(record.deviceId)
+  assertAccountText(record.name)
+  if (record.userId !== userId) throw new PeerHelperError('p2p.user_scope_mismatch')
+  if (!['online', 'stale', 'offline'].includes(record.presence as string))
+    throw new PeerHelperError('p2p.invalid_device_state')
+  if (!Number.isSafeInteger(record.lastSeen) || (record.lastSeen as number) < 0)
+    throw new PeerHelperError('p2p.invalid_device_state')
+  return {
+    deviceId: record.deviceId,
+    userId,
+    name: record.name,
+    presence: record.presence === 'online' ? 'online' : 'offline',
+    lastSeen: record.lastSeen as number,
+    version: displayable(record.version),
+    platform: displayable(record.platform),
+    architecture: displayable(record.architecture)
+  }
+}
+
+/** Keeps a self-declared string only when it is safe to render as-is. */
+function displayable(value: unknown): string {
+  if (typeof value !== 'string' || value.length > 64) return ''
+  return /[\r\n\u0000]/.test(value) || value !== value.trim() ? '' : value
 }
 
 export function peerNetworks(value: unknown, userId: string): PeerNetwork[] {

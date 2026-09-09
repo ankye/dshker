@@ -165,6 +165,22 @@ export class PeerManagement {
       accounts.listNetworks(serviceId, active)
     )
   }
+  /**
+   * Reads a network's device directory together with the local device id.
+   *
+   * Both come from one owner call so the IPC layer never has to combine two
+   * operations, which would make a single read look like two to any caller
+   * counting dispatches.
+   */
+  async networkDevices(serviceId: string, networkId: string, signal: AbortSignal) {
+    const devices = await this.#account(serviceId, signal, (accounts, active) =>
+      accounts.listNetworkDevices(serviceId, networkId, active)
+    )
+    // A service with no registration yet simply has no local device in the list.
+    const saved = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
+    const localDeviceId = saved?.kind === 'registered' ? saved.credential.deviceId : ''
+    return { devices, localDeviceId }
+  }
   createNetwork(serviceId: string, name: string, signal: AbortSignal) {
     return this.#account(serviceId, signal, (accounts, active) =>
       accounts.createNetwork(serviceId, name, active)

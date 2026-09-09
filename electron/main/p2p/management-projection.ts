@@ -2,11 +2,13 @@ import type {
   P2PCatalogView,
   P2PUserView,
   P2PNetworkView,
+  P2PNetworkDeviceView,
   P2PRegistrationView,
   P2PPairView,
   P2PInviteView,
   P2PConnectionView
 } from '../../../src/shared/p2p-management'
+import type { PeerNetworkDevice } from './account-records'
 import type { PeerCatalogSnapshot } from './catalog'
 import type { PeerHelperState } from './helper-state'
 import type { PeerPair, PeerInvite } from './pair-records'
@@ -23,6 +25,29 @@ export function projectPeerNetwork(value: P2PNetworkView): P2PNetworkView {
     maxDevices: value.maxDevices
   }
 }
+/**
+ * Projects a network's device directory for the renderer.
+ *
+ * `isLocal` marks the device this launcher runs on so the UI can refuse to let a
+ * user remove the machine they are sitting at. It is derived from the registered
+ * credential rather than trusted from the reply.
+ */
+export function projectPeerNetworkDevices(
+  devices: readonly PeerNetworkDevice[],
+  localDeviceId: string
+): P2PNetworkDeviceView[] {
+  return devices.map((device) => ({
+    deviceId: device.deviceId,
+    name: device.name,
+    presence: device.presence,
+    lastSeen: device.lastSeen,
+    version: device.version,
+    platform: device.platform,
+    architecture: device.architecture,
+    isLocal: device.deviceId === localDeviceId
+  }))
+}
+
 export function projectPeerRegistration(value: P2PRegistrationView): P2PRegistrationView {
   const identity = {
     serviceId: value.serviceId,

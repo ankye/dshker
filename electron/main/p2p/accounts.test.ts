@@ -84,6 +84,76 @@ describe('main-owned P2P accounts', () => {
     expect(f.accounts.hasSession(serviceId)).toBe(false)
   })
 
+  it('reads the device directory and keeps self-declared telemetry only when displayable', async () => {
+    const f = await loggedIn()
+    const base = { userId: user.userId, presence: 'online', lastSeen: 1788000000 }
+    f.call
+      // The ownership check runs first, then the directory read.
+      .mockResolvedValueOnce([network])
+      .mockResolvedValueOnce([
+        {
+          ...base,
+          deviceId: 'a'.repeat(32),
+          name: 'Mac',
+          version: '0.1.25',
+          platform: 'darwin',
+          architecture: 'arm64'
+        },
+        {
+          ...base,
+          deviceId: 'b'.repeat(32),
+          name: 'Linux box',
+          presence: 'stale',
+          // Self-declared values that cannot be rendered as-is are dropped to
+          // empty rather than refusing the whole directory.
+          version: 'x'.repeat(65),
+          platform: 'lin\nux',
+          architecture: ' arm64'
+        }
+      ])
+    const devices = await f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
+    expect(devices[0]).toEqual({
+      deviceId: 'a'.repeat(32),
+      userId: user.userId,
+      name: 'Mac',
+      presence: 'online',
+      lastSeen: 1788000000,
+      version: '0.1.25',
+      platform: 'darwin',
+      architecture: 'arm64'
+    })
+    // A stale heartbeat is not usable, and the unusable strings became empty.
+    expect(devices[1]).toMatchObject({
+      presence: 'offline',
+      version: '',
+      platform: '',
+      architecture: ''
+    })
+  })
+
+  it('refuses a directory row that belongs to another user or reports an impossible state', async () => {
+    for (const bad of [
+      { userId: '9'.repeat(32), presence: 'online', lastSeen: 0 },
+      { userId: user.userId, presence: 'connected', lastSeen: 0 },
+      { userId: user.userId, presence: 'online', lastSeen: -1 }
+    ]) {
+      const f = await loggedIn()
+      f.call.mockResolvedValueOnce([network]).mockResolvedValueOnce([
+        {
+          ...bad,
+          deviceId: 'a'.repeat(32),
+          name: 'Mac',
+          version: '',
+          platform: '',
+          architecture: ''
+        }
+      ])
+      await expect(
+        f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
+      ).rejects.toThrow()
+    }
+  })
+
   it('raises an owned network capacity and confirms it through readback', async () => {
     const f = await loggedIn()
     const raised = { ...network, maxDevices: 20 }

@@ -7,10 +7,12 @@ import {
   assertAccountText,
   assertAccountUsername,
   peerNetwork,
+  peerNetworkDevice,
   peerNetworks,
   peerUser,
   peerUserSession,
   type PeerNetwork,
+  type PeerNetworkDevice,
   type PeerUser,
   type PeerUserSession
 } from './account-records'
@@ -212,6 +214,33 @@ export class PeerAccounts {
     return this.#operation(serviceId, signal, () =>
       this.#networks(serviceId, this.#session(serviceId), signal)
     )
+  }
+
+  /**
+   * Reads the device directory of one owned network.
+   *
+   * Ownership is re-checked server side by the same session, so this cannot be
+   * used to enumerate a network the user does not own.
+   */
+  listNetworkDevices(
+    serviceId: string,
+    networkId: string,
+    signal: AbortSignal
+  ): Promise<PeerNetworkDevice[]> {
+    assertAccountId(networkId)
+    return this.#operation(serviceId, signal, async () => {
+      const session = this.#session(serviceId)
+      // Confirm the network is one this user owns before reading its members.
+      await this.#ownedNetwork(serviceId, session, networkId, signal)
+      const reply = await this.#call(
+        serviceId,
+        'networks.devices',
+        { token: session.token, networkId },
+        signal
+      )
+      if (!Array.isArray(reply)) throw new PeerHelperError('p2p.invalid_server_response')
+      return reply.map((value) => peerNetworkDevice(value, session.user.userId))
+    })
   }
 
   createNetwork(serviceId: string, name: string, signal: AbortSignal): Promise<PeerNetwork> {

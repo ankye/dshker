@@ -38,6 +38,8 @@ export const P2P_MANAGEMENT_CHANNELS = {
   connect: 'dsh-launcher:p2p:connect',
   disconnect: 'dsh-launcher:p2p:disconnect',
   localDevice: 'dsh-launcher:p2p:local-device',
+  /** Devices enrolled in one owned network, with liveness and reported build. */
+  networkDevices: 'dsh-launcher:p2p:network-devices',
   cancel: 'dsh-launcher:p2p:cancel'
 } as const
 
@@ -74,6 +76,33 @@ export interface P2PUserView {
 export interface P2PLocalDeviceView {
   deviceId: string
   name: string
+}
+
+/**
+ * A device enrolled in a network, as the owner sees it.
+ *
+ * Carries no certificate: this view exists to identify and manage devices, and
+ * the coordinator deliberately withholds credential material from its directory.
+ *
+ * `presence` is advisory only, exactly as for a pair: a stale heartbeat reads as
+ * offline rather than as a usable connection. `lastSeen` is a Unix second, or 0
+ * when the device has never reported; the coordinator persists it at most once a
+ * minute, so it is accurate to the minute rather than to the second.
+ *
+ * `version`, `platform` and `architecture` are self-declared by each device and
+ * are empty until it reports. They are descriptive only and must never be used
+ * to decide what a device is allowed to do.
+ */
+export interface P2PNetworkDeviceView {
+  deviceId: string
+  name: string
+  presence: 'online' | 'offline'
+  lastSeen: number
+  version: string
+  platform: string
+  architecture: string
+  /** True for the device this launcher is running on, which cannot remove itself. */
+  isLocal: boolean
 }
 /**
  * Device capacity of a network: how many enrolled devices it accepts.
@@ -309,6 +338,7 @@ export interface P2PManagementInputs {
   connect: ServiceRequest & { pairId: string }
   disconnect: ServiceRequest & { pairId: string }
   localDevice: Record<never, never>
+  networkDevices: NetworkRequest
   cancel: { targetRequestId: number }
 }
 export interface P2PManagementResults {
@@ -351,6 +381,7 @@ export interface P2PManagementResults {
   connect: P2PConnectionView
   disconnect: void
   localDevice: P2PLocalDeviceView
+  networkDevices: P2PNetworkDeviceView[]
   /** Accepted means cancellation requested, never that a server write was undone. */
   cancel: { accepted: boolean }
 }

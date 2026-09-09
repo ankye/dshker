@@ -15,6 +15,7 @@ import {
   projectPeerCatalog,
   projectPeerUser,
   projectPeerNetwork,
+  projectPeerNetworkDevices,
   projectPeerRegistration,
   projectPeerPair,
   projectPeerPairs,
@@ -88,6 +89,10 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('networks', false, async (r, s) =>
     (await owner.networks(r.serviceId, s)).map(projectPeerNetwork)
   )
+  register('networkDevices', false, async (r, s) => {
+    const { devices, localDeviceId } = await owner.networkDevices(r.serviceId, r.networkId, s)
+    return projectPeerNetworkDevices(devices, localDeviceId)
+  })
   register('createNetwork', true, async (r, s) =>
     projectPeerNetwork(await owner.createNetwork(r.serviceId, r.name, s))
   )

@@ -17,6 +17,7 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   currentUser: ['serviceId'],
   logout: ['serviceId'],
   networks: ['serviceId'],
+  networkDevices: ['serviceId', 'networkId'],
   createNetwork: ['serviceId', 'name'],
   renameNetwork: ['serviceId', 'networkId', 'name'],
   updateNetworkLimit: ['serviceId', 'networkId', 'maxDevices'],
