@@ -12,6 +12,7 @@ import {
   P2P_NETWORK_DEVICE_LIMITS,
   type P2PNetworkView
 } from '@/shared/p2p-management'
+import { p2pRefusalKind } from '@/shared/p2p-refusal'
 
 const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
@@ -84,27 +85,50 @@ const registerBlocked = computed(
 const ACCOUNT_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
   'p2p.network_limit_reached': 'p2p.account.networkLimit',
   'p2p.user_conflict': 'p2p.account.userConflict',
-  'p2p.invalid_user_credentials': 'p2p.account.invalidCredentials'
+  'p2p.invalid_user_credentials': 'p2p.account.invalidCredentials',
+  // A refused input is the user's to fix, not a configuration fault. Falling
+  // through to the generic message told them to check a configuration that was
+  // never wrong, and showed only a bare error code.
+  'p2p.invalid_request': 'p2p.account.invalidInput'
 }
-const accountErrorKey = computed<MessageKey | undefined>(() => {
-  const error = operation.value?.error
-  return error ? ACCOUNT_ERROR_KEYS[error] : undefined
-})
+
 /**
  * Being signed out is a fact, not a failure. The coordinator reports these
  * codes whenever no session exists, which is the normal state before a login,
  * and the domain already reflects them by clearing the user. Showing them as a
  * red alert told the user to check a configuration that was never wrong.
  */
-const SIGNED_OUT_CODES: readonly string[] = [
-  'p2p.user_login_required',
-  'p2p.user_session_expired',
-  'p2p.user_unauthorized'
-]
+/**
+ * Refusals this panel must not report as failures.
+ *
+ * Being signed out and having nothing registered yet are both normal states
+ * before the user acts, and the domain already reflects them. Showing them as a
+ * red alert told the user to check a configuration that was never wrong.
+ */
 const failure = computed(() => {
   const error = operation.value?.error
-  if (!error || SIGNED_OUT_CODES.includes(error)) return undefined
+  if (!error) return undefined
+  const kind = p2pRefusalKind(error)
+  if (kind === 'signedOut') return undefined
+  if (error === 'p2p.credential_unavailable') return undefined
   return error
+})
+/**
+ * A readable line for every refusal, not only the four that had copy.
+ *
+ * A specific message wins when one exists; otherwise the classified category
+ * still says something true. The raw code stays visible for reporting, but it is
+ * no longer the only thing the user is given.
+ */
+const failureMessage = computed<MessageKey | undefined>(() => {
+  const error = failure.value ?? operation.value?.error
+  if (!error) return undefined
+  const specific = ACCOUNT_ERROR_KEYS[error]
+  if (specific) return specific
+  if (uncertain.value) return 'p2p.management.unconfirmed'
+  const kind = p2pRefusalKind(error)
+  if (kind === 'unconfirmed') return 'p2p.management.unconfirmed'
+  return `p2p.refusal.${kind}` as MessageKey
 })
 const deletion = ref<P2PNetworkView>()
 const confirmButton = ref<HTMLButtonElement>()
@@ -253,10 +277,7 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
       role="alert"
       data-testid="p2p-account-error"
     >
-      <template v-if="accountErrorKey">{{ t(accountErrorKey) }}</template>
-      <template v-else>{{
-        uncertain ? t('p2p.management.unconfirmed') : t('p2p.management.failed')
-      }}</template>
+      <template v-if="failureMessage">{{ t(failureMessage) }}</template>
       <code>{{ failure ?? operation?.error }}</code>
     </p>
     <p v-if="operation?.cancelError" class="remote-error" role="alert">

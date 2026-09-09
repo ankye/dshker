@@ -2,6 +2,7 @@ import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopApi } from '@/shared/contracts'
 import type { P2PManagementApi } from '@/shared/p2p-management'
+import { zhCN } from '@/app/shared/i18n/messages.zh-CN'
 
 const user = { userId: 'user-a', username: 'alice' }
 const network = { networkId: 'net-a', userId: user.userId, name: 'Office', maxDevices: 10 }
@@ -247,6 +248,47 @@ describe('P2P account public controls (component diagnostics)', () => {
       await flushPromises()
       const error = ui.get('[data-testid="p2p-account-error"]')
       expect(error.text()).toContain('p2p.helper_unavailable')
+    })
+
+    it('explains a rejected value instead of blaming the configuration', async () => {
+      // A refused input used to produce "check your configuration" plus a bare
+      // code, which pointed the user at something that was not wrong.
+      const ui = await render({
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: false, code: 'p2p.invalid_request', message: 'refused' })
+      })
+      await button(ui, '读取网络列表').trigger('click')
+      await flushPromises()
+      const error = ui.get('[data-testid="p2p-account-error"]')
+      expect(error.text()).toContain(zhCN['p2p.account.invalidInput'])
+      expect(error.text()).not.toContain(zhCN['p2p.management.failed'])
+      // The code stays available for reporting, just no longer alone.
+      expect(error.text()).toContain('p2p.invalid_request')
+    })
+
+    it('offers a category message for a code that has no specific copy', async () => {
+      const ui = await render({
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: false, code: 'p2p.service_busy', message: 'busy' })
+      })
+      await button(ui, '读取网络列表').trigger('click')
+      await flushPromises()
+      // Transient refusals invite a retry rather than a configuration audit.
+      expect(ui.get('[data-testid="p2p-account-error"]').text()).toContain(
+        zhCN['p2p.refusal.retry']
+      )
+    })
+
+    it('does not report an unregistered device as a failure', async () => {
+      // Nothing stored yet is the normal state before enrollment.
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.credential_unavailable',
+          message: 'none'
+        })
+      })
+      expect(ui.find('[data-testid="p2p-account-error"]').exists()).toBe(false)
     })
 
     it('shows one auth form at a time and switches between login and register', async () => {

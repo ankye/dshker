@@ -19,6 +19,22 @@ const operation = computed(() => {
     ? current
     : undefined
 })
+/**
+ * Codes that mean "this device is not registered yet".
+ *
+ * That is the normal state before enrollment, not a failure: the owner returns
+ * these so the panel below can offer registration. Reporting them as an alert
+ * told the user something was wrong when nothing was.
+ */
+const NOT_REGISTERED_CODES: readonly string[] = [
+  'p2p.enrollment_not_found',
+  'p2p.credential_unavailable'
+]
+const readFailure = computed(() => {
+  const error = operation.value?.error
+  if (!error || NOT_REGISTERED_CODES.includes(error)) return undefined
+  return error
+})
 const sameUser = computed(
   () =>
     !!state.registration &&
@@ -128,12 +144,11 @@ async function submit() {
       }}</template>
       <template v-else>{{ t('p2p.enrollment.unknown') }}</template>
     </p>
-    <p
-      v-if="operation?.error && operation.error !== 'p2p.enrollment_not_found'"
-      class="remote-error"
-      role="alert"
-    >
-      {{ t('p2p.enrollment.readFailed') }} <code>{{ operation.error }}</code>
+    <!-- "Not registered yet" is a state, not a failure. Both codes mean the same
+         thing here: nothing is stored for this service, which is exactly what the
+         panel below is for. -->
+    <p v-if="readFailure" class="remote-error" role="alert" data-testid="p2p-enrollment-error">
+      {{ t('p2p.enrollment.readFailed') }} <code>{{ readFailure }}</code>
     </p>
     <p v-if="operation?.cancelError" class="remote-error" role="alert">
       {{ t('p2p.management.cancelFailed') }} <code>{{ operation.cancelError }}</code>
