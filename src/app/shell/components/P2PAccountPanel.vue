@@ -231,10 +231,13 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
   <section class="p2p-account" :aria-label="t('p2p.account.title')" data-testid="p2p-account-panel">
     <h3 ref="title" tabindex="-1">{{ t('p2p.account.title') }} · {{ displayName }}</h3>
     <div class="p2p-account-actions">
-      <!-- Re-reading the signed-in user is only meaningful once there is one;
-           signed out it could only repeat 'login required'. -->
+      <!-- Available when signed in and when the state is unknown. Confirmed
+           signed out is the only case where it could merely repeat 'login
+           required'. Hiding it while unknown left no control at all: no identity
+           to act on and no form to sign in with, so the panel could not recover
+           without restarting the app. -->
       <button
-        v-if="state.user"
+        v-if="state.user !== null"
         type="button"
         class="prototype-button"
         :disabled="pending"
@@ -284,7 +287,10 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
       {{ t('p2p.management.cancelFailed') }} <code>{{ operation.cancelError }}</code>
     </p>
     <p v-if="state.user === undefined">{{ t('p2p.account.unknown') }}</p>
-    <template v-if="!state.user">
+    <!-- Only a confirmed sign-out offers the credential forms. An unknown state
+         is not a sign-out: showing a password field there asked for a secret the
+         app could not yet use, and did it while claiming the state was unknown. -->
+    <template v-if="state.user === null">
       <form v-if="mode === 'login'" data-testid="p2p-login-form" @submit.prevent="login">
         <fieldset
           :disabled="pending || uncertain"
@@ -391,7 +397,9 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
         </p>
       </form>
     </template>
-    <template v-else>
+    <!-- Signed in is its own state, distinct from unknown: an unknown state has
+         no identity to display and must not claim one. -->
+    <template v-else-if="state.user">
       <p>
         {{ t('p2p.account.user') }}: {{ state.user.username }} ·
         <code>{{ state.user.userId }}</code>

@@ -1,4 +1,5 @@
 import { reactive } from 'vue'
+import { p2pRefusalKind } from '@/shared/p2p-refusal'
 import type { P2PNetworkDeviceView, P2PNetworkView, P2PUserView } from '@/shared/p2p-management'
 import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
 
@@ -44,13 +45,12 @@ export class P2PAccountsDomain {
   async currentUser(serviceId: string): Promise<void> {
     const result = await this.management.run('currentUser', { serviceId })
     const state = this.state(serviceId)
-    if (result.ok) this.#acceptUser(state, result.data)
-    else if (
-      ['p2p.user_login_required', 'p2p.user_session_expired', 'p2p.user_unauthorized'].includes(
-        result.code
-      )
-    )
-      this.#signedOut(state)
+    if (result.ok) return this.#acceptUser(state, result.data)
+    // Any refusal that means "no session" clears authority, not just the three
+    // codes this used to name. A hard-coded list left every other refusal in a
+    // half state: the user was neither accepted nor cleared, so the panel showed
+    // the password form again while still believing a read was in progress.
+    if (p2pRefusalKind(result.code) === 'signedOut') this.#signedOut(state)
   }
 
   async login(serviceId: string, username: string, password: string): Promise<void> {

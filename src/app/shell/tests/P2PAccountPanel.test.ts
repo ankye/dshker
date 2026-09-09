@@ -279,6 +279,47 @@ describe('P2P account public controls (component diagnostics)', () => {
       )
     })
 
+    it('never asks for a password while the account state is unknown', async () => {
+      // Unknown is not signed out. The panel used to show the 'unknown' line and
+      // the password form together, asking for a secret it could not yet use.
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.helper_resource_unavailable',
+          message: 'no helper'
+        })
+      })
+      expect(ui.text()).toContain(zhCN['p2p.account.unknown'])
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
+      expect(ui.find('input[type="password"]').exists()).toBe(false)
+    })
+
+    it('keeps a way out when the account state is unknown', async () => {
+      // With no identity to act on and no form to submit, hiding the read button
+      // left the panel with no control at all: only restarting the app recovered.
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.helper_resource_unavailable',
+          message: 'no helper'
+        })
+      })
+      expect(ui.find('[data-testid="p2p-account-read-user"]').exists()).toBe(true)
+    })
+
+    it('offers the credential forms only once sign-out is confirmed', async () => {
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'none'
+        })
+      })
+      // A confirmed sign-out is exactly when asking for credentials is correct.
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(true)
+      expect(ui.text()).not.toContain(zhCN['p2p.account.unknown'])
+    })
+
     it('does not report an unregistered device as a failure', async () => {
       // Nothing stored yet is the normal state before enrollment.
       const ui = await render({

@@ -16,6 +16,36 @@ function setup(overrides: Partial<P2PManagementApi> = {}) {
 }
 
 describe('P2P user and network domain', () => {
+  it('clears authority for any refusal that means there is no session', async () => {
+    // A hard-coded list of three codes left every other signed-out refusal in a
+    // half state: neither accepted nor cleared, so the panel kept showing a
+    // signed-in view it could not act on.
+    const { accounts, api } = setup()
+    await accounts.currentUser('service-a')
+    expect(accounts.state('service-a').user).toEqual(user)
+    vi.mocked(api.currentUser).mockResolvedValueOnce({
+      ok: false,
+      code: 'p2p.user_unauthorized',
+      message: 'no'
+    })
+    await accounts.currentUser('service-a')
+    expect(accounts.state('service-a').user).toBeNull()
+  })
+
+  it('does not claim a sign-out when the refusal says nothing about the session', async () => {
+    // A missing helper is not evidence the user was signed out. Reporting it as
+    // one would discard authority the coordinator still honours.
+    const { accounts, api } = setup()
+    await accounts.currentUser('service-a')
+    vi.mocked(api.currentUser).mockResolvedValueOnce({
+      ok: false,
+      code: 'p2p.helper_resource_unavailable',
+      message: 'no helper'
+    })
+    await accounts.currentUser('service-a')
+    expect(accounts.state('service-a').user).toEqual(user)
+  })
+
   it('requires explicit selection and preserves network IDs instead of matching names', async () => {
     const { accounts } = setup()
     await accounts.currentUser('service-a')
