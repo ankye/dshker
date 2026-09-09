@@ -289,6 +289,56 @@ describe('P2P account public controls (component diagnostics)', () => {
       )
     })
 
+    it('states the password requirement and refuses a short one before any request', async () => {
+      const register = vi.fn<P2PManagementApi['register']>()
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        }),
+        register
+      })
+      await ui.get('[data-testid="p2p-account-switch-register"]').trigger('click')
+      // The requirement is stated up front, not discovered by failing.
+      expect(ui.text()).toContain('密码至少 12 位')
+      const form = ui.get('[data-testid="p2p-register-form"]')
+      await form.get('input[autocomplete="email"]').setValue('alice@example.com')
+      await form.get('[data-testid="p2p-register-password"]').setValue('too-short')
+      expect(ui.find('[data-testid="p2p-register-too-short"]').exists()).toBe(true)
+      await form.trigger('submit')
+      await flushPromises()
+      // A password the coordinator would refuse never leaves the renderer.
+      expect(register).not.toHaveBeenCalled()
+      await form.get('[data-testid="p2p-register-password"]').setValue('a-long-password')
+      expect(ui.find('[data-testid="p2p-register-too-short"]').exists()).toBe(false)
+    })
+
+    it('explains a credential refusal from the server in readable terms', async () => {
+      const register = vi.fn<P2PManagementApi['register']>().mockResolvedValue({
+        ok: false,
+        code: 'p2p.invalid_user_credentials',
+        message: 'refused'
+      })
+      const ui = await render({
+        currentUser: async () => ({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        }),
+        register
+      })
+      await ui.get('[data-testid="p2p-account-switch-register"]').trigger('click')
+      const form = ui.get('[data-testid="p2p-register-form"]')
+      await form.get('input[autocomplete="email"]').setValue('alice@example.com')
+      await form.get('[data-testid="p2p-register-password"]').setValue('a-long-password')
+      await form.trigger('submit')
+      await flushPromises()
+      const error = ui.get('[data-testid="p2p-account-error"]')
+      expect(error.text()).toContain('服务器拒绝了这组邮箱或密码')
+      expect(error.text()).toContain('p2p.invalid_user_credentials')
+    })
+
     it('registers with its own email and adopts the registered user', async () => {
       const register = vi.fn<P2PManagementApi['register']>().mockResolvedValue({
         ok: true,
@@ -306,20 +356,20 @@ describe('P2P account public controls (component diagnostics)', () => {
       const form = ui.get('[data-testid="p2p-register-form"]')
       expect(form.text()).toContain('注册账号')
       await form.get('input[autocomplete="email"]').setValue('alice@example.com')
-      await form.get('[data-testid="p2p-register-password"]').setValue('new-secret')
+      await form.get('[data-testid="p2p-register-password"]').setValue('a-long-new-secret')
       await form.trigger('submit')
       await flushPromises()
       expect(register).toHaveBeenCalledWith(
         expect.objectContaining({
           serviceId: 'service-a',
           email: 'alice@example.com',
-          password: 'new-secret'
+          password: 'a-long-new-secret'
         })
       )
       expect(ui.text()).toContain(user.userId)
       expect(ui.find('[data-testid="p2p-register-password"]').exists()).toBe(false)
       const { p2pAccounts } = await import('@/app/domains/remote-connections')
-      expect(JSON.stringify(p2pAccounts.state('service-a'))).not.toContain('new-secret')
+      expect(JSON.stringify(p2pAccounts.state('service-a'))).not.toContain('a-long-new-secret')
     })
 
     it('shows a localized message when create-network is refused due to the network limit', async () => {
@@ -361,7 +411,7 @@ describe('P2P account public controls (component diagnostics)', () => {
       await ui.get('[data-testid="p2p-account-switch-register"]').trigger('click')
       const form = ui.get('[data-testid="p2p-register-form"]')
       await form.get('input[autocomplete="email"]').setValue('existing@example.com')
-      await form.get('[data-testid="p2p-register-password"]').setValue('secret')
+      await form.get('[data-testid="p2p-register-password"]').setValue('a-long-password')
       await form.trigger('submit')
       await flushPromises()
       const error = ui.get('[data-testid="p2p-account-error"]')

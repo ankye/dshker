@@ -6,7 +6,11 @@ import {
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
-import { P2P_NETWORK_DEVICE_LIMITS, type P2PNetworkView } from '@/shared/p2p-management'
+import {
+  P2P_ACCOUNT_PASSWORD_MIN,
+  P2P_NETWORK_DEVICE_LIMITS,
+  type P2PNetworkView
+} from '@/shared/p2p-management'
 
 const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
@@ -32,11 +36,26 @@ const uncertain = computed(
 const registerMismatch = computed(
   () => registerConfirm.value !== '' && registerConfirm.value !== registerPassword.value
 )
+/**
+ * The coordinator refuses a short password with p2p.invalid_user_credentials.
+ * Checking it here turns that refusal into an inline requirement, and the
+ * server stays authoritative: this only avoids a round trip that must fail.
+ */
+const registerTooShort = computed(
+  () => registerPassword.value !== '' && registerPassword.value.length < P2P_ACCOUNT_PASSWORD_MIN
+)
+const registerBlocked = computed(
+  () =>
+    registerMismatch.value ||
+    registerTooShort.value ||
+    registerPassword.value.length < P2P_ACCOUNT_PASSWORD_MIN
+)
 
 /** Account-operation refusals get a readable line instead of only the raw code. */
 const ACCOUNT_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
   'p2p.network_limit_reached': 'p2p.account.networkLimit',
-  'p2p.user_conflict': 'p2p.account.userConflict'
+  'p2p.user_conflict': 'p2p.account.userConflict',
+  'p2p.invalid_user_credentials': 'p2p.account.invalidCredentials'
 }
 const accountErrorKey = computed<MessageKey | undefined>(() => {
   const error = operation.value?.error
@@ -102,7 +121,7 @@ async function login() {
   await accounts.login(props.serviceId, state.usernameDraft, supplied)
 }
 async function register() {
-  if (registerMismatch.value) return
+  if (registerBlocked.value) return
   const supplied = registerPassword.value
   registerPassword.value = ''
   registerConfirm.value = ''
@@ -277,8 +296,21 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
               type="password"
               required
               autocomplete="new-password"
+              :minlength="P2P_ACCOUNT_PASSWORD_MIN"
+              :aria-describedby="`p2p-password-rule-${serviceId}`"
               data-testid="p2p-register-password"
           /></label>
+          <p :id="`p2p-password-rule-${serviceId}`" class="p2p-account-rule">
+            {{ t('p2p.account.passwordRule') }}
+          </p>
+          <p
+            v-if="registerTooShort"
+            class="remote-error"
+            role="alert"
+            data-testid="p2p-register-too-short"
+          >
+            {{ t('p2p.account.passwordTooShort') }}
+          </p>
           <label
             ><span>{{ t('p2p.account.confirmPassword') }}</span
             ><input
@@ -290,7 +322,7 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
           <button
             type="submit"
             class="prototype-button prototype-button--primary"
-            :disabled="registerMismatch"
+            :disabled="registerBlocked"
           >
             {{ t('p2p.account.register') }}
           </button>
@@ -515,6 +547,11 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
 .p2p-account input:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 1px;
+}
+.p2p-account-rule {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
 }
 .p2p-account-switch {
   display: flex;

@@ -37,6 +37,10 @@ export const zhCN = {
   'p2p.account.haveAccount': '已有账号？',
   'p2p.account.registerHint':
     '注册会用邮箱和密码在此服务器创建账号。密码提交后立即清空，不保留到草稿或页面状态。',
+  'p2p.account.passwordRule': '密码至少 12 位，最长 72 字节。',
+  'p2p.account.passwordTooShort': '密码至少需要 12 位，请补足后重新提交。',
+  'p2p.account.invalidCredentials':
+    '服务器拒绝了这组邮箱或密码：邮箱需为有效地址，密码至少 12 位。',
   'p2p.account.networkLimit': '每个账号最多创建 2 个网络',
   'p2p.account.userConflict': '该邮箱已注册过账号，请直接登录或更换邮箱注册。',
   'p2p.account.unknown': '用户状态尚未确认，请读取服务器结果。',

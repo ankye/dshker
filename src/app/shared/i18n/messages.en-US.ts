@@ -46,6 +46,11 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.account.haveAccount': 'Already have an account?',
   'p2p.account.registerHint':
     'Registration creates an account on this server with your email and password. The password is cleared immediately after submission.',
+  'p2p.account.passwordRule': 'Use at least 12 characters, up to 72 bytes.',
+  'p2p.account.passwordTooShort':
+    'The password needs at least 12 characters. Complete it and submit again.',
+  'p2p.account.invalidCredentials':
+    'The server refused this email or password: the email must be a valid address and the password at least 12 characters.',
   'p2p.account.networkLimit': 'Each account can create at most 2 networks on this server.',
   'p2p.account.userConflict':
     'An account with this email already exists. Log in instead, or use a different email to register.',

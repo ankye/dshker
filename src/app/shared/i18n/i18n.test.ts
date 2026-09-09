@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { P2P_ACCOUNT_PASSWORD_MIN } from '@/shared/p2p-management'
 import { INITIAL_LOCALE, SUPPORTED_LOCALES, createTranslator, enUS, zhCN } from './i18n'
 
 describe('launcher locales', () => {
@@ -49,6 +50,16 @@ describe('locale catalog parity', () => {
       .map(([key]) => key)
 
     expect(untranslated).toStrictEqual([])
+  })
+
+  it('states the coordinator password minimum that the server actually enforces', () => {
+    // The catalogs spell the number out, so it must track the shared constant
+    // rather than drift once the coordinator changes its requirement.
+    const minimum = String(P2P_ACCOUNT_PASSWORD_MIN)
+    expect(createTranslator('zh-CN')('p2p.account.passwordRule')).toContain(minimum)
+    expect(createTranslator('en-US')('p2p.account.passwordRule')).toContain(minimum)
+    expect(createTranslator('zh-CN')('p2p.account.passwordTooShort')).toContain(minimum)
+    expect(createTranslator('en-US')('p2p.account.passwordTooShort')).toContain(minimum)
   })
 
   it('keeps every message non-empty in both catalogs', () => {

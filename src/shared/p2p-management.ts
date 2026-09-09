@@ -90,6 +90,14 @@ export interface P2PNetworkView {
   maxDevices: number
 }
 
+/**
+ * Password bounds the coordinator enforces on registration. The server refuses
+ * anything outside them with p2p.invalid_user_credentials, so the form states
+ * the requirement up front instead of letting the user discover it by failing.
+ */
+export const P2P_ACCOUNT_PASSWORD_MIN = 12 as const
+export const P2P_ACCOUNT_PASSWORD_MAX = 72 as const
+
 export const P2P_NETWORK_DEFAULT_DEVICE_LIMIT = 10 as const
 /** The only device limits a network owner may choose when raising the cap. */
 export const P2P_NETWORK_DEVICE_LIMITS = [10, 20, 30] as const
