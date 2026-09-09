@@ -562,10 +562,35 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
 </template>
 
 <style scoped>
+/* A card, matching .settings-section elsewhere in the app, rather than six
+ * siblings separated only by a rule. The panel previously had no surface of its
+ * own: heading, actions, status text and a bare button all sat at one level, so
+ * nothing grouped the account from the networks it owns. */
 .p2p-account {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
   min-width: 0;
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+/* The heading owns the card, so it takes the section type scale and a rule that
+ * separates it from the controls below. Left to the browser default it rendered
+ * at 16.38px bold, a size the token scale does not contain. */
+.p2p-account > h3 {
+  margin: 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: var(--type-section);
+  font-weight: var(--font-weight-semibold);
+}
+.p2p-account > p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-body);
 }
 .p2p-account code {
   overflow-wrap: anywhere;

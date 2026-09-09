@@ -216,10 +216,26 @@ async function submit() {
 </template>
 
 <style scoped>
+/* Same section language as the account card beside it. This was the only panel
+ * on the screen still separated by a rule instead of a surface, which made the
+ * screen read as one long list rather than a set of related cards. */
 .p2p-enrollment {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
   min-width: 0;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--color-border);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.p2p-enrollment > h3 {
+  margin: 0;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: var(--type-section);
+  font-weight: var(--font-weight-semibold);
 }
 .p2p-enrollment-actions {
   display: flex;

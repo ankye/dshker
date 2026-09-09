@@ -239,11 +239,24 @@ const stateLabels: Record<P2PPairView['state'], MessageKey> = {
 </template>
 
 <style scoped>
+/* Same section language as the account and enrollment cards above it, so the
+ * three panels on this screen read as siblings instead of one flat column. */
 .p2p-pairing {
   display: grid;
+  align-content: start;
   min-width: 0;
   gap: var(--space-3);
   margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.p2p-pairing h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-section);
+  font-weight: var(--font-weight-semibold);
 }
 .p2p-pairing fieldset {
   border: 0;
