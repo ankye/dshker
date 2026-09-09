@@ -58,17 +58,20 @@ func (client *Client) DeleteNetwork(ctx context.Context, token, networkID string
 	return client.deleteOwned(ctx, token, "/v1/networks/"+networkID)
 }
 
-func (client *Client) UserDevices(ctx context.Context, token string) ([]Device, error) {
-	var result []Device
+// The directory returns DeviceEntry, not Device: the coordinator withholds
+// certificates here and instead reports presence and the build each device
+// declared, which is what a device list is actually for.
+func (client *Client) UserDevices(ctx context.Context, token string) ([]DeviceEntry, error) {
+	var result []DeviceEntry
 	err := client.call(ctx, "GET", "/v1/devices", token, nil, &result)
 	return result, err
 }
 
-func (client *Client) NetworkDevices(ctx context.Context, token, networkID string) ([]Device, error) {
+func (client *Client) NetworkDevices(ctx context.Context, token, networkID string) ([]DeviceEntry, error) {
 	if !protocol.ValidID(networkID) {
 		return nil, errors.New("p2p.invalid_request")
 	}
-	var result []Device
+	var result []DeviceEntry
 	err := client.call(ctx, "GET", "/v1/networks/"+networkID+"/devices", token, nil, &result)
 	return result, err
 }

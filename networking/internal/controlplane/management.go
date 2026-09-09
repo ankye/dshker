@@ -106,6 +106,19 @@ func (client *Client) Enroll(ctx context.Context, request Enrollment) (Device, e
 	return result, err
 }
 
+// JoinNetwork enrols this device into a network using only its networkId.
+//
+// No session is involved: the coordinator's /v1/network/join sits outside the
+// authorized route groups, because holding the networkId is the entire claim.
+func (client *Client) JoinNetwork(ctx context.Context, request NetworkJoin) (Device, error) {
+	var result Device
+	if !protocol.ValidID(request.NetworkID) || !protocol.ValidID(request.RequestID) {
+		return result, errors.New("p2p.invalid_request")
+	}
+	err := client.call(ctx, "POST", "/v1/network/join", "", request, &result)
+	return result, err
+}
+
 func (client *Client) Pairs(ctx context.Context) ([]Pair, error) {
 	var result []Pair
 	err := client.call(ctx, "GET", "/v1/pairs", "", nil, &result)

@@ -68,7 +68,9 @@ func (client *Client) Subscribe(ctx context.Context, deviceID string) (*Signals,
 					DeviceID string `json:"deviceId"`
 					At       int64  `json:"at"`
 				}
-				if client.call(child, "POST", "/v1/heartbeat", "", struct{}{}, &heartbeat) != nil || heartbeat.DeviceID != deviceID {
+				// The heartbeat carries this build's own description so the
+				// coordinator's device directory can tell deployments apart.
+				if client.call(child, "POST", "/v1/heartbeat", "", client.telemetry, &heartbeat) != nil || heartbeat.DeviceID != deviceID {
 					cancel()
 					connection.CloseNow()
 					return

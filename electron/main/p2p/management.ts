@@ -202,6 +202,22 @@ export class PeerManagement {
       this.#signal(signal)
     )
   }
+  async joinNetwork(serviceId: string, networkId: string, name: string, signal: AbortSignal) {
+    return (await this.#ready(signal)).enrollment.join(
+      serviceId,
+      networkId,
+      name,
+      this.#signal(signal)
+    )
+  }
+  async leaveNetwork(serviceId: string, networkId: string, deviceId: string, signal: AbortSignal) {
+    return (await this.#ready(signal)).enrollment.leave(
+      serviceId,
+      networkId,
+      deviceId,
+      this.#signal(signal)
+    )
+  }
   async submitEnrollment(serviceId: string, revision: string, signal: AbortSignal) {
     return (await this.#ready(signal)).enrollment.submitPending(
       serviceId,

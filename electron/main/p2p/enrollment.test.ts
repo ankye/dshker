@@ -54,8 +54,14 @@ function fixture() {
     if (!saved) throw new PeerHelperError('p2p.credential_unavailable')
     return structuredClone(saved)
   })
+  const remove = vi.fn(async (_serviceId: string, revision: string) => {
+    order.push('credential-removed')
+    if (!saved || saved.revision !== revision) throw new PeerHelperError('p2p.credential_conflict')
+    saved = undefined
+  })
   const accounts = {
     currentUser: vi.fn(async () => user),
+    sessionToken: vi.fn(() => 'd'.repeat(64) as string | undefined),
     enrollmentGrant: vi.fn(async () => {
       order.push('grant')
       return { token: 'e'.repeat(64), networkId, expiresAt: Math.floor(Date.now() / 1000) + 300 }
@@ -72,6 +78,8 @@ function fixture() {
         return { privateKey, csr: '-----BEGIN CERTIFICATE REQUEST-----\ntest' }
       if (method === 'device.createCSR') return { csr: '-----BEGIN CERTIFICATE REQUEST-----\ntest' }
       if (method === 'device.enroll' || method === 'device.enrollmentResult') return { ...device }
+      if (method === 'network.join') return { ...device }
+      if (method === 'network.leave') return {}
       throw new PeerHelperError('p2p.invalid_operation')
     }
   )
@@ -79,7 +87,7 @@ function fixture() {
     accounts,
     services,
     rpc: { call },
-    credentials: { prepareEnrollment, completeEnrollment, loadRegistration }
+    credentials: { prepareEnrollment, completeEnrollment, loadRegistration, remove }
   })
   const prepare = async () => {
     await prepareEnrollment({
@@ -109,6 +117,92 @@ function fixture() {
 }
 
 describe('main enrollment orchestration (test-only dependency doubles)', () => {
+  it('joins by networkId without a session and takes the owner the server assigns', async () => {
+    const f = fixture()
+    const result = await f.enrollment.join(serviceId, networkId, f.device.name, signal())
+    expect(result).toMatchObject({ kind: 'registered', deviceId: f.device.deviceId })
+    // No session is read: possession of the networkId is the whole claim.
+    expect(f.accounts.currentUser).not.toHaveBeenCalled()
+    expect(f.accounts.enrollmentGrant).not.toHaveBeenCalled()
+    // The key is persisted before the join and the result is read back before
+    // it is committed, so an interrupted join cannot leave a phantom device.
+    expect(f.order).toEqual([
+      'device.createKey',
+      'network.join',
+      'persist-pending',
+      'device.enrollmentResult',
+      'persist-issued'
+    ])
+  })
+
+  it('refuses a join whose reply describes a different device', async () => {
+    const f = fixture()
+    f.call.mockImplementation(async (method: string) => {
+      if (method === 'device.createKey')
+        return { privateKey: f.privateKey, csr: '-----BEGIN CERTIFICATE REQUEST-----\ntest' }
+      // A reply naming another public key must never become a local credential.
+      if (method === 'network.join') return { ...f.device, publicKey: 'A'.repeat(43) + '=' }
+      throw new PeerHelperError('p2p.invalid_operation')
+    })
+    await expect(
+      f.enrollment.join(serviceId, networkId, f.device.name, signal())
+    ).rejects.toMatchObject({ code: 'p2p.identity_mismatch' })
+    await expect(f.loadRegistration()).rejects.toMatchObject({
+      code: 'p2p.credential_unavailable'
+    })
+  })
+
+  it('requires a session to leave and clears the credential only after the server confirms', async () => {
+    const f = fixture()
+    await f.enrollment.join(serviceId, networkId, f.device.name, signal())
+    f.order.length = 0
+
+    // Without a session the coordinator has no login-free removal to call.
+    f.accounts.sessionToken.mockReturnValueOnce(undefined)
+    await expect(
+      f.enrollment.leave(serviceId, networkId, f.device.deviceId, signal())
+    ).rejects.toMatchObject({ code: 'p2p.user_login_required' })
+    expect(f.order).toEqual([])
+
+    await f.enrollment.leave(serviceId, networkId, f.device.deviceId, signal())
+    // The server confirms first; only then is the local credential dropped.
+    expect(f.order).toEqual(['network.leave', 'credential-removed'])
+    await expect(f.loadRegistration()).rejects.toMatchObject({
+      code: 'p2p.credential_unavailable'
+    })
+  })
+
+  it('keeps the credential when the server refuses the removal', async () => {
+    const f = fixture()
+    await f.enrollment.join(serviceId, networkId, f.device.name, signal())
+    f.order.length = 0
+    // Refuse the removal specifically, not whatever call happens to come first.
+    const original = f.call.getMockImplementation()!
+    f.call.mockImplementation(async (method: string, payload: unknown, sig: AbortSignal) => {
+      if (method === 'network.leave') {
+        f.order.push(method)
+        throw new PeerHelperError('p2p.network_unauthorized')
+      }
+      return original(method, payload, sig)
+    })
+    await expect(
+      f.enrollment.leave(serviceId, networkId, f.device.deviceId, signal())
+    ).rejects.toMatchObject({ code: 'p2p.network_unauthorized' })
+    // A refused removal must not strand the device without its credential.
+    expect(f.order).toEqual(['network.leave'])
+    expect(await f.loadRegistration()).toMatchObject({ kind: 'registered' })
+  })
+
+  it('refuses to leave on behalf of a device that is not the one stored here', async () => {
+    const f = fixture()
+    await f.enrollment.join(serviceId, networkId, f.device.name, signal())
+    f.order.length = 0
+    await expect(
+      f.enrollment.leave(serviceId, networkId, 'a'.repeat(32), signal())
+    ).rejects.toMatchObject({ code: 'p2p.device_unregistered' })
+    expect(f.order).toEqual([])
+  })
+
   it('persists the original identity before a grant, verifies server readback, then commits', async () => {
     const f = fixture()
     const result = await f.enrollment.register(serviceId, networkId, f.device.name, signal())

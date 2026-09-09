@@ -13,7 +13,7 @@ import (
 
 func (account *account) management(ctx context.Context, method string, data json.RawMessage) (any, error) {
 	switch method {
-	case "user.current", "user.logout", "devices.list", "networks.rename", "networks.limit", "networks.delete", "networks.devices", "networks.pairs", "devices.bind", "devices.unbind", "networks.deletePair":
+	case "user.current", "user.logout", "devices.list", "networks.rename", "networks.limit", "networks.delete", "networks.devices", "networks.pairs", "network.leave", "devices.bind", "devices.unbind", "networks.deletePair":
 		return account.userManagement(ctx, method, data)
 	case "user.login":
 		var request struct {
@@ -24,6 +24,24 @@ func (account *account) management(ctx context.Context, method string, data json
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.Login(ctx, request.Username, request.Password)
+	case "network.join":
+		// Login-free: possession of the networkId is the claim, so this runs on
+		// the base client with no session and no device certificate yet.
+		var request struct {
+			RequestID string `json:"requestId"`
+			NetworkID string `json:"networkId"`
+			CSR       string `json:"csr"`
+			Name      string `json:"name"`
+		}
+		if protocol.Decode(data, &request) != nil {
+			return nil, errors.New("p2p.invalid_request")
+		}
+		return account.base.JoinNetwork(ctx, controlplane.NetworkJoin{
+			RequestID: request.RequestID,
+			NetworkID: request.NetworkID,
+			CSR:       request.CSR,
+			Name:      request.Name,
+		})
 	case "user.register":
 		var request struct {
 			Email    string `json:"email"`

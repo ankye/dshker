@@ -25,18 +25,8 @@ import {
 import { PeerManagementRequests } from './management-requests'
 import { PeerHelperError } from './wire'
 
-/**
- * Owner methods the IPC may dispatch to.
- *
- * `register`, `updateNetworkLimit`, `joinNetwork` and `leaveNetwork` are
- * deliberately excluded: the local Go helper does not expose those RPCs yet, so
- * they are admitted at this boundary but dispatched as typed stubs below until
- * the helper lands.
- */
-export type PeerManagementOwner = Pick<
-  PeerManagement,
-  Exclude<P2PManagementOperation, 'cancel' | 'joinNetwork' | 'leaveNetwork'>
->
+/** Owner methods the IPC may dispatch to; every operation is now implemented. */
+export type PeerManagementOwner = Pick<PeerManagement, Exclude<P2PManagementOperation, 'cancel'>>
 
 /** No raw RPC dispatch, paths, keys or tokens cross this boundary. */
 export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
@@ -114,26 +104,15 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('registerDevice', true, async (r, s) =>
     projectPeerRegistration(await owner.registerDevice(r.serviceId, r.networkId, r.name, s))
   )
-  //
-  // joinNetwork: login-free enrollment needs a server flow that proves local
-  // public-key ownership against a bare networkId. The Go coordinator
-  // (ankye/dshker-server, add-dshker-user-networks) does not expose it yet, so
-  // there is no owner dispatch to wire.
-  // TODO(p2p-join): when the helper lands, route to owner.joinNetwork and
-  // complete Task 10.1. Never resolve this stub as registered.
-  register('joinNetwork', true, async () => {
-    throw new PeerHelperError('p2p.invalid_operation')
-  })
-  //
-  // leaveNetwork: leaving a network needs the coordinator DELETE
-  // /v1/networks/:networkId/devices/:deviceId flow, which the local Go helper
-  // does not expose yet. The typed channel and admission are live; this stub
-  // refuses cleanly instead of faking a leave.
-  // TODO(p2p-leave): once the helper exposes device removal, route to
-  // owner.leaveNetwork and clear the local credential only after server readback.
-  register('leaveNetwork', true, async () => {
-    throw new PeerHelperError('p2p.invalid_operation')
-  })
+  // Login-free: holding the networkId is the whole claim, so no session is read.
+  register('joinNetwork', true, async (r, s) =>
+    projectPeerRegistration(await owner.joinNetwork(r.serviceId, r.networkId, r.name, s))
+  )
+  // Leaving requires the owner's session: the coordinator has no login-free
+  // removal, so without one any holder of a deviceId could evict a device.
+  register('leaveNetwork', true, (r, s) =>
+    owner.leaveNetwork(r.serviceId, r.networkId, r.deviceId, s)
+  )
   register('submitEnrollment', true, async (r, s) =>
     projectPeerRegistration(await owner.submitEnrollment(r.serviceId, r.revision, s))
   )

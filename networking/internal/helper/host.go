@@ -125,6 +125,9 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 	var request struct {
 		Endpoints controlplane.Endpoints `json:"endpoints"`
 		PinnedKey []byte                 `json:"pinnedKey"`
+		// The launcher owns its version string, so it is supplied here rather
+		// than guessed by the helper. Absent telemetry reports nothing.
+		Telemetry controlplane.Telemetry `json:"telemetry"`
 	}
 	if protocol.Decode(payload, &request) != nil || (len(request.PinnedKey) != 0 && len(request.PinnedKey) != 32) {
 		return nil, errors.New("p2p.invalid_request")
@@ -133,6 +136,7 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 	if err != nil {
 		return nil, err
 	}
+	base.SetTelemetry(request.Telemetry)
 	var pinned ed25519.PublicKey
 	if len(request.PinnedKey) > 0 {
 		pinned = request.PinnedKey

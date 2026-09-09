@@ -1,3 +1,4 @@
+import { APP_METADATA } from '../../../src/shared/contracts'
 import type { PeerRpc } from './rpc'
 import { PeerCatalog, type PeerCatalogSnapshot } from './catalog'
 import { assertPeerEndpoints, parsePeerService, type PeerServiceRecord } from './catalog-schema'
@@ -9,6 +10,25 @@ export interface PeerServiceInput {
   httpsOrigin: string
   wssUrl: string
   stunAddress: string
+}
+
+/**
+ * What this build reports about itself to a coordinator.
+ *
+ * The launcher owns its version string, so it is supplied to the helper on every
+ * configure rather than guessed there. The coordinator displays these values in
+ * its device directory and never uses them for authorization.
+ *
+ * The version comes from APP_METADATA, the same source the updater compares
+ * against, rather than from the Electron runtime: it is the product's own
+ * version either way, and this keeps the value available without a live app.
+ */
+export function launcherTelemetry(): { version: string; platform: string; architecture: string } {
+  return {
+    version: APP_METADATA.version,
+    platform: process.platform,
+    architecture: process.arch
+  }
 }
 
 /** Owns the catalog-to-helper trust boundary; never accepts caller-supplied keys. */
@@ -47,7 +67,7 @@ export class PeerServices {
       this.#admit(signal)
       const identity = await this.rpc.call(
         'service.configure',
-        { endpoints: endpoints(fields), pinnedKey: '' },
+        { endpoints: endpoints(fields), pinnedKey: '', telemetry: launcherTelemetry() },
         signal
       )
       this.#admit(signal)
@@ -118,7 +138,11 @@ export class PeerServices {
       this.#admit(signal)
       const identity = await this.rpc.call(
         'service.configure',
-        { endpoints: endpoints(fields), pinnedKey: existing.publicKey },
+        {
+          endpoints: endpoints(fields),
+          pinnedKey: existing.publicKey,
+          telemetry: launcherTelemetry()
+        },
         signal
       )
       this.#admit(signal)
@@ -159,7 +183,8 @@ export class PeerServices {
         'service.configure',
         {
           endpoints: endpoints(service),
-          pinnedKey: service.publicKey
+          pinnedKey: service.publicKey,
+          telemetry: launcherTelemetry()
         },
         signal
       )

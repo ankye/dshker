@@ -34,10 +34,10 @@ export type PeerRegistrationView =
 
 interface Dependencies {
   services: Pick<PeerServices, 'activate' | 'requireSaved'>
-  accounts: Pick<PeerAccounts, 'currentUser' | 'enrollmentGrant'>
+  accounts: Pick<PeerAccounts, 'currentUser' | 'enrollmentGrant' | 'sessionToken'>
   credentials: Pick<
     PeerCredentialStore,
-    'prepareEnrollment' | 'completeEnrollment' | 'loadRegistration'
+    'prepareEnrollment' | 'completeEnrollment' | 'loadRegistration' | 'remove'
   >
   rpc: Pick<PeerRpc, 'call'>
 }
@@ -105,6 +105,116 @@ export class PeerEnrollment {
       const saved = await this.dependencies.credentials.prepareEnrollment(pending)
       this.#admit(operationSignal)
       return this.#submit(saved, operationSignal)
+    })
+  }
+
+  /**
+   * Enrols this device into a network using only its networkId.
+   *
+   * No session is involved. Unlike register(), the owning user is not known
+   * before the call: the coordinator makes the network's owner the device's
+   * owner, so the identity is read from the confirmed result rather than
+   * asserted beforehand. The credential is persisted only after that result is
+   * independently read back, so an interrupted join never leaves a device that
+   * believes it joined.
+   */
+  join(
+    serviceId: string,
+    networkId: string,
+    name: string,
+    signal: AbortSignal
+  ): Promise<PeerRegistrationView> {
+    assertAccountId(networkId)
+    assertAccountText(name)
+    return this.#operation(serviceId, signal, async (operationSignal) => {
+      await this.dependencies.services.activate(serviceId, operationSignal)
+      const created = exactPeerObject(await this.#call('device.createKey', {}, operationSignal), [
+        'privateKey',
+        'csr'
+      ])
+      const privateKey = base64(created.privateKey, 64, 64)
+      const bytes = Buffer.from(privateKey, 'base64')
+      const publicKey = bytes.subarray(32).toString('base64')
+      bytes.fill(0)
+      const requestId = randomBytes(16).toString('hex')
+      const csr = created.csr
+      if (
+        typeof csr !== 'string' ||
+        !csr.startsWith('-----BEGIN CERTIFICATE REQUEST-----') ||
+        Buffer.byteLength(csr) > 16 * 1024
+      )
+        throw new PeerHelperError('p2p.invalid_csr')
+      this.#admit(operationSignal)
+      const reply = await this.#call(
+        'network.join',
+        { serviceId, data: { requestId, networkId, csr, name } },
+        operationSignal
+      )
+      // The coordinator assigns the owner, so userId comes from the reply. Every
+      // other field must still match what this device actually submitted.
+      const device = exactPeerObject(reply, [
+        'deviceId',
+        'userId',
+        'name',
+        'publicKey',
+        'certificate'
+      ])
+      assertAccountId(device.deviceId)
+      assertAccountId(device.userId)
+      if (device.name !== name || device.publicKey !== publicKey)
+        throw new PeerHelperError('p2p.identity_mismatch')
+      const pending: PeerPendingEnrollment = {
+        serviceId,
+        networkId,
+        name,
+        userId: device.userId,
+        requestId,
+        publicKey,
+        privateKey
+      }
+      assertPendingEnrollment(pending)
+      this.#admit(operationSignal)
+      const saved = await this.dependencies.credentials.prepareEnrollment(pending)
+      this.#admit(operationSignal)
+      // Confirm through the same readback path as a token enrollment: a reply
+      // alone never becomes a stored credential.
+      return this.#queryAndComplete(saved, operationSignal, issuedCredential(reply, pending))
+    })
+  }
+
+  /**
+   * Removes this device from a network and clears the local credential.
+   *
+   * The coordinator has no login-free removal: without one, any holder of a
+   * deviceId could evict someone else's device. So this requires the owning
+   * user's session, and the local credential is cleared only after the server
+   * confirms the removal.
+   */
+  leave(
+    serviceId: string,
+    networkId: string,
+    deviceId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    assertAccountId(networkId)
+    assertAccountId(deviceId)
+    return this.#operation(serviceId, signal, async (operationSignal) => {
+      await this.dependencies.services.activate(serviceId, operationSignal)
+      const token = this.dependencies.accounts.sessionToken(serviceId)
+      if (!token) throw new PeerHelperError('p2p.user_login_required')
+      // Read the local credential first: removal needs its revision, and the
+      // deviceId being removed must be the one actually stored here.
+      const saved = await this.dependencies.credentials.loadRegistration(serviceId)
+      if (saved.kind !== 'registered' || saved.credential.deviceId !== deviceId)
+        throw new PeerHelperError('p2p.device_unregistered')
+      await this.#call(
+        'network.leave',
+        { serviceId, data: { token, networkId, deviceId } },
+        operationSignal
+      )
+      this.#admit(operationSignal)
+      // Only now is the local credential dropped: the server has confirmed.
+      await this.dependencies.credentials.remove(serviceId, saved.revision)
     })
   }
 

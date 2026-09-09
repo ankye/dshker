@@ -54,6 +54,33 @@ type Enrollment struct {
 	Name      string `json:"name"`
 }
 
+// NetworkJoin enrols this device into a network without a user session.
+//
+// Possession of the networkId is the whole claim, so there is no token: the
+// coordinator admits the device into that network's directory and makes the
+// network's owner its owner. RequestID makes a retry idempotent.
+type NetworkJoin struct {
+	RequestID string `json:"requestId"`
+	NetworkID string `json:"networkId"`
+	CSR       string `json:"csr"`
+	Name      string `json:"name"`
+}
+
+// DeviceEntry is a row of a network's device directory.
+//
+// It carries no certificate: the directory exists to identify and manage
+// devices, and the coordinator deliberately withholds credential material here.
+type DeviceEntry struct {
+	DeviceID     string `json:"deviceId"`
+	UserID       string `json:"userId"`
+	Name         string `json:"name"`
+	Presence     string `json:"presence"`
+	LastSeen     int64  `json:"lastSeen"`
+	Version      string `json:"version"`
+	Platform     string `json:"platform"`
+	Architecture string `json:"architecture"`
+}
+
 type Device struct {
 	DeviceID    string `json:"deviceId"`
 	UserID      string `json:"userId"`

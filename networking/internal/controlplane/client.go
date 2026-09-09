@@ -22,11 +22,30 @@ import (
 )
 
 // Client owns one explicitly configured service origin. It never follows redirects.
+// Telemetry is what this build reports about itself on each heartbeat.
+//
+// It is descriptive only: the coordinator displays it in the device directory
+// and never uses it for authorization. Empty fields mean "unchanged" server
+// side, so a build that knows nothing about itself reports nothing rather than
+// erasing what was already stored.
+type Telemetry struct {
+	Version      string `json:"version"`
+	Platform     string `json:"platform"`
+	Architecture string `json:"architecture"`
+}
+
 type Client struct {
 	endpoints Endpoints
 	http      *http.Client
 	transport *http.Transport
 	deviceID  string
+	telemetry Telemetry
+}
+
+// SetTelemetry records what to report on subsequent heartbeats. The launcher
+// owns its version string, so the helper is told rather than guessing.
+func (client *Client) SetTelemetry(telemetry Telemetry) {
+	client.telemetry = telemetry
 }
 
 func New(endpoints Endpoints, roots *x509.CertPool) (*Client, error) {
@@ -90,6 +109,9 @@ func (client *Client) WithDevice(device Device, private ed25519.PrivateKey, auth
 	}
 	next.transport.TLSClientConfig.Certificates = []tls.Certificate{{Certificate: [][]byte{device.Certificate}, PrivateKey: private}}
 	next.deviceID = device.DeviceID
+	// Heartbeats run on this device client, so the report has to come with it:
+	// a fresh Client starts with empty telemetry and would report nothing.
+	next.telemetry = client.telemetry
 	return next, nil
 }
 

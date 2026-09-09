@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { APP_METADATA } from '../../../src/shared/contracts'
 import { PeerCatalog } from './catalog'
 import { PeerServices } from './services'
 
@@ -68,7 +69,14 @@ describe('saved P2P service admission', () => {
         wssUrl: input.wssUrl,
         stunAddress: input.stunAddress
       },
-      pinnedKey: ''
+      pinnedKey: '',
+      // The helper is told this build's own description; the coordinator shows
+      // it in the device directory. The version tracks the product, not a literal.
+      telemetry: {
+        version: APP_METADATA.version,
+        platform: process.platform,
+        architecture: process.arch
+      }
     })
     const restarted = new PeerServices(catalog, { call })
     expect(await restarted.activate(serviceId, signal())).toEqual(saved.record.services[0])
@@ -78,7 +86,12 @@ describe('saved P2P service admission', () => {
         wssUrl: input.wssUrl,
         stunAddress: input.stunAddress
       },
-      pinnedKey: publicKey
+      pinnedKey: publicKey,
+      telemetry: {
+        version: APP_METADATA.version,
+        platform: process.platform,
+        architecture: process.arch
+      }
     })
     await restarted.activate(serviceId, signal())
     expect(call).toHaveBeenCalledTimes(2)

@@ -61,6 +61,18 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 		default:
 			return account.base.NetworkPairs(ctx, request.Token, request.NetworkID)
 		}
+	case "network.leave":
+		// Leaving needs the owner's session: the coordinator has no login-free
+		// removal, and without one any holder of a deviceId could evict a device.
+		var request struct {
+			Token     string `json:"token"`
+			NetworkID string `json:"networkId"`
+			DeviceID  string `json:"deviceId"`
+		}
+		if protocol.Decode(data, &request) != nil {
+			return nil, errors.New("p2p.invalid_request")
+		}
+		return struct{}{}, account.base.UnbindDevice(ctx, request.Token, request.NetworkID, request.DeviceID)
 	case "devices.bind", "devices.unbind":
 		var request struct {
 			Token     string `json:"token"`
