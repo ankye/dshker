@@ -51,6 +51,43 @@ describe('main-owned P2P accounts', () => {
     expect(f.accounts.hasSession(serviceId)).toBe(true)
   })
 
+  it('signs in with the address the coordinator keys the account by', async () => {
+    // Every account is keyed by email server side, and the login form is
+    // type=email, but the validator required a handle without '@'. That refused
+    // every real account with p2p.invalid_request before the request left this
+    // process, so signing in was impossible.
+    const f = fixture()
+    f.call
+      .mockResolvedValueOnce({
+        user: registered,
+        token: '9'.repeat(64),
+        expiresAt: session().expiresAt
+      })
+      .mockResolvedValueOnce(registered)
+    expect(await f.accounts.login(serviceId, email, 'a-long-password', signal())).toEqual(
+      registered
+    )
+    expect(f.call.mock.calls[0]?.[1]).toEqual({
+      serviceId,
+      data: { username: email, password: 'a-long-password' }
+    })
+    expect(f.accounts.hasSession(serviceId)).toBe(true)
+  })
+
+  it('still refuses a value no coordinator would accept as a login name', async () => {
+    // Widening to accept an address must not turn the check off: a value with
+    // control characters or no plausible shape is stopped before the password
+    // leaves this process.
+    const f = fixture()
+    // The guard runs before any promise is returned, so the throw is synchronous.
+    for (const bad of ['', 'a', 'no-at-sign-but-way-too-'.repeat(20), 'has space@example.com']) {
+      expect(() => f.accounts.login(serviceId, bad, 'a-long-password', signal())).toThrow(
+        'p2p.invalid_request'
+      )
+    }
+    expect(f.call).not.toHaveBeenCalled()
+  })
+
   it('never returns the session token to the caller after registering', async () => {
     const f = fixture()
     const token = '9'.repeat(64)

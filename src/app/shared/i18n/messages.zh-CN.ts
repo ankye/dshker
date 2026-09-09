@@ -1,4 +1,5 @@
 import { zhCNErrors } from './i18n.errors'
+import { zhCNRefusals } from './i18n.refusals'
 
 /** Simplified Chinese message catalog and reference key set. */
 export const zhCN = {
@@ -353,6 +354,7 @@ export const zhCN = {
   'versions.catalog.installGit': '从 Git 安装',
   'versions.catalog.installSelected': '安装选中插件',
   ...zhCNErrors,
+  ...zhCNRefusals,
   'bootstrap.title': '先注册受管理目录',
   'bootstrap.description':
     '当前版本不会推断设置目录、工作区、Git、Node 或 Harness 版本。完成目录注册后，Launcher 才会开放克隆、注册和启动操作。',

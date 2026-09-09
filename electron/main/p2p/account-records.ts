@@ -144,9 +144,22 @@ export function assertAccountText(value: unknown): asserts value is string {
     throw new PeerHelperError('p2p.invalid_request')
 }
 
+/**
+ * Accepts a value a user can sign in with.
+ *
+ * The coordinator keys every account by email, so a login name is normally an
+ * address. Requiring the narrower handle form here refused every real account
+ * and made signing in impossible, which is the same mistake peerUser already
+ * had to correct. The handle form stays accepted so a coordinator that issues
+ * one is not locked out.
+ */
 export function assertAccountUsername(value: unknown): asserts value is string {
-  if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,63}$/.test(value))
-    throw new PeerHelperError('p2p.invalid_request')
+  if (typeof value !== 'string') throw new PeerHelperError('p2p.invalid_request')
+  const handle = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,63}$/.test(value)
+  const email =
+    Buffer.byteLength(value) <= 254 &&
+    /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
+  if (!handle && !email) throw new PeerHelperError('p2p.invalid_request')
 }
 
 /**

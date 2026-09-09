@@ -1,4 +1,5 @@
 import { enUSErrors } from './i18n.errors'
+import { enUSRefusals } from './i18n.refusals'
 import type { MessageKey } from './messages.zh-CN'
 
 /** US English message catalog, checked against every reference key. */
@@ -409,6 +410,7 @@ export const enUS: Record<MessageKey, string> = {
   'versions.catalog.installGit': 'Install from Git',
   'versions.catalog.installSelected': 'Install selected',
   ...enUSErrors,
+  ...enUSRefusals,
   'bootstrap.title': 'Register managed directories first',
   'bootstrap.description':
     'This build does not infer a settings directory, workspace, Git, Node, or Harness revision. Clone, registration, and launch become available only after directory registration.',
