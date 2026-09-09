@@ -158,9 +158,6 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
 <template>
   <section class="p2p-account" :aria-label="t('p2p.account.title')" data-testid="p2p-account-panel">
     <h3 ref="title" tabindex="-1">{{ t('p2p.account.title') }} · {{ displayName }}</h3>
-    <p>
-      <code>{{ serviceId }}</code>
-    </p>
     <div class="p2p-account-actions">
       <!-- Re-reading the signed-in user is only meaningful once there is one;
            signed out it could only repeat 'login required'. -->

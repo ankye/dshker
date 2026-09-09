@@ -145,6 +145,11 @@ export class PeerManagement {
       accounts.login(serviceId, username, password, active)
     )
   }
+  register(serviceId: string, email: string, password: string, signal: AbortSignal) {
+    return this.#account(serviceId, signal, (accounts, active) =>
+      accounts.register(serviceId, email, password, active)
+    )
+  }
   currentUser(serviceId: string, signal: AbortSignal) {
     return this.#account(serviceId, signal, (accounts, active) =>
       accounts.currentUser(serviceId, active)
@@ -168,6 +173,16 @@ export class PeerManagement {
   renameNetwork(serviceId: string, networkId: string, name: string, signal: AbortSignal) {
     return this.#account(serviceId, signal, (accounts, active) =>
       accounts.renameNetwork(serviceId, networkId, name, active)
+    )
+  }
+  updateNetworkLimit(
+    serviceId: string,
+    networkId: string,
+    maxDevices: number,
+    signal: AbortSignal
+  ) {
+    return this.#account(serviceId, signal, (accounts, active) =>
+      accounts.updateNetworkLimit(serviceId, networkId, maxDevices, active)
     )
   }
   deleteNetwork(serviceId: string, networkId: string, signal: AbortSignal) {

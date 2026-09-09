@@ -42,6 +42,23 @@ func DeviceCSR(key ed25519.PrivateKey) (string, error) {
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})), nil
 }
 
+// Register creates a coordinator account and returns the created user.
+//
+// The coordinator answers POST /v1/register with the user only, never a session:
+// registration and sign-in are separate server operations. Callers that want an
+// immediately usable session must follow this with Login.
+func (client *Client) Register(ctx context.Context, email, password string) (User, error) {
+	var result User
+	err := client.call(ctx, "POST", "/v1/register", "", struct {
+		Email    string `json:"email"`
+		Password string `json:"password"`
+	}{email, password}, &result)
+	if err == nil && !protocol.ValidID(result.UserID) {
+		err = errors.New("p2p.invalid_server_response")
+	}
+	return result, err
+}
+
 func (client *Client) Login(ctx context.Context, username, password string) (UserSession, error) {
 	var result UserSession
 	err := client.call(ctx, "POST", "/v1/login", "", struct {

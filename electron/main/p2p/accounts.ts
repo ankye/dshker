@@ -1,6 +1,8 @@
 import type { PeerRpc } from './rpc'
 import { exactPeerObject, PeerHelperError } from './wire'
+import { P2P_NETWORK_DEVICE_LIMITS } from '../../../src/shared/p2p-management'
 import {
+  assertAccountEmail,
   assertAccountId,
   assertAccountText,
   assertAccountUsername,
@@ -42,30 +44,74 @@ export class PeerAccounts {
     signal: AbortSignal
   ): Promise<PeerUser> {
     assertAccountUsername(username)
-    if (typeof password !== 'string' || !password || Buffer.byteLength(password) > 72)
+    this.#assertPassword(password)
+    return this.#operation(serviceId, signal, () =>
+      this.#establishSession(serviceId, 'user.login', { username, password }, signal)
+    )
+  }
+
+  /**
+   * Creates an account and returns the signed-in user.
+   *
+   * The helper registers and then signs in with the same credentials, so a
+   * confirmed result carries a real session and the caller is signed in exactly
+   * as after a login. The password is validated against the coordinator's
+   * 12-character minimum here so a value it would refuse never leaves.
+   */
+  register(
+    serviceId: string,
+    email: string,
+    password: string,
+    signal: AbortSignal
+  ): Promise<PeerUser> {
+    assertAccountEmail(email)
+    this.#assertPassword(password, 12)
+    return this.#operation(serviceId, signal, () =>
+      this.#establishSession(serviceId, 'user.register', { email, password }, signal)
+    )
+  }
+
+  #assertPassword(password: unknown, minimum = 1): asserts password is string {
+    if (
+      typeof password !== 'string' ||
+      password.length < minimum ||
+      Buffer.byteLength(password) > 72
+    )
       throw new PeerHelperError('p2p.invalid_request')
-    return this.#operation(serviceId, signal, async () => {
-      const previous = this.#sessions.get(serviceId)
-      if (previous && previous.expiresAt * 1000 <= Date.now()) this.#sessions.delete(serviceId)
-      if (this.#sessions.has(serviceId)) throw new PeerHelperError('p2p.user_already_logged_in')
-      const session = peerUserSession(
-        await this.#call(serviceId, 'user.login', { username, password }, signal)
-      )
-      const user = peerUser(
-        await this.#call(serviceId, 'user.current', { token: session.token }, signal)
-      )
-      if (user.userId !== session.user.userId || user.username !== session.user.username)
-        throw new PeerHelperError('p2p.user_scope_mismatch')
-      this.#checkExpiry(session)
-      if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
-      this.#sessions.set(serviceId, session)
-      // Persist so a restart does not ask for the password again.
-      await this.onSessionPersisted?.(serviceId, {
-        token: session.token,
-        expiresAt: session.expiresAt
-      })
-      return { ...user }
+  }
+
+  /**
+   * Adopts a session returned by a credential RPC.
+   *
+   * Both login and register end in a real session, so both confirm it by
+   * reading the user back, reject a mismatched scope, and persist only after
+   * that readback. Registration must not take a shortcut here: an unverified
+   * session would leave the renderer signed in on the strength of a reply alone.
+   */
+  async #establishSession(
+    serviceId: string,
+    method: 'user.login' | 'user.register',
+    payload: Record<string, string>,
+    signal: AbortSignal
+  ): Promise<PeerUser> {
+    const previous = this.#sessions.get(serviceId)
+    if (previous && previous.expiresAt * 1000 <= Date.now()) this.#sessions.delete(serviceId)
+    if (this.#sessions.has(serviceId)) throw new PeerHelperError('p2p.user_already_logged_in')
+    const session = peerUserSession(await this.#call(serviceId, method, payload, signal))
+    const user = peerUser(
+      await this.#call(serviceId, 'user.current', { token: session.token }, signal)
+    )
+    if (user.userId !== session.user.userId || user.username !== session.user.username)
+      throw new PeerHelperError('p2p.user_scope_mismatch')
+    this.#checkExpiry(session)
+    if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
+    this.#sessions.set(serviceId, session)
+    // Persist so a restart does not ask for the password again.
+    await this.onSessionPersisted?.(serviceId, {
+      token: session.token,
+      expiresAt: session.expiresAt
     })
+    return { ...user }
   }
 
   /** Current session token, for main-side RPCs; never crosses to the renderer. */
@@ -203,6 +249,43 @@ export class PeerAccounts {
         session.user.userId
       )
       if (updated.networkId !== networkId || updated.name !== name)
+        throw new PeerHelperError('p2p.management_result_unconfirmed')
+      return this.#readNetwork(serviceId, session, updated, signal)
+    })
+  }
+
+  /**
+   * Raises the device capacity of a network the signed-in user owns.
+   *
+   * The coordinator owns the allowed values and refuses anything else; this
+   * confirms the raise through a readback rather than trusting the reply, and
+   * refuses to report success for a value the server did not actually apply.
+   */
+  updateNetworkLimit(
+    serviceId: string,
+    networkId: string,
+    maxDevices: number,
+    signal: AbortSignal
+  ): Promise<PeerNetwork> {
+    assertAccountId(networkId)
+    if (!(P2P_NETWORK_DEVICE_LIMITS as readonly number[]).includes(maxDevices))
+      throw new PeerHelperError('p2p.invalid_network_limit')
+    return this.#operation(serviceId, signal, async () => {
+      const session = this.#session(serviceId)
+      const previous = await this.#ownedNetwork(serviceId, session, networkId, signal)
+      if (previous.maxDevices === maxDevices) return previous
+      // Capacity is raised, never lowered: the server owns devices already bound.
+      if (maxDevices < previous.maxDevices) throw new PeerHelperError('p2p.invalid_network_limit')
+      const updated = peerNetwork(
+        await this.#call(
+          serviceId,
+          'networks.limit',
+          { token: session.token, networkId, maxDevices },
+          signal
+        ),
+        session.user.userId
+      )
+      if (updated.networkId !== networkId || updated.maxDevices !== maxDevices)
         throw new PeerHelperError('p2p.management_result_unconfirmed')
       return this.#readNetwork(serviceId, session, updated, signal)
     })

@@ -36,6 +36,9 @@ type Network struct {
 	NetworkID string `json:"networkId"`
 	UserID    string `json:"userId"`
 	Name      string `json:"name"`
+	// MaxDevices is the coordinator-owned device capacity. Without it the value
+	// the server reports would be dropped on the way to the launcher.
+	MaxDevices int `json:"maxDevices"`
 }
 
 type EnrollmentGrant struct {

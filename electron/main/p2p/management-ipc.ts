@@ -35,10 +35,7 @@ import { PeerHelperError } from './wire'
  */
 export type PeerManagementOwner = Pick<
   PeerManagement,
-  Exclude<
-    P2PManagementOperation,
-    'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork' | 'leaveNetwork'
-  >
+  Exclude<P2PManagementOperation, 'cancel' | 'joinNetwork' | 'leaveNetwork'>
 >
 
 /** No raw RPC dispatch, paths, keys or tokens cross this boundary. */
@@ -89,16 +86,11 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('login', true, async (r, s) =>
     projectPeerUser(await owner.login(r.serviceId, r.username, r.password, s))
   )
-  //
-  // register: the self-hosted Go coordinator (ankye/dshker-server) exposes
-  // POST /v1/register, but the local Go helper does not expose a user.register
-  // RPC yet. The typed channel and admission are live; this stub refuses
-  // cleanly instead of faking a result.
-  // TODO(p2p-register): once the helper exposes the user.register RPC, route
-  // to owner.register and complete the account registration flow.
-  register('register', true, async () => {
-    throw new PeerHelperError('p2p.invalid_operation')
-  })
+  // The helper registers against POST /v1/register and then signs in, so a
+  // confirmed result is a real session and the caller is signed in as if by login.
+  register('register', true, async (r, s) =>
+    projectPeerUser(await owner.register(r.serviceId, r.email, r.password, s))
+  )
   register('currentUser', false, async (r, s) =>
     projectPeerUser(await owner.currentUser(r.serviceId, s))
   )
@@ -112,16 +104,9 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   register('renameNetwork', true, async (r, s) =>
     projectPeerNetwork(await owner.renameNetwork(r.serviceId, r.networkId, r.name, s))
   )
-  //
-  // updateNetworkLimit: the self-hosted Go coordinator (ankye/dshker-server,
-  // add-dshker-user-networks) does not expose a network capacity RPC yet, so
-  // there is no owner dispatch to wire. The typed channel and admission are
-  // live; this stub refuses cleanly instead of faking a result.
-  // TODO(p2p-capacity): once the helper exposes the capacity update, route to
-  // owner.updateNetworkLimit and complete Task 10.2 (raise 10 -> 20/30).
-  register('updateNetworkLimit', true, async () => {
-    throw new PeerHelperError('p2p.invalid_operation')
-  })
+  register('updateNetworkLimit', true, async (r, s) =>
+    projectPeerNetwork(await owner.updateNetworkLimit(r.serviceId, r.networkId, r.maxDevices, s))
+  )
   register('deleteNetwork', true, (r, s) => owner.deleteNetwork(r.serviceId, r.networkId, s))
   register('registration', false, async (r, s) =>
     projectPeerRegistration(await owner.registration(r.serviceId, s))

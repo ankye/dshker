@@ -35,6 +35,16 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.RenameNetwork(ctx, request.Token, request.NetworkID, request.Name)
+	case "networks.limit":
+		var request struct {
+			Token      string `json:"token"`
+			NetworkID  string `json:"networkId"`
+			MaxDevices int    `json:"maxDevices"`
+		}
+		if protocol.Decode(data, &request) != nil {
+			return nil, errors.New("p2p.invalid_request")
+		}
+		return account.base.UpdateNetworkLimit(ctx, request.Token, request.NetworkID, request.MaxDevices)
 	case "networks.delete", "networks.devices", "networks.pairs":
 		var request struct {
 			Token     string `json:"token"`

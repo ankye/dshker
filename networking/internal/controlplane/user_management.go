@@ -37,6 +37,20 @@ func (client *Client) RenameNetwork(ctx context.Context, token, networkID, name 
 	return result, err
 }
 
+// UpdateNetworkLimit raises a network's device capacity. Only the owning user
+// may raise it, and the coordinator refuses any value outside its allowed set,
+// so the caller's choice is validated by the server rather than assumed here.
+func (client *Client) UpdateNetworkLimit(ctx context.Context, token, networkID string, maxDevices int) (Network, error) {
+	var result Network
+	if !protocol.ValidID(networkID) {
+		return result, errors.New("p2p.invalid_request")
+	}
+	err := client.call(ctx, "PATCH", "/v1/networks/"+networkID+"/limit", token, struct {
+		MaxDevices int `json:"maxDevices"`
+	}{maxDevices}, &result)
+	return result, err
+}
+
 func (client *Client) DeleteNetwork(ctx context.Context, token, networkID string) error {
 	if !protocol.ValidID(networkID) {
 		return errors.New("p2p.invalid_request")

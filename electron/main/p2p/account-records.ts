@@ -25,7 +25,10 @@ export interface PeerUserSession {
 export function peerUser(value: unknown): PeerUser {
   const record = exactPeerObject(value, ['userId', 'username'])
   assertAccountId(record.userId)
-  assertAccountUsername(record.username)
+  // The coordinator identifies every account by email and returns that address
+  // as the username, so the projection must accept an address here. Validating
+  // it with assertAccountUsername rejected every real user, registered or not.
+  assertAccountIdentity(record.username)
   return { userId: record.userId, username: record.username }
 }
 
@@ -82,4 +85,34 @@ export function assertAccountText(value: unknown): asserts value is string {
 export function assertAccountUsername(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,63}$/.test(value))
     throw new PeerHelperError('p2p.invalid_request')
+}
+
+/**
+ * Registration identifies the account by email, which assertAccountUsername
+ * rejects. This mirrors the coordinator's own pattern and 254-byte ceiling so a
+ * value it would refuse is stopped before the password leaves this process.
+ */
+export function assertAccountEmail(value: unknown): asserts value is string {
+  if (
+    typeof value !== 'string' ||
+    Buffer.byteLength(value) > 254 ||
+    !/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
+  )
+    throw new PeerHelperError('p2p.invalid_request')
+}
+
+/**
+ * Accepts an account identity as the coordinator reports it.
+ *
+ * Every account is keyed by email server-side, so a returned identity is
+ * normally an address; the narrower handle form is still accepted so a
+ * coordinator that reports one is not refused. Control characters and
+ * whitespace are rejected either way.
+ */
+export function assertAccountIdentity(value: unknown): asserts value is string {
+  if (typeof value !== 'string' || Buffer.byteLength(value) > 254)
+    throw new PeerHelperError('p2p.invalid_request')
+  const handle = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{2,63}$/.test(value)
+  const address = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)
+  if (!handle && !address) throw new PeerHelperError('p2p.invalid_request')
 }

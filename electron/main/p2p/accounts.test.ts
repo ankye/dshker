@@ -30,6 +30,80 @@ async function loggedIn() {
 }
 
 describe('main-owned P2P accounts', () => {
+  const email = 'alice@example.com'
+  const registered = { userId: user.userId, username: email }
+
+  it('registers, confirms the session by readback and signs the user in', async () => {
+    const f = fixture()
+    const created = { user: registered, token: '9'.repeat(64), expiresAt: session().expiresAt }
+    f.call.mockResolvedValueOnce(created).mockResolvedValueOnce(registered)
+    expect(await f.accounts.register(serviceId, email, 'a-long-password', signal())).toEqual(
+      registered
+    )
+    expect(f.call.mock.calls[0]?.[0]).toBe('user.register')
+    expect(f.call.mock.calls[0]?.[1]).toEqual({
+      serviceId,
+      data: { email, password: 'a-long-password' }
+    })
+    // The session is confirmed by reading the user back, exactly like login.
+    expect(f.call.mock.calls[1]?.[0]).toBe('user.current')
+    // A confirmed registration leaves the service signed in.
+    expect(f.accounts.hasSession(serviceId)).toBe(true)
+  })
+
+  it('never returns the session token to the caller after registering', async () => {
+    const f = fixture()
+    const token = '9'.repeat(64)
+    f.call.mockResolvedValueOnce({ user: registered, token, expiresAt: session().expiresAt })
+    f.call.mockResolvedValueOnce(registered)
+    const result = await f.accounts.register(serviceId, email, 'a-long-password', signal())
+    expect(JSON.stringify(result)).not.toContain(token)
+    expect(JSON.stringify(result)).not.toContain('a-long-password')
+  })
+
+  it('refuses a registration the coordinator would reject before sending it', async () => {
+    const f = fixture()
+    // Input is validated before any request is built, so these throw directly.
+    for (const [address, password] of [
+      ['not-an-email', 'a-long-password'],
+      ['alice@example.com', 'short'],
+      ['', 'a-long-password']
+    ] as const)
+      expect(() => f.accounts.register(serviceId, address, password, signal())).toThrow(
+        'p2p.invalid_request'
+      )
+    expect(f.call).not.toHaveBeenCalled()
+  })
+
+  it('reports a refused registration and leaves the service signed out', async () => {
+    const f = fixture()
+    f.call.mockRejectedValueOnce(new PeerHelperError('p2p.user_conflict'))
+    await expect(
+      f.accounts.register(serviceId, email, 'a-long-password', signal())
+    ).rejects.toMatchObject({ code: 'p2p.user_conflict' })
+    expect(f.accounts.hasSession(serviceId)).toBe(false)
+  })
+
+  it('raises an owned network capacity and confirms it through readback', async () => {
+    const f = await loggedIn()
+    const raised = { ...network, maxDevices: 20 }
+    f.call
+      .mockResolvedValueOnce([network])
+      .mockResolvedValueOnce(raised)
+      .mockResolvedValueOnce([raised])
+    expect(await f.accounts.updateNetworkLimit(serviceId, network.networkId, 20, signal())).toEqual(
+      raised
+    )
+    expect(f.call.mock.calls[1]?.[0]).toBe('networks.limit')
+
+    // A value outside the allowed set never reaches the coordinator.
+    const g = await loggedIn()
+    expect(() => g.accounts.updateNetworkLimit(serviceId, network.networkId, 15, signal())).toThrow(
+      'p2p.invalid_network_limit'
+    )
+    expect(g.call).not.toHaveBeenCalled()
+  })
+
   it('clears rejected user authority so explicit login can recover without restarting the app', async () => {
     const f = await loggedIn()
     f.call.mockRejectedValueOnce(new PeerHelperError('p2p.user_unauthorized'))

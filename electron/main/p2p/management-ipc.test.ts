@@ -146,11 +146,13 @@ function fixture() {
     catalog: vi.fn(async () => snapshot),
     addService: vi.fn(async () => snapshot),
     login: vi.fn(async () => user),
+    register: vi.fn(async () => user),
     currentUser: vi.fn(async () => user),
     logout: vi.fn(async () => undefined),
     networks: vi.fn(async () => [network]),
     createNetwork: vi.fn(async () => network),
     renameNetwork: vi.fn(async () => network),
+    updateNetworkLimit: vi.fn(async () => ({ ...network, maxDevices: 20 })),
     deleteNetwork: vi.fn(async () => undefined),
     registration: vi.fn(async () => registration),
     registerDevice: vi.fn(async () => registration),
@@ -323,14 +325,30 @@ describe('P2P named management admission', () => {
     expect(admitted).not.toHaveProperty('privateKey')
   })
 
-  it('refuses register at dispatch until the helper exposes the user.register RPC', async () => {
-    const { invoke } = fixture()
+  it('dispatches register and returns the signed-in user without leaking the password', async () => {
+    const { owner, invoke, user } = fixture()
     const result = await invoke('register', page().event, request('register'))
-    expect(result).toEqual({
-      ok: false,
-      code: 'p2p.invalid_operation',
-      message: 'p2p.invalid_operation'
-    })
+    expect(result).toEqual({ ok: true, data: user })
+    expect(owner.register).toHaveBeenCalledWith(
+      serviceId,
+      inputs.register.email,
+      inputs.register.password,
+      expect.anything()
+    )
+    // The reply carries the user projection only: no token, no credential.
+    expect(JSON.stringify(result)).not.toContain(inputs.register.password)
+  })
+
+  it('dispatches the network capacity raise and returns the confirmed network', async () => {
+    const { owner, invoke } = fixture()
+    const result = await invoke('updateNetworkLimit', page().event, request('updateNetworkLimit'))
+    expect(result).toEqual({ ok: true, data: expect.objectContaining({ maxDevices: 20 }) })
+    expect(owner.updateNetworkLimit).toHaveBeenCalledWith(
+      serviceId,
+      networkId,
+      inputs.updateNetworkLimit.maxDevices,
+      expect.anything()
+    )
   })
 
   it('returns only allowlisted errors and never exception or helper text', async () => {

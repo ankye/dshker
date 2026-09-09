@@ -13,7 +13,7 @@ import (
 
 func (account *account) management(ctx context.Context, method string, data json.RawMessage) (any, error) {
 	switch method {
-	case "user.current", "user.logout", "devices.list", "networks.rename", "networks.delete", "networks.devices", "networks.pairs", "devices.bind", "devices.unbind", "networks.deletePair":
+	case "user.current", "user.logout", "devices.list", "networks.rename", "networks.limit", "networks.delete", "networks.devices", "networks.pairs", "devices.bind", "devices.unbind", "networks.deletePair":
 		return account.userManagement(ctx, method, data)
 	case "user.login":
 		var request struct {
@@ -24,6 +24,23 @@ func (account *account) management(ctx context.Context, method string, data json
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.Login(ctx, request.Username, request.Password)
+	case "user.register":
+		var request struct {
+			Email    string `json:"email"`
+			Password string `json:"password"`
+		}
+		if protocol.Decode(data, &request) != nil {
+			return nil, errors.New("p2p.invalid_request")
+		}
+		// The coordinator's register endpoint returns the created user without a
+		// session, so sign in with the same credentials to hand back a usable
+		// one. A refused sign-in is reported as it came: the account already
+		// exists, so calling it a registration failure would be untrue and would
+		// invite a retry that can now only fail with p2p.user_conflict.
+		if _, err := account.base.Register(ctx, request.Email, request.Password); err != nil {
+			return nil, err
+		}
+		return account.base.Login(ctx, request.Email, request.Password)
 	case "networks.list":
 		var request struct {
 			Token string `json:"token"`
