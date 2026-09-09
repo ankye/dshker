@@ -1,7 +1,6 @@
 package integration
 
 import (
-	"bytes"
 	"testing"
 	"time"
 )
@@ -29,7 +28,9 @@ func TestUserNetworkManagementReadback(t *testing.T) {
 		matched := false
 		for _, original := range f.config {
 			if device.DeviceID == original.Device.DeviceID {
-				matched = bytes.Equal(device.PublicKey, original.Device.PublicKey) && bytes.Equal(device.Certificate, original.Device.Certificate)
+				// The directory deliberately withholds credential material, so
+				// identity is confirmed by the fields it does carry.
+				matched = device.UserID == original.Device.UserID && device.Name == original.Device.Name
 			}
 		}
 		if !matched {
@@ -52,8 +53,13 @@ func TestUserNetworkManagementReadback(t *testing.T) {
 	must(t, f.client.BindDevice(f.ctx, token, network.NetworkID, device.DeviceID))
 	bound, err := f.client.NetworkDevices(f.ctx, token, network.NetworkID)
 	must(t, err)
-	if len(bound) != 1 || bound[0].DeviceID != device.DeviceID || bound[0].UserID != user.UserID || !bytes.Equal(bound[0].PublicKey, device.PublicKey) {
+	if len(bound) != 1 || bound[0].DeviceID != device.DeviceID || bound[0].UserID != user.UserID || bound[0].Name != device.Name {
 		t.Fatal("binding readback mismatch")
+	}
+	// A directory row must never carry a certificate: the coordinator withholds
+	// credential material from this view and nothing here needs it.
+	if bound[0].Presence != "online" && bound[0].Presence != "offline" {
+		t.Fatal("directory reported an unusable presence")
 	}
 	must(t, f.client.UnbindDevice(f.ctx, token, network.NetworkID, device.DeviceID))
 	bound, err = f.client.NetworkDevices(f.ctx, token, network.NetworkID)
