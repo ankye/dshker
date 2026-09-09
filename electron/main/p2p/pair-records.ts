@@ -17,8 +17,23 @@ import { exactPeerObject, PeerHelperError } from './wire'
 const PAIR_STATES = ['invited', 'approved', 'active', 'rejected', 'revoked'] as const
 export type PeerPairState = (typeof PAIR_STATES)[number]
 
-const PRESENCE = ['online', 'offline'] as const
-export type PeerPresence = (typeof PRESENCE)[number]
+/**
+ * Presence values the coordinator can report.
+ *
+ * `stale` means the last heartbeat is older than the server's liveness window.
+ * It has to be accepted here: the coordinator returns it from the same call that
+ * backs pair identity, so rejecting it would make a device whose heartbeat is
+ * merely a few seconds late fail the whole read. It is narrowed to `offline`
+ * when projected, because a stale heartbeat must never read as usable.
+ */
+const PRESENCE = ['online', 'stale', 'offline'] as const
+type PeerReportedPresence = (typeof PRESENCE)[number]
+export type PeerPresence = 'online' | 'offline'
+
+/** A heartbeat that has gone stale is not a usable connection. */
+function usablePresence(value: PeerReportedPresence): PeerPresence {
+  return value === 'online' ? 'online' : 'offline'
+}
 
 export interface PeerPairDevice {
   deviceId: string
@@ -70,14 +85,14 @@ function peerPairDevice(value: unknown): PeerPairDevice {
   assertAccountId(record.deviceId)
   assertAccountId(record.userId)
   assertAccountText(record.name)
-  if (!PRESENCE.includes(record.presence as PeerPresence))
+  if (!PRESENCE.includes(record.presence as PeerReportedPresence))
     throw new PeerHelperError('p2p.invalid_device_state')
   return {
     deviceId: record.deviceId,
     userId: record.userId,
     name: record.name,
     fingerprint: peerFingerprint(peerPublicKey(record.publicKey)),
-    presence: record.presence as PeerPresence
+    presence: usablePresence(record.presence as PeerReportedPresence)
   }
 }
 

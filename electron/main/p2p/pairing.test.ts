@@ -62,6 +62,31 @@ describe('main-owned P2P pairing', () => {
     expect(remoteFingerprint.replace(/ /g, '')).toBe(expected)
   })
 
+  it('accepts a stale heartbeat and reads it as unusable rather than failing', async () => {
+    const f = fixture()
+    // The coordinator reports 'stale' from the same call that backs pair
+    // identity once a heartbeat passes its liveness window. Refusing the value
+    // would fail the whole read for a device that is merely a few seconds late.
+    const stale = identity('active')
+    stale.initiator.presence = 'stale'
+    stale.target.presence = 'stale'
+    f.call.mockResolvedValueOnce(stale)
+    const result = await f.pairing.identity(serviceId, pairId, signal())
+    // A stale heartbeat is not a usable connection, so it presents as offline.
+    expect(result.initiator.presence).toBe('offline')
+    expect(result.target.presence).toBe('offline')
+  })
+
+  it('refuses a presence value the coordinator cannot report', async () => {
+    const f = fixture()
+    const impossible = identity('active')
+    impossible.initiator.presence = 'connected'
+    f.call.mockResolvedValueOnce(impossible)
+    await expect(f.pairing.identity(serviceId, pairId, signal())).rejects.toMatchObject({
+      code: 'p2p.invalid_device_state'
+    })
+  })
+
   it('refuses approval when the confirmed fingerprint does not match the remote key', async () => {
     const f = fixture()
     f.call.mockResolvedValueOnce(identity('approved'))
