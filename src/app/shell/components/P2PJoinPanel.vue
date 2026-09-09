@@ -34,6 +34,14 @@ const operation = computed(() =>
   serviceId.value === undefined ? undefined : management.operations[serviceId.value]
 )
 const busy = computed(() => (serviceId.value ? management.busy(serviceId.value) : false))
+const catalogOperation = computed(() => management.operations.catalog)
+/** A read failure keeps catalog undefined, so expose it instead of claiming 'not configured'. */
+const catalogError = computed(() =>
+  catalogOperation.value?.phase === 'failed' ? catalogOperation.value.error : undefined
+)
+const catalogLoading = computed(
+  () => catalog.value === undefined && catalogOperation.value?.phase === 'pending'
+)
 const registration = computed(() => enrollmentState.value?.registration)
 const joining = computed(
   () => operation.value?.method === 'joinNetwork' && operation.value?.phase === 'pending'
@@ -119,6 +127,14 @@ const joinErrorKey = computed<MessageKey>(() => {
   return JOIN_ERROR_KEYS[code] ?? 'p2p.join.error.generic'
 })
 
+/** Re-reads the catalog and re-provisions the built-in service after a failure. */
+async function retryProvision(): Promise<void> {
+  await management.readLocalDevice()
+  await management.ensureBuiltinService()
+  const id = serviceId.value
+  if (id && !management.busy(id)) void enrollment.read(id)
+}
+
 /** Seeds the device name once per service so an empty draft never reaches a join. */
 function ensureNameDraft(): void {
   const state = enrollmentState.value
@@ -186,7 +202,22 @@ async function leave(): Promise<void> {
       </div>
     </div>
 
-    <p v-if="catalog === undefined">{{ t('p2p.management.notLoaded') }}</p>
+    <p v-if="catalogError" role="alert" class="remote-error" data-testid="p2p-catalog-error">
+      {{ t('p2p.myNetwork.catalogReadFailed') }}
+      <code>{{ catalogError }}</code>
+      <button
+        class="prototype-button"
+        type="button"
+        :disabled="catalogLoading"
+        @click="retryProvision"
+      >
+        {{ t('p2p.myNetwork.retry') }}
+      </button>
+    </p>
+    <p v-else-if="catalogLoading" role="status" data-testid="p2p-catalog-loading">
+      {{ t('p2p.myNetwork.catalogLoading') }}
+    </p>
+    <p v-else-if="catalog === undefined">{{ t('p2p.management.notLoaded') }}</p>
     <p
       v-else-if="management.builtinRemoved.value"
       role="alert"

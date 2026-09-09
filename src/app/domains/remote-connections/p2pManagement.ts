@@ -62,7 +62,14 @@ export class P2PManagementDomain {
   ): Promise<P2PDomainResult<K>> {
     // These contracts contain primitives only. Preserve exactly what was submitted.
     const fields = { ...input }
-    const scope = 'serviceId' in fields ? String(fields.serviceId) : 'catalog'
+    // Pure machine reads without a service (localDevice, connections) must not
+    // collide with the catalog-scoped operations, so they use their own scope.
+    const scope =
+      method === 'localDevice' || method === 'connections'
+        ? method
+        : 'serviceId' in fields
+          ? String(fields.serviceId)
+          : 'catalog'
     if (this.busy(scope))
       return { ok: false, code: 'p2p.service_busy', message: 'p2p.service_busy' }
     const requestId = nextRequestId()

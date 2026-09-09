@@ -254,6 +254,10 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.myNetwork.deviceName': 'Device name',
   'p2p.myNetwork.deviceId': 'Device ID',
   'p2p.myNetwork.deviceNameDefault': 'My computer',
+  'p2p.myNetwork.catalogReadFailed':
+    'Could not read the P2P configuration; this does not mean none exists. Retry.',
+  'p2p.myNetwork.catalogLoading': 'Reading P2P configuration…',
+  'p2p.myNetwork.retry': 'Retry',
   'p2p.myNetwork.networkIdLabel': 'Network ID',
   'p2p.myNetwork.join': 'Join network',
   'p2p.myNetwork.joining': 'Joining…',

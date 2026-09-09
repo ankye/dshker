@@ -1,9 +1,14 @@
 import type { IpcMainInvokeEvent, WebContents, WebFrameMain } from 'electron'
 import { PeerHelperError } from './wire'
 
+/** Ids below highWater - WINDOW are refused outright, bounding what must be retained. */
+const REPLAY_WINDOW = 256
+
 interface Scope {
   frame: WebFrameMain
   highWater: number
+  /** Ids already admitted within the replay window; an id is never admitted twice. */
+  seen: Set<number>
   pending: Map<number, AbortController>
 }
 
@@ -54,10 +59,26 @@ export class PeerManagementRequests {
     throw controller.signal.reason
   }
 
+  /**
+   * Admits one request exactly once.
+   *
+   * The renderer allocates ids from a single monotonic sequence, but concurrent
+   * invokes on different channels have no ordering guarantee, so an earlier id
+   * legitimately arrives after a later one. Rejecting anything below a high
+   * water mark would fail those honest requests, so replay protection tracks
+   * the ids actually admitted and refuses only a genuine repeat. The window
+   * bounds retention: an id far behind the high water mark is refused rather
+   * than remembered forever.
+   */
   #admit(event: IpcMainInvokeEvent, requestId: number): Scope {
     const scope = this.#scope(event)
-    if (requestId <= scope.highWater) throw new PeerHelperError('p2p.request_replayed')
-    scope.highWater = requestId
+    if (!Number.isSafeInteger(requestId) || requestId <= 0)
+      throw new PeerHelperError('p2p.invalid_request')
+    if (requestId <= scope.highWater - REPLAY_WINDOW || scope.seen.has(requestId))
+      throw new PeerHelperError('p2p.request_replayed')
+    scope.seen.add(requestId)
+    if (requestId > scope.highWater) scope.highWater = requestId
+    for (const id of scope.seen) if (id <= scope.highWater - REPLAY_WINDOW) scope.seen.delete(id)
     return scope
   }
 
@@ -69,7 +90,12 @@ export class PeerManagementRequests {
       if (current.frame !== event.senderFrame) throw new PeerHelperError('p2p.ipc_invalid_sender')
       return current
     }
-    const scope: Scope = { frame: event.senderFrame, highWater: 0, pending: new Map() }
+    const scope: Scope = {
+      frame: event.senderFrame,
+      highWater: 0,
+      seen: new Set(),
+      pending: new Map()
+    }
     const retire = () => {
       for (const pending of scope.pending.values())
         pending.abort(new PeerHelperError('p2p.request_cancelled'))

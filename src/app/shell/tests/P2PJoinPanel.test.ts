@@ -58,7 +58,11 @@ afterEach(() => {
 
 /** Mounts with the built-in service catalog and selection pre-set. */
 async function render(api: Partial<P2PManagementApi>) {
-  window.dshLauncher = { p2pManagement: api } as unknown as DesktopApi
+  const localDevice = vi.fn<P2PManagementApi['localDevice']>().mockResolvedValue({
+    ok: true,
+    data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
+  })
+  window.dshLauncher = { p2pManagement: { ...api, localDevice } } as unknown as DesktopApi
   const domain = await import('@/app/domains/remote-connections')
   domain.p2pManagement.catalog.value = saved
   domain.p2pManagement.selectedServiceId.value = serviceId
@@ -74,7 +78,13 @@ describe('P2P 「我的网络」 card', () => {
       ok: true,
       data: saved
     })
-    window.dshLauncher = { p2pManagement: { catalog } } as unknown as DesktopApi
+    const localDevice = vi.fn<P2PManagementApi['localDevice']>().mockResolvedValue({
+      ok: true,
+      data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
+    })
+    window.dshLauncher = {
+      p2pManagement: { catalog, localDevice }
+    } as unknown as DesktopApi
     const domain = await import('@/app/domains/remote-connections')
     const component = (await import('../components/P2PJoinPanel.vue')).default
     wrapper = mount(component)
@@ -90,8 +100,8 @@ describe('P2P 「我的网络」 card', () => {
     const info = ui.get('[data-testid="p2p-device-info"]')
     expect(info.text()).toContain('设备名称')
     expect(info.text()).toContain('设备标识')
-    // Before joining there is no server-confirmed deviceId.
-    expect(info.text()).toContain('—')
+    // Before joining, the card shows this machine's generated local device id.
+    expect(info.text()).toContain('local-device-a')
     expect(ui.find('input[name]').exists()).toBe(false)
     expect(ui.findAll('input')).toHaveLength(1)
     expect((ui.get('[data-testid="p2p-join-network"]').element as HTMLInputElement).type).toBe(
@@ -206,16 +216,40 @@ describe('P2P 「我的网络」 card', () => {
     expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(true)
   })
 
-  it('shows the unavailable state when the official server cannot be provisioned', async () => {
-    window.dshLauncher = {} as unknown as DesktopApi
+  it('shows the unavailable state when the catalog holds no official server', async () => {
+    // The catalog was read successfully and simply has no built-in service, and
+    // adding one is refused: that is 'unavailable', not a read failure.
+    const catalog = vi
+      .fn<P2PManagementApi['catalog']>()
+      .mockResolvedValue({ ok: true, data: { ...saved, services: [] } })
+    const addService = vi
+      .fn<P2PManagementApi['addService']>()
+      .mockResolvedValue({ ok: false, code: 'p2p.catalog_conflict', message: 'conflict' })
+    const ui = await render({ catalog, addService })
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pManagement.catalog.value = { ...saved, services: [] }
+    domain.p2pManagement.selectedServiceId.value = undefined
+    await flushPromises()
+    expect(ui.get('[data-testid="p2p-service-unavailable"]').text()).toContain('官方服务器暂不可用')
+    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
+  })
+
+  it('surfaces a catalog read failure as retryable instead of claiming no configuration', async () => {
+    // A failed read must never look like 'not configured'.
+    const catalog = vi
+      .fn<P2PManagementApi['catalog']>()
+      .mockResolvedValue({ ok: false, code: 'p2p.request_replayed', message: 'replayed' })
+    const localDevice = vi.fn<P2PManagementApi['localDevice']>().mockResolvedValue({
+      ok: true,
+      data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
+    })
+    window.dshLauncher = { p2pManagement: { catalog, localDevice } } as unknown as DesktopApi
     const component = (await import('../components/P2PJoinPanel.vue')).default
     wrapper = mount(component)
     await flushPromises()
-    expect(wrapper.get('[data-testid="p2p-service-unavailable"]').text()).toContain(
-      '官方服务器暂不可用'
-    )
+    const error = wrapper.get('[data-testid="p2p-catalog-error"]')
+    expect(error.text()).toContain('p2p.request_replayed')
+    expect(error.find('button').exists()).toBe(true)
     expect(wrapper.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
   })
 

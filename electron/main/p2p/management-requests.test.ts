@@ -37,11 +37,33 @@ describe('management request document ownership', () => {
     await expect(requests.run(a.event, 3, false, operation)).rejects.toMatchObject({
       code: 'p2p.request_replayed'
     })
+    // A lower id is not a replay: concurrent invokes on different channels have
+    // no ordering guarantee, so an earlier allocation may arrive later.
+    expect(await requests.run(a.event, 2, true, operation)).toBe('readback')
     await expect(requests.run(a.event, 2, true, operation)).rejects.toMatchObject({
       code: 'p2p.request_replayed'
     })
     expect(await requests.run(b.event, 1, false, operation)).toBe('readback')
-    expect(operation).toHaveBeenCalledTimes(2)
+    // Only the three admitted requests ran; a refused replay never reaches the operation.
+    expect(operation).toHaveBeenCalledTimes(3)
+  })
+
+  it('admits concurrent out-of-order ids and refuses one beyond the replay window', async () => {
+    const requests = new PeerManagementRequests()
+    const a = page()
+    const operation = vi.fn(async () => 'readback')
+    // Ids allocated 1..8 by one renderer sequence, delivered in any order.
+    const admitted = await Promise.all(
+      [5, 2, 8, 1, 7, 3, 6, 4].map((id) => requests.run(a.event, id, false, operation))
+    )
+    expect(admitted).toEqual(Array.from({ length: 8 }, () => 'readback'))
+    // Retention is bounded: an id far behind the high water mark is refused
+    // rather than remembered forever.
+    const far = page()
+    expect(await requests.run(far.event, 1000, false, operation)).toBe('readback')
+    await expect(requests.run(far.event, 2, false, operation)).rejects.toMatchObject({
+      code: 'p2p.request_replayed'
+    })
   })
 
   it('caps pending requests without losing the owned cancellation path', async () => {
