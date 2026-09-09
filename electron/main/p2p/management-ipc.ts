@@ -185,6 +185,7 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
     projectPeerConnection(r.serviceId, await owner.connect(r.serviceId, r.pairId, s))
   )
   register('disconnect', true, (r, s) => owner.disconnect(r.serviceId, r.pairId, s))
+  register('localDevice', false, async () => owner.localDevice())
   register('updateServiceConfig', true, async (r, s) =>
     projectPeerCatalog(
       await owner.updateServiceConfig(

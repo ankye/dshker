@@ -38,5 +38,6 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
   remoteDirectory: (request) => ipcRenderer.invoke(channels.remoteDirectory, request),
   connect: (request) => ipcRenderer.invoke(channels.connect, request),
   disconnect: (request) => ipcRenderer.invoke(channels.disconnect, request),
+  localDevice: (request) => ipcRenderer.invoke(channels.localDevice, request),
   cancel: (request) => ipcRenderer.invoke(channels.cancel, request)
 })

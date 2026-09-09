@@ -10,6 +10,7 @@ import {
   type P2PManagementResults,
   type P2PManagementErrorCode,
   type P2PCatalogView,
+  type P2PLocalDeviceView,
   type P2PServiceInput
 } from '@/shared/p2p-management'
 
@@ -37,6 +38,7 @@ export class P2PManagementDomain {
   readonly #operations = reactive<Record<string, P2POperationState>>({})
   readonly operations = readonly(this.#operations)
   readonly catalog = ref<P2PCatalogView | null>()
+  readonly localDevice = ref<P2PLocalDeviceView>()
   readonly selectedServiceId = ref<string>()
   /** True once the built-in service is present in the catalog and selected. */
   readonly builtinProvisioned = ref(false)
@@ -119,6 +121,11 @@ export class P2PManagementDomain {
         current.cancelError = 'bridge'
       }
     }
+  }
+
+  async readLocalDevice(): Promise<void> {
+    const result = await this.run('localDevice', {})
+    if (result.ok) this.localDevice.value = result.data
   }
 
   async readCatalog(): Promise<void> {

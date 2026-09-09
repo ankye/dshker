@@ -251,6 +251,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       connections: unusedP2P,
       connect: unusedP2P,
       disconnect: unusedP2P,
+      localDevice: unusedP2P,
       updateServiceConfig: unusedP2P,
       remoteRoots: unusedP2P,
       remoteDirectory: unusedP2P,

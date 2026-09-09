@@ -1,4 +1,7 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
+import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { hostname } from 'node:os'
+import { isAbsolute, join } from 'node:path'
 import type { LauncherHarnessService } from '../managed/launcher-harness-service'
 import { assertAccountId } from './account-records'
 import { PeerAccounts } from './accounts'
@@ -38,8 +41,10 @@ export class PeerManagement {
   #session: Session | undefined
   /** Services whose enrolled device has been restored into the live helper. */
   readonly #restored = new Set<string>()
+  readonly #resolveSettingsRoot: () => Promise<string>
 
   constructor(options: Options) {
+    this.#resolveSettingsRoot = options.resolveSettingsRoot
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot)
     this.#host = new PeerRuntimeHost({
@@ -66,6 +71,40 @@ export class PeerManagement {
   }
   status() {
     return this.#host.snapshot()
+  }
+
+  /**
+   * This machine's local device identity. The device id is a stable random
+   * value persisted once under the settings root (independent of any
+   * coordinator registration), and the name defaults to the OS hostname. The
+   * UI always has a real device name and identifier to show, even before any
+   * network join.
+   */
+  async localDevice() {
+    this.#admit()
+    const root = await this.#settingsRoot()
+    const file = join(root, 'p2p-local-device.json')
+    let deviceId: string | undefined
+    try {
+      const raw = await readFile(file, 'utf8')
+      const parsed = JSON.parse(raw) as { deviceId?: unknown }
+      if (typeof parsed.deviceId === 'string' && /^[0-9a-f]{32}$/.test(parsed.deviceId))
+        deviceId = parsed.deviceId
+    } catch {
+      deviceId = undefined // First run or unreadable preset: generate below.
+    }
+    if (!deviceId) {
+      deviceId = randomBytes(16).toString('hex')
+      await mkdir(root, { recursive: true })
+      await writeFile(file, JSON.stringify({ deviceId, name: hostname() }) + '\n', 'utf8')
+    }
+    return { deviceId, name: hostname() }
+  }
+
+  async #settingsRoot(): Promise<string> {
+    const root = await this.#resolveSettingsRoot()
+    if (!isAbsolute(root)) throw new PeerHelperError('p2p.settings_root_required')
+    return root
   }
 
   async addService(revision: string, input: PeerServiceInput, signal: AbortSignal) {

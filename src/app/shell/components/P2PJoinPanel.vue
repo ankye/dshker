@@ -51,16 +51,22 @@ const canJoin = computed(
     !busy.value
 )
 
-const defaultDeviceName = t('p2p.myNetwork.deviceNameDefault')
-/** 设备名称: the name the server stores for this device. */
+const defaultDeviceName = () =>
+  management.localDevice.value?.name ?? t('p2p.myNetwork.deviceNameDefault')
+/** 设备名称: the server-stored name once registered, else this machine's hostname. */
 const deviceName = computed(() =>
   registration.value?.kind === 'registered'
     ? registration.value.name
-    : enrollmentState.value?.joinNameDraft || defaultDeviceName
+    : (management.localDevice.value?.name ?? t('p2p.myNetwork.deviceNameDefault'))
 )
-/** 设备标识: only a server-confirmed deviceId is ever shown. */
+/**
+ * 设备标识: the server-confirmed deviceId once registered, else this machine's
+ * stable, machine-generated local device id (never a placeholder).
+ */
 const deviceId = computed(() =>
-  registration.value?.kind === 'registered' ? registration.value.deviceId : '—'
+  registration.value?.kind === 'registered'
+    ? registration.value.deviceId
+    : (management.localDevice.value?.deviceId ?? '—')
 )
 
 /** Leaving is only wired to a server-confirmed path; the stub never fakes it. */
@@ -116,7 +122,7 @@ const joinErrorKey = computed<MessageKey>(() => {
 /** Seeds the device name once per service so an empty draft never reaches a join. */
 function ensureNameDraft(): void {
   const state = enrollmentState.value
-  if (state && !state.joinNameDraft) state.joinNameDraft = defaultDeviceName
+  if (state && !state.joinNameDraft) state.joinNameDraft = defaultDeviceName()
 }
 
 /**
@@ -124,6 +130,7 @@ function ensureNameDraft(): void {
  * the card never offers a redundant join.
  */
 onMounted(async () => {
+  void management.readLocalDevice()
   await management.ensureBuiltinService()
   ensureNameDraft()
   const id = serviceId.value

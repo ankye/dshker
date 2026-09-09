@@ -37,6 +37,7 @@ export const P2P_MANAGEMENT_CHANNELS = {
   remoteDirectory: 'dsh-launcher:p2p:remote-directory',
   connect: 'dsh-launcher:p2p:connect',
   disconnect: 'dsh-launcher:p2p:disconnect',
+  localDevice: 'dsh-launcher:p2p:local-device',
   cancel: 'dsh-launcher:p2p:cancel'
 } as const
 
@@ -62,6 +63,17 @@ export const P2P_BUILTIN_SERVICE: P2PServiceInput = {
 export interface P2PUserView {
   userId: string
   username: string
+}
+
+/**
+ * This machine's local device identity: a stable, machine-generated id and the
+ * operating-system hostname as the default name. It exists from startup,
+ * independent of any coordinator registration, so the UI can always show the
+ * user which device this is.
+ */
+export interface P2PLocalDeviceView {
+  deviceId: string
+  name: string
 }
 /**
  * Device capacity of a network: how many enrolled devices it accepts.
@@ -288,6 +300,7 @@ export interface P2PManagementInputs {
   }
   connect: ServiceRequest & { pairId: string }
   disconnect: ServiceRequest & { pairId: string }
+  localDevice: Record<never, never>
   cancel: { targetRequestId: number }
 }
 export interface P2PManagementResults {
@@ -329,6 +342,7 @@ export interface P2PManagementResults {
   /** Starting a connection returns the accepted attempt, never a ready state. */
   connect: P2PConnectionView
   disconnect: void
+  localDevice: P2PLocalDeviceView
   /** Accepted means cancellation requested, never that a server write was undone. */
   cancel: { accepted: boolean }
 }
