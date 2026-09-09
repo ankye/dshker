@@ -47,6 +47,20 @@ export class PeerPairing {
     })
   }
 
+  /**
+   * Pairs this device with every other device already in one of its networks.
+   *
+   * Joining a network is the authorization, so no invite code and no approval
+   * step are involved. The coordinator derives the peers from this device's own
+   * bindings, which is why the request carries no target.
+   */
+  adopt(serviceId: string, signal: AbortSignal): Promise<PeerPair[]> {
+    return this.#operation(serviceId, signal, async () => {
+      const local = await this.localDeviceId(serviceId, signal)
+      return peerPairs(await this.#call(serviceId, 'pairs.adopt', {}, signal), local)
+    })
+  }
+
   /** Reads one relationship with both device identities and real fingerprints. */
   identity(serviceId: string, pairId: string, signal: AbortSignal): Promise<PeerPair> {
     assertAccountId(pairId)

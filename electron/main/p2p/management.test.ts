@@ -158,24 +158,46 @@ async function loggedIn() {
 }
 
 describe('bringing enrolled services online at startup', () => {
+  const deviceId = '3'.repeat(32)
+  const publicKey = Buffer.alloc(32, 1).toString('base64')
+  /** Makes this machine look like it completed enrollment for the saved service. */
+  function enrolled() {
+    vi.spyOn(PeerCredentialStore.prototype, 'load').mockResolvedValue({
+      revision: 'a'.repeat(64),
+      credential: {
+        serviceId,
+        deviceId,
+        userId: user.userId,
+        name: 'This machine',
+        publicKey,
+        certificate: 'test-only-credential-boundary',
+        privateKey: Buffer.alloc(32, 9).toString('base64')
+      }
+    } as Awaited<ReturnType<PeerCredentialStore['load']>>)
+    // Pairing resolves the local device through the registration readback, not
+    // the credential itself.
+    vi.spyOn(PeerCredentialStore.prototype, 'loadRegistration').mockResolvedValue({
+      kind: 'registered',
+      revision: 'a'.repeat(64),
+      credential: {
+        serviceId,
+        deviceId,
+        userId: user.userId,
+        name: 'This machine',
+        publicKey,
+        certificate: 'test-only-credential-boundary',
+        privateKey: Buffer.alloc(32, 9).toString('base64')
+      }
+    } as Awaited<ReturnType<PeerCredentialStore['loadRegistration']>>)
+  }
+
   it('restores the device session so the coordinator heartbeat can run', async () => {
     // Presence, the reported build, discoverability and pairing all depend on
     // the heartbeat, which only runs while a device session holds the signal
     // connection. Nothing established it until the user opened pairing, so a
     // running launcher looked offline to every other machine.
     const f = fixture()
-    vi.spyOn(PeerCredentialStore.prototype, 'load').mockResolvedValue({
-      revision: 'a'.repeat(64),
-      credential: {
-        serviceId,
-        deviceId: '3'.repeat(32),
-        userId: user.userId,
-        name: 'This machine',
-        publicKey: Buffer.alloc(32, 1).toString('base64'),
-        certificate: 'test-only-credential-boundary',
-        privateKey: Buffer.alloc(32, 9).toString('base64')
-      }
-    } as Awaited<ReturnType<PeerCredentialStore['load']>>)
+    enrolled()
     const results = await f.owner.goOnline()
     expect(results).toEqual([{ serviceId, online: true }])
     expect(f.call.mock.calls.map(([method]) => method)).toContain('device.restore')
@@ -188,6 +210,29 @@ describe('bringing enrolled services online at startup', () => {
     expect(await f.owner.goOnline()).toEqual([
       { serviceId, online: false, code: 'p2p.device_unregistered' }
     ])
+  })
+
+  it('pairs devices that already share a network, with no invite', async () => {
+    // Joining a network is the authorization. Without this, membership granted
+    // nothing and two of the user's own machines still had to exchange a code.
+    const f = fixture()
+    enrolled()
+    await f.owner.goOnline()
+    expect(f.call.mock.calls.map(([method]) => method)).toContain('pairs.adopt')
+  })
+
+  it('stays online when adoption is refused', async () => {
+    // Adoption is an enhancement, not a precondition: a coordinator that rejects
+    // it must not take the service offline.
+    const f = fixture()
+    enrolled()
+    f.call.mockImplementation(async (method: string) => {
+      if (method === 'pairs.adopt') throw new PeerHelperError('p2p.binding_unauthorized')
+      if (method === 'device.restore') return { deviceId: '3'.repeat(32) }
+      if (method === 'user.current') return user
+      return {}
+    })
+    expect(await f.owner.goOnline()).toEqual([{ serviceId, online: true }])
   })
 
   it('reports a refusal per service instead of throwing', async () => {

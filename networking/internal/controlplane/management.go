@@ -125,6 +125,20 @@ func (client *Client) Pairs(ctx context.Context) ([]Pair, error) {
 	return result, err
 }
 
+// AdoptNetwork pairs this device with every other device already bound to one of
+// its networks, with no invite code and no approval step.
+//
+// The request carries no target: the coordinator derives the peers from the
+// bindings this device already holds, so the caller cannot aim it at a device it
+// has no claim to.
+func (client *Client) AdoptNetwork(ctx context.Context) ([]Pair, error) {
+	var result struct {
+		Pairs []Pair `json:"pairs"`
+	}
+	err := client.call(ctx, "POST", "/v1/adopt-network", "", struct{}{}, &result)
+	return result.Pairs, err
+}
+
 func (client *Client) PairIdentity(ctx context.Context, pairID string) (PairIdentity, error) {
 	var result PairIdentity
 	if !protocol.ValidID(pairID) {

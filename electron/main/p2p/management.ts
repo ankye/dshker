@@ -84,7 +84,11 @@ export class PeerManagement {
     for (const service of snapshot.record.services) {
       if (this.#lifetime.signal.aborted) break
       try {
-        await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
+        const session = await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
+        // Devices in the same network are already authorized to reach each other,
+        // so pair them without an invite. Joining a network would otherwise grant
+        // nothing on its own. A refusal here still leaves the service online.
+        await session.pairing.adopt(service.serviceId, this.#lifetime.signal).catch(() => undefined)
         results.push({ serviceId: service.serviceId, online: true })
       } catch (error) {
         results.push({

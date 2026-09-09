@@ -111,6 +111,14 @@ func (account *account) management(ctx context.Context, method string, data json
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.client.Pairs(ctx)
+	case "pairs.adopt":
+		// No arguments: the coordinator derives peers from this device's own
+		// network bindings, so there is nothing for the caller to choose.
+		var empty struct{}
+		if protocol.Decode(data, &empty) != nil {
+			return nil, errors.New("p2p.invalid_request")
+		}
+		return account.client.AdoptNetwork(ctx)
 	case "pairs.identity":
 		var request struct {
 			PairID string `json:"pairId"`
