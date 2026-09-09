@@ -31,7 +31,13 @@ function nextRequestId(): number {
   if (sequence === Number.MAX_SAFE_INTEGER) throw new Error('p2p.request_limit')
   return ++sequence
 }
-const reads = new Set<Operation>(['catalog', 'currentUser', 'networks', 'registration'])
+const reads = new Set<Operation>([
+  'catalog',
+  'currentUser',
+  'networks',
+  'networkDevices',
+  'registration'
+])
 
 /** Domain owner survives route changes. No password, token or request body enters state. */
 export class P2PManagementDomain {

@@ -6,6 +6,7 @@ import {
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
+import P2PDeviceDirectory from './P2PDeviceDirectory.vue'
 import {
   P2P_ACCOUNT_PASSWORD_MIN,
   P2P_NETWORK_DEVICE_LIMITS,
@@ -15,6 +16,34 @@ import {
 const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
 const state = accounts.state(props.serviceId)
+
+const selectedNetwork = computed(() =>
+  state.networks?.find((network) => network.networkId === state.selectedNetworkId)
+)
+const directoryLoading = computed(
+  () =>
+    management.operations[props.serviceId]?.method === 'networkDevices' &&
+    management.operations[props.serviceId]?.phase === 'pending'
+)
+/**
+ * Clock for relative times, ticked rather than read per render so every row in a
+ * list agrees on "now" and the values refresh without a user action.
+ */
+const now = ref(Math.floor(Date.now() / 1000))
+const clock = setInterval(() => (now.value = Math.floor(Date.now() / 1000)), 30_000)
+onBeforeUnmount(() => clearInterval(clock))
+
+// Reading the directory follows the selection: an unselected network is never
+// fetched, and re-selecting the same network does not re-read it.
+watch(
+  () => state.selectedNetworkId,
+  (networkId) => {
+    if (!networkId || management.busy(props.serviceId)) return
+    if (state.devices[networkId] !== undefined) return
+    void accounts.networkDevices(props.serviceId, networkId)
+  },
+  { immediate: true }
+)
 const password = ref('')
 /** Registration drafts stay local to the panel, including its own email field:
  * sharing one draft let typing in one form silently rewrite the other. */
@@ -455,6 +484,17 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
           {{ t('p2p.account.selected') }}: <code>{{ state.selectedNetworkId }}</code>
         </p>
         <p v-else>{{ t('p2p.account.selectRequired') }}</p>
+        <!-- The directory follows the selection rather than expanding every row:
+             one network's devices at a time stays readable, and only the selected
+             network is actually read from the server. -->
+        <P2PDeviceDirectory
+          v-if="selectedNetwork"
+          :devices="state.devices[selectedNetwork.networkId]"
+          :max-devices="selectedNetwork.maxDevices"
+          :failed="state.devicesFailed[selectedNetwork.networkId] === true"
+          :loading="directoryLoading"
+          :now="now"
+        />
         <form @submit.prevent="accounts.createNetwork(serviceId)">
           <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
             <label

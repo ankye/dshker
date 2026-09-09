@@ -1,5 +1,5 @@
 import { reactive } from 'vue'
-import type { P2PNetworkView, P2PUserView } from '@/shared/p2p-management'
+import type { P2PNetworkDeviceView, P2PNetworkView, P2PUserView } from '@/shared/p2p-management'
 import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
 
 export interface P2PAccountState {
@@ -10,6 +10,14 @@ export interface P2PAccountState {
   networkNameDraft: string
   renameDrafts: Record<string, string>
   networkWriteUnconfirmed: boolean
+  /**
+   * Device directory per network id.
+   *
+   * `undefined` means "not read yet", which is not the same as an empty network:
+   * the UI must not claim a network has no devices before it has looked.
+   */
+  devices: Record<string, P2PNetworkDeviceView[] | undefined>
+  devicesFailed: Record<string, boolean>
 }
 
 /** Account state is partitioned by the pinned service identity, never by its name. */
@@ -26,7 +34,9 @@ export class P2PAccountsDomain {
         usernameDraft: '',
         networkNameDraft: '',
         renameDrafts: {},
-        networkWriteUnconfirmed: false
+        networkWriteUnconfirmed: false,
+        devices: {},
+        devicesFailed: {}
       }
     return this.#states[serviceId]
   }
@@ -80,6 +90,18 @@ export class P2PAccountsDomain {
     state.networkWriteUnconfirmed = false
     if (!result.data.some((network) => network.networkId === state.selectedNetworkId))
       state.selectedNetworkId = undefined
+  }
+
+  /** Reads one network's device directory; a failure is surfaced, never silent. */
+  async networkDevices(serviceId: string, networkId: string): Promise<void> {
+    const result = await this.management.run('networkDevices', { serviceId, networkId })
+    const state = this.state(serviceId)
+    if (!result.ok) {
+      state.devicesFailed[networkId] = true
+      return
+    }
+    state.devices[networkId] = result.data
+    state.devicesFailed[networkId] = false
   }
 
   select(serviceId: string, networkId: string): void {
