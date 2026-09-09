@@ -36,7 +36,8 @@ function setup() {
       .fn<P2PManagementApi['submitEnrollment']>()
       .mockResolvedValue({ ok: true, data: issued }),
     registerDevice: vi.fn<P2PManagementApi['registerDevice']>(),
-    joinNetwork: vi.fn<P2PManagementApi['joinNetwork']>()
+    joinNetwork: vi.fn<P2PManagementApi['joinNetwork']>(),
+    leaveNetwork: vi.fn<P2PManagementApi['leaveNetwork']>()
   }
   const management = new P2PManagementDomain(() => api as unknown as P2PManagementApi)
   return { api, management, enrollment: new P2PEnrollmentDomain(management) }
@@ -220,6 +221,109 @@ describe('P2P enrollment reconciliation', () => {
       const state = enrollment.state('service-a')
       expect(state.registration).toEqual(pending)
       expect(state.resultUnconfirmed).toBe(true)
+    })
+  })
+
+  describe('P2P login-free join cancellation and leave', () => {
+    it('cancels a pending join when readback proves no registration exists', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: pending })
+      await enrollment.join('service-a', pending.networkId, pending.name)
+      expect(enrollment.state('service-a').registration?.kind).toBe('pending')
+      api.registration.mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.credential_unavailable',
+        message: 'nothing stored'
+      })
+      await enrollment.cancelJoin('service-a')
+      expect(enrollment.state('service-a').registration).toBeUndefined()
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(false)
+    })
+
+    it('keeps a pending join that the readback still reports as pending', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: pending })
+      await enrollment.join('service-a', pending.networkId, pending.name)
+      await enrollment.cancelJoin('service-a')
+      expect(enrollment.state('service-a').registration).toEqual(pending)
+    })
+
+    it('adopts a registration the readback reveals instead of faking a cancel', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: pending })
+      await enrollment.join('service-a', pending.networkId, pending.name)
+      api.registration.mockResolvedValueOnce({ ok: true, data: issued })
+      await enrollment.cancelJoin('service-a')
+      expect(enrollment.state('service-a').registration).toEqual(issued)
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(false)
+    })
+
+    it('leaves a pending join untouched when the readback cannot confirm absence', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: pending })
+      await enrollment.join('service-a', pending.networkId, pending.name)
+      api.registration.mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.server_unavailable',
+        message: 'offline'
+      })
+      await enrollment.cancelJoin('service-a')
+      expect(enrollment.state('service-a').registration).toEqual(pending)
+    })
+
+    it('clears the registration only after a server-confirmed leave', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: issued })
+      await enrollment.join('service-a', 'network-a', 'My computer')
+      api.leaveNetwork.mockResolvedValueOnce({ ok: true, data: undefined })
+      await enrollment.leave('service-a', 'network-a', issued.deviceId)
+      expect(api.leaveNetwork).toHaveBeenCalledWith(
+        expect.objectContaining({
+          serviceId: 'service-a',
+          networkId: 'network-a',
+          deviceId: issued.deviceId
+        })
+      )
+      expect(enrollment.state('service-a').registration).toBeUndefined()
+      expect(enrollment.state('service-a').joinNetworkIdDraft).toBe('')
+    })
+
+    it('never fakes a leave when the server refuses it', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: issued })
+      await enrollment.join('service-a', 'network-a', 'My computer')
+      api.leaveNetwork.mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.invalid_operation',
+        message: 'stub until the helper lands'
+      })
+      await enrollment.leave('service-a', 'network-a', issued.deviceId)
+      expect(enrollment.state('service-a').registration).toEqual(issued)
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(false)
+    })
+
+    it('marks a lost leave reply as unconfirmed without clearing the registration', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: issued })
+      await enrollment.join('service-a', 'network-a', 'My computer')
+      api.leaveNetwork.mockRejectedValueOnce(new Error('reply lost'))
+      await enrollment.leave('service-a', 'network-a', issued.deviceId)
+      expect(enrollment.state('service-a').registration).toEqual(issued)
+      expect(enrollment.state('service-a').resultUnconfirmed).toBe(true)
+    })
+
+    it('does not call the server when nothing is registered to leave', async () => {
+      const { enrollment, api } = setup()
+      await enrollment.leave('service-a', 'network-a', 'device-a')
+      expect(api.leaveNetwork).not.toHaveBeenCalled()
+    })
+
+    it('refuses to leave without the enrolled network identifier', async () => {
+      const { enrollment, api } = setup()
+      api.joinNetwork.mockResolvedValueOnce({ ok: true, data: issued })
+      await enrollment.join('service-a', 'network-a', 'My computer')
+      await enrollment.leave('service-a', '', issued.deviceId)
+      expect(api.leaveNetwork).not.toHaveBeenCalled()
     })
   })
 })

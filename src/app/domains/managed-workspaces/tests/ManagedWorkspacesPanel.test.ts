@@ -237,6 +237,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       registration: unusedP2P,
       registerDevice: unusedP2P,
       joinNetwork: unusedP2P,
+      leaveNetwork: unusedP2P,
       submitEnrollment: unusedP2P,
       recoverEnrollment: unusedP2P,
       pairs: unusedP2P,

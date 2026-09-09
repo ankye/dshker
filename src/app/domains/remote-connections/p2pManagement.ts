@@ -38,9 +38,14 @@ export class P2PManagementDomain {
   readonly operations = readonly(this.#operations)
   readonly catalog = ref<P2PCatalogView | null>()
   readonly selectedServiceId = ref<string>()
+  /** True once the built-in service is present in the catalog and selected. */
+  readonly builtinProvisioned = ref(false)
+  /** True when the built-in service was removed and re-adding is refused. */
+  readonly builtinRemoved = ref(false)
   readonly serviceDraft = reactive<P2PServiceInput>({
     ...P2P_BUILTIN_SERVICE
   })
+  #ensuringBuiltin = false
 
   constructor(private readonly bridge: () => P2PManagementApi | undefined) {}
 
@@ -144,6 +149,54 @@ export class P2PManagementDomain {
     if (!saved || this.busy(serviceId)) return
     const result = await this.run('removeService', { serviceId })
     if (result.ok) this.catalog.value = result.data
+  }
+
+  /**
+   * Auto-provisions the built-in coordinator for the simplified P2P flow.
+   *
+   * Enables P2P when the catalog says it is disabled, adds the built-in
+   * service when the catalog has none, and selects it so no user choice is
+   * needed. Idempotent: the service is added at most once per document and
+   * repeated calls are no-ops. When the built-in was deliberately removed the
+   * server refuses re-adding (p2p.trust_restore_rejected); that terminal
+   * state is recorded instead of looping. Any other failure — an unavailable
+   * bridge, a catalog conflict — leaves the state retryable for the next
+   * mount: nothing is marked done unless a readback confirmed it.
+   */
+  async ensureBuiltinService(): Promise<void> {
+    if (this.builtinProvisioned.value || this.builtinRemoved.value || this.#ensuringBuiltin) return
+    this.#ensuringBuiltin = true
+    try {
+      if (this.catalog.value === undefined) await this.readCatalog()
+      let saved = this.catalog.value
+      if (saved === null) {
+        await this.enable()
+        saved = this.catalog.value
+      }
+      if (!saved) return
+      const existing = saved.services.find(
+        (entry) => entry.httpsOrigin === P2P_BUILTIN_SERVICE.httpsOrigin
+      )
+      if (existing) {
+        this.selectedServiceId.value = existing.serviceId
+        this.builtinProvisioned.value = true
+        return
+      }
+      await this.addService()
+      const added = this.catalog.value?.services.find(
+        (entry) => entry.httpsOrigin === P2P_BUILTIN_SERVICE.httpsOrigin
+      )
+      if (added) {
+        this.selectedServiceId.value = added.serviceId
+        this.builtinProvisioned.value = true
+        return
+      }
+      const outcome = this.operations.catalog
+      if (outcome?.phase === 'failed' && outcome.error === 'p2p.trust_restore_rejected')
+        this.builtinRemoved.value = true
+    } finally {
+      this.#ensuringBuiltin = false
+    }
   }
 
   #fail<K extends Operation>(scope: string, requestId: number, code: Failure): P2PDomainResult<K> {

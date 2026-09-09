@@ -2,7 +2,6 @@
 import { ref } from 'vue'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import P2PJoinPanel from './P2PJoinPanel.vue'
-import P2PManagementPanel from './P2PManagementPanel.vue'
 import P2PNetworkAccountPanel from './P2PNetworkAccountPanel.vue'
 import RemoteSSHManagementPanel from './RemoteSSHManagementPanel.vue'
 
@@ -11,10 +10,11 @@ type RemoteTab = 'connect' | 'account'
 /**
  * Two operational sub-tabs of the remote route.
  *
- * Tab 1 「连接」 is login-free (SSH hosts, P2P server configuration, and
- * joining a network by networkId). Tab 2 「网络与账户」 is login-gated and
- * carries account, network, enrollment and pairing management. Tabs never
- * switch by themselves; cross-tab guidance asks the user to switch explicitly.
+ * Tab 1 「连接」 is login-free (SSH hosts, plus the「我的网络」card that joins
+ * a P2P network through the built-in official server). Tab 2 「网络与账户」
+ * is login-gated and carries account, network, enrollment and pairing
+ * management. Tabs never switch by themselves; cross-tab guidance asks the
+ * user to switch explicitly.
  */
 const t = useTranslator()
 const activeTab = ref<RemoteTab>('connect')
@@ -58,7 +58,6 @@ const activeTab = ref<RemoteTab>('connect')
     >
       <p class="remote-tab-description">{{ t('p2p.tabs.connectDescription') }}</p>
       <RemoteSSHManagementPanel />
-      <P2PManagementPanel />
       <P2PJoinPanel />
     </section>
 

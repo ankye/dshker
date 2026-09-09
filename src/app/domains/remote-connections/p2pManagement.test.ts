@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { P2PManagementApi, P2PCatalogView } from '@/shared/p2p-management'
+import {
+  P2P_BUILTIN_SERVICE,
+  type P2PManagementApi,
+  type P2PCatalogView
+} from '@/shared/p2p-management'
 import { P2PManagementDomain } from './p2pManagement'
 
 const saved: P2PCatalogView = {
@@ -222,5 +226,89 @@ describe('P2P management renderer owner', () => {
     expect(domain.operations['actual-id'].error).toBe('unconfirmed')
     expect(domain.catalog.value).toEqual(withService)
     expect(removeService).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('built-in official server provisioning', () => {
+  const builtin = {
+    serviceId: 'b'.repeat(32),
+    publicKey: 'pinned-key',
+    displayName: P2P_BUILTIN_SERVICE.displayName,
+    httpsOrigin: P2P_BUILTIN_SERVICE.httpsOrigin,
+    wssUrl: P2P_BUILTIN_SERVICE.wssUrl,
+    stunAddress: P2P_BUILTIN_SERVICE.stunAddress
+  }
+
+  it('enables, adds and selects the built-in service exactly once', async () => {
+    const enable = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, revision: 'enabled' }
+    }))
+    const addService = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, revision: 'added', services: [builtin] }
+    }))
+    const { domain } = setup({ enable, addService })
+    domain.catalog.value = null
+    await domain.ensureBuiltinService()
+    expect(enable).toHaveBeenCalledTimes(1)
+    expect(addService).toHaveBeenCalledTimes(1)
+    expect(addService).toHaveBeenCalledWith(
+      expect.objectContaining({
+        revision: 'enabled',
+        displayName: P2P_BUILTIN_SERVICE.displayName,
+        httpsOrigin: P2P_BUILTIN_SERVICE.httpsOrigin,
+        wssUrl: P2P_BUILTIN_SERVICE.wssUrl,
+        stunAddress: P2P_BUILTIN_SERVICE.stunAddress
+      })
+    )
+    expect(domain.selectedServiceId.value).toBe(builtin.serviceId)
+    expect(domain.builtinProvisioned.value).toBe(true)
+    expect(domain.builtinRemoved.value).toBe(false)
+    // Idempotent: a repeated call never adds or selects again.
+    domain.selectedServiceId.value = undefined
+    await domain.ensureBuiltinService()
+    expect(addService).toHaveBeenCalledTimes(1)
+    expect(domain.selectedServiceId.value).toBeUndefined()
+  })
+
+  it('selects an already-present built-in service without adding anything', async () => {
+    const addService = vi.fn()
+    const { domain } = setup({ addService })
+    domain.catalog.value = { ...saved, services: [builtin] }
+    await domain.ensureBuiltinService()
+    expect(addService).not.toHaveBeenCalled()
+    expect(domain.selectedServiceId.value).toBe(builtin.serviceId)
+    expect(domain.builtinProvisioned.value).toBe(true)
+  })
+
+  it('records the terminal removed state when re-adding the built-in is refused', async () => {
+    const addService = vi.fn(async () => ({
+      ok: false as const,
+      code: 'p2p.trust_restore_rejected' as const,
+      message: 'p2p.trust_restore_rejected'
+    }))
+    const { domain } = setup({ addService })
+    domain.catalog.value = saved
+    await domain.ensureBuiltinService()
+    expect(addService).toHaveBeenCalledTimes(1)
+    expect(domain.builtinRemoved.value).toBe(true)
+    expect(domain.builtinProvisioned.value).toBe(false)
+    expect(domain.selectedServiceId.value).toBeUndefined()
+    // No loop: further calls are no-ops.
+    await domain.ensureBuiltinService()
+    expect(addService).toHaveBeenCalledTimes(1)
+  })
+
+  it('stays retryable when provisioning cannot confirm anything', async () => {
+    const addService = vi.fn()
+    const { domain } = setup({ addService })
+    domain.catalog.value = saved
+    await domain.ensureBuiltinService()
+    expect(domain.builtinProvisioned.value).toBe(false)
+    expect(domain.builtinRemoved.value).toBe(false)
+    // A later mount may retry without a terminal state being recorded.
+    await domain.ensureBuiltinService()
+    expect(addService).toHaveBeenCalledTimes(2)
   })
 })

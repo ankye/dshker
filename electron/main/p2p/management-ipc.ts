@@ -28,14 +28,17 @@ import { PeerHelperError } from './wire'
 /**
  * Owner methods the IPC may dispatch to.
  *
- * `register`, `updateNetworkLimit` and `joinNetwork` are deliberately
- * excluded: the local Go helper does not expose those RPCs yet, so they are
- * admitted at this boundary but dispatched as typed stubs below until the
- * helper lands.
+ * `register`, `updateNetworkLimit`, `joinNetwork` and `leaveNetwork` are
+ * deliberately excluded: the local Go helper does not expose those RPCs yet, so
+ * they are admitted at this boundary but dispatched as typed stubs below until
+ * the helper lands.
  */
 export type PeerManagementOwner = Pick<
   PeerManagement,
-  Exclude<P2PManagementOperation, 'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork'>
+  Exclude<
+    P2PManagementOperation,
+    'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork' | 'leaveNetwork'
+  >
 >
 
 /** No raw RPC dispatch, paths, keys or tokens cross this boundary. */
@@ -134,6 +137,16 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   // TODO(p2p-join): when the helper lands, route to owner.joinNetwork and
   // complete Task 10.1. Never resolve this stub as registered.
   register('joinNetwork', true, async () => {
+    throw new PeerHelperError('p2p.invalid_operation')
+  })
+  //
+  // leaveNetwork: leaving a network needs the coordinator DELETE
+  // /v1/networks/:networkId/devices/:deviceId flow, which the local Go helper
+  // does not expose yet. The typed channel and admission are live; this stub
+  // refuses cleanly instead of faking a leave.
+  // TODO(p2p-leave): once the helper exposes device removal, route to
+  // owner.leaveNetwork and clear the local credential only after server readback.
+  register('leaveNetwork', true, async () => {
     throw new PeerHelperError('p2p.invalid_operation')
   })
   register('submitEnrollment', true, async (r, s) =>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import {
   p2pAccounts as accounts,
   p2pEnrollment as enrollment,
@@ -20,6 +20,12 @@ import P2PPairingPanel from './P2PPairingPanel.vue'
  * composes the account, network, enrollment and pairing panels.
  */
 const t = useTranslator()
+
+// The built-in official server is provisioned and selected automatically, so
+// this tab works whether the user visited Connect first or not.
+onMounted(() => {
+  void management.ensureBuiltinService()
+})
 
 const catalog = management.catalog
 const serviceId = computed(() => management.selectedServiceId.value)

@@ -83,6 +83,60 @@ export class P2PEnrollmentDomain {
     if (!refusedBeforeEffect(result.code)) state.resultUnconfirmed = true
   }
 
+  /**
+   * Cancel a pending login-free join without inventing a server outcome.
+   *
+   * Reads the registration back: a pending enrollment the server still holds
+   * stays pending, and a readback that proves no registration exists (no
+   * local record, or the server reports the enrollment was never found)
+   * clears the local pending draft so the user may join again. Any other
+   * failure leaves the pending registration untouched.
+   */
+  async cancelJoin(serviceId: string): Promise<void> {
+    const state = this.state(serviceId)
+    if (state.registration?.kind !== 'pending' || this.management.busy(serviceId)) return
+    const result = await this.management.run('registration', { serviceId })
+    if (result.ok) {
+      // The readback still holds a registration; adopt whatever it reports.
+      state.registration = result.data
+      state.retryRevision = undefined
+      state.resultUnconfirmed = result.data.kind === 'pending'
+      return
+    }
+    if (
+      result.code === 'p2p.credential_unavailable' ||
+      result.code === 'p2p.enrollment_not_found'
+    ) {
+      state.registration = undefined
+      state.resultUnconfirmed = false
+      state.retryRevision = undefined
+    }
+  }
+
+  /**
+   * Leave a network the device joined.
+   *
+   * Only a server-confirmed removal clears the local registration. A typed
+   * refusal (for example the p2p.invalid_operation stub until the helper
+   * lands) never fakes a leave: the registration stays and the caller
+   * surfaces the error.
+   */
+  async leave(serviceId: string, networkId: string, deviceId: string): Promise<void> {
+    const state = this.state(serviceId)
+    if (state.registration?.kind !== 'registered' || this.management.busy(serviceId)) return
+    if (!networkId || !deviceId) return
+    const result = await this.management.run('leaveNetwork', { serviceId, networkId, deviceId })
+    if (result.ok) {
+      state.registration = undefined
+      state.resultUnconfirmed = false
+      state.retryRevision = undefined
+      state.joinNetworkIdDraft = ''
+      return
+    }
+    // A typed refusal proves no removal; a lost reply may have taken effect.
+    if (!refusedBeforeEffect(result.code)) state.resultUnconfirmed = true
+  }
+
   async recover(serviceId: string): Promise<void> {
     const state = this.state(serviceId)
     if (state.registration?.kind !== 'pending' || this.management.busy(serviceId)) return

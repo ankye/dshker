@@ -48,6 +48,7 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   registration: { serviceId },
   registerDevice: { serviceId, networkId, name: 'Mac' },
   joinNetwork: { serviceId, networkId, name: 'Mac' },
+  leaveNetwork: { serviceId, networkId, deviceId: 'e'.repeat(32) },
   submitEnrollment: { serviceId, revision },
   recoverEnrollment: { serviceId, revision },
   pairs: { serviceId },
@@ -260,7 +261,7 @@ describe('P2P named management admission', () => {
     let sequence = 0
     for (const method of Object.keys(owner) as Exclude<
       P2PManagementOperation,
-      'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork'
+      'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork' | 'leaveNetwork'
     >[]) {
       const result = await invoke(method, event, request(method, ++sequence))
       expect(result.ok, method).toBe(true)

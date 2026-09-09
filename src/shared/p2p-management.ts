@@ -17,6 +17,8 @@ export const P2P_MANAGEMENT_CHANNELS = {
   deleteNetwork: 'dsh-launcher:p2p:delete-network',
   /** Login-free enrollment of this device into a network by its networkId. */
   joinNetwork: 'dsh-launcher:p2p:join-network',
+  /** Login-free removal of this device from a network it joined. */
+  leaveNetwork: 'dsh-launcher:p2p:leave-network',
   registration: 'dsh-launcher:p2p:registration',
   registerDevice: 'dsh-launcher:p2p:register-device',
   submitEnrollment: 'dsh-launcher:p2p:submit-enrollment',
@@ -245,6 +247,13 @@ export interface P2PManagementInputs {
    * renderer only supplies the coordinator, the networkId and a display name.
    */
   joinNetwork: NetworkRequest & { name: string }
+  /**
+   * Login-free removal of this device from a network.
+   *
+   * Mirrors the coordinator DELETE /v1/networks/:networkId/devices/:deviceId.
+   * The local credential is cleared only after the server confirms the removal.
+   */
+  leaveNetwork: NetworkRequest & { deviceId: string }
   submitEnrollment: RevisionRequest
   recoverEnrollment: RevisionRequest
   pairs: ServiceRequest
@@ -298,6 +307,8 @@ export interface P2PManagementResults {
   registerDevice: P2PRegistrationView
   /** Registered once the server confirms the login-free enrollment. */
   joinNetwork: P2PRegistrationView
+  /** Nothing remains on success; the local credential is then cleared. */
+  leaveNetwork: void
   submitEnrollment: P2PRegistrationView
   recoverEnrollment: P2PRegistrationView
   pairs: P2PPairView[]

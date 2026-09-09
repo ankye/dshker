@@ -1,16 +1,21 @@
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopApi } from '@/shared/contracts'
-import type { P2PCatalogView, P2PManagementApi, P2PRegistrationView } from '@/shared/p2p-management'
+import {
+  P2P_BUILTIN_SERVICE,
+  type P2PCatalogView,
+  type P2PManagementApi,
+  type P2PRegistrationView
+} from '@/shared/p2p-management'
 
 const serviceId = 'a'.repeat(64)
 const service = {
   serviceId,
   publicKey: 'pinned-key',
-  displayName: 'Home server',
-  httpsOrigin: 'https://peer.example',
-  wssUrl: 'wss://peer.example/v1/signals',
-  stunAddress: 'peer.example:3478'
+  displayName: P2P_BUILTIN_SERVICE.displayName,
+  httpsOrigin: P2P_BUILTIN_SERVICE.httpsOrigin,
+  wssUrl: P2P_BUILTIN_SERVICE.wssUrl,
+  stunAddress: P2P_BUILTIN_SERVICE.stunAddress
 }
 const saved: P2PCatalogView = {
   revision: 'r1',
@@ -28,6 +33,16 @@ const registered: P2PRegistrationView = {
   revision: 'b'.repeat(64),
   deviceId: 'device-a'
 }
+const pending: P2PRegistrationView = {
+  kind: 'pending',
+  serviceId,
+  userId: 'user-a',
+  name: 'My computer',
+  publicKey: 'public-key',
+  revision: 'a'.repeat(64),
+  requestId: 'original-request',
+  networkId: 'network-a'
+}
 let previous: DesktopApi | undefined
 let wrapper: VueWrapper | undefined
 
@@ -41,6 +56,7 @@ afterEach(() => {
   window.dshLauncher = previous
 })
 
+/** Mounts with the built-in service catalog and selection pre-set. */
 async function render(api: Partial<P2PManagementApi>) {
   window.dshLauncher = { p2pManagement: api } as unknown as DesktopApi
   const domain = await import('@/app/domains/remote-connections')
@@ -52,93 +68,163 @@ async function render(api: Partial<P2PManagementApi>) {
   return wrapper
 }
 
-async function fillJoinForm(ui: VueWrapper, networkId: string, name: string) {
-  await ui.get('[data-testid="p2p-join-network"]').setValue(networkId)
-  await ui.get('[data-testid="p2p-join-name"]').setValue(name)
-}
+describe('P2P 「我的网络」 card', () => {
+  it('provisions the built-in official server automatically on mount', async () => {
+    const catalog = vi.fn<P2PManagementApi['catalog']>().mockResolvedValue({
+      ok: true,
+      data: saved
+    })
+    window.dshLauncher = { p2pManagement: { catalog } } as unknown as DesktopApi
+    const domain = await import('@/app/domains/remote-connections')
+    const component = (await import('../components/P2PJoinPanel.vue')).default
+    wrapper = mount(component)
+    await flushPromises()
+    expect(catalog).toHaveBeenCalled()
+    expect(domain.p2pManagement.selectedServiceId.value).toBe(serviceId)
+    expect(domain.p2pManagement.builtinProvisioned.value).toBe(true)
+    expect(wrapper.find('[data-testid="p2p-join-form"]').exists()).toBe(true)
+  })
 
-describe('P2P login-free join panel', () => {
-  it('shows a pending/loading state and then a registered-not-meshed success card', async () => {
-    let finish!: (value: Awaited<ReturnType<P2PManagementApi['joinNetwork']>>) => void
-    const joinNetwork = vi.fn<P2PManagementApi['joinNetwork']>(
-      () =>
-        new Promise((resolve) => {
-          finish = resolve
-        })
+  it('always shows the device name and identifier, with no endpoint inputs', async () => {
+    const ui = await render({})
+    const info = ui.get('[data-testid="p2p-device-info"]')
+    expect(info.text()).toContain('设备名称')
+    expect(info.text()).toContain('设备标识')
+    // Before joining there is no server-confirmed deviceId.
+    expect(info.text()).toContain('—')
+    expect(ui.find('input[name]').exists()).toBe(false)
+    expect(ui.findAll('input')).toHaveLength(1)
+    expect((ui.get('[data-testid="p2p-join-network"]').element as HTMLInputElement).type).toBe(
+      'text'
     )
-    const ui = await render({ joinNetwork })
-    await fillJoinForm(ui, 'network-b', 'My computer')
+  })
+
+  it('flows not-joined -> pending -> not-joined again after a confirmed cancel', async () => {
+    const joinNetwork = vi.fn<P2PManagementApi['joinNetwork']>().mockResolvedValue({
+      ok: true,
+      data: pending
+    })
+    const registration = vi.fn<P2PManagementApi['registration']>().mockResolvedValue({
+      ok: false,
+      code: 'p2p.credential_unavailable',
+      message: 'nothing stored'
+    })
+    const ui = await render({ joinNetwork, registration })
+    // Not joined: join form with a single network ID input.
+    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(true)
+    await ui.get('[data-testid="p2p-join-network"]').setValue('network-a')
     await ui.get('[data-testid="p2p-join-form"]').trigger('submit')
     await flushPromises()
-    expect(ui.get('[data-testid="p2p-join-loading"]').text()).not.toBe('')
     expect(joinNetwork).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId, networkId: 'network-a' })
+    )
+    // Pending: input greyed out, cancel button, waiting-for-approval status.
+    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
+    expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(true)
+    const disabled = ui.get('[data-testid="p2p-pending-network"]')
+    expect((disabled.element as HTMLInputElement).disabled).toBe(true)
+    expect(ui.get('[data-testid="p2p-pending-status"]').text()).toContain('等待审批')
+    // Cancel with a readback that proves no registration clears the pending draft.
+    await ui.get('[data-testid="p2p-cancel-request"]').trigger('click')
+    await flushPromises()
+    expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(false)
+    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(true)
+  })
+
+  it('keeps the pending state when the readback still reports a registration', async () => {
+    const joinNetwork = vi.fn<P2PManagementApi['joinNetwork']>()
+    const registration = vi.fn<P2PManagementApi['registration']>().mockResolvedValue({
+      ok: true,
+      data: pending
+    })
+    const ui = await render({ joinNetwork, registration })
+    // The mount readback reports a pending registration: the card starts pending.
+    expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(true)
+    await ui.get('[data-testid="p2p-cancel-request"]').trigger('click')
+    await flushPromises()
+    // The readback still holds the pending enrollment, so nothing is cleared.
+    expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(true)
+    expect(joinNetwork).not.toHaveBeenCalled()
+  })
+
+  it('shows the registered card with no input, honest offline status and a leave action', async () => {
+    const ui = await render({})
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pEnrollment.state(serviceId).registration = registered
+    domain.p2pEnrollment.state(serviceId).joinNetworkIdDraft = 'network-a'
+    await flushPromises()
+    const info = ui.get('[data-testid="p2p-device-info"]')
+    expect(info.text()).toContain('My computer')
+    expect(info.text()).toContain('device-a')
+    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
+    expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(false)
+    // Offline unless a live ready connection stage proves otherwise.
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('离线')
+    expect(ui.find('[data-testid="p2p-leave-network"]').exists()).toBe(true)
+  })
+
+  it('surfaces a stub leave refusal honestly without leaving the network', async () => {
+    const leaveNetwork = vi.fn<P2PManagementApi['leaveNetwork']>().mockResolvedValue({
+      ok: false,
+      code: 'p2p.invalid_operation',
+      message: 'stub until the helper lands'
+    })
+    const ui = await render({ leaveNetwork })
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pEnrollment.state(serviceId).registration = registered
+    domain.p2pEnrollment.state(serviceId).joinNetworkIdDraft = 'network-a'
+    await flushPromises()
+    await ui.get('[data-testid="p2p-leave-network"]').trigger('click')
+    await flushPromises()
+    const error = ui.get('[data-testid="p2p-leave-error"]')
+    expect(error.text()).toContain('离开网络暂不可用')
+    expect(error.text()).toContain('p2p.invalid_operation')
+    expect(ui.find('[data-testid="p2p-joined-state"]').exists()).toBe(true)
+    expect(leaveNetwork).toHaveBeenCalledWith(
       expect.objectContaining({
         serviceId,
-        networkId: 'network-b',
-        name: 'My computer'
+        networkId: 'network-a',
+        deviceId: 'device-a'
       })
     )
-    finish({ ok: true as const, data: registered })
-    await flushPromises()
-    const card = ui.get('[data-testid="p2p-join-registered"]')
-    expect(card.text()).toContain('device-a')
-    expect(card.text()).toContain('network-b')
-    expect(card.text()).toContain('已登记，尚未组网')
-    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
-    await ui.get('[data-testid="p2p-join-go-account"]').trigger('click')
-    expect(wrapper!.emitted('navigate-account')).toHaveLength(1)
   })
 
   it('surfaces a full-network refusal as a typed error and keeps the form retryable', async () => {
     const joinNetwork = vi.fn<P2PManagementApi['joinNetwork']>().mockResolvedValue({
-      ok: false as const,
-      code: 'p2p.network_full' as const,
+      ok: false,
+      code: 'p2p.network_full',
       message: 'network full'
     })
     const ui = await render({ joinNetwork })
-    await fillJoinForm(ui, 'network-full', 'My computer')
+    await ui.get('[data-testid="p2p-join-network"]').setValue('network-full')
     await ui.get('[data-testid="p2p-join-form"]').trigger('submit')
     await flushPromises()
     const error = ui.get('[data-testid="p2p-join-error"]')
     expect(error.text()).toContain('已达到组网设备数上限')
     expect(error.text()).toContain('p2p.network_full')
-    expect(ui.find('[data-testid="p2p-join-registered"]').exists()).toBe(false)
+    expect(ui.find('[data-testid="p2p-joined-state"]').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(true)
   })
 
-  it('maps an unavailable server-side enrollment endpoint as a stub error, never a registration', async () => {
-    const joinNetwork = vi.fn<P2PManagementApi['joinNetwork']>().mockResolvedValue({
-      ok: false as const,
-      code: 'p2p.invalid_operation' as const,
-      message: 'server helper not wired yet'
-    })
-    const ui = await render({ joinNetwork })
-    await fillJoinForm(ui, 'network-b', 'My computer')
-    await ui.get('[data-testid="p2p-join-form"]').trigger('submit')
-    await flushPromises()
-    const error = ui.get('[data-testid="p2p-join-error"]')
-    expect(error.text()).toContain('免登录登记接口')
-    expect(ui.find('[data-testid="p2p-join-registered"]').exists()).toBe(false)
-  })
-
-  it('reflects an already-registered local device instead of offering a redundant join', async () => {
-    const ui = await render({})
-    const domain = await import('@/app/domains/remote-connections')
-    domain.p2pEnrollment.state(serviceId).registration = registered
-    await flushPromises()
-    expect(ui.get('[data-testid="p2p-join-registered"]').text()).toContain('device-a')
-    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
-  })
-
-  it('asks for a selected server when none is chosen', async () => {
+  it('shows the unavailable state when the official server cannot be provisioned', async () => {
     window.dshLauncher = {} as unknown as DesktopApi
     const domain = await import('@/app/domains/remote-connections')
-    domain.p2pManagement.catalog.value = saved
-    domain.p2pManagement.selectedServiceId.value = undefined
+    domain.p2pManagement.catalog.value = { ...saved, services: [] }
     const component = (await import('../components/P2PJoinPanel.vue')).default
     wrapper = mount(component)
     await flushPromises()
-    expect(wrapper.text()).toContain('请先在“服务器配置”列表中点击“管理用户与网络”')
+    expect(wrapper.get('[data-testid="p2p-service-unavailable"]').text()).toContain(
+      '官方服务器暂不可用'
+    )
     expect(wrapper.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
+  })
+
+  it('shows the terminal removed state for a forgotten official server', async () => {
+    const ui = await render({})
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pManagement.builtinRemoved.value = true
+    await flushPromises()
+    expect(ui.get('[data-testid="p2p-builtin-removed"]').text()).toContain('官方服务器已被移除')
+    expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
   })
 })

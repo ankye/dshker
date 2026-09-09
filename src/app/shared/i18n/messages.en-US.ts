@@ -245,27 +245,29 @@ export const enUS: Record<MessageKey, string> = {
     'Built-in coordinator preset. To point elsewhere, edit the built-in constant in code and rebuild.',
   'p2p.tabs.remoteLabel': 'Remote connections',
   'p2p.tabs.connect': 'Connect',
-  'p2p.tabs.connectDescription':
-    'No login needed: SSH hosts, P2P server configuration, and joining a network by its networkId.',
+  'p2p.tabs.connectDescription': 'No login needed: SSH hosts, and joining a network by its ID.',
   'p2p.tabs.account': 'Network & account',
   'p2p.tabs.accountDescription':
     'Login is required to create/manage networks, enroll this device, mesh paired devices, and review registered computers.',
-  'p2p.join.title': 'Join a network',
-  'p2p.join.description':
-    'Enter the networkId published by the other network. This device enrolls login-free; login and authorization are only required later to mesh (connect) devices.',
-  'p2p.join.networkIdLabel': 'Network ID (networkId)',
-  'p2p.join.nameLabel': 'Name of this device in the network',
-  'p2p.join.action': 'Join network',
-  'p2p.join.joining': 'Joining…',
-  'p2p.join.registered': 'Registered — not meshed yet',
-  'p2p.join.registeredHint':
-    'This device joined the network. Log in and select this network under “Network & account” before you can mesh with other devices.',
-  'p2p.join.pending': 'The join request was submitted and is waiting for the server to confirm.',
-  'p2p.join.pendingHint':
-    'It is not shown as registered until the server confirms; do not submit again.',
-  'p2p.join.noService': 'Add and select a coordinator server above before joining a network.',
-  'p2p.join.selectService':
-    'Select a coordinator server first (click “Manage user and networks” on its row) before joining a network.',
+  'p2p.myNetwork.title': 'My network',
+  'p2p.myNetwork.officialServer': 'Official server',
+  'p2p.myNetwork.deviceName': 'Device name',
+  'p2p.myNetwork.deviceId': 'Device ID',
+  'p2p.myNetwork.deviceNameDefault': 'My computer',
+  'p2p.myNetwork.networkIdLabel': 'Network ID',
+  'p2p.myNetwork.join': 'Join network',
+  'p2p.myNetwork.joining': 'Joining…',
+  'p2p.myNetwork.cancelRequest': 'Cancel request',
+  'p2p.myNetwork.waitingApproval': 'Waiting for approval',
+  'p2p.myNetwork.leave': 'Leave network',
+  'p2p.myNetwork.online': 'Online',
+  'p2p.myNetwork.offline': 'Offline',
+  'p2p.myNetwork.banned': 'Banned',
+  'p2p.myNetwork.notJoinedHint': 'Enter a network ID to join the network without logging in.',
+  'p2p.myNetwork.builtinRemoved': 'The official server was removed and cannot be re-added.',
+  'p2p.myNetwork.serviceUnavailable': 'The official server is unavailable. Try again shortly.',
+  'p2p.myNetwork.leaveError':
+    'Leaving the network is not available yet: the server endpoint is not open.',
   'p2p.join.error.unavailable':
     'This build cannot join yet: the login-free enrollment endpoint is still being implemented on the server side.',
   'p2p.join.error.networkFull':
@@ -277,16 +279,14 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.join.error.generic': 'Joining failed and this device was not enrolled.',
   'p2p.join.error.unconfirmed':
     'The server result is unconfirmed and the device may already be enrolled. Read the local enrollment before retrying.',
-  'p2p.join.goAccount': 'Open “Network & account”',
   'p2p.accountTab.noService': 'There is no server to manage yet.',
   'p2p.accountTab.noServiceDescription':
-    'Add and select a coordinator server in the “Connect” tab first, then log in here to manage networks and devices.',
+    'The official server is not ready yet. Open the “Connect” tab first so it provisions automatically, then log in here to manage networks and devices.',
   'p2p.accountTab.loginRegister': 'Log in or register an account',
   'p2p.accountTab.meshGate':
     'This device enrolled in a network but is not logged in, so it cannot mesh with other devices yet.',
   'p2p.accountTab.meshGateDescription':
     'Log in and select that network to enable pairing and connections.',
-  'p2p.accountTab.leaveNetwork': 'Leave network',
   'p2p.management.editService': 'Edit configuration',
   'p2p.management.manageHint':
     'To manage this server’s users, networks and devices, open the “Network & account” tab.',
