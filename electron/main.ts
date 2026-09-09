@@ -125,6 +125,12 @@ async function start(): Promise<void> {
   })
   createWindow(mainDirectory, services.runtimeBrowserController)
   void initializeActiveVersion(services.launcherHarnessService)
+  // Presence, the reported build, discoverability and pairing all ride on the
+  // coordinator heartbeat, which only runs while a device session is held. Until
+  // this ran at startup, a launcher that was open still looked offline to every
+  // other machine and to the web console. Deliberately not awaited: an
+  // unreachable coordinator must not delay the window.
+  void bringPeerServicesOnline(services.peerManagement)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -254,6 +260,18 @@ async function registerLauncherServices(
     remotePeerBroker,
     peerManagement
   }
+}
+
+/**
+ * Restores the device session for every enrolled service.
+ *
+ * A refusal is expected and harmless: the coordinator may be unreachable, the
+ * service may never have been enrolled on this machine, or its credential may be
+ * revoked. Each case leaves the app fully usable and simply offline, so nothing
+ * here is allowed to escape and become an unhandled rejection.
+ */
+async function bringPeerServicesOnline(peerManagement: PeerManagement): Promise<void> {
+  await peerManagement.goOnline().catch(() => undefined)
 }
 
 /**

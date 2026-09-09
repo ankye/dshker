@@ -61,6 +61,42 @@ export class PeerManagement {
     await this.#host.close()
   }
 
+  /**
+   * Brings every enrolled service online at startup.
+   *
+   * Presence, the reported version, discoverability and pairing all depend on
+   * the coordinator heartbeat, and that heartbeat only runs while a device
+   * session holds the signal connection. Nothing established that session until
+   * the user happened to open pairing, so a launcher that was running looked
+   * offline, never reported its build, could not be found by another machine and
+   * could not be driven from the web console. The offline hint shown to users
+   * already promises the opposite: that starting the app is what brings a
+   * computer online.
+   *
+   * Failure here must never block application startup: a coordinator that is
+   * unreachable, a service that was never enrolled, or a revoked credential all
+   * leave the app fully usable and simply offline, exactly as before.
+   */
+  async goOnline(): Promise<{ serviceId: string; online: boolean; code?: string }[]> {
+    const snapshot = await this.#catalog.inspect().catch(() => undefined)
+    if (!snapshot) return []
+    const results: { serviceId: string; online: boolean; code?: string }[] = []
+    for (const service of snapshot.record.services) {
+      if (this.#lifetime.signal.aborted) break
+      try {
+        await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
+        results.push({ serviceId: service.serviceId, online: true })
+      } catch (error) {
+        results.push({
+          serviceId: service.serviceId,
+          online: false,
+          code: error instanceof PeerHelperError ? error.code : 'p2p.internal_error'
+        })
+      }
+    }
+    return results
+  }
+
   async enable() {
     this.#admit()
     return this.#catalog.enable()

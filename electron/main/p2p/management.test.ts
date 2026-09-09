@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LauncherHarnessState } from '../../../src/shared/contracts'
 import { PeerAccounts } from './accounts'
 import { PeerCatalog } from './catalog'
+import { PeerCredentialStore } from './credentials'
 import type { PeerCatalogRecord } from './catalog-schema'
 import { PeerEnrollment } from './enrollment'
 import { PeerManagement } from './management'
@@ -110,6 +111,10 @@ function fixture() {
         return {}
       }
       if (method === 'network.invalidate') return {}
+      // Restoring the enrolled device is what holds the signal connection the
+      // coordinator heartbeat rides on.
+      if (method === 'device.restore') return { deviceId: '3'.repeat(32) }
+      if (method === 'pairs.list') return []
       throw new PeerHelperError('p2p.invalid_operation')
     }
   )
@@ -151,6 +156,64 @@ async function loggedIn() {
   ).toEqual(user)
   return f
 }
+
+describe('bringing enrolled services online at startup', () => {
+  it('restores the device session so the coordinator heartbeat can run', async () => {
+    // Presence, the reported build, discoverability and pairing all depend on
+    // the heartbeat, which only runs while a device session holds the signal
+    // connection. Nothing established it until the user opened pairing, so a
+    // running launcher looked offline to every other machine.
+    const f = fixture()
+    vi.spyOn(PeerCredentialStore.prototype, 'load').mockResolvedValue({
+      revision: 'a'.repeat(64),
+      credential: {
+        serviceId,
+        deviceId: '3'.repeat(32),
+        userId: user.userId,
+        name: 'This machine',
+        publicKey: Buffer.alloc(32, 1).toString('base64'),
+        certificate: 'test-only-credential-boundary',
+        privateKey: Buffer.alloc(32, 9).toString('base64')
+      }
+    } as Awaited<ReturnType<PeerCredentialStore['load']>>)
+    const results = await f.owner.goOnline()
+    expect(results).toEqual([{ serviceId, online: true }])
+    expect(f.call.mock.calls.map(([method]) => method)).toContain('device.restore')
+  })
+
+  it('stays offline for a service this machine never enrolled', async () => {
+    // Without a saved credential there is no device to speak as, so the service
+    // is reported offline rather than failing the whole startup pass.
+    const f = fixture()
+    expect(await f.owner.goOnline()).toEqual([
+      { serviceId, online: false, code: 'p2p.device_unregistered' }
+    ])
+  })
+
+  it('reports a refusal per service instead of throwing', async () => {
+    // An unreachable coordinator, a service that was never enrolled here, or a
+    // revoked credential must leave the app usable and simply offline.
+    const f = fixture()
+    vi.spyOn(PeerServices.prototype, 'activate').mockRejectedValue(
+      new PeerHelperError('p2p.helper_unavailable')
+    )
+    const results = await f.owner.goOnline()
+    expect(results).toEqual([{ serviceId, online: false, code: 'p2p.helper_unavailable' }])
+  })
+
+  it('does nothing when P2P was never enabled', async () => {
+    const f = fixture()
+    vi.spyOn(PeerCatalog.prototype, 'inspect').mockResolvedValue(undefined)
+    expect(await f.owner.goOnline()).toEqual([])
+    expect(f.spawn).not.toHaveBeenCalled()
+  })
+
+  it('stops once the owner is closing rather than starting new work', async () => {
+    const f = fixture()
+    await f.owner.close()
+    expect(await f.owner.goOnline()).toEqual([])
+  })
+})
 
 describe('formal P2P management composition', () => {
   it('keeps construction idle and activates the saved service before account traffic', async () => {
