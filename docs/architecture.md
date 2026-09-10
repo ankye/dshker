@@ -14,6 +14,12 @@ The first foundation API returns immutable bootstrap metadata. It is deliberatel
 
 `packages/desktop-foundation/` contains reusable app-neutral helpers only. Its inherited VFS modules are intentionally absent from the package public surface and the former Node VFS service exits with `service.vfs_removed`; neither is a launcher runtime path.
 
+## Connection state layering
+
+Remote connections have two independent layers, and a surface must not answer one with data from the other. The **network session** (`p2pNetwork`) is this computer's session with a coordinator: it decides presence, discoverability and whether pairing is possible. A **pair connection** (`p2pConnections`) decides whether one specific remote workbench is reachable. Deriving network status from pair stages made a single enrolled computer report itself offline for a stage it could never reach.
+
+Both layers distinguish "not read yet" from a confirmed negative state, and neither is derived per surface: the shell seeds both at start and main pushes session changes. A peer tab's status is projected without an address, because the DSH entry point stays in main. See [P2P connection state](handover-p2p-connection-state.md).
+
 ## Extension rules
 
 Add a capability by defining its shared request/result types, validating its renderer sender in main, exposing only that operation from preload, and covering failure and admission behavior. Persisted paths and executable locations must be explicit registered data, never inferred defaults.

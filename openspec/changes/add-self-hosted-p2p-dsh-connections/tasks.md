@@ -36,6 +36,8 @@ Electron helper 接入进展：主进程私有 RPC、严格 JSON framing、固�
 
 Helper 接入进展（2026-09-07）：新增 Go helper、私有 RPC、runtime HTTP/WS gateway 与 session manager 的生产模块；修复 RPC 并发编号乱序、认证预读丢字节、连接 deadline 并发、gateway 关闭竞争及公钥类型比较错误。focused race 测试覆盖双向 800 次 RPC、错误密钥、协议拒绝、身份替换拒绝和 Pion 上 HTTP/WS 转发；Windows x64 helper 交叉编译仅作为编译证据。尚缺 Electron supervisor/安全持久化/UI/真实受管 DSH 生产组合及完整压力门禁，3.5、4.1、4.2 和发布任务不据此勾选。详见 `.agents/notes/2026-09-07-p2p-helper-integration.md`。
 
+连接状态分层（2026-09-10）：远程连接状态拆为两层并各有单一来源。网络会话（本机↔协调服务器）在 main 记录、经 `serviceSessions` 暴露、变化时推送、每 60 秒仅重试非在线服务、运行时失效即标记离线并附拒绝码；shell 启动即读取，状态栏在所有路由显示。配对连接（本机↔某台电脑）投影到 runtime tab，peer 与 SSH 对等且均不含地址（DSH 入口留在 main）。修正 Connect tab 用配对阶段回答网络状态的缺陷：单机零配对时 `ready` 结构性不可达，导致设备目录显示在线而该卡片显示离线。两层均区分「未读取」与「已确认否」,吊销配对报 disconnected 而非 failed。订阅以独立参数传入 IPC 注册（挂在 owner 上会破坏 79 项准入测试的不变量）。1187 项测试、类型/格式/架构/visual-smoke/构建通过；单机环境无法证明配对达到 ready，不据此勾选 4.4/5.4。详见 `.agents/notes/2026-09-10-p2p-connection-state-layers.md`。
+
 预发布顺序修订（用户已明确确认）：先完成实现、本地生产组合端到端、安全和包门禁，发布 GitHub prerelease 供 Win/Mac 联测；不进入 latest/稳定源。物理平台与公网矩阵在候选发布后执行，相关任务不提前勾选；7.9 继续约束正式稳定版。新增 9.3 追踪联测预发布，不能借此跳过缺失实现或本地门禁。
 
 扩展授权修订：用户已明确要求继续补齐客户端扩展。扩展归属 Launcher 独立包，不需要改写用户受管 Harness 源码；按第 9 节继续实现，替代下面历史记录中的“等待所有权确认”。
