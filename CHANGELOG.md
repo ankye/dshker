@@ -2,6 +2,13 @@
 
 ## 0.1.26 — 2026-09-10
 
+- Updating a managed plugin no longer fails the whole operation when a previous
+  build left modified output inside the Launcher-owned clone. The checkout
+  refused to overwrite it, and the refusal surfaced as "the core did not
+  start", which pointed at the wrong remedy; the clone now converges to the
+  fetched revision first, and a refused update explains itself as an extension
+  failure instead.
+
 - The Connect tab now matches the compact network-management layout: saved
   computers come first, testing and connection status remain visible, and add,
   edit and removal controls expand on demand. Local device IDs and membership

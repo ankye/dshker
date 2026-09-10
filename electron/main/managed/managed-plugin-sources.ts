@@ -8,6 +8,12 @@ import { extractPluginArchive } from './plugin-archive'
 const MANAGED_PLUGIN_SOURCE_DIRECTORY = 'managed-sources'
 const MANAGED_PLUGIN_SOURCE_DOCUMENT = 'sources.json'
 
+/** Reads the failing Git command out of a plain Error so the user can act on it. */
+function formatGitFailure(arguments_: readonly string[], error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error)
+  return `${arguments_.join(' ')} failed: ${detail}`
+}
+
 /** A source resolved by typed IPC before main-process materialization. */
 export type ManagedPluginInstallSource =
   | { readonly kind: 'git'; readonly url: string }
@@ -172,21 +178,14 @@ export class ManagedPluginSources {
         'Only a Launcher-managed Git plugin can be updated.'
       )
     }
-    await runText(this.#gitExecutable, [
-      '-C',
-      record.directory,
-      'fetch',
-      '--prune',
-      'origin',
-      record.source.branch
-    ])
-    await runText(this.#gitExecutable, [
-      '-C',
-      record.directory,
-      'checkout',
-      '--detach',
-      'FETCH_HEAD'
-    ])
+    await this.#git(record, ['fetch', '--prune', 'origin', record.source.branch])
+    // The Launcher owns this clone, so a dirty worktree here is residue, not
+    // user work: a build leaving modified ignored output behind must not block
+    // every later update with a checkout refusal. Converge the worktree to the
+    // fetched revision before checking it out; any uncommitted change in an
+    // owned source is discarded by design.
+    await this.#git(record, ['reset', '--hard', 'FETCH_HEAD'])
+    await this.#git(record, ['checkout', '--detach', 'FETCH_HEAD'])
     const revision = await this.#readRevision(record.directory)
     const source: ManagedGitPluginSource = { ...record.source, revision, updateAvailable: false }
     await this.#write({
@@ -326,6 +325,27 @@ export class ManagedPluginSources {
   async #write(document: ManagedPluginSourceDocument): Promise<void> {
     await mkdir(this.#root(), { recursive: true })
     await writeFile(this.#documentPath(), `${JSON.stringify(document, null, 2)}\n`, 'utf8')
+  }
+
+  /**
+   * Runs one Git command inside a managed source, surfacing failures as plugin
+   * operation errors rather than launch failures.
+   *
+   * `runText` rejects with a plain `Error`, which the IPC layer collapsed into
+   * `managed.harness_launch_failed` ("the core did not start"). A refused
+   * checkout is an extension failure with a specific remedy, and the renderer
+   * has copy for exactly that: converting here keeps the code the console
+   * output explains.
+   */
+  async #git(record: ManagedPluginSourceRecord, arguments_: readonly string[]): Promise<void> {
+    try {
+      await runText(this.#gitExecutable, ['-C', record.directory, ...arguments_])
+    } catch (error) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.plugin_operation_failed',
+        formatGitFailure(arguments_, error)
+      )
+    }
   }
 
   async #readRevision(directory: string): Promise<string> {
