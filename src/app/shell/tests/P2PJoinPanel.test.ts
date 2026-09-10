@@ -113,9 +113,12 @@ describe('P2P 「我的网络」 card', () => {
     const ui = await render({})
     const info = ui.get('[data-testid="p2p-device-info"]')
     expect(info.text()).toContain('设备名称')
-    expect(info.text()).toContain('设备标识')
+    const technical = ui.get('.connect-device-details')
+    expect(technical.attributes('open')).toBeUndefined()
+    expect(technical.text()).toContain('设备标识')
     // Before joining, the card shows this machine's generated local device id.
-    expect(info.text()).toContain('local-device-a')
+    expect(technical.text()).toContain('local-device-a')
+    expect(info.text()).not.toContain('local-device-a')
     expect(ui.find('input[name]').exists()).toBe(false)
     expect(ui.findAll('input')).toHaveLength(1)
     expect((ui.get('[data-testid="p2p-join-network"]').element as HTMLInputElement).type).toBe(
@@ -179,7 +182,8 @@ describe('P2P 「我的网络」 card', () => {
     await flushPromises()
     const info = ui.get('[data-testid="p2p-device-info"]')
     expect(info.text()).toContain('My computer')
-    expect(info.text()).toContain('device-a')
+    expect(ui.get('.connect-device-details').text()).toContain('device-a')
+    expect(ui.get('.connect-membership-details').attributes('open')).toBeUndefined()
     expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(false)
     // Offline unless a live ready connection stage proves otherwise.

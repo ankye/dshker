@@ -1,5 +1,14 @@
 ## Context
 
+2026-09-10 Connect-tab alignment: the saved SSH computer list precedes its
+in-card add disclosure. Testing, connection actions, status and errors remain
+visible; edit/remove are grouped under per-computer management. P2P local
+identity and actual coordinator status share one summary row. The exact device
+ID and membership settings use separate native disclosures. Required network
+ID input remains visible with source guidance. Existing typed operations,
+exact-target identities, pending guards and drafts are unchanged. Validation
+uses component tests and an isolated visual entry, not production P2P evidence.
+
 2026-09-10 network/account layout refinement: names and explicit selection own
 the primary network list; internal user/network identifiers are disclosed with
 their troubleshooting purpose. Each network is a compact aligned row; editing,

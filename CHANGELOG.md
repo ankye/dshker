@@ -1,6 +1,12 @@
 # Changelog
 
-## Unreleased
+## 0.1.26 — 2026-09-10
+
+- The Connect tab now matches the compact network-management layout: saved
+  computers come first, testing and connection status remain visible, and add,
+  edit and removal controls expand on demand. Local device IDs and membership
+  settings live in separate disclosures; joining explains where to get the
+  required network ID without hiding errors or offline status.
 
 - Network management now presents aligned, compact rows with network names,
   device limits and an explicit current selection. Rename, capacity and deletion
@@ -8,8 +14,6 @@
   live in explained technical details; the selected device section uses the
   network name. Destructive controls remain separate with confirmation, and
   background reads no longer leave a generic success message above the list.
-
-## 0.1.26 — 2026-09-10
 
 - A running launcher now comes online by itself. The coordinator heartbeat only
   runs while a device session holds the signal connection, and nothing

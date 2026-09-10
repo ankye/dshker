@@ -62,6 +62,11 @@ Select a network by name to view its computers; expand **Manage network** to
 rename it or change its device limit. Internal IDs are available in technical
 details for troubleshooting rather than displayed throughout the main view.
 
+The adjacent **Connect** tab uses the same compact layout. Saved computers and
+connection tests come first; adding and managing a computer expands on demand.
+**My network** keeps the computer name and status visible, with device IDs and
+membership settings in separate expandable sections.
+
 Devices bound to the same network pair themselves with no invite code and no
 approval step: joining the network is the authorization. The invite-and-confirm
 flow remains for pairing a device that is not in one of your networks.

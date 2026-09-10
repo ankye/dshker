@@ -14,7 +14,7 @@ import type { MessageKey } from '@/app/shared/i18n/i18n'
  *
  * The coordinator is always the built-in official server: there is no server
  * or endpoint configuration, and its endpoint fields are never shown. The card
- * always displays this device's name and identifier, and offers a login-free
+ * displays this device's name with expandable identifier details, and offers a login-free
  * join by networkId. Only a server-confirmed result is shown as registered.
  *
  * Online here means this computer holds a coordinator session, which is the
@@ -257,26 +257,15 @@ async function leave(): Promise<void> {
       <!-- This device's identity leads: it is the one fact that is true in every
            phase, and it answers "which machine am I looking at" before anything
            asks the user to act. -->
-      <dl class="p2p-device-info" data-testid="p2p-device-info">
-        <div>
-          <dt>{{ t('p2p.myNetwork.deviceName') }}</dt>
-          <dd>{{ deviceName }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('p2p.myNetwork.deviceId') }}</dt>
-          <dd>
-            <code>{{ deviceId }}</code>
-          </dd>
-        </div>
-      </dl>
-
-      <!-- Joined: status and the one destructive action, no input to re-join. -->
-      <div
-        v-if="registration?.kind === 'registered'"
-        class="p2p-joined"
-        data-testid="p2p-joined-state"
-      >
+      <div class="connect-device-summary">
+        <dl class="p2p-device-info" data-testid="p2p-device-info">
+          <div>
+            <dt>{{ t('p2p.myNetwork.deviceName') }}</dt>
+            <dd>{{ deviceName }}</dd>
+          </div>
+        </dl>
         <p
+          v-if="registration?.kind === 'registered'"
           class="p2p-network-status"
           role="status"
           :data-state="networkStatus"
@@ -284,6 +273,24 @@ async function leave(): Promise<void> {
         >
           {{ t(STATUS_KEYS[networkStatus]) }}
         </p>
+      </div>
+      <details class="connect-device-details">
+        <summary>{{ t('remote.connectLayout.deviceDetails') }}</summary>
+        <p>{{ t('remote.connectLayout.deviceIdHint') }}</p>
+        <dl>
+          <dt>{{ t('p2p.myNetwork.deviceId') }}</dt>
+          <dd>
+            <code>{{ deviceId }}</code>
+          </dd>
+        </dl>
+      </details>
+
+      <!-- Joined: status and the one destructive action, no input to re-join. -->
+      <div
+        v-if="registration?.kind === 'registered'"
+        class="p2p-joined"
+        data-testid="p2p-joined-state"
+      >
         <p
           v-if="networkStatus === 'offline' && sessionRefusal"
           class="p2p-network-reason"
@@ -294,22 +301,25 @@ async function leave(): Promise<void> {
         <p v-if="leaveError" role="alert" class="remote-error" data-testid="p2p-leave-error">
           {{ t('p2p.myNetwork.leaveError') }} <code>{{ leaveError }}</code>
         </p>
-        <div class="p2p-joined__actions">
-          <button
-            class="prototype-button prototype-button--danger"
-            type="button"
-            :disabled="busy || !signedIn"
-            data-testid="p2p-leave-network"
-            @click="leave"
-          >
-            {{ t('p2p.myNetwork.leave') }}
-          </button>
-          <!-- Stated rather than implied: a disabled button with no reason reads
+        <details class="connect-membership-details">
+          <summary>{{ t('remote.connectLayout.membership') }}</summary>
+          <div class="p2p-joined__actions">
+            <button
+              class="prototype-button prototype-button--danger"
+              type="button"
+              :disabled="busy || !signedIn"
+              data-testid="p2p-leave-network"
+              @click="leave"
+            >
+              {{ t('p2p.myNetwork.leave') }}
+            </button>
+            <!-- Stated rather than implied: a disabled button with no reason reads
                as a defect. -->
-          <p v-if="!signedIn" class="remote-form-hint" data-testid="p2p-leave-requires-login">
-            {{ t('p2p.devices.leaveRequiresLogin') }}
-          </p>
-        </div>
+            <p v-if="!signedIn" class="remote-form-hint" data-testid="p2p-leave-requires-login">
+              {{ t('p2p.devices.leaveRequiresLogin') }}
+            </p>
+          </div>
+        </details>
       </div>
 
       <!-- Pending: input disabled, cancel action, awaiting approval. -->
@@ -359,6 +369,7 @@ async function leave(): Promise<void> {
           {{ joining ? t('p2p.myNetwork.joining') : t('p2p.myNetwork.join') }}
         </button>
         <p class="remote-form-hint">{{ t('p2p.myNetwork.notJoinedHint') }}</p>
+        <p class="remote-form-hint">{{ t('remote.connectLayout.networkIdHint') }}</p>
       </form>
 
       <p v-if="joinError" role="alert" class="remote-error" data-testid="p2p-join-error">
@@ -379,16 +390,47 @@ async function leave(): Promise<void> {
   gap: var(--space-4);
   min-width: 0;
 }
+.connect-device-details {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.connect-device-details dd {
+  margin: var(--space-2) 0;
+  overflow-wrap: anywhere;
+}
+.connect-membership-details {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-2);
+}
+.connect-membership-details > summary {
+  color: var(--color-accent);
+}
+.p2p-join summary {
+  cursor: pointer;
+  padding-block: var(--space-2);
+  width: fit-content;
+}
+.p2p-join summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
 /* Identity reads as a definition list: label above value at narrow widths, and
    two aligned columns once there is room to compare them. */
 .p2p-device-info {
   display: grid;
   gap: var(--space-2);
   margin: 0;
-  padding: var(--space-3);
+  min-width: 0;
+}
+.connect-device-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
-  background: var(--color-surface-raised);
 }
 .p2p-device-info > div {
   display: grid;

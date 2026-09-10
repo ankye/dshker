@@ -5,6 +5,13 @@ import type { MessageKey } from './messages.zh-CN'
 
 /** US English message catalog, checked against every reference key. */
 export const enUS: Record<MessageKey, string> = {
+  'remote.connectLayout.manage': 'Manage',
+  'remote.connectLayout.deviceDetails': 'Computer technical details',
+  'remote.connectLayout.deviceIdHint':
+    'The device ID identifies this computer for troubleshooting. Everyday connections do not require entering it.',
+  'remote.connectLayout.membership': 'Network membership settings',
+  'remote.connectLayout.networkIdHint':
+    'The network ID specifies which network to join. Ask its owner, who can find it under network technical details in Network & account.',
   'p2p.account.accountDetails': 'Account technical details',
   'p2p.account.accountIdHint':
     'The account ID is for troubleshooting. You do not need to remember or enter it for everyday use.',

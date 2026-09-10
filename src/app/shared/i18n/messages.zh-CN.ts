@@ -4,6 +4,12 @@ import { zhCNRefusals } from './i18n.refusals'
 
 /** Simplified Chinese message catalog and reference key set. */
 export const zhCN = {
+  'remote.connectLayout.manage': '管理',
+  'remote.connectLayout.deviceDetails': '本机技术信息',
+  'remote.connectLayout.deviceIdHint': '设备 ID 用于识别这台电脑和排查连接问题，日常连接无需填写。',
+  'remote.connectLayout.membership': '网络成员设置',
+  'remote.connectLayout.networkIdHint':
+    '网络 ID 用于指定要加入的网络。请向网络所有者获取；所有者可在“网络与账户”的网络技术信息中查看。',
   'p2p.account.accountDetails': '账号技术信息',
   'p2p.account.accountIdHint': '账号 ID 仅用于排查问题，日常操作无需记忆或填写。',
   'p2p.account.networksTitle': '我的网络',

@@ -76,47 +76,6 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'):
 
 <template>
   <div class="remote-connections-layout">
-    <section class="remote-add-card" aria-labelledby="remote-add-title">
-      <div class="remote-section-heading">
-        <div>
-          <h2 id="remote-add-title">{{ t('remote.add.title') }}</h2>
-          <p>{{ t('remote.add.description') }}</p>
-        </div>
-        <span class="remote-security-badge">{{ t('remote.security.badge') }}</span>
-      </div>
-      <form class="remote-add-form" data-testid="remote-add-form" @submit.prevent="submit">
-        <label>
-          <span>{{ t('remote.field.name') }}</span>
-          <input v-model="form.displayName" type="text" autocomplete="off" />
-        </label>
-        <label>
-          <span>{{ t('remote.field.host') }}</span>
-          <input v-model="form.host" type="text" spellcheck="false" autocomplete="off" />
-        </label>
-        <label>
-          <span>{{ t('remote.field.port') }}</span>
-          <input v-model="form.port" type="number" min="1" max="65535" inputmode="numeric" />
-        </label>
-        <label>
-          <span>{{ t('remote.field.user') }}</span>
-          <input v-model="form.user" type="text" spellcheck="false" autocomplete="username" />
-        </label>
-        <button
-          class="prototype-button prototype-button--primary"
-          type="submit"
-          :disabled="remote.loading.value"
-        >
-          {{ remote.loading.value ? t('remote.add.saving') : t('remote.add.action') }}
-        </button>
-      </form>
-      <p class="remote-form-hint">{{ t('remote.add.hint') }}</p>
-      <p v-if="remote.error.value" class="remote-error" role="alert">
-        {{ errorLabel(remote.error.value) }} · {{ remote.error.value }}
-      </p>
-    </section>
-
-    <RemoteConnectionEditor />
-
     <section class="remote-list-card" aria-labelledby="remote-list-title">
       <div class="remote-section-heading">
         <div>
@@ -167,15 +126,6 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'):
           </div>
           <div class="remote-row-actions">
             <button
-              :id="`remote-edit-${connection.connectionId}`"
-              class="prototype-button"
-              type="button"
-              :disabled="remote.pendingActions.value[connection.connectionId] !== undefined"
-              @click="remoteConnectionEditor.open(connection.connectionId)"
-            >
-              {{ t('remote.edit.action') }}
-            </button>
-            <button
               v-if="
                 connection.status.kind === 'disconnected' || connection.status.kind === 'failed'
               "
@@ -210,20 +160,131 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'):
             >
               {{ t('remote.disconnect') }}
             </button>
-            <button
-              class="prototype-button prototype-button--danger"
-              type="button"
-              :disabled="
-                connection.status.kind !== 'disconnected' ||
-                remote.pendingActions.value[connection.connectionId] !== undefined
-              "
-              @click="remote.remove(connection.connectionId)"
-            >
-              {{ t('remote.remove') }}
-            </button>
+            <details class="connect-row-management">
+              <summary>{{ t('remote.connectLayout.manage') }}</summary>
+              <div class="connect-management-actions">
+                <button
+                  :id="`remote-edit-${connection.connectionId}`"
+                  class="prototype-button"
+                  type="button"
+                  :disabled="remote.pendingActions.value[connection.connectionId] !== undefined"
+                  @click="remoteConnectionEditor.open(connection.connectionId)"
+                >
+                  {{ t('remote.edit.action') }}
+                </button>
+                <button
+                  class="prototype-button prototype-button--danger"
+                  type="button"
+                  :disabled="
+                    connection.status.kind !== 'disconnected' ||
+                    remote.pendingActions.value[connection.connectionId] !== undefined
+                  "
+                  @click="remote.remove(connection.connectionId)"
+                >
+                  {{ t('remote.remove') }}
+                </button>
+              </div>
+            </details>
           </div>
         </li>
       </ul>
+      <p v-if="remote.error.value" class="remote-error" role="alert">
+        {{ errorLabel(remote.error.value) }} · {{ remote.error.value }}
+      </p>
+      <details class="connect-add-disclosure" :open="remote.state.value.connections.length === 0">
+        <summary>{{ t('remote.add.title') }}</summary>
+        <div class="remote-section-heading">
+          <p>{{ t('remote.add.description') }}</p>
+          <span class="remote-security-badge">{{ t('remote.security.badge') }}</span>
+        </div>
+        <form class="remote-add-form" data-testid="remote-add-form" @submit.prevent="submit">
+          <label
+            ><span>{{ t('remote.field.name') }}</span
+            ><input v-model="form.displayName" type="text" autocomplete="off"
+          /></label>
+          <label
+            ><span>{{ t('remote.field.host') }}</span
+            ><input v-model="form.host" type="text" spellcheck="false" autocomplete="off"
+          /></label>
+          <label
+            ><span>{{ t('remote.field.port') }}</span
+            ><input v-model="form.port" type="number" min="1" max="65535" inputmode="numeric"
+          /></label>
+          <label
+            ><span>{{ t('remote.field.user') }}</span
+            ><input v-model="form.user" type="text" spellcheck="false" autocomplete="username"
+          /></label>
+          <button
+            class="prototype-button prototype-button--primary"
+            type="submit"
+            :disabled="remote.loading.value"
+          >
+            {{ remote.loading.value ? t('remote.add.saving') : t('remote.add.action') }}
+          </button>
+        </form>
+        <p class="remote-form-hint">{{ t('remote.add.hint') }}</p>
+      </details>
     </section>
+    <RemoteConnectionEditor />
   </div>
 </template>
+
+<style scoped>
+.remote-computer-list {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.remote-computer-row {
+  padding: var(--space-3) var(--space-4);
+}
+.remote-computer-copy {
+  min-width: 0;
+}
+.remote-computer-copy strong,
+.remote-computer-copy code {
+  overflow-wrap: anywhere;
+}
+.connect-row-management {
+  min-width: 5rem;
+}
+.connect-row-management summary {
+  color: var(--color-accent);
+}
+.connect-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding-top: var(--space-2);
+}
+summary {
+  cursor: pointer;
+  min-height: var(--size-control-md);
+  align-content: center;
+}
+summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.connect-add-disclosure > summary {
+  font-size: var(--type-section);
+  font-weight: var(--font-weight-semibold);
+}
+.connect-add-disclosure {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-2);
+}
+.connect-add-disclosure > .remote-section-heading {
+  margin-block: var(--space-3);
+}
+@media (max-width: 880px) {
+  .remote-computer-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .remote-row-actions {
+    grid-column: 2;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+}
+</style>
