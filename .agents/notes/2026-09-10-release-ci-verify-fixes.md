@@ -7,7 +7,7 @@ exercised in a clean checkout before the v0.1.26 tag push.
 
 1. electron/main/p2p/packaging.test.ts read build/p2p unconditionally.
    That directory is produced only by tools/build-peer-helper.mjs (run by each
-   dist:* script); CI verify steps never build the per-platform Go helper, so
+   dist:\* script); CI verify steps never build the per-platform Go helper, so
    the readdir threw ENOENT on a clean runner. The dir-name convention check is
    only meaningful when a helper has actually been built.
 2. src/foundation/appMetadata.ts only guarded desktopApi, not
