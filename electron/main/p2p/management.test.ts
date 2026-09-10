@@ -212,6 +212,29 @@ describe('bringing enrolled services online at startup', () => {
     ])
   })
 
+  it('retains why a session is down so the surface can explain it', async () => {
+    // The refusal used to be discarded, so the product could only say "offline"
+    // and the cause was reachable only by inspecting files on disk.
+    const f = fixture()
+    await f.owner.goOnline()
+    expect(await f.owner.serviceSessions()).toEqual([
+      { serviceId, state: 'offline', code: 'p2p.device_unregistered' }
+    ])
+  })
+
+  it('reports a confirmed session without a refusal code', async () => {
+    const f = fixture()
+    enrolled()
+    await f.owner.goOnline()
+    expect(await f.owner.serviceSessions()).toEqual([{ serviceId, state: 'online', code: '' }])
+  })
+
+  it('reports an unattempted service as offline with no invented reason', async () => {
+    // Never having tried is not a refusal, so no code is supplied for one.
+    const f = fixture()
+    expect(await f.owner.serviceSessions()).toEqual([{ serviceId, state: 'offline', code: '' }])
+  })
+
   it('pairs devices that already share a network, with no invite', async () => {
     // Joining a network is the authorization. Without this, membership granted
     // nothing and two of the user's own machines still had to exchange a code.

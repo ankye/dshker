@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
 import { useLauncherUpdates } from '../domains/launcher-updates'
-import { useRemoteConnections } from '../domains/remote-connections'
+import { p2pManagement, p2pNetwork, useRemoteConnections } from '../domains/remote-connections'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
 import ConsoleDrawer from './components/ConsoleDrawer.vue'
 import ControllerPanel from './components/ControllerPanel.vue'
@@ -166,6 +166,23 @@ const protocolVersion = computed(() =>
     : 'unavailable'
 )
 
+/**
+ * The coordinator session, shown in the status bar so it is legible from every
+ * route rather than only from the Connect tab.
+ *
+ * Network reach is a global fact: it decides whether a remote workbench can be
+ * opened at all, so a surface that depends on it should not have to derive it.
+ * Undefined means unread, which stays distinct from a confirmed offline state.
+ */
+const networkOnline = computed(() => {
+  const id = p2pManagement.selectedServiceId.value
+  return id === undefined ? undefined : p2pNetwork.isOnline(id)
+})
+const networkLabel = computed(() => {
+  if (networkOnline.value === undefined) return shell.t('p2p.myNetwork.statusUnknown')
+  return shell.t(networkOnline.value ? 'p2p.myNetwork.online' : 'p2p.myNetwork.offline')
+})
+
 /** The tail's link hands over to the full Console route and collapses itself. */
 function openConsoleRoute(): void {
   consoleDrawer.closeConsoleDrawer()
@@ -303,6 +320,11 @@ function openConsoleRoute(): void {
       :scope-value="shell.t('footer.scopeValue')"
       :operation-label="statusbarOperationLabel"
       :operation-progress="statusbarProgressRatio"
+      :network-label="shell.t('footer.network')"
+      :network-value="networkLabel"
+      :network-state="
+        networkOnline === undefined ? 'unknown' : networkOnline ? 'online' : 'offline'
+      "
       @progress-toggle="consoleDrawer.toggleConsoleDrawer"
     />
   </div>

@@ -5,7 +5,8 @@ import {
   P2P_BUILTIN_SERVICE,
   type P2PCatalogView,
   type P2PManagementApi,
-  type P2PRegistrationView
+  type P2PRegistrationView,
+  type P2PServiceSessionView
 } from '@/shared/p2p-management'
 
 const serviceId = 'a'.repeat(64)
@@ -57,12 +58,25 @@ afterEach(() => {
 })
 
 /** Mounts with the built-in service catalog and selection pre-set. */
+/**
+ * The card reports the coordinator session, so every bridge must supply it.
+ * An empty list is a read that found no session, which the card states as
+ * offline rather than as unknown.
+ */
+function sessionReader(sessions: P2PServiceSessionView[] = []) {
+  return vi
+    .fn<P2PManagementApi['serviceSessions']>()
+    .mockResolvedValue({ ok: true, data: sessions })
+}
+
 async function render(api: Partial<P2PManagementApi>) {
   const localDevice = vi.fn<P2PManagementApi['localDevice']>().mockResolvedValue({
     ok: true,
     data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
   })
-  window.dshLauncher = { p2pManagement: { ...api, localDevice } } as unknown as DesktopApi
+  window.dshLauncher = {
+    p2pManagement: { serviceSessions: sessionReader(), ...api, localDevice }
+  } as unknown as DesktopApi
   const domain = await import('@/app/domains/remote-connections')
   domain.p2pManagement.catalog.value = saved
   domain.p2pManagement.selectedServiceId.value = serviceId
@@ -83,7 +97,7 @@ describe('P2P 「我的网络」 card', () => {
       data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
     })
     window.dshLauncher = {
-      p2pManagement: { catalog, localDevice }
+      p2pManagement: { catalog, localDevice, serviceSessions: sessionReader() }
     } as unknown as DesktopApi
     const domain = await import('@/app/domains/remote-connections')
     const component = (await import('../components/P2PJoinPanel.vue')).default
@@ -173,6 +187,36 @@ describe('P2P 「我的网络」 card', () => {
     expect(ui.find('[data-testid="p2p-leave-network"]').exists()).toBe(true)
   })
 
+  it('reports online from the coordinator session, with no paired computer', async () => {
+    // The decisive case: one enrolled computer, zero pairs. A pair stage can
+    // never reach ready here, so deriving status from it reported offline for a
+    // machine the coordinator lists as online.
+    const ui = await render({
+      serviceSessions: sessionReader([{ serviceId, state: 'online', code: '' }])
+    })
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pEnrollment.state(serviceId).registration = registered
+    await flushPromises()
+    expect(domain.p2pManagement.catalog.value?.computers).toHaveLength(0)
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('在线')
+    expect(ui.find('[data-testid="p2p-network-reason"]').exists()).toBe(false)
+  })
+
+  it('explains a down session instead of stating a bare offline', async () => {
+    const ui = await render({
+      serviceSessions: sessionReader([
+        { serviceId, state: 'offline', code: 'p2p.device_unregistered' }
+      ])
+    })
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pEnrollment.state(serviceId).registration = registered
+    await flushPromises()
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('离线')
+    // Without the refusal the user saw an unexplained offline and had nothing to
+    // act on; the cause was only reachable by inspecting files.
+    expect(ui.get('[data-testid="p2p-network-reason"]').text()).toContain('p2p.device_unregistered')
+  })
+
   it('offers no leave without a session and says why, rather than failing on click', async () => {
     const leaveNetwork = vi.fn<P2PManagementApi['leaveNetwork']>()
     const ui = await render({ leaveNetwork })
@@ -256,7 +300,9 @@ describe('P2P 「我的网络」 card', () => {
       ok: true,
       data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
     })
-    window.dshLauncher = { p2pManagement: { catalog, localDevice } } as unknown as DesktopApi
+    window.dshLauncher = {
+      p2pManagement: { catalog, localDevice, serviceSessions: sessionReader() }
+    } as unknown as DesktopApi
     const component = (await import('../components/P2PJoinPanel.vue')).default
     wrapper = mount(component)
     await flushPromises()

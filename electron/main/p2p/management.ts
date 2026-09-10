@@ -41,6 +41,14 @@ export class PeerManagement {
   #session: Session | undefined
   /** Services whose enrolled device has been restored into the live helper. */
   readonly #restored = new Set<string>()
+  /**
+   * This computer's session with each coordinator, keyed by serviceId.
+   *
+   * A missing entry means never attempted, which the projection reports as
+   * offline with no code rather than inventing a reason. This is the network
+   * layer: a pair connection is tracked separately by the runtime host.
+   */
+  readonly #sessions = new Map<string, { state: 'online' | 'offline'; code: string }>()
   readonly #resolveSettingsRoot: () => Promise<string>
 
   constructor(options: Options) {
@@ -85,20 +93,45 @@ export class PeerManagement {
       if (this.#lifetime.signal.aborted) break
       try {
         const session = await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
+        this.#sessions.set(service.serviceId, { state: 'online', code: '' })
         // Devices in the same network are already authorized to reach each other,
         // so pair them without an invite. Joining a network would otherwise grant
         // nothing on its own. A refusal here still leaves the service online.
         await session.pairing.adopt(service.serviceId, this.#lifetime.signal).catch(() => undefined)
         results.push({ serviceId: service.serviceId, online: true })
       } catch (error) {
-        results.push({
-          serviceId: service.serviceId,
-          online: false,
-          code: error instanceof PeerHelperError ? error.code : 'p2p.internal_error'
-        })
+        const code = error instanceof PeerHelperError ? error.code : 'p2p.internal_error'
+        // The refusal is retained rather than discarded: without it the surface
+        // could only say "offline" and never why, which left the cause of a
+        // down session undiscoverable from the product.
+        this.#sessions.set(service.serviceId, { state: 'offline', code })
+        results.push({ serviceId: service.serviceId, online: false, code })
       }
     }
     return results
+  }
+
+  /**
+   * Reports this computer's session with every enrolled coordinator.
+   *
+   * A read, so it never starts or repairs a session: it states what the last
+   * attempt observed. Services with no attempt are reported offline with an
+   * empty code, which is honest about not having tried.
+   */
+  async serviceSessions(): Promise<
+    { serviceId: string; state: 'online' | 'offline'; code: string }[]
+  > {
+    this.#admit()
+    const snapshot = await this.#catalog.inspect().catch(() => undefined)
+    if (!snapshot) return []
+    return snapshot.record.services.map((service) => {
+      const session = this.#sessions.get(service.serviceId)
+      return {
+        serviceId: service.serviceId,
+        state: session?.state ?? 'offline',
+        code: session?.code ?? ''
+      }
+    })
   }
 
   async enable() {

@@ -63,6 +63,14 @@
   automatic read whenever the account card was still reading, and reported an
   unknown enrollment state as a result. Manual refresh remains for resolving a
   write whose result was never confirmed.
+- Network reach is now a shared fact rather than something each surface derived.
+  This computer's session with the coordinator is tracked in the main process,
+  exposed through the management contract, and shown in the status bar so it is
+  legible from every route. The Connect tab previously derived a network status
+  from pair connection stages, so a computer with no paired peer reported itself
+  offline while the device directory listed the same machine as online. A down
+  session now states the refusal that caused it instead of an unexplained
+  "offline", and an unread session reads as unknown rather than as offline.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

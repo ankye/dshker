@@ -38,6 +38,8 @@ export const P2P_MANAGEMENT_CHANNELS = {
   connect: 'dsh-launcher:p2p:connect',
   disconnect: 'dsh-launcher:p2p:disconnect',
   localDevice: 'dsh-launcher:p2p:local-device',
+  /** This computer's session with each coordinator: the network layer, not a pair. */
+  serviceSessions: 'dsh-launcher:p2p:service-sessions',
   /** Devices enrolled in one owned network, with liveness and reported build. */
   networkDevices: 'dsh-launcher:p2p:network-devices',
   cancel: 'dsh-launcher:p2p:cancel'
@@ -250,6 +252,25 @@ export interface P2PRemoteEntryView {
   isProject: boolean
 }
 
+/**
+ * This computer's session with one coordinator.
+ *
+ * Distinct from a pair connection: presence, discoverability, the reported build
+ * and the ability to pair all depend on this session, while a pair connection
+ * decides whether one specific remote workbench is reachable. Reporting one
+ * through the other made a single enrolled computer look offline for a stage it
+ * could never reach.
+ *
+ * `code` carries the refusal that kept the session down and is empty while
+ * online. `undefined` state means never attempted, which is not offline.
+ */
+export interface P2PServiceSessionView {
+  serviceId: string
+  state: 'online' | 'offline'
+  /** Refusal code only, empty unless the state is `offline`. */
+  code: string
+}
+
 export interface P2PConnectionView {
   serviceId: string
   pairId: string
@@ -338,6 +359,7 @@ export interface P2PManagementInputs {
   connect: ServiceRequest & { pairId: string }
   disconnect: ServiceRequest & { pairId: string }
   localDevice: Record<never, never>
+  serviceSessions: Record<never, never>
   networkDevices: NetworkRequest
   cancel: { targetRequestId: number }
 }
@@ -381,6 +403,7 @@ export interface P2PManagementResults {
   connect: P2PConnectionView
   disconnect: void
   localDevice: P2PLocalDeviceView
+  serviceSessions: P2PServiceSessionView[]
   networkDevices: P2PNetworkDeviceView[]
   /** Accepted means cancellation requested, never that a server write was undone. */
   cancel: { accepted: boolean }

@@ -149,6 +149,9 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
     projectPeerCatalog(await owner.removeService(r.serviceId, s))
   )
   register('connections', false, async () => projectPeerConnections(owner.connections()))
+  // The network layer: this computer's session with each coordinator, which is
+  // what presence and pairing depend on. A pair connection is reported above.
+  register('serviceSessions', false, async () => owner.serviceSessions())
   // Starting a connection is a write: it consumes an attempt and a generation.
   register('connect', true, async (r, s) =>
     projectPeerConnection(r.serviceId, await owner.connect(r.serviceId, r.pairId, s))

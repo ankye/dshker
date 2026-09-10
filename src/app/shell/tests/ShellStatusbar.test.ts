@@ -13,7 +13,10 @@ describe('ShellStatusbar', () => {
     protocolLabel: 'Desktop API',
     protocolVersion: '1',
     scopeLabel: 'Scope',
-    scopeValue: 'App start'
+    scopeValue: 'App start',
+    networkLabel: 'Network',
+    networkValue: 'Status unknown',
+    networkState: 'unknown' as const
   }
 
   it('slides indeterminately while no step progress exists', () => {
@@ -26,6 +29,24 @@ describe('ShellStatusbar', () => {
     expect(bar.attributes('data-determinate')).toBe('false')
     expect(bar.attributes('style')).toBeUndefined()
     expect(wrapper.get('.statusbar-progress-text').text()).toBe('正在启动 DSH Web…')
+  })
+
+  it('states network reach on every route, distinguishing unread from offline', async () => {
+    // Network reach governs whether any remote workbench can open, so it belongs
+    // to the shell rather than to the Connect tab that used to own it alone.
+    const unknown = mount(ShellStatusbar, { props: base })
+    expect(unknown.get('.statusbar-network').attributes('data-state')).toBe('unknown')
+
+    const offline = mount(ShellStatusbar, {
+      props: { ...base, networkValue: 'Offline', networkState: 'offline' as const }
+    })
+    expect(offline.get('.statusbar-network').attributes('data-state')).toBe('offline')
+    expect(offline.get('.statusbar-network').text()).toContain('Offline')
+
+    const online = mount(ShellStatusbar, {
+      props: { ...base, networkValue: 'Online', networkState: 'online' as const }
+    })
+    expect(online.get('.statusbar-network').attributes('data-state')).toBe('online')
   })
 
   it('reveals the console tail when the busy strip is activated', async () => {

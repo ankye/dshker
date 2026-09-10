@@ -342,6 +342,17 @@
   background: color-mix(in srgb, var(--color-accent), var(--color-surface) 94%);
 }
 
+/* Network reach belongs in the status bar because it governs whether any remote
+ * workbench can open, which no single route owns. Online takes the success role;
+ * unknown and offline stay muted so an unread session never reads as a fault. */
+.statusbar-network[data-state='online'] {
+  color: var(--color-success);
+}
+.statusbar-network[data-state='offline'],
+.statusbar-network[data-state='unknown'] {
+  color: var(--color-text-muted);
+}
+
 .statusbar-progress {
   display: flex;
   min-width: 0;

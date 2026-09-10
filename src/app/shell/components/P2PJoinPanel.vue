@@ -2,9 +2,9 @@
 import { computed, onMounted, watch } from 'vue'
 import {
   p2pAccounts as accounts,
-  p2pConnections,
   p2pEnrollment as enrollment,
-  p2pManagement as management
+  p2pManagement as management,
+  p2pNetwork
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
@@ -15,9 +15,13 @@ import type { MessageKey } from '@/app/shared/i18n/i18n'
  * The coordinator is always the built-in official server: there is no server
  * or endpoint configuration, and its endpoint fields are never shown. The card
  * always displays this device's name and identifier, and offers a login-free
- * join by networkId. Only a server-confirmed result is shown as registered,
- * and online status is only ever derived from a live connection stage, never
- * assumed.
+ * join by networkId. Only a server-confirmed result is shown as registered.
+ *
+ * Online here means this computer holds a coordinator session, which is the
+ * question this card asks: it sits beside "leave network" and describes the
+ * machine's relationship to the server. It previously derived that from pair
+ * connection stages, so a computer with no paired peer reported itself offline
+ * even while the coordinator listed it as online.
  */
 const t = useTranslator()
 
@@ -99,25 +103,30 @@ const banned = computed(() => {
   const code = leaveError.value
   return code === 'p2p.network_revoked' || code === 'p2p.pair_revoked'
 })
-/** Presence evidence: only a live ready connection stage counts as online. */
-const onlineEvidence = computed(() => {
+/** The shared network-layer session, never a pair connection stage. */
+const sessionOnline = computed(() => {
   const id = serviceId.value
-  if (!id) return false
-  return (
-    p2pConnections.state.peers?.some((peer) => peer.serviceId === id && peer.stage === 'ready') ??
-    false
-  )
+  return id ? p2pNetwork.isOnline(id) : undefined
 })
-type NetworkStatus = 'online' | 'offline' | 'banned'
+type NetworkStatus = 'online' | 'offline' | 'banned' | 'unknown'
 const STATUS_KEYS: Readonly<Record<NetworkStatus, MessageKey>> = {
   online: 'p2p.myNetwork.online',
   offline: 'p2p.myNetwork.offline',
-  banned: 'p2p.myNetwork.banned'
+  banned: 'p2p.myNetwork.banned',
+  unknown: 'p2p.myNetwork.statusUnknown'
 }
 const networkStatus = computed<NetworkStatus>(() => {
   if (registration.value?.kind !== 'registered') return 'offline'
   if (banned.value) return 'banned'
-  return onlineEvidence.value ? 'online' : 'offline'
+  // An unread session is not evidence of being offline, so it is stated as
+  // unknown rather than resolved into a claim in either direction.
+  if (sessionOnline.value === undefined) return 'unknown'
+  return sessionOnline.value ? 'online' : 'offline'
+})
+/** The refusal behind a down session, so "offline" is never unexplained. */
+const sessionRefusal = computed(() => {
+  const id = serviceId.value
+  return id ? p2pNetwork.refusal(id) : ''
 })
 
 const JOIN_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -162,18 +171,20 @@ onMounted(async () => {
   await management.ensureBuiltinService()
   ensureNameDraft()
   const id = serviceId.value
-  if (id && !management.busy(id)) {
+  if (id) {
     void enrollment.read(id)
-    void p2pConnections.read()
+    // The network session is what this card reports, so it is read on entry
+    // rather than inferred from whatever a pair connection happens to be doing.
+    void p2pNetwork.read()
   }
 })
 
 // Re-read when a service is selected after provisioning completed.
 watch(serviceId, (id, previous) => {
-  if (id && id !== previous && !management.busy(id)) {
+  if (id && id !== previous) {
     ensureNameDraft()
     void enrollment.read(id)
-    void p2pConnections.read()
+    void p2pNetwork.read()
   }
 })
 
@@ -272,6 +283,13 @@ async function leave(): Promise<void> {
           data-testid="p2p-network-status"
         >
           {{ t(STATUS_KEYS[networkStatus]) }}
+        </p>
+        <p
+          v-if="networkStatus === 'offline' && sessionRefusal"
+          class="p2p-network-reason"
+          data-testid="p2p-network-reason"
+        >
+          {{ t('p2p.myNetwork.offlineReason') }} <code>{{ sessionRefusal }}</code>
         </p>
         <p v-if="leaveError" role="alert" class="remote-error" data-testid="p2p-leave-error">
           {{ t('p2p.myNetwork.leaveError') }} <code>{{ leaveError }}</code>
@@ -468,6 +486,19 @@ async function leave(): Promise<void> {
 }
 .p2p-network-status[data-state='banned'] {
   color: var(--color-danger);
+}
+/* Unknown is not a fault and not a claim: it reads muted like offline. */
+.p2p-network-status[data-state='unknown'] {
+  color: var(--color-text-muted);
+}
+.p2p-network-reason {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-network-reason code {
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
 }
 .remote-error code {
   overflow-wrap: anywhere;

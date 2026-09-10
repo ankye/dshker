@@ -64,6 +64,7 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   connect: { serviceId, pairId },
   disconnect: { serviceId, pairId },
   localDevice: {},
+  serviceSessions: {},
   updateServiceConfig: {
     serviceId,
     revision,
@@ -172,6 +173,7 @@ function fixture() {
     connect: vi.fn(async () => helperState),
     disconnect: vi.fn(async () => undefined),
     localDevice: vi.fn(async () => ({ deviceId: 'a'.repeat(32), name: 'host' })),
+    serviceSessions: vi.fn(async () => []),
     updateServiceConfig: vi.fn(async () => snapshot),
     remoteRoots: vi.fn(async () => [{ rootId: 'root-a', name: 'Work', path: '/remote/work' }]),
     remoteDirectory: vi.fn(async () => ({

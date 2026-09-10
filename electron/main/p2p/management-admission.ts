@@ -40,6 +40,7 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   connect: ['serviceId', 'pairId'],
   disconnect: ['serviceId', 'pairId'],
   localDevice: [],
+  serviceSessions: [],
   updateServiceConfig: [
     'serviceId',
     'revision',

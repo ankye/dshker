@@ -12,6 +12,16 @@ defineProps<{
    * progress presentation that still moves when the OS reduces motion.
    */
   readonly operationProgress?: number
+  /**
+   * The coordinator session for the selected service.
+   *
+   * Shown here because network reach decides whether any remote workbench can
+   * be opened, which is not a fact that belongs to one route. `unknown` keeps an
+   * unread session distinct from a confirmed offline state.
+   */
+  readonly networkLabel: string
+  readonly networkValue: string
+  readonly networkState: 'online' | 'offline' | 'unknown'
 }>()
 
 const emit = defineEmits<{ progressToggle: [] }>()
@@ -50,6 +60,9 @@ const emit = defineEmits<{ progressToggle: [] }>()
     <template v-else>
       <span>{{ protocolLabel }} · {{ protocolVersion }}</span>
       <span>{{ scopeLabel }} · {{ scopeValue }}</span>
+      <span class="statusbar-network" :data-state="networkState" role="status">
+        {{ networkLabel }} · {{ networkValue }}
+      </span>
     </template>
   </footer>
 </template>

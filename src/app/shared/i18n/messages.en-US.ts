@@ -275,6 +275,8 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.myNetwork.online': 'Online',
   'p2p.myNetwork.offline': 'Offline',
   'p2p.myNetwork.banned': 'Banned',
+  'p2p.myNetwork.statusUnknown': 'Status unknown',
+  'p2p.myNetwork.offlineReason': 'Could not come online:',
   'p2p.myNetwork.notJoinedHint': 'Enter a network ID to join the network without logging in.',
   'p2p.myNetwork.builtinRemoved': 'The official server was removed and cannot be re-added.',
   'p2p.myNetwork.serviceUnavailable': 'The official server is unavailable. Try again shortly.',
@@ -954,5 +956,6 @@ export const enUS: Record<MessageKey, string> = {
     'The renderer can call only named bootstrap, directory or executable-selection, registration, clone, switch, and start APIs. It cannot read arbitrary files, start arbitrary processes, call Git directly, or read credentials.',
   'footer.protocol': 'Desktop API',
   'footer.scope': 'Current scope',
-  'footer.scopeValue': 'Application bootstrap'
+  'footer.scopeValue': 'Application bootstrap',
+  'footer.network': 'Network'
 }

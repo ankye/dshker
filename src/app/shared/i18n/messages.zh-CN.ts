@@ -229,6 +229,8 @@ export const zhCN = {
   'p2p.myNetwork.online': '在线',
   'p2p.myNetwork.offline': '离线',
   'p2p.myNetwork.banned': '被封禁',
+  'p2p.myNetwork.statusUnknown': '状态未知',
+  'p2p.myNetwork.offlineReason': '未能上线：',
   'p2p.myNetwork.notJoinedHint': '输入网络 ID 即可免登录加入网络。',
   'p2p.myNetwork.builtinRemoved': '官方服务器已被移除，无法重新添加。',
   'p2p.myNetwork.serviceUnavailable': '官方服务器暂不可用，请稍后重试。',
@@ -856,7 +858,8 @@ export const zhCN = {
     'Renderer 只能调用命名的启动信息、目录或可执行文件选择、注册、克隆、切换和启动 API；它不能读取任意文件、启动任意进程、直接调用 Git 或读取凭证。',
   'footer.protocol': 'Desktop API',
   'footer.scope': '当前作用域',
-  'footer.scopeValue': '应用启动'
+  'footer.scopeValue': '应用启动',
+  'footer.network': '网络'
 } as const
 
 /** Every message key, derived from the reference zh-CN catalog. */
