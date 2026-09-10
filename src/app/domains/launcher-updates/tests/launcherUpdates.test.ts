@@ -145,6 +145,36 @@ describe('Launcher update Settings card', () => {
     wrapper.unmount()
   })
 
+  it('shows what changed when the release carries notes', async () => {
+    // The card previously reported only that a newer version existed, so the
+    // user had to open GitHub to find out what was in it.
+    installApi({ ...states.available, releaseNotes: '- Devices pair automatically' })
+    const wrapper = mount(LauncherUpdateSettingsCard)
+    await flushPromises()
+    expect(wrapper.text()).toContain('更新内容')
+    expect(wrapper.text()).toContain('- Devices pair automatically')
+    wrapper.unmount()
+  })
+
+  it('omits the notes section when the release has none', async () => {
+    // An empty heading would imply the release said nothing on purpose.
+    installApi(states.available)
+    const wrapper = mount(LauncherUpdateSettingsCard)
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('更新内容')
+    wrapper.unmount()
+  })
+
+  it('renders notes as text so remote markup cannot become elements', async () => {
+    // The body is untrusted remote content.
+    installApi({ ...states.available, releaseNotes: '<img src=x onerror="alert(1)">' })
+    const wrapper = mount(LauncherUpdateSettingsCard)
+    await flushPromises()
+    expect(wrapper.find('img').exists()).toBe(false)
+    expect(wrapper.text()).toContain('<img src=x onerror="alert(1)">')
+    wrapper.unmount()
+  })
+
   it('checks and opens the verified installer without accepting a renderer URL', async () => {
     const api = installApi(states.available)
     const wrapper = mount(LauncherUpdateSettingsCard)

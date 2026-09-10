@@ -136,6 +136,15 @@ const statusLabel = computed(() => {
             </dd>
           </div>
         </dl>
+        <section
+          v-if="updateState.releaseNotes"
+          class="settings-update-notes"
+          aria-labelledby="launcher-update-notes-title"
+        >
+          <h4 id="launcher-update-notes-title">{{ t('settings.update.notesTitle') }}</h4>
+          <!-- Plain text: the body is remote, so it is never rendered as markup. -->
+          <p class="settings-update-notes-body">{{ updateState.releaseNotes }}</p>
+        </section>
         <p class="settings-update-install-hint">{{ t('settings.update.installHint') }}</p>
       </div>
       <div v-else-if="updateState?.kind === 'failed'" class="settings-update-failure" role="alert">

@@ -51,14 +51,20 @@ host, without exposing DSH Web to the network and without an SSH tunnel. The
 independent [DSHKer Server](https://github.com/ankye/dshker-server) provides
 user-scoped networks and authenticated device pairing.
 
-The desktop implementation and its automated tests are complete: pairing with
-fingerprint confirmation, connection staging, per-computer isolated browser
-sessions, remote authorized-directory browsing and project selection, shared
-server configuration editing, and post-disconnect task reconciliation.
+The desktop implementation and its automated tests are complete: automatic
+pairing between devices in the same network, connection staging, per-computer
+isolated browser sessions, remote authorized-directory browsing and project
+selection, shared server configuration editing, and post-disconnect task
+reconciliation.
 
-**Not released.** Two-machine acceptance, the four-architecture packaged builds
-and coordination-server deployment have not been carried out, so this is not
-advertised as an available desktop feature. A successful installer build is not
+Devices bound to the same network pair themselves with no invite code and no
+approval step: joining the network is the authorization. The invite-and-confirm
+flow remains for pairing a device that is not in one of your networks.
+
+**Two-machine acceptance is still outstanding.** The coordination server is
+deployed and a launcher now reports presence from startup, verified against the
+live server. Until two machines have completed a real session this is not
+advertised as an available desktop feature: a successful installer build is not
 a successful release.
 
 Two limits worth knowing before you plan around it: there is **no relay**, so

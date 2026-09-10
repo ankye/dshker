@@ -1,4 +1,5 @@
 import { enUSErrors } from './i18n.errors'
+import { enUSUpdates } from './i18n.updates'
 import { enUSRefusals } from './i18n.refusals'
 import type { MessageKey } from './messages.zh-CN'
 
@@ -411,6 +412,7 @@ export const enUS: Record<MessageKey, string> = {
   'versions.catalog.installSelected': 'Install selected',
   ...enUSErrors,
   ...enUSRefusals,
+  ...enUSUpdates,
   'bootstrap.title': 'Register managed directories first',
   'bootstrap.description':
     'This build does not infer a settings directory, workspace, Git, Node, or Harness revision. Clone, registration, and launch become available only after directory registration.',
@@ -576,49 +578,6 @@ export const enUS: Record<MessageKey, string> = {
   'settings.theme.light': 'Light',
   'settings.language': 'Display language',
   'settings.language.hint': 'Applies to every surface as soon as it changes.',
-  'settings.update.title': 'Application updates',
-  'settings.update.description':
-    'Check GitHub Releases for a DSHKer Launcher installer built for this system.',
-  'settings.update.currentVersion': 'Current version',
-  'settings.update.latestVersion': 'Latest version',
-  'settings.update.status.loading': 'Reading',
-  'settings.update.status.idle': 'Not checked',
-  'settings.update.status.checking': 'Checking',
-  'settings.update.status.current': 'Up to date',
-  'settings.update.status.available': 'Update available',
-  'settings.update.status.failed': 'Check failed',
-  'settings.update.loading': 'Reading the application update state.',
-  'settings.update.idle': 'The latest GitHub release has not been checked yet.',
-  'settings.update.checking': 'Checking GitHub Releases…',
-  'settings.update.upToDate': 'This installation is the latest version available for this system.',
-  'settings.update.available': 'A newer installer is available for this system.',
-  'settings.update.asset': 'Installer',
-  'settings.update.checkedAt': 'Checked',
-  'settings.update.installHint':
-    'This opens the download in your system browser. Quit Launcher and run the installer manually after it finishes.',
-  'settings.update.check': 'Check for updates',
-  'settings.update.checkingAction': 'Checking…',
-  'settings.update.retry': 'Check again',
-  'settings.update.download': 'Download installer',
-  'settings.update.openingDownload': 'Opening…',
-  'settings.update.operationFailed':
-    'The update action did not finish. Use the diagnostic code and try again.',
-  'settings.update.errorCode': 'Diagnostic code',
-  'settings.update.error.invalidRequest':
-    'The update request was invalid. Reopen the app and try again.',
-  'settings.update.error.network': 'GitHub could not be reached. Check your network and try again.',
-  'settings.update.error.http':
-    'GitHub Releases did not return an available result. Try again later.',
-  'settings.update.error.response': 'GitHub Releases returned data this Launcher cannot read.',
-  'settings.update.error.release':
-    'The latest release information is not supported by this Launcher.',
-  'settings.update.error.platform':
-    'The latest release does not support this operating system or processor architecture.',
-  'settings.update.error.asset':
-    'The latest release does not contain one unambiguous installer for this system.',
-  'settings.update.error.notAvailable': 'There is no newer installer to download.',
-  'settings.update.error.open':
-    'The system browser could not open the installer download. Try again.',
   'update.notice.title': 'A new DSHKer Launcher is available',
   'update.notice.version': 'Version',
   'update.notice.download': 'Download installer',

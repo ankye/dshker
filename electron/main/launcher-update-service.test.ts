@@ -76,6 +76,7 @@ describe('Launcher update release parsing', () => {
       tag: 'v0.2.0',
       version: '0.2.0',
       releasePageUrl: 'https://github.com/ankye/dshker/releases/tag/v0.2.0',
+      notes: undefined,
       assets: [
         {
           name: 'dshker-launcher-0.2.0-mac-arm64.dmg',
@@ -84,6 +85,47 @@ describe('Launcher update release parsing', () => {
         }
       ]
     })
+  })
+
+  it('carries the release body through so the app can show what changed', () => {
+    // Without this the update only reported that a newer version existed and the
+    // user had to open GitHub to learn what was in it.
+    const parsed = parseLatestRelease({
+      ...releasePayload(),
+      body: '- Fixed a thing\n- Added another'
+    })
+    expect(parsed.notes).toBe('- Fixed a thing\n- Added another')
+  })
+
+  it.each([
+    { label: 'absent', body: undefined },
+    { label: 'empty', body: '   \n  ' },
+    { label: 'not a string', body: 42 }
+  ])('treats a $label body as no notes rather than a failure', ({ body }) => {
+    // Notes are descriptive: their absence must never block an update.
+    expect(parseLatestRelease({ ...releasePayload(), body }).notes).toBeUndefined()
+  })
+
+  it('strips control characters from the untrusted body', () => {
+    const parsed = parseLatestRelease({
+      ...releasePayload(),
+      body: 'Fixed\u0000 a\u001b[31m thing\u007f'
+    })
+    expect(parsed.notes).toBe('Fixed a[31m thing')
+  })
+
+  it('normalizes line endings and collapses long gaps', () => {
+    const parsed = parseLatestRelease({
+      ...releasePayload(),
+      body: 'First\r\nSecond\r\n\r\n\r\n\r\nThird'
+    })
+    expect(parsed.notes).toBe('First\nSecond\n\nThird')
+  })
+
+  it('bounds a very long body so it cannot dominate the screen', () => {
+    const parsed = parseLatestRelease({ ...releasePayload(), body: 'x'.repeat(9000) })
+    expect(parsed.notes!.length).toBeLessThanOrEqual(4001)
+    expect(parsed.notes!.endsWith('…')).toBe(true)
   })
 
   it.each([

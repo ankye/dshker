@@ -1,6 +1,9 @@
 import type { LauncherUpdateErrorCode, LauncherUpdateState } from '../../src/shared/contracts'
 
 /** Fixed public endpoint for the only Launcher release source. */
+/** Bounds the displayed release body; the full text stays on the release page. */
+const RELEASE_NOTES_LIMIT = 4000
+
 export const LAUNCHER_RELEASE_API_URL =
   'https://api.github.com/repos/ankye/dshker/releases/latest' as const
 
@@ -29,6 +32,7 @@ interface ParsedRelease {
   readonly tag: string
   readonly version: string
   readonly releasePageUrl: string
+  readonly notes?: string
   readonly assets: readonly ParsedReleaseAsset[]
 }
 
@@ -134,6 +138,7 @@ export class LauncherUpdateService {
         latestVersion: release.version,
         assetName: asset.name,
         releasePageUrl: release.releasePageUrl,
+        ...(release.notes === undefined ? {} : { releaseNotes: release.notes }),
         checkedAt
       })
     } catch (error) {
@@ -279,8 +284,33 @@ export function parseLatestRelease(payload: unknown): ParsedRelease {
     tag: payload.tag_name,
     version,
     releasePageUrl: payload.html_url,
+    notes: parseReleaseNotes(payload.body),
     assets
   }
+}
+
+/**
+ * Sanitizes the release body so the Launcher can show what changed.
+ *
+ * Without this the app only reported that a newer version existed and the user
+ * had to open GitHub to learn what was in it. The text is remote and untrusted,
+ * so it is treated as display data: control characters are dropped, line endings
+ * are normalized, and the length is bounded. It is rendered as plain text, never
+ * as markup, and an absent or unusable body simply yields no notes rather than
+ * failing the update check over a descriptive field.
+ */
+export function parseReleaseNotes(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value
+    .replace(/\r\n?/gu, '\n')
+    // Strip C0/C1 controls but keep newline and tab, which carry the layout.
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu, '')
+    .replace(/\n{3,}/gu, '\n\n')
+    .trim()
+  if (normalized.length === 0) return undefined
+  return normalized.length > RELEASE_NOTES_LIMIT
+    ? `${normalized.slice(0, RELEASE_NOTES_LIMIT).trimEnd()}…`
+    : normalized
 }
 
 function selectInstallerAsset(release: ParsedRelease, expectedName: string): ParsedReleaseAsset {

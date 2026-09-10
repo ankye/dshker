@@ -17,6 +17,26 @@ installer names, release manifests, update comparisons, and the tag gate read
 that value instead of maintaining another version constant. A release tag must
 be the exact stable semantic version `v${package.json.version}`.
 
+## What every version must record
+
+A version that ships without saying what changed leaves both the user and the
+project unable to tell releases apart. Each version therefore updates all three,
+in the same commit range as the change itself:
+
+1. `CHANGELOG.md` — one entry per user-visible change, describing the behaviour
+   that was wrong and what it does now, not the code that moved.
+2. `README.md` and `README.zh-CN.md` — only when a change alters what the
+   product can do or what is still outstanding. A feature that became available,
+   or a stated limitation that no longer holds, is stale documentation the next
+   reader will trust.
+3. The GitHub Release body — this is what the Launcher shows in
+   **Settings → Updates**, so it is the only one most users will ever read. The
+   app renders it as plain text; write it for someone deciding whether to
+   install, not for a reviewer reading a diff.
+
+The release body should be the `CHANGELOG.md` entry for that version, so the two
+cannot drift.
+
 The public update feed is the fixed
 [DSHKer GitHub Releases page](https://github.com/ankye/dshker/releases/latest).
 The Launcher reads its latest stable release in Electron main and only opens the

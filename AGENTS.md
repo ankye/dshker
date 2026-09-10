@@ -60,3 +60,8 @@ For any non-trivial product, IPC, persistence, or release change, update the
 active OpenSpec change and add an Agent Note under \`.agents/notes/\`. Do not
 commit generated output, local roots, credentials, signing material, or release
 artifacts.
+
+A user-visible change also records itself: add the CHANGELOG entry, and correct
+both READMEs when the change makes either stale. The Launcher shows the GitHub
+Release body in Settings then Updates, so that body is what most users read; see
+docs/release.md.

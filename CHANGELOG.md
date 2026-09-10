@@ -32,6 +32,12 @@
   happened to agree with the variable, so only Windows was affected. Each
   platform now names its own directory literally, and a package can only contain
   its own helper.
+- The update check now shows what changed. It previously reported only that a
+  newer version existed, so the only way to find out what was in it was to open
+  GitHub. The release body appears under **Settings → Updates** as plain text:
+  it is remote content, so control characters are stripped, its length is
+  bounded, and it is never rendered as markup. A release without a body simply
+  shows no notes instead of an empty heading.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

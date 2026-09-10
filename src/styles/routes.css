@@ -1442,6 +1442,36 @@
   line-height: 1.5;
 }
 
+/* Release notes: the update said only that a version existed, so what changed
+   had to be read on GitHub. Bounded height keeps a long body from pushing the
+   download action out of view. */
+.settings-update-notes {
+  max-width: 54rem;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+
+.settings-update-notes h4 {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text);
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-medium);
+}
+
+.settings-update-notes-body {
+  margin: 0;
+  max-height: 18rem;
+  overflow-y: auto;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  line-height: 1.6;
+  /* The body is plain text with meaningful line breaks. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .settings-update-checked-at {
   display: flex;
   flex-wrap: wrap;

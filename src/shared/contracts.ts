@@ -656,6 +656,13 @@ export type LauncherUpdateState =
       readonly latestVersion: string
       readonly assetName: string
       readonly releasePageUrl: string
+      /**
+       * What changed, taken from the release body and shown as plain text.
+       *
+       * Optional because a release may have no body, and because it is remote
+       * descriptive data: its absence must never block an update.
+       */
+      readonly releaseNotes?: string
       readonly checkedAt: string
     }
   | {
