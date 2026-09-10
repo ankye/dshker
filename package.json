@@ -94,6 +94,7 @@
   },
   "build": {
     "appId": "com.ankye.dsh-launcher",
+    "afterSign": "tools/after-sign-peer-helper.mjs",
     "productName": "DSHKer Launcher",
     "icon": "resources/icon-512.png",
     "asar": true,

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { access, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
@@ -101,6 +102,65 @@ function artifactNamesLookVersioned(manifest) {
     if (artifact.kind === 'directory') return true
     return artifact.name.includes(manifest.version)
   })
+}
+
+/**
+ * Confirms the shipped helper still matches the digest the launcher verifies.
+ *
+ * Code signing rewrites the helper binary after its manifest is written, so a
+ * stale digest made the launcher refuse to start it: the app opened, the helper
+ * never ran, and P2P was silently dead in every packaged build. Nothing in the
+ * release gates noticed, which is why this is checked against the real package.
+ */
+async function peerHelperIntegrityHolds(releaseDir, manifest) {
+  const roots = await peerHelperRoots(releaseDir, manifest)
+  if (roots.length === 0) return false
+  for (const root of roots) {
+    let targets
+    try {
+      targets = await readdir(root, { withFileTypes: true })
+    } catch {
+      return false
+    }
+    const directories = targets.filter((entry) => entry.isDirectory())
+    if (directories.length === 0) return false
+    for (const entry of directories) {
+      const directory = path.join(root, entry.name)
+      let helperManifest
+      try {
+        helperManifest = JSON.parse(await readFile(path.join(directory, 'manifest.json'), 'utf8'))
+      } catch {
+        return false
+      }
+      if (helperManifest.target !== entry.name) return false
+      let binary
+      try {
+        binary = await readFile(path.join(directory, helperManifest.file))
+      } catch {
+        return false
+      }
+      if (createHash('sha256').update(binary).digest('hex') !== helperManifest.sha256) return false
+    }
+  }
+  return true
+}
+
+/** Locates the packaged p2p resource directory for each unpacked build present. */
+async function peerHelperRoots(releaseDir, manifest) {
+  const candidates = [
+    path.join(releaseDir, 'mac-arm64', `${manifest.productName}.app`, 'Contents', 'Resources'),
+    path.join(releaseDir, 'mac', `${manifest.productName}.app`, 'Contents', 'Resources'),
+    path.join(releaseDir, 'win-unpacked', 'resources'),
+    path.join(releaseDir, 'win-arm64-unpacked', 'resources'),
+    path.join(releaseDir, 'linux-unpacked', 'resources'),
+    path.join(releaseDir, 'linux-arm64-unpacked', 'resources')
+  ]
+  const roots = []
+  for (const candidate of candidates) {
+    const root = path.join(candidate, 'p2p')
+    if (await exists(root)) roots.push(root)
+  }
+  return roots
 }
 
 async function firstExisting(candidates) {
@@ -274,6 +334,7 @@ async function main() {
     rollback: Boolean(manifest.rollback),
     updateMetadata: Boolean(manifest.update?.channel && manifest.update?.minimumVersion),
     unpackedExecutable: Boolean(executable),
+    peerHelperIntegrity: await peerHelperIntegrityHolds(releaseDir, manifest),
     launchIdentityMatchesManifest: launchPayloadMatchesManifest(
       launchPayload,
       manifest,

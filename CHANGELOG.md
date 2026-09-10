@@ -38,6 +38,15 @@
   it is remote content, so control characters are stripped, its length is
   bounded, and it is never rendered as markup. A release without a body simply
   shows no notes instead of an empty heading.
+- P2P was silently dead in every packaged build, on every platform. The helper's
+  integrity manifest is written when the Go binary is built, but packaging then
+  code-signs every executable, which rewrites the binary and invalidated the
+  recorded digest. The launcher verifies that digest before starting the helper,
+  so it refused: the app opened normally, no P2P feature worked, and the device
+  stayed offline forever while reporting an older build. Nothing failed at build
+  time. The manifest is now resealed after signing, and the release gate verifies
+  the shipped helper against the digest the runtime reads, so this cannot ship
+  again unnoticed.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 
