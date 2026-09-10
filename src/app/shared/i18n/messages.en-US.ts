@@ -34,7 +34,7 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.enrollment.submit': 'Submit original enrollment request',
   'p2p.account.title': 'User and private networks',
   'p2p.account.manage': 'Manage user and networks',
-  'p2p.account.readUser': 'Read user again',
+  'p2p.account.readUser': 'Refresh account',
   'p2p.account.login': 'Log in',
   'p2p.account.logout': 'Log out',
   'p2p.account.username': 'Username',
@@ -56,10 +56,10 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.account.networkLimit': 'Each account can create at most 2 networks on this server.',
   'p2p.account.userConflict':
     'An account with this email already exists. Log in instead, or use a different email to register.',
-  'p2p.account.unknown': 'User state is unconfirmed. Read the server result.',
-  'p2p.account.user': 'User readback',
-  'p2p.account.readNetworks': 'Read networks',
-  'p2p.account.networksUnknown': 'Networks have not been read; this does not mean there are none.',
+  'p2p.account.unknown': 'Account state is not loaded yet. Refresh to check.',
+  'p2p.account.user': 'Signed in as',
+  'p2p.account.readNetworks': 'Refresh networks',
+  'p2p.account.networksUnknown': 'Networks are not loaded yet — this does not mean you have none.',
   'p2p.account.networksEmpty': 'This user has no networks. You can explicitly create one.',
   'p2p.account.newName': 'Network name',
   'p2p.account.rename': 'Save name',
@@ -97,7 +97,7 @@ export const enUS: Record<MessageKey, string> = {
     'Browse directories the other computer authorized and choose a project. Only explicitly authorized directories can be entered.',
   'p2p.remote.readRoots': 'Read authorized directories',
   'p2p.remote.rootsUnknown':
-    'Authorized directories have not been read. A failed read does not mean none were granted.',
+    'Authorized directories are not loaded yet — this does not mean none were granted.',
   'p2p.remote.rootsEmpty':
     'The other computer has not authorized any directory yet. Ask its user to add one.',
   'p2p.remote.selectRoot': 'Select an authorized directory',
@@ -106,7 +106,7 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.remote.rootPath': 'Path on the other computer',
   'p2p.remote.rootPathHint':
     'Shown for recognition only. This computer never joins or rewrites remote paths.',
-  'p2p.remote.entriesUnknown': 'Directory contents have not been read.',
+  'p2p.remote.entriesUnknown': 'Directory contents are not loaded yet.',
   'p2p.remote.entriesEmpty': 'This directory contains no subdirectories.',
   'p2p.remote.enter': 'Open',
   'p2p.remote.backToRoot': 'Back to the authorized directory root',
@@ -223,11 +223,11 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.management.title': 'P2P service management',
   'p2p.management.description':
     'Configure your pairing server. A reachable server does not mean remote DSH is connected.',
-  'p2p.management.readback': 'Read again',
+  'p2p.management.readback': 'Refresh',
   'p2p.management.pending': 'Operation in progress. Waiting for the actual result…',
   'p2p.management.cancelling': 'Cancellation requested. Waiting for the original operation…',
   'p2p.management.cancel': 'Request cancellation',
-  'p2p.management.confirmed': 'The operation result has been read back.',
+  'p2p.management.confirmed': 'Done.',
   'p2p.management.unconfirmed':
     'The result is unconfirmed; the operation may have completed. Read back before submitting again.',
   'p2p.management.failed':

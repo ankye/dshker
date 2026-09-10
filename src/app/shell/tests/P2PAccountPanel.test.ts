@@ -70,7 +70,7 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(networks).not.toHaveBeenCalled()
     expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-register-form"]').exists()).toBe(false)
-    await button(ui, '读取网络列表').trigger('click')
+    await button(ui, '刷新网络列表').trigger('click')
     await flushPromises()
     expect(ui.get('.p2p-network-list').text()).toContain(network.networkId)
     expect(ui.get('.p2p-network-list').text()).toContain(network.name)
@@ -95,7 +95,7 @@ describe('P2P account public controls (component diagnostics)', () => {
       networks,
       deleteNetwork
     })
-    await button(ui, '读取网络列表').trigger('click')
+    await button(ui, '刷新网络列表').trigger('click')
     await flushPromises()
     await button(ui, '删除网络').trigger('click')
     expect(deleteNetwork).not.toHaveBeenCalled()
@@ -109,11 +109,11 @@ describe('P2P account public controls (component diagnostics)', () => {
       expect.objectContaining({ serviceId: 'service-a', networkId: 'net-a' })
     )
     expect(ui.get('.p2p-delete-confirm button').attributes('disabled')).toBeDefined()
-    await button(ui, '重新读取用户').trigger('click')
+    await button(ui, '刷新账户').trigger('click')
     await flushPromises()
     expect(ui.get('.p2p-delete-confirm button').attributes('disabled')).toBeDefined()
     networks.mockResolvedValueOnce({ ok: true, data: [] })
-    await button(ui, '读取网络列表').trigger('click')
+    await button(ui, '刷新网络列表').trigger('click')
     await flushPromises()
     expect(ui.find('.p2p-delete-confirm').exists()).toBe(false)
     expect(document.activeElement).toBe(ui.get('h3').element)
@@ -137,7 +137,7 @@ describe('P2P account public controls (component diagnostics)', () => {
       renameNetwork,
       createNetwork
     })
-    await button(ui, '读取网络列表').trigger('click')
+    await button(ui, '刷新网络列表').trigger('click')
     await flushPromises()
     const rename = ui.get('.p2p-network-list form')
     expect((rename.get('input').element as HTMLInputElement).value).toBe('Office')
@@ -179,11 +179,13 @@ describe('P2P account public controls (component diagnostics)', () => {
         networks: async () => ({ ok: true, data: [network] }),
         updateNetworkLimit
       })
-      await button(ui, '读取网络列表').trigger('click')
+      await button(ui, '刷新网络列表').trigger('click')
       await flushPromises()
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
-      const select = ui.get('[data-testid="p2p-limit-select"]').element as HTMLSelectElement
-      expect(Array.from(select.options).map((option) => option.value)).toEqual(['20', '30'])
+      // The themed listbox renders its rows on open, so the trigger is opened first.
+      await ui.get('[data-testid="p2p-limit"]').trigger('click')
+      await flushPromises()
+      expect(ui.findAll('[role="option"]').map((option) => option.text())).toEqual(['20', '30'])
       await ui.get('[data-testid="p2p-limit-save"]').trigger('click')
       await flushPromises()
       expect(updateNetworkLimit).toHaveBeenCalledWith(
@@ -202,10 +204,10 @@ describe('P2P account public controls (component diagnostics)', () => {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: true, data: [atMax] })
       })
-      await button(ui, '读取网络列表').trigger('click')
+      await button(ui, '刷新网络列表').trigger('click')
       await flushPromises()
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('30')
-      expect(ui.find('[data-testid="p2p-limit-select"]').exists()).toBe(false)
+      expect(ui.find('[data-testid="p2p-limit"]').exists()).toBe(false)
       expect(ui.text()).toContain('已达最大上限 30')
     })
 
@@ -215,10 +217,10 @@ describe('P2P account public controls (component diagnostics)', () => {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: true, data: [foreign] })
       })
-      await button(ui, '读取网络列表').trigger('click')
+      await button(ui, '刷新网络列表').trigger('click')
       await flushPromises()
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
-      expect(ui.find('[data-testid="p2p-limit-select"]').exists()).toBe(false)
+      expect(ui.find('[data-testid="p2p-limit"]').exists()).toBe(false)
     })
   })
 
@@ -244,7 +246,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         networks: async () => ({ ok: false, code: 'p2p.helper_unavailable', message: 'down' })
       })
       expect(ui.find('[data-testid="p2p-account-read-user"]').exists()).toBe(true)
-      await button(ui, '读取网络列表').trigger('click')
+      await button(ui, '刷新网络列表').trigger('click')
       await flushPromises()
       const error = ui.get('[data-testid="p2p-account-error"]')
       expect(error.text()).toContain('p2p.helper_unavailable')
@@ -257,7 +259,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: false, code: 'p2p.invalid_request', message: 'refused' })
       })
-      await button(ui, '读取网络列表').trigger('click')
+      await button(ui, '刷新网络列表').trigger('click')
       await flushPromises()
       const error = ui.get('[data-testid="p2p-account-error"]')
       expect(error.text()).toContain(zhCN['p2p.account.invalidInput'])
@@ -271,7 +273,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: false, code: 'p2p.service_busy', message: 'busy' })
       })
-      await button(ui, '读取网络列表').trigger('click')
+      await button(ui, '刷新网络列表').trigger('click')
       await flushPromises()
       // Transient refusals invite a retry rather than a configuration audit.
       expect(ui.get('[data-testid="p2p-account-error"]').text()).toContain(
@@ -466,7 +468,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         networks: async () => ({ ok: true, data: [network] }),
         createNetwork
       })
-      await button(ui, '读取网络列表').trigger('click')
+      await button(ui, '刷新网络列表').trigger('click')
       await flushPromises()
       const create = ui.findAll('form').at(-1)!
       await create.get('input').setValue('Third')

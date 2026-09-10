@@ -4,6 +4,7 @@ import {
   p2pAccounts as accounts,
   p2pManagement as management
 } from '@/app/domains/remote-connections'
+import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
 import P2PDeviceDirectory from './P2PDeviceDirectory.vue'
@@ -213,6 +214,20 @@ function limitOptions(network: P2PNetworkView): number[] {
 function limitTarget(network: P2PNetworkView): number {
   return limitDrafts[network.networkId] ?? limitOptions(network)[0] ?? network.maxDevices
 }
+/**
+ * Adapts the numeric limits to the listbox contract, which commits strings.
+ *
+ * The native select this replaced could not carry the application palette in its
+ * popup, which the workspace design gate forbids.
+ */
+function limitListboxOptions(network: P2PNetworkView): ThemedListboxOption<string>[] {
+  return limitOptions(network).map((limit) => ({ value: String(limit), label: String(limit) }))
+}
+function commitLimitDraft(network: P2PNetworkView, value: string): void {
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed)) return
+  limitDrafts[network.networkId] = parsed
+}
 async function saveLimit(network: P2PNetworkView): Promise<void> {
   const target = limitDrafts[network.networkId] ?? limitOptions(network)[0]
   if (!target || pending.value || uncertain.value) return
@@ -400,13 +415,14 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
     <!-- Signed in is its own state, distinct from unknown: an unknown state has
          no identity to display and must not claim one. -->
     <template v-else-if="state.user">
-      <p>
-        {{ t('p2p.account.user') }}: {{ state.user.username }} ·
-        <code>{{ state.user.userId }}</code>
+      <p class="p2p-account-identity">
+        <span class="p2p-account-identity-label">{{ t('p2p.account.user') }}</span>
+        <span class="p2p-account-identity-name">{{ state.user.username }}</span>
+        <code class="p2p-account-identity-id">{{ state.user.userId }}</code>
       </p>
       <button
         type="button"
-        class="prototype-button"
+        class="prototype-button p2p-account-refresh"
         :disabled="pending"
         @click="accounts.networks(serviceId)"
       >
@@ -481,20 +497,14 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
               >
                 <label>
                   <span>{{ t('p2p.account.raiseTo') }}</span>
-                  <select
-                    :value="limitTarget(network)"
-                    data-testid="p2p-limit-select"
+                  <ThemedListbox
+                    :model-value="String(limitTarget(network))"
+                    :options="limitListboxOptions(network)"
+                    :label="t('p2p.account.raiseTo')"
                     :disabled="pending || uncertain"
-                    @change="
-                      limitDrafts[network.networkId] = Number(
-                        ($event.target as HTMLSelectElement).value
-                      )
-                    "
-                  >
-                    <option v-for="option in limitOptions(network)" :key="option" :value="option">
-                      {{ option }}
-                    </option>
-                  </select>
+                    test-id="p2p-limit"
+                    @update:model-value="commitLimitDraft(network, $event)"
+                  />
                 </label>
                 <button
                   class="prototype-button"
@@ -566,6 +576,33 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
  * siblings separated only by a rule. The panel previously had no surface of its
  * own: heading, actions, status text and a bare button all sat at one level, so
  * nothing grouped the account from the networks it owns. */
+/* Secondary refresh actions previously stretched to the full card width because
+ * the grid stretches its items, which made a minor reload read as the card's
+ * primary action. */
+.p2p-account-refresh {
+  justify-self: start;
+}
+/* The account line packed a label, an email and a raw user ID into one sentence
+ * at a single weight, so the identifier competed with the identity. */
+.p2p-account-identity {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+.p2p-account-identity-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-account-identity-name {
+  color: var(--color-text);
+  font-size: var(--type-body);
+}
+.p2p-account-identity-id {
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
 .p2p-account {
   display: grid;
   align-content: start;

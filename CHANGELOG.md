@@ -47,6 +47,15 @@
   time. The manifest is now resealed after signing, and the release gate verifies
   the shipped helper against the digest the runtime reads, so this cannot ship
   again unnoticed.
+- Remote connection surfaces now read as product rather than tooling. The device
+  limit used a native select, which the workspace design gate forbids because its
+  popup cannot carry the dark operational palette; it now uses the existing
+  ThemedListbox. Copy that exposed implementation vocabulary ("readback", "read
+  user again") is stated from the user's point of view while keeping the
+  distinction between an unconfirmed result and a confirmed negative. Account and
+  enrollment identity now rank a name above its raw identifier instead of
+  rendering every fact at one weight, and secondary refresh actions no longer
+  stretch to full card width as though they were the primary action.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

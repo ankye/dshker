@@ -154,7 +154,7 @@ async function submit() {
       {{ t('p2p.management.cancelFailed') }} <code>{{ operation.cancelError }}</code>
     </p>
     <template v-if="state.registration">
-      <dl>
+      <dl class="p2p-enrollment-facts">
         <div>
           <dt>{{ t('p2p.enrollment.name') }}</dt>
           <dd>{{ state.registration.name }}</dd>
@@ -236,6 +236,32 @@ async function submit() {
   color: var(--color-text);
   font-size: var(--type-section);
   font-weight: var(--font-weight-semibold);
+}
+/* Identity facts previously rendered as four rows of identical weight, so a
+ * public key and a device ID competed with the device name for attention. The
+ * label carries the caption role and the value stays monospace, matching the
+ * launch card's version facts. */
+.p2p-enrollment-facts {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+.p2p-enrollment-facts > div {
+  display: grid;
+  gap: var(--space-1);
+}
+.p2p-enrollment-facts dt {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-enrollment-facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-size: var(--type-row);
+}
+.p2p-enrollment-facts code {
+  font-family: var(--font-mono);
 }
 .p2p-enrollment-actions {
   display: flex;
