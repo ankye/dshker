@@ -43,9 +43,12 @@ export class P2PAccountsDomain {
   }
 
   async currentUser(serviceId: string): Promise<void> {
-    const result = await this.management.run('currentUser', { serviceId })
+    const result = await this.management.runRead('currentUser', { serviceId })
     const state = this.state(serviceId)
-    if (result.ok) return this.#acceptUser(state, result.data)
+    if (result.ok) {
+      this.#acceptUser(state, result.data)
+      return this.#readNetworksForSession(serviceId)
+    }
     // Any refusal that means "no session" clears authority, not just the three
     // codes this used to name. A hard-coded list left every other refusal in a
     // half state: the user was neither accepted nor cleared, so the panel showed
@@ -55,7 +58,9 @@ export class P2PAccountsDomain {
 
   async login(serviceId: string, username: string, password: string): Promise<void> {
     const result = await this.management.run('login', { serviceId, username, password })
-    if (result.ok) this.#acceptUser(this.state(serviceId), result.data)
+    if (!result.ok) return
+    this.#acceptUser(this.state(serviceId), result.data)
+    await this.#readNetworksForSession(serviceId)
   }
 
   /**
@@ -67,7 +72,9 @@ export class P2PAccountsDomain {
    */
   async register(serviceId: string, email: string, password: string): Promise<void> {
     const result = await this.management.run('register', { serviceId, email, password })
-    if (result.ok) this.#acceptUser(this.state(serviceId), result.data)
+    if (!result.ok) return
+    this.#acceptUser(this.state(serviceId), result.data)
+    await this.#readNetworksForSession(serviceId)
   }
 
   async logout(serviceId: string): Promise<void> {
@@ -83,7 +90,7 @@ export class P2PAccountsDomain {
   }
 
   async networks(serviceId: string): Promise<void> {
-    const result = await this.management.run('networks', { serviceId })
+    const result = await this.management.runRead('networks', { serviceId })
     if (!result.ok) return
     const state = this.state(serviceId)
     state.networks = result.data
@@ -187,6 +194,23 @@ export class P2PAccountsDomain {
     return true
   }
 
+  /**
+   * Loads the network list for a session the server just confirmed.
+   *
+   * A read observes state rather than inferring it, so it carries none of the
+   * hazard the refusal contract guards against: the app still never retries,
+   * resubmits, or claims a status it did not see. Every sibling panel already
+   * reads on entry, and requiring a click here left the signed-in card showing
+   * "networks are not loaded yet" until the user asked for what the panel exists
+   * to display.
+   *
+   * A failure stays unreported here because the domain leaves the list undefined,
+   * which the panel already presents as unread rather than empty.
+   */
+  async #readNetworksForSession(serviceId: string): Promise<void> {
+    if (this.state(serviceId).networks !== undefined) return
+    await this.networks(serviceId)
+  }
   #acceptUser(state: P2PAccountState, user: P2PUserView): void {
     if (state.user?.userId !== user.userId) {
       state.networks = undefined

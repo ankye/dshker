@@ -64,8 +64,14 @@ const canSubmit = computed(
 
 // The local credential is read on open rather than behind a button: a manual
 // re-read produced nothing the panel had not already asked for.
+//
+// The read is no longer skipped while the service is busy. This panel mounts as
+// soon as the session is confirmed, which is exactly when the account card is
+// still reading, so the guard dropped the only automatic read this panel makes
+// and left it reporting an unknown enrollment state. Entry reads are queued per
+// scope, so ordering is handled without skipping the read.
 onMounted(() => {
-  if (!busy.value) void enrollment.read(props.serviceId)
+  void enrollment.read(props.serviceId)
 })
 
 async function submit() {

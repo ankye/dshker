@@ -41,6 +41,17 @@ const reads = new Set<Operation>([
 
 /** Domain owner survives route changes. No password, token or request body enters state. */
 export class P2PManagementDomain {
+  /**
+   * Serializes entry reads that share a busy scope.
+   *
+   * The signed-in card mounts several panels at once and each reads on entry.
+   * Those reads collide in one scope, and `run` refuses a collision with
+   * p2p.service_busy, which the read paths treat as "nothing to record" — so a
+   * panel silently kept claiming it held no data. Queueing applies to reads
+   * only: the refusal still protects writes from duplicate submission, which is
+   * what it exists for.
+   */
+  readonly #readQueues = new Map<string, Promise<unknown>>()
   readonly #operations = reactive<Record<string, P2POperationState>>({})
   readonly operations = readonly(this.#operations)
   readonly catalog = ref<P2PCatalogView | null>()
@@ -60,6 +71,37 @@ export class P2PManagementDomain {
   busy(scope: string): boolean {
     const state = this.#operations[scope]
     return state?.phase === 'pending' || state?.phase === 'cancelling'
+  }
+
+  /**
+   * Runs a read after any read already queued for the same scope has settled.
+   *
+   * Callers keep using `run` for writes; only entry reads need ordering, and
+   * they must not lose their result to a sibling panel's read.
+   */
+  async runRead<K extends Operation>(
+    method: K,
+    input: P2PManagementInputs[K]
+  ): Promise<P2PDomainResult<K>> {
+    const scope = this.#scopeOf(method, input)
+    const previous = this.#readQueues.get(scope)
+    const attempt = (async () => {
+      if (previous) await previous.catch(() => undefined)
+      return this.run(method, input)
+    })()
+    this.#readQueues.set(scope, attempt)
+    try {
+      return await attempt
+    } finally {
+      if (this.#readQueues.get(scope) === attempt) this.#readQueues.delete(scope)
+    }
+  }
+
+  /** Mirrors the scope `run` derives, so a queued read waits on the right one. */
+  #scopeOf<K extends Operation>(method: K, input: P2PManagementInputs[K]): string {
+    const fields = { ...input }
+    if (method === 'localDevice' || method === 'connections') return method
+    return 'serviceId' in fields ? String(fields.serviceId) : 'catalog'
   }
 
   async run<K extends Operation>(

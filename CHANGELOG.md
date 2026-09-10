@@ -56,6 +56,13 @@
   enrollment identity now rank a name above its raw identifier instead of
   rendering every fact at one weight, and secondary refresh actions no longer
   stretch to full card width as though they were the primary action.
+- The signed-in remote-connection card loads its own data on entry. The network
+  list required a click, unlike every sibling panel, so the card opened claiming
+  no networks were loaded. Entry reads for one service are now queued instead of
+  refusing each other, which also fixes the enrollment panel: it skipped its only
+  automatic read whenever the account card was still reading, and reported an
+  unknown enrollment state as a result. Manual refresh remains for resolving a
+  write whose result was never confirmed.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

@@ -43,7 +43,7 @@ export class P2PPairingDomain {
 
   /** Reading is always allowed; it is how an unconfirmed write gets resolved. */
   async read(serviceId: string): Promise<void> {
-    const result = await this.management.run('pairs', { serviceId })
+    const result = await this.management.runRead('pairs', { serviceId })
     if (result.ok) {
       const state = this.state(serviceId)
       state.pairs = result.data

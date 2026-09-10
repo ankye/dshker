@@ -31,7 +31,7 @@ export class P2PEnrollmentDomain {
   }
 
   async read(serviceId: string): Promise<void> {
-    const result = await this.management.run('registration', { serviceId })
+    const result = await this.management.runRead('registration', { serviceId })
     if (result.ok) {
       const state = this.state(serviceId)
       state.registration = result.data

@@ -73,7 +73,9 @@ describe('P2P user and network domain', () => {
       })
     )
     expect(accounts.state('service-a').user).toEqual(user)
-    expect(accounts.state('service-a').networks).toBeUndefined()
+    // A confirmed registration is a session, so it loads its networks exactly
+    // like a sign-in rather than leaving the new account looking empty.
+    expect(accounts.state('service-a').networks).toEqual([network])
   })
 
   it('keeps a create refused by the network limit retryable instead of uncertain', async () => {
@@ -91,7 +93,9 @@ describe('P2P user and network domain', () => {
       expect.objectContaining({ serviceId: 'service-a', name: 'Third' })
     )
     expect(state.networkWriteUnconfirmed).toBe(false)
-    expect(state.networks).toBeUndefined()
+    // The refused create leaves the list as the session loaded it: a rejection
+    // is a known outcome, so it neither invalidates nor re-reads the record.
+    expect(state.networks).toEqual([network])
   })
 
   it('clears old user resources when authoritative user identity changes', async () => {
@@ -105,12 +109,16 @@ describe('P2P user and network domain', () => {
       data: { userId: 'user-b', username: 'bob' }
     })
     await accounts.currentUser('service-a')
+    // The new identity's own list is read immediately, so the assertion is that
+    // nothing from the previous user survives: no selection and no draft. The
+    // list itself is repopulated for user-b rather than left unread.
     expect(accounts.state('service-a')).toMatchObject({
       user: { userId: 'user-b' },
-      networks: undefined,
       selectedNetworkId: undefined,
       renameDrafts: {}
     })
+    // Once for the first session, once for the explicit call, once for user-b.
+    expect(api.networks).toHaveBeenCalledTimes(3)
   })
 
   it('retains last readback after a failed list and clears a deleted selection only after successful readback', async () => {
