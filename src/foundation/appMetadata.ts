@@ -13,7 +13,7 @@ import {
 export async function getBootstrapInfo(
   desktopApi: DesktopApi | undefined = window.dshLauncher
 ): Promise<ApiResult<BootstrapInfo, BootstrapErrorCode>> {
-  if (!desktopApi) {
+  if (!desktopApi || !desktopApi.bootstrap) {
     return apiFail(
       'bootstrap.bridge_unavailable',
       'The DSHKer Launcher desktop bridge is unavailable.'

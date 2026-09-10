@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -59,7 +59,11 @@ describe('peer helper packaging', () => {
 
   it('names every built helper directory the way the filters expect', () => {
     // A directory the filters cannot express would be dropped from the package.
-    const built = readdirSync(join(root, 'build', 'p2p'), { withFileTypes: true })
+    // CI verify runs from a clean checkout where no helper has been built yet;
+    // the per-platform helper appears only after its dist job builds it.
+    const helperRoot = join(root, 'build', 'p2p')
+    if (!existsSync(helperRoot)) return
+    const built = readdirSync(helperRoot, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
     expect(built.length).toBeGreaterThan(0)
