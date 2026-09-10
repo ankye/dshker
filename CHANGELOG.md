@@ -63,12 +63,6 @@
   automatic read whenever the account card was still reading, and reported an
   unknown enrollment state as a result. Manual refresh remains for resolving a
   write whose result was never confirmed.
-- A computer with no paired computer no longer reports itself offline on the
-  Connect tab. Online there means a live ready connection, which requires a pair,
-  so a single enrolled machine was labelled offline for a stage it could never
-  reach and had no way to act on. It now states that no pair exists. The strict
-  definition of online is unchanged: a paired computer without a ready connection
-  still reads offline.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

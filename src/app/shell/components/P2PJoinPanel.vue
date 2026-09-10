@@ -108,37 +108,16 @@ const onlineEvidence = computed(() => {
     false
   )
 })
-/**
- * Whether this service has a pair that a connection could ever reach.
- *
- * Online here means a live ready connection, which requires a paired computer.
- * With none, that stage is unreachable, so reporting "offline" answered a
- * question the user never asked: an enrolled, reachable computer that simply has
- * nothing to connect to was labelled offline with no way to act on it.
- */
-const hasActivePair = computed(() => {
-  const id = serviceId.value
-  if (!id) return false
-  return (
-    catalog.value?.computers.some(
-      (computer) => computer.serviceId === id && computer.pairState === 'active'
-    ) ?? false
-  )
-})
-type NetworkStatus = 'online' | 'offline' | 'banned' | 'unpaired'
+type NetworkStatus = 'online' | 'offline' | 'banned'
 const STATUS_KEYS: Readonly<Record<NetworkStatus, MessageKey>> = {
   online: 'p2p.myNetwork.online',
   offline: 'p2p.myNetwork.offline',
-  banned: 'p2p.myNetwork.banned',
-  unpaired: 'p2p.myNetwork.unpaired'
+  banned: 'p2p.myNetwork.banned'
 }
 const networkStatus = computed<NetworkStatus>(() => {
   if (registration.value?.kind !== 'registered') return 'offline'
   if (banned.value) return 'banned'
-  if (onlineEvidence.value) return 'online'
-  // Keep the strict definition of online, but do not present an unreachable
-  // stage as a connection state the user could correct.
-  return hasActivePair.value ? 'offline' : 'unpaired'
+  return onlineEvidence.value ? 'online' : 'offline'
 })
 
 const JOIN_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -489,11 +468,6 @@ async function leave(): Promise<void> {
 }
 .p2p-network-status[data-state='banned'] {
   color: var(--color-danger);
-}
-/* Having no pair is a neutral fact about setup, not a fault, so it reads muted
- * like offline rather than taking the danger role. */
-.p2p-network-status[data-state='unpaired'] {
-  color: var(--color-text-muted);
 }
 .remote-error code {
   overflow-wrap: anywhere;
