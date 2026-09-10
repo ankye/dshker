@@ -760,6 +760,13 @@ export class PeerManagement {
   }
 
   #clearSession(): void {
+    // Losing the runtime ends every coordinator session it carried. Without this
+    // the recorded state stayed 'online' after the helper became unavailable,
+    // which is worse than reporting nothing: the surface would assert reach the
+    // computer no longer had.
+    for (const [serviceId, session] of this.#sessions)
+      if (session.state === 'online')
+        this.#sessions.set(serviceId, { state: 'offline', code: 'p2p.helper_unavailable' })
     this.#restored.clear()
     this.#session?.projects.close()
     this.#session?.connections.close()

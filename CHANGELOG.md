@@ -71,6 +71,11 @@
   offline while the device directory listed the same machine as online. A down
   session now states the refusal that caused it instead of an unexplained
   "offline", and an unread session reads as unknown rather than as offline.
+- The network status in the status bar is filled at shell start instead of when
+  Remote connections is first opened, so the first screen no longer shows an
+  unknown status that only resolved after visiting that tab. A session is also
+  ended when the runtime is lost, rather than continuing to claim reach the
+  computer no longer has.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

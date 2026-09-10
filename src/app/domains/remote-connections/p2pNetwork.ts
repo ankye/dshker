@@ -63,6 +63,25 @@ export class P2PNetworkDomain {
   refusal(serviceId: string): string {
     return this.find(serviceId)?.code ?? ''
   }
+
+  /**
+   * Establishes the shared network facts once, independent of any route.
+   *
+   * The status bar reports network reach from every route, so the read that
+   * fills it cannot depend on the user opening Remote connections first: the
+   * shell otherwise showed "unknown" until that tab was visited, which is a
+   * property of where the read lived rather than of the network. Provisioning is
+   * included because the session is keyed by the selected service, and nothing
+   * selects the built-in coordinator until it is provisioned.
+   *
+   * Idempotent: provisioning already returns early once done, and the read is
+   * queued per scope, so a panel that also reads on entry costs one extra read
+   * rather than colliding.
+   */
+  async start(): Promise<void> {
+    await this.management.ensureBuiltinService()
+    await this.read()
+  }
 }
 
 export const p2pNetwork = new P2PNetworkDomain(p2pManagement)

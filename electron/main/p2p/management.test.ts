@@ -229,6 +229,19 @@ describe('bringing enrolled services online at startup', () => {
     expect(await f.owner.serviceSessions()).toEqual([{ serviceId, state: 'online', code: '' }])
   })
 
+  it('ends a recorded session when the runtime is lost', async () => {
+    // A session that outlived its runtime would assert reach the computer no
+    // longer has, which is worse than reporting nothing.
+    const f = fixture()
+    enrolled()
+    await f.owner.goOnline()
+    expect(await f.owner.serviceSessions()).toEqual([{ serviceId, state: 'online', code: '' }])
+    f.unavailable()
+    expect(await f.owner.serviceSessions()).toEqual([
+      { serviceId, state: 'offline', code: 'p2p.helper_unavailable' }
+    ])
+  })
+
   it('reports an unattempted service as offline with no invented reason', async () => {
     // Never having tried is not a refusal, so no code is supplied for one.
     const f = fixture()

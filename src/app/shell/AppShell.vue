@@ -34,6 +34,9 @@ startLocale()
 const consoleDrawer = useConsoleDrawer()
 onMounted(() => {
   consoleDrawer.markConsoleSeen()
+  // Network reach is shown in the status bar on every route, so it is read at
+  // shell start rather than when a particular tab happens to mount.
+  void p2pNetwork.start()
 })
 
 const shell = useLauncherShell()
