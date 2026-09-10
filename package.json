@@ -133,7 +133,8 @@
             "darwin-${arch}/**"
           ]
         }
-      ]
+      ],
+      "icon": "resources/icon.icns"
     },
     "win": {
       "target": [
