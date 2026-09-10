@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.1.26 — 2026-09-10
+
+- A running launcher now comes online by itself. The coordinator heartbeat only
+  runs while a device session holds the signal connection, and nothing
+  established that session until the user happened to open the pairing screen.
+  Until then a launcher that was open never reported its build, showed as
+  offline to every other machine, could not be found for pairing, and could not
+  be driven from the web console. Verified against the live coordinator: the
+  device's last-seen moved from never to a live timestamp, and it now reports
+  its version, platform and architecture.
+- Devices in the same network are paired automatically, with no invite code and
+  no approval step. Joining a network is the authorization, so requiring two of
+  your own machines to exchange a code made membership grant nothing. The trust
+  boundary is unchanged: adoption still requires an active binding in a shared
+  network owned by the same user with neither device revoked, which is exactly
+  what the invite path verified. Peers are derived from the device's own
+  bindings, so the request cannot be aimed at another account.
+- Buttons across the app had no surface of their own and fell back to the
+  browser's default grey, a colour the theme does not contain, so primary and
+  secondary actions were indistinguishable. Destructive actions were styled in
+  seven places but never defined at all, meaning deleting a network looked
+  exactly like reading one; they now carry a danger outline. Keyboard focus is
+  visible on every variant.
+- The Network & account screen is grouped into cards instead of one flat column
+  of headings, status lines and bare buttons separated only by rules.
+- Windows packages contained no peer helper at all, so every P2P feature was
+  unavailable there with no build error to show it. The packaging filter used
+  electron-builder's `${platform}`, which expands to `win`, while the launcher
+  resolves the helper by `process.platform`, which is `win32`. macOS and Linux
+  happened to agree with the variable, so only Windows was affected. Each
+  platform now names its own directory literally, and a package can only contain
+  its own helper.
+- This candidate remains an interop-testing prerelease: not marked latest,
+  not in the stable update feed.
+
 ## 0.1.25 — 2026-09-08
 
 - Deleting a configured P2P coordinator server is now tolerant: it is a

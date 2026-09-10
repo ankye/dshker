@@ -1,6 +1,6 @@
 {
   "name": "@ankye/dshker-launcher",
-  "version": "0.1.25",
+  "version": "0.1.26",
   "description": "Managed desktop shell for DeepSeek Harness.",
   "author": "ankye <shengxiehua@gmail.com>",
   "homepage": "https://github.com/ankye/dshker",
@@ -117,24 +117,35 @@
       {
         "from": "resources/dsh-launcher-verbose-logging.patch.yml",
         "to": "dsh-launcher-verbose-logging.patch.yml"
-      },
-      {
-        "from": "build/p2p",
-        "to": "p2p",
-        "filter": [
-          "${platform}-${arch}/**"
-        ]
       }
     ],
     "mac": {
       "target": [
         "dmg"
       ],
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "extraResources": [
+        {
+          "from": "build/p2p",
+          "to": "p2p",
+          "filter": [
+            "darwin-${arch}/**"
+          ]
+        }
+      ]
     },
     "win": {
       "target": [
         "nsis"
+      ],
+      "extraResources": [
+        {
+          "from": "build/p2p",
+          "to": "p2p",
+          "filter": [
+            "win32-${arch}/**"
+          ]
+        }
       ]
     },
     "linux": {
@@ -144,7 +155,16 @@
       ],
       "category": "Network",
       "executableName": "dshker-launcher",
-      "maintainer": "ankye <shengxiehua@gmail.com>"
+      "maintainer": "ankye <shengxiehua@gmail.com>",
+      "extraResources": [
+        {
+          "from": "build/p2p",
+          "to": "p2p",
+          "filter": [
+            "linux-${arch}/**"
+          ]
+        }
+      ]
     },
     "nsis": {
       "oneClick": false,
