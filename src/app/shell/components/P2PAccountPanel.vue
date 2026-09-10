@@ -18,6 +18,7 @@ import { p2pRefusalKind } from '@/shared/p2p-refusal'
 const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
 const state = accounts.state(props.serviceId)
+const expandedNetworks = reactive<Record<string, boolean>>({})
 
 const selectedNetwork = computed(() =>
   state.networks?.find((network) => network.networkId === state.selectedNetworkId)
@@ -146,6 +147,7 @@ watch(
     registerPassword.value = ''
     registerConfirm.value = ''
     mode.value = 'login'
+    for (const id of Object.keys(expandedNetworks)) delete expandedNetworks[id]
   }
 )
 watch(
@@ -279,7 +281,22 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
         {{ t('p2p.management.cancel') }}
       </button>
     </div>
-    <p role="status" aria-live="polite">
+    <p
+      v-if="
+        pending ||
+        (operation?.phase === 'succeeded' &&
+          [
+            'login',
+            'register',
+            'createNetwork',
+            'renameNetwork',
+            'deleteNetwork',
+            'updateNetworkLimit'
+          ].includes(operation.method))
+      "
+      role="status"
+      aria-live="polite"
+    >
       <template v-if="pending">{{
         operation?.phase === 'cancelling'
           ? t('p2p.management.cancelling')
@@ -415,112 +432,168 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
     <!-- Signed in is its own state, distinct from unknown: an unknown state has
          no identity to display and must not claim one. -->
     <template v-else-if="state.user">
-      <p class="p2p-account-identity">
+      <div class="p2p-account-identity">
         <span class="p2p-account-identity-label">{{ t('p2p.account.user') }}</span>
         <span class="p2p-account-identity-name">{{ state.user.username }}</span>
-        <code class="p2p-account-identity-id">{{ state.user.userId }}</code>
-      </p>
-      <button
-        type="button"
-        class="prototype-button p2p-account-refresh"
-        :disabled="pending"
-        @click="accounts.networks(serviceId)"
-      >
-        {{ t('p2p.account.readNetworks') }}
-      </button>
+        <details class="p2p-technical-details">
+          <summary>{{ t('p2p.account.accountDetails') }}</summary>
+          <p>{{ t('p2p.account.accountIdHint') }}</p>
+          <code class="p2p-account-identity-id">{{ state.user.userId }}</code>
+        </details>
+      </div>
+      <div class="p2p-networks-heading">
+        <div>
+          <h4>{{ t('p2p.account.networksTitle') }}</h4>
+          <p>{{ t('p2p.account.networksHint') }}</p>
+        </div>
+        <button
+          type="button"
+          class="prototype-button p2p-account-refresh"
+          :disabled="pending"
+          @click="accounts.networks(serviceId)"
+        >
+          {{ t('p2p.account.readNetworks') }}
+        </button>
+      </div>
       <p v-if="state.networks === undefined">{{ t('p2p.account.networksUnknown') }}</p>
       <template v-else>
         <p v-if="state.networks.length === 0">{{ t('p2p.account.networksEmpty') }}</p>
-        <ul class="p2p-network-list">
-          <li v-for="network in state.networks" :key="network.networkId">
-            <label
-              ><input
-                type="radio"
-                :name="`network-${serviceId}`"
-                :checked="state.selectedNetworkId === network.networkId"
-                :disabled="pending || uncertain"
-                @change="accounts.select(serviceId, network.networkId)"
-              />
-              {{ network.name }}</label
-            >
-            <p>
-              <code>{{ network.networkId }}</code>
-            </p>
-            <form @submit.prevent="accounts.renameNetwork(serviceId, network.networkId)">
-              <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
-                <label
-                  ><span>{{ t('p2p.account.newName') }}</span
-                  ><input
-                    :value="
-                      state.renameDrafts[network.networkId] === undefined
-                        ? network.name
-                        : state.renameDrafts[network.networkId]
-                    "
-                    required
-                    @input="
-                      state.renameDrafts[network.networkId] = (
-                        $event.target as HTMLInputElement
-                      ).value
-                    "
-                /></label>
-                <button
-                  type="submit"
-                  class="prototype-button"
-                  :disabled="state.renameDrafts[network.networkId] === undefined"
-                >
-                  {{ t('p2p.account.rename') }}
-                </button>
-                <button
-                  type="button"
-                  class="prototype-button prototype-button--danger"
-                  @click="askDelete(network, $event)"
-                >
-                  {{ t('p2p.account.delete') }}
-                </button>
-              </fieldset>
-            </form>
-            <div class="p2p-network-capacity" :data-owned="network.userId === state.user?.userId">
-              <p data-testid="p2p-network-limit">
-                {{ t('p2p.account.capacity') }}: <code>{{ network.maxDevices }}</code>
-              </p>
-              <p
-                v-if="network.userId === state.user?.userId && network.maxDevices >= 30"
-                class="remote-form-hint"
-              >
-                {{ t('p2p.account.capacityMaxed') }}
-              </p>
-              <div
-                v-else-if="
-                  network.userId === state.user?.userId && limitOptions(network).length > 0
-                "
-                class="p2p-limit-control"
-              >
-                <label>
-                  <span>{{ t('p2p.account.raiseTo') }}</span>
-                  <ThemedListbox
-                    :model-value="String(limitTarget(network))"
-                    :options="limitListboxOptions(network)"
-                    :label="t('p2p.account.raiseTo')"
-                    :disabled="pending || uncertain"
-                    test-id="p2p-limit"
-                    @update:model-value="commitLimitDraft(network, $event)"
-                  />
-                </label>
-                <button
-                  class="prototype-button"
-                  type="button"
-                  data-testid="p2p-limit-save"
+        <div v-if="state.networks.length" class="p2p-network-columns" aria-hidden="true">
+          <span>{{ t('p2p.account.newName') }}</span
+          ><span>{{ t('p2p.account.capacityShort') }}</span
+          ><span>{{ t('p2p.account.selection') }}</span
+          ><span>{{ t('p2p.account.manageNetwork') }}</span>
+        </div>
+        <ul class="p2p-network-list" :aria-label="t('p2p.account.networksTitle')">
+          <li
+            v-for="network in state.networks"
+            :key="network.networkId"
+            :class="{ 'is-selected': state.selectedNetworkId === network.networkId }"
+          >
+            <div class="p2p-network-row">
+              <label
+                ><input
+                  type="radio"
+                  :name="`network-${serviceId}`"
+                  :checked="state.selectedNetworkId === network.networkId"
                   :disabled="pending || uncertain"
-                  @click="saveLimit(network)"
+                  @change="accounts.select(serviceId, network.networkId)"
+                />
+                {{ network.name }}</label
+              >
+              <span class="p2p-network-row-limit"
+                >{{ network.maxDevices }} {{ t('p2p.account.devicesUnit') }}</span
+              >
+              <span class="p2p-network-selection">{{
+                state.selectedNetworkId === network.networkId
+                  ? t('p2p.account.currentNetwork')
+                  : t('p2p.account.notSelected')
+              }}</span>
+            </div>
+            <div class="p2p-network-editor">
+              <button
+                type="button"
+                class="p2p-network-toggle"
+                :aria-expanded="expandedNetworks[network.networkId] === true"
+                :aria-controls="`network-editor-${network.networkId}`"
+                @click="expandedNetworks[network.networkId] = !expandedNetworks[network.networkId]"
+              >
+                {{ t('p2p.account.manageNetwork') }}
+              </button>
+              <div
+                v-show="expandedNetworks[network.networkId]"
+                :id="`network-editor-${network.networkId}`"
+                class="p2p-network-editor-body"
+              >
+                <form @submit.prevent="accounts.renameNetwork(serviceId, network.networkId)">
+                  <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
+                    <label
+                      ><span>{{ t('p2p.account.newName') }}</span
+                      ><input
+                        :value="
+                          state.renameDrafts[network.networkId] === undefined
+                            ? network.name
+                            : state.renameDrafts[network.networkId]
+                        "
+                        required
+                        @input="
+                          state.renameDrafts[network.networkId] = (
+                            $event.target as HTMLInputElement
+                          ).value
+                        "
+                    /></label>
+                    <button
+                      type="submit"
+                      class="prototype-button"
+                      :disabled="state.renameDrafts[network.networkId] === undefined"
+                    >
+                      {{ t('p2p.account.rename') }}
+                    </button>
+                  </fieldset>
+                </form>
+                <div
+                  class="p2p-network-capacity"
+                  :data-owned="network.userId === state.user?.userId"
                 >
-                  {{ t('p2p.account.saveLimit') }}
-                </button>
+                  <p data-testid="p2p-network-limit">
+                    {{ t('p2p.account.capacity') }}: <code>{{ network.maxDevices }}</code>
+                  </p>
+                  <p
+                    v-if="network.userId === state.user?.userId && network.maxDevices >= 30"
+                    class="remote-form-hint"
+                  >
+                    {{ t('p2p.account.capacityMaxed') }}
+                  </p>
+                  <div
+                    v-else-if="
+                      network.userId === state.user?.userId && limitOptions(network).length > 0
+                    "
+                    class="p2p-limit-control"
+                  >
+                    <label>
+                      <span>{{ t('p2p.account.raiseTo') }}</span>
+                      <ThemedListbox
+                        :model-value="String(limitTarget(network))"
+                        :options="limitListboxOptions(network)"
+                        :label="t('p2p.account.raiseTo')"
+                        :disabled="pending || uncertain"
+                        test-id="p2p-limit"
+                        @update:model-value="commitLimitDraft(network, $event)"
+                      />
+                    </label>
+                    <button
+                      class="prototype-button"
+                      type="button"
+                      data-testid="p2p-limit-save"
+                      :disabled="pending || uncertain"
+                      @click="saveLimit(network)"
+                    >
+                      {{ t('p2p.account.saveLimit') }}
+                    </button>
+                  </div>
+                </div>
+                <details class="p2p-technical-details">
+                  <summary>{{ t('p2p.account.networkDetails') }}</summary>
+                  <p>{{ t('p2p.account.networkIdHint') }}</p>
+                  <code>{{ network.networkId }}</code>
+                </details>
+                <div class="p2p-network-danger">
+                  <span>{{ t('p2p.account.deleteWarning') }}</span>
+                  <button
+                    type="button"
+                    class="prototype-button prototype-button--danger"
+                    :disabled="pending || uncertain"
+                    @click="askDelete(network, $event)"
+                  >
+                    {{ t('p2p.account.delete') }}
+                  </button>
+                </div>
               </div>
             </div>
           </li>
         </ul>
-        <p v-if="state.selectedNetworkId">
-          {{ t('p2p.account.selected') }}: <code>{{ state.selectedNetworkId }}</code>
+        <p v-if="selectedNetwork" class="p2p-selected-network-heading">
+          {{ t('p2p.account.selected') }}: <strong>{{ selectedNetwork.name }}</strong>
         </p>
         <p v-else>{{ t('p2p.account.selectRequired') }}</p>
         <!-- The directory follows the selection rather than expanding every row:
@@ -534,15 +607,18 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
           :loading="directoryLoading"
           :now="now"
         />
-        <form @submit.prevent="accounts.createNetwork(serviceId)">
-          <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
-            <label
-              ><span>{{ t('p2p.account.newName') }}</span
-              ><input v-model="state.networkNameDraft" required
-            /></label>
-            <button type="submit" class="prototype-button">{{ t('p2p.account.create') }}</button>
-          </fieldset>
-        </form>
+        <details class="p2p-network-create" :open="state.networks.length === 0">
+          <summary>{{ t('p2p.account.create') }}</summary>
+          <form @submit.prevent="accounts.createNetwork(serviceId)">
+            <fieldset :disabled="pending || uncertain" class="p2p-account-fields">
+              <label
+                ><span>{{ t('p2p.account.newName') }}</span
+                ><input v-model="state.networkNameDraft" required
+              /></label>
+              <button type="submit" class="prototype-button">{{ t('p2p.account.create') }}</button>
+            </fieldset>
+          </form>
+        </details>
       </template>
     </template>
     <section
@@ -709,10 +785,170 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
 .p2p-network-list {
   list-style: none;
   padding: 0;
+  margin: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
 }
 .p2p-network-list li {
-  padding-block: var(--space-3);
   border-bottom: 1px solid var(--color-border);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem 7rem 7rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.p2p-network-list li:last-child {
+  border-bottom: 0;
+}
+.p2p-network-list li.is-selected {
+  box-shadow: inset 3px 0 var(--color-accent);
+}
+.p2p-network-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 7rem 7rem 7rem;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.p2p-network-columns {
+  padding-block: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-network-row label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  min-height: var(--size-control-md);
+}
+.p2p-network-row {
+  display: contents;
+}
+.p2p-network-row input {
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+}
+.p2p-network-row-limit {
+  font-variant-numeric: tabular-nums;
+}
+.p2p-network-selection {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.is-selected .p2p-network-selection {
+  color: var(--color-accent);
+}
+.p2p-network-editor {
+  display: contents;
+}
+.p2p-network-toggle {
+  color: var(--color-accent);
+  grid-column: 4;
+  grid-row: 1;
+  padding: var(--space-2) 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.p2p-network-toggle::before {
+  content: '▸';
+  margin-right: var(--space-2);
+}
+.p2p-network-toggle[aria-expanded='true']::before {
+  content: '▾';
+}
+.p2p-network-editor-hint {
+  color: var(--color-text-muted);
+  margin-left: var(--space-3);
+  font-size: var(--type-caption);
+}
+.p2p-network-editor-body {
+  grid-column: 1 / -1;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-network-editor form {
+  max-width: 40rem;
+}
+.p2p-network-danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-network-danger span {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  flex: 1 1 20rem;
+}
+.p2p-technical-details {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-technical-details p {
+  margin-block: var(--space-2);
+}
+.p2p-technical-details code {
+  display: block;
+}
+.p2p-account summary {
+  cursor: pointer;
+  padding-block: var(--space-2);
+  width: fit-content;
+}
+.p2p-account summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.p2p-networks-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-networks-heading h4 {
+  font-size: var(--type-section);
+  margin: 0;
+}
+.p2p-networks-heading p {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  margin: var(--space-2) 0 0;
+}
+.p2p-selected-network-heading {
+  padding-top: var(--space-3);
+}
+.p2p-network-create {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+.p2p-network-create form {
+  max-width: 40rem;
+}
+@media (max-width: 760px) {
+  .p2p-network-list li,
+  .p2p-network-columns {
+    grid-template-columns: minmax(0, 1fr) 5rem 5rem 6rem;
+    gap: var(--space-2);
+  }
+  .p2p-network-editor-hint {
+    display: block;
+    margin-left: 0;
+  }
 }
 .p2p-delete-confirm {
   padding: var(--space-4);

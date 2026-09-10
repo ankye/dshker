@@ -1,5 +1,15 @@
 ## Context
 
+2026-09-10 network/account layout refinement: names and explicit selection own
+the primary network list; internal user/network identifiers are disclosed with
+their troubleshooting purpose. Each network is a compact aligned row; editing,
+capacity and destructive actions appear only after expanding its management
+region. Selected devices are contextualized by network name, while operations
+continue to bind the original IDs. Existing pending/uncertain guards, draft
+preservation and exact-target deletion confirmation remain unchanged. See the
+dated Agent Note for visual roles and review evidence; this does not mark the
+full P2P implementation or production-interface acceptance complete.
+
 见 [proposal.md](proposal.md)。本设计以用户最新澄清为准：Go 自研服务器，DSHKer 连接客户端，ZeroTierOne 仅参考。
 
 当前 `v0.1.21` 的 SSH 模式通过 SCP 获取 peer descriptor，再建立 broker 和 DSH 两条隧道。`RemotePeerBroker` 从 Launcher 当前启动状态取得 DSH URL，`OpenSshRemoteConnector` 解析其中的端口；此动态端口原则继续沿用。SSH 认证、SCP、descriptor 路径问题不由 P2P 模式修复，也不作为新模式的依赖。

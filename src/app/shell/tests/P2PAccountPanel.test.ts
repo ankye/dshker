@@ -39,6 +39,25 @@ function button(ui: VueWrapper, text: string) {
 }
 
 describe('P2P account public controls (component diagnostics)', () => {
+  it('keeps identity and editing details collapsed while exposing a scannable network row', async () => {
+    const ui = await render({
+      currentUser: async () => ({ ok: true, data: user }),
+      networks: async () => ({ ok: true, data: [network] })
+    })
+    const row = ui.get('.p2p-network-row')
+    expect(row.text()).toContain('Office')
+    expect(row.text()).toContain('10 台')
+    expect(row.text()).not.toContain(network.networkId)
+    expect(ui.get('.p2p-account-identity details').attributes('open')).toBeUndefined()
+    expect(ui.get('.p2p-network-toggle').attributes('aria-expanded')).toBe('false')
+    expect(ui.get('.p2p-network-editor .p2p-technical-details code').text()).toBe(network.networkId)
+    await ui.get('.p2p-network-toggle').trigger('click')
+    expect(ui.get('.p2p-network-toggle').attributes('aria-expanded')).toBe('true')
+    expect(ui.get('.p2p-network-editor-body').isVisible()).toBe(true)
+    expect(ui.get('.p2p-network-create').attributes('open')).toBeUndefined()
+    expect(ui.findAll('.p2p-network-row button')).toHaveLength(0)
+  })
+
   it('clears submitted passwords and reads the user and networks without guessing a selection', async () => {
     const login = vi.fn<P2PManagementApi['login']>().mockResolvedValue({ ok: true, data: user })
     const networks = vi
@@ -76,8 +95,9 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(ui.get('.p2p-network-list').text()).toContain(network.name)
     expect((ui.get('input[type="radio"]').element as HTMLInputElement).checked).toBe(false)
     await ui.get('input[type="radio"]').setValue(true)
-    expect(ui.text()).toContain('选定网络: net-a')
+    expect(ui.text()).toContain('选定网络: Office')
     const { p2pAccounts } = await import('@/app/domains/remote-connections')
+    expect(p2pAccounts.state('service-a').selectedNetworkId).toBe(network.networkId)
     expect(JSON.stringify(p2pAccounts.state('service-a'))).not.toContain('secret-login')
   })
 
@@ -95,6 +115,8 @@ describe('P2P account public controls (component diagnostics)', () => {
       networks,
       deleteNetwork
     })
+    await ui.get('.p2p-network-toggle').trigger('click')
+    expect(button(ui, '删除网络').isVisible()).toBe(true)
     await button(ui, '删除网络').trigger('click')
     expect(deleteNetwork).not.toHaveBeenCalled()
     const confirmation = ui.get('.p2p-delete-confirm')
@@ -137,6 +159,7 @@ describe('P2P account public controls (component diagnostics)', () => {
       renameNetwork,
       createNetwork
     })
+    await ui.get('.p2p-network-toggle').trigger('click')
     const rename = ui.get('.p2p-network-list form')
     expect((rename.get('input').element as HTMLInputElement).value).toBe('Office')
     await rename.get('input').setValue('Office updated')
@@ -177,6 +200,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         networks: async () => ({ ok: true, data: [network] }),
         updateNetworkLimit
       })
+      await ui.get('.p2p-network-toggle').trigger('click')
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
       // The themed listbox renders its rows on open, so the trigger is opened first.
       await ui.get('[data-testid="p2p-limit"]').trigger('click')

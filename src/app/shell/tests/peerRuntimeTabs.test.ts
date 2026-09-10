@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
-import type { P2PCatalogView, P2PComputerView } from '@/shared/p2p-management'
+import type { P2PCatalogView, P2PComputerView, P2PConnectionView } from '@/shared/p2p-management'
 import { p2pConnections, p2pManagement } from '@/app/domains/remote-connections'
 import { runtimeBrowser } from '../runtimeBrowserState'
 
@@ -36,6 +36,20 @@ function catalog(entries: P2PComputerView[]): P2PCatalogView {
   }
 }
 
+function peer(overrides: Partial<P2PConnectionView> = {}): P2PConnectionView {
+  return {
+    serviceId,
+    pairId,
+    attemptId: '6'.repeat(32),
+    generation: 1,
+    stage: 'ready',
+    error: '',
+    path: { localType: 'host', remoteType: 'host', protocol: 'udp' },
+    runtimeGeneration: 1,
+    ...overrides
+  }
+}
+
 function peerTab() {
   return runtimeBrowser.tabs.value.find((tab) => tab.id === `peer:${connectionId}`)
 }
@@ -47,6 +61,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   vi.restoreAllMocks()
+  p2pConnections.state.peers = undefined
   p2pManagement.catalog.value = null
   runtimeBrowser.activeTabId.value = 'local'
   await nextTick()
@@ -73,6 +88,53 @@ describe('paired computer Run tabs', () => {
   it('keeps the DSH entry point out of tab state even when ready', () => {
     vi.spyOn(p2pConnections, 'isReady').mockReturnValue(true)
     expect(JSON.stringify(peerTab())).not.toMatch(/127\.0\.0\.1|token/i)
+  })
+
+  it('reports the pair connection stage, like an SSH tab reports its own', async () => {
+    // The peer branch hardcoded status to undefined while the SSH branch carried
+    // a real one, so a paired computer's tab could not show whether it was
+    // connecting, ready or failed.
+    const stages = [
+      ['punching', { kind: 'connecting' }],
+      ['starting-runtime', { kind: 'connecting' }],
+      ['ready', { kind: 'ready' }],
+      ['disconnected', { kind: 'disconnected' }]
+    ] as const
+    for (const [stage, expected] of stages) {
+      p2pConnections.state.peers = [peer({ stage })]
+      await nextTick()
+      expect(peerTab()?.status, stage).toEqual(expected)
+    }
+    p2pConnections.state.peers = [peer({ stage: 'failed', error: 'p2p.operation_failed' })]
+    await nextTick()
+    expect(peerTab()?.status).toEqual({ kind: 'failed', code: 'p2p.operation_failed' })
+  })
+
+  it('separates an unread connection list from a disconnected pair', async () => {
+    p2pConnections.state.peers = undefined
+    await nextTick()
+    // Never having looked is not evidence that the pair is disconnected.
+    expect(peerTab()?.status).toBeUndefined()
+    p2pConnections.state.peers = []
+    await nextTick()
+    expect(peerTab()?.status).toEqual({ kind: 'disconnected' })
+  })
+
+  it('reports a revoked pair as disconnected rather than failed', async () => {
+    p2pConnections.state.peers = [peer({ stage: 'ready' })]
+    p2pManagement.catalog.value = catalog([computer({ pairState: 'revoked' })])
+    await nextTick()
+    // Losing authorization is not a connection fault.
+    expect(peerTab()?.status).toEqual({ kind: 'disconnected' })
+    expect(peerTab()?.url).toBeUndefined()
+  })
+
+  it('keeps no address in the status even when ready', async () => {
+    p2pConnections.state.peers = [peer({ stage: 'ready' })]
+    await nextTick()
+    expect(peerTab()?.status).toEqual({ kind: 'ready' })
+    // A ready SSH status carries a url; the peer entry point must stay in main.
+    expect(JSON.stringify(peerTab()?.status)).not.toMatch(/http|127\.0\.0\.1|url/i)
   })
 
   it('follows a rename without changing tab identity', async () => {

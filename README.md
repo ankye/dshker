@@ -57,6 +57,11 @@ isolated browser sessions, remote authorized-directory browsing and project
 selection, shared server configuration editing, and post-disconnect task
 reconciliation.
 
+In **Remote connections → Network & account**, networks appear as compact rows.
+Select a network by name to view its computers; expand **Manage network** to
+rename it or change its device limit. Internal IDs are available in technical
+details for troubleshooting rather than displayed throughout the main view.
+
 Devices bound to the same network pair themselves with no invite code and no
 approval step: joining the network is the authorization. The invite-and-confirm
 flow remains for pairing a device that is not in one of your networks.

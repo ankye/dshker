@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Network management now presents aligned, compact rows with network names,
+  device limits and an explicit current selection. Rename, capacity and deletion
+  controls expand on demand instead of filling the list. Account and network IDs
+  live in explained technical details; the selected device section uses the
+  network name. Destructive controls remain separate with confirmation, and
+  background reads no longer leave a generic success message above the list.
+
 ## 0.1.26 — 2026-09-10
 
 - A running launcher now comes online by itself. The coordinator heartbeat only
@@ -83,6 +92,13 @@
   online, so a coordinator that was briefly unreachable, a network change or a
   wake from sleep no longer leaves the launcher offline for the rest of its run.
   Services already online are left untouched by the sweep.
+- A paired computer's Browser tab now reports its connection state, matching what
+  an SSH tab has always reported. The peer branch hardcoded that state to
+  undefined, so the tab could not show whether it was connecting, ready or
+  failed. Both sources are projected to one address-free shape: an SSH `ready`
+  carries a URL, while a peer entry point stays in the main process. A revoked
+  pair reads as disconnected rather than failed, and an unread connection list
+  stays distinct from a confirmed disconnected state.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

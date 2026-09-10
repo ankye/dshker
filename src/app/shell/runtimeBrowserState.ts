@@ -9,6 +9,20 @@ import type { RemoteConnectionStatus } from '@/shared/contracts'
 
 export type RuntimeTabId = 'local' | `remote:${string}` | `peer:${string}`
 
+/**
+ * Connection state a tab can report, with no address in it.
+ *
+ * A peer tab must never hold a DSH URL: the entry point stays in main and is
+ * supplied to the guest there. `RemoteConnectionStatus` carries a `url` on
+ * `ready`, so peer state is projected to this address-free shape instead of
+ * reusing it. `failed` keeps only a code, never helper-supplied text.
+ */
+export type RuntimeTabStatus =
+  | { readonly kind: 'disconnected' }
+  | { readonly kind: 'connecting' }
+  | { readonly kind: 'ready' }
+  | { readonly kind: 'failed'; readonly code: string }
+
 /** One fixed local, SSH-registered or paired-computer browser workspace. */
 export interface RuntimeTab {
   readonly id: RuntimeTabId
@@ -16,7 +30,48 @@ export interface RuntimeTab {
   readonly connectionId?: string
   url: string | undefined
   title: string
-  readonly status: RemoteConnectionStatus | undefined
+  readonly status: RuntimeTabStatus | undefined
+}
+
+/** Drops the SSH address so both sources report the same address-free shape. */
+function withoutAddress(status: RemoteConnectionStatus): RuntimeTabStatus {
+  switch (status.kind) {
+    case 'ready':
+      return { kind: 'ready' }
+    case 'failed':
+      return { kind: 'failed', code: status.code }
+    default:
+      return { kind: status.kind }
+  }
+}
+
+/**
+ * Projects a pair connection onto the tab's state.
+ *
+ * A revoked pair is reported disconnected rather than failed: losing
+ * authorization is not a connection fault. An unread connection list yields
+ * undefined, which stays distinct from a confirmed disconnected state.
+ */
+function peerTabStatus(
+  serviceId: string,
+  pairId: string,
+  pairState: 'active' | 'revoked'
+): RuntimeTabStatus | undefined {
+  if (pairState === 'revoked') return { kind: 'disconnected' }
+  if (p2pConnections.state.peers === undefined) return undefined
+  const peer = p2pConnections.find(serviceId, pairId)
+  if (peer === undefined) return { kind: 'disconnected' }
+  switch (peer.stage) {
+    case 'punching':
+    case 'starting-runtime':
+      return { kind: 'connecting' }
+    case 'ready':
+      return { kind: 'ready' }
+    case 'failed':
+      return { kind: 'failed', code: peer.error }
+    default:
+      return { kind: 'disconnected' }
+  }
 }
 
 const navigation = reactive<Record<string, { url: string; title: string } | undefined>>({})
@@ -51,7 +106,7 @@ const tabs = computed<readonly RuntimeTab[]>(() => {
         connectionId: connection.connectionId,
         url: readyUrl === undefined ? undefined : (current?.url ?? readyUrl),
         title: current?.title ?? connection.displayName,
-        status: connection.status
+        status: withoutAddress(connection.status)
       }
     }),
     ...peerTabs()
@@ -70,16 +125,15 @@ function peerTabs(): RuntimeTab[] {
   const computers = p2pManagement.catalog.value?.computers ?? []
   return computers.map((computer): RuntimeTab => {
     const id = `peer:${computer.connectionId}` as const
-    const ready =
-      computer.pairState === 'active' && p2pConnections.isReady(computer.serviceId, computer.pairId)
+    const status = peerTabStatus(computer.serviceId, computer.pairId, computer.pairState)
     const current = navigation[id]
     return {
       id,
       source: 'peer',
       connectionId: computer.connectionId,
-      url: ready ? current?.url : undefined,
+      url: status?.kind === 'ready' ? current?.url : undefined,
       title: current?.title ?? computer.displayName,
-      status: undefined
+      status
     }
   })
 }

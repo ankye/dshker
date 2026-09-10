@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { P2PManagementApi } from '@/shared/p2p-management'
 import { P2PManagementDomain } from './p2pManagement'
+import { P2PConnectionsDomain } from './p2pConnections'
 import { P2PNetworkDomain } from './p2pNetwork'
 
 const serviceId = 'service-a'
@@ -14,7 +15,11 @@ function setup(overrides: Partial<P2PManagementApi> = {}) {
     ...overrides
   } as unknown as P2PManagementApi
   const management = new P2PManagementDomain(() => api)
-  return { api, management, network: new P2PNetworkDomain(management) }
+  return {
+    api,
+    management,
+    network: new P2PNetworkDomain(management, new P2PConnectionsDomain(management))
+  }
 }
 
 describe('P2P network layer', () => {
@@ -73,7 +78,7 @@ describe('P2P network layer', () => {
     window.dshLauncher = { p2pManagement: api } as never
     try {
       const management = new P2PManagementDomain(() => api)
-      const network = new P2PNetworkDomain(management)
+      const network = new P2PNetworkDomain(management, new P2PConnectionsDomain(management))
       await network.start()
       expect(network.isOnline(serviceId)).toBe(false)
       notify?.()
@@ -95,7 +100,7 @@ describe('P2P network layer', () => {
         .mockResolvedValueOnce({ ok: false, code: 'p2p.service_busy', message: 'busy' })
     } as unknown as P2PManagementApi
     const management = new P2PManagementDomain(() => api)
-    const network = new P2PNetworkDomain(management)
+    const network = new P2PNetworkDomain(management, new P2PConnectionsDomain(management))
     await network.read()
     await network.read()
     // A refused read is not evidence of being offline.

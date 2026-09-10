@@ -1,5 +1,6 @@
 import { reactive } from 'vue'
 import type { P2PServiceSessionView } from '@/shared/p2p-management'
+import { p2pConnections, type P2PConnectionsDomain } from './p2pConnections'
 import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
 
 export interface P2PNetworkState {
@@ -32,7 +33,10 @@ export interface P2PNetworkState {
 export class P2PNetworkDomain {
   readonly #state = reactive<P2PNetworkState>({ sessions: undefined })
   #unsubscribe: (() => void) | undefined
-  constructor(private readonly management: P2PManagementDomain) {}
+  constructor(
+    private readonly management: P2PManagementDomain,
+    private readonly connections: P2PConnectionsDomain
+  ) {}
 
   get state(): P2PNetworkState {
     return this.#state
@@ -83,6 +87,11 @@ export class P2PNetworkDomain {
     this.#subscribe()
     await this.management.ensureBuiltinService()
     await this.read()
+    // Pair connections drive the runtime tab indicators, which exist on the
+    // Browser route regardless of whether Remote connections was ever opened.
+    // Their own polling only continues an in-flight attempt, so without a first
+    // read here every peer tab reported an unread state forever.
+    await this.connections.read()
   }
 
   /**
@@ -106,4 +115,4 @@ export class P2PNetworkDomain {
   }
 }
 
-export const p2pNetwork = new P2PNetworkDomain(p2pManagement)
+export const p2pNetwork = new P2PNetworkDomain(p2pManagement, p2pConnections)

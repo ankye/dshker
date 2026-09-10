@@ -5,6 +5,22 @@ import type { MessageKey } from './messages.zh-CN'
 
 /** US English message catalog, checked against every reference key. */
 export const enUS: Record<MessageKey, string> = {
+  'p2p.account.accountDetails': 'Account technical details',
+  'p2p.account.accountIdHint':
+    'The account ID is for troubleshooting. You do not need to remember or enter it for everyday use.',
+  'p2p.account.networksTitle': 'My networks',
+  'p2p.account.networksHint':
+    'Select a network to see its computers. Expand network settings when needed.',
+  'p2p.account.capacityShort': 'Device limit',
+  'p2p.account.devicesUnit': 'devices',
+  'p2p.account.selection': 'Selection',
+  'p2p.account.currentNetwork': 'Current network',
+  'p2p.account.notSelected': 'Not selected',
+  'p2p.account.manageNetwork': 'Manage network',
+  'p2p.account.manageHint': 'Name, device limit and deletion',
+  'p2p.account.networkDetails': 'Network technical details',
+  'p2p.account.networkIdHint':
+    'The network ID uniquely identifies this network for troubleshooting. Networks with the same name still have different IDs.',
   'p2p.enrollment.title': 'Local enrollment and recovery',
   'p2p.enrollment.description':
     'Read this service’s local credential or reconcile interrupted enrollment. The private key stays on this computer.',

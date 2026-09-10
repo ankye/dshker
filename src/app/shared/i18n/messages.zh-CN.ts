@@ -4,6 +4,19 @@ import { zhCNRefusals } from './i18n.refusals'
 
 /** Simplified Chinese message catalog and reference key set. */
 export const zhCN = {
+  'p2p.account.accountDetails': '账号技术信息',
+  'p2p.account.accountIdHint': '账号 ID 仅用于排查问题，日常操作无需记忆或填写。',
+  'p2p.account.networksTitle': '我的网络',
+  'p2p.account.networksHint': '选择一个网络，查看其中的电脑。网络设置可按需展开。',
+  'p2p.account.capacityShort': '设备上限',
+  'p2p.account.devicesUnit': '台',
+  'p2p.account.selection': '选择状态',
+  'p2p.account.currentNetwork': '当前网络',
+  'p2p.account.notSelected': '未选择',
+  'p2p.account.manageNetwork': '管理网络',
+  'p2p.account.manageHint': '名称、设备上限与删除',
+  'p2p.account.networkDetails': '网络技术信息',
+  'p2p.account.networkIdHint': '网络 ID 是此网络的唯一标识，用于技术排查；同名网络也有不同的 ID。',
   'p2p.enrollment.title': '本机登记与恢复',
   'p2p.enrollment.description': '查看此服务的本机凭据，或核对中断的登记。私钥始终留在本机。',
   'p2p.enrollment.register': '登记本机',
