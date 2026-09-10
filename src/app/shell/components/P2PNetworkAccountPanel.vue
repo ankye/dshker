@@ -9,6 +9,7 @@ import { useTranslator } from '@/app/shared/i18n/useLocale'
 import P2PAccountPanel from './P2PAccountPanel.vue'
 import P2PEnrollmentPanel from './P2PEnrollmentPanel.vue'
 import P2PPairingPanel from './P2PPairingPanel.vue'
+import type { AppRouteId } from '@/app/shared/navigation/routes'
 
 /**
  * Network & account sub-tab (login-gated).
@@ -20,6 +21,7 @@ import P2PPairingPanel from './P2PPairingPanel.vue'
  * composes the account, network, enrollment and pairing panels.
  */
 const t = useTranslator()
+const emit = defineEmits<{ navigate: [route: AppRouteId] }>()
 
 // The built-in official server is provisioned and selected automatically, so
 // this tab works whether the user visited Connect first or not.
@@ -93,6 +95,7 @@ const joinedNotLoggedIn = computed(
         :key="`pairing-${service.serviceId}`"
         :service-id="service.serviceId"
         :network-id="accountState?.selectedNetworkId"
+        @navigate="emit('navigate', $event)"
       />
     </template>
   </section>

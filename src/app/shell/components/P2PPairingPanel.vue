@@ -7,14 +7,15 @@ import {
   p2pWorkReconciliation as work
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
-import { useLauncherShell } from '../useLauncherShell'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
 import type { P2PConnectionView, P2PPairView } from '@/shared/p2p-management'
 import P2PRemoteProjectsPanel from './P2PRemoteProjectsPanel.vue'
+import { runtimeBrowser } from '../runtimeBrowserState'
+import type { AppRouteId } from '@/app/shared/navigation/routes'
 
 const props = defineProps<{ serviceId: string; networkId: string | undefined }>()
 const t = useTranslator()
-const shell = useLauncherShell()
+const emit = defineEmits<{ navigate: [route: AppRouteId] }>()
 const state = pairing.state(props.serviceId)
 const pending = computed(() => management.busy(props.serviceId))
 const operation = computed(() => management.operations[props.serviceId])
@@ -66,6 +67,18 @@ const stateLabels: Record<P2PPairView['state'], MessageKey> = {
   active: 'p2p.pairing.stateActive',
   revoked: 'p2p.pairing.stateRevoked',
   rejected: 'p2p.pairing.stateRevoked'
+}
+
+function connectionIdFor(pairId: string): string | undefined {
+  return management.catalog.value?.computers.find(
+    (computer) => computer.serviceId === props.serviceId && computer.pairId === pairId
+  )?.connectionId
+}
+
+function openWorkbench(pairId: string): void {
+  const connectionId = connectionIdFor(pairId)
+  if (connectionId === undefined) return
+  if (runtimeBrowser.openRemoteTab(`peer:${connectionId}`)) emit('navigate', 'runtime')
 }
 </script>
 
@@ -198,11 +211,11 @@ const stateLabels: Record<P2PPairView['state'], MessageKey> = {
           </p>
           <div class="p2p-pair-actions">
             <button
-              v-if="connections.isReady(serviceId, pair.pairId)"
+              v-if="connectionIdFor(pair.pairId) !== undefined"
               type="button"
               class="prototype-button prototype-button--primary"
               data-testid="p2p-open-workbench"
-              @click="shell.selectRoute('runtime')"
+              @click="openWorkbench(pair.pairId)"
             >
               {{ t('p2p.connect.openWorkbench') }}
             </button>

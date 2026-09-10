@@ -53,7 +53,10 @@ function runtimeContextMenuLocale(): RuntimeContextMenuLocale {
  * pair identity, so an unrecognised or hand-written value is refused.
  */
 function isAllowedGuestPartition(value: unknown): boolean {
-  if (value === undefined || value === LOCAL_PARTITION) return true
+  // Electron 42 serialises an omitted <webview partition> attribute as an
+  // empty string. Treat that exact representation the same as an omitted
+  // value; arbitrary partition labels remain rejected below.
+  if (value === undefined || value === '' || value === LOCAL_PARTITION) return true
   return isPeerPartition(value)
 }
 

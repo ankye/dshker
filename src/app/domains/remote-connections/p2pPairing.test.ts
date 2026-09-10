@@ -26,6 +26,16 @@ function pair(state: P2PPairView['state']): P2PPairView {
 
 function setup() {
   const api = {
+    catalog: vi.fn<P2PManagementApi['catalog']>().mockResolvedValue({
+      ok: true,
+      data: {
+        revision: 'catalog-revision',
+        catalogId: 'catalog-id',
+        services: [],
+        computers: [],
+        forgottenServiceIds: []
+      }
+    }),
     pairs: vi
       .fn<P2PManagementApi['pairs']>()
       .mockResolvedValue({ ok: true, data: [pair('active')] }),
@@ -48,10 +58,19 @@ function setup() {
     revokePair: vi.fn<P2PManagementApi['revokePair']>()
   }
   const management = new P2PManagementDomain(() => api as unknown as P2PManagementApi)
-  return { api, pairing: new P2PPairingDomain(management) }
+  return { api, management, pairing: new P2PPairingDomain(management) }
 }
 
 describe('renderer P2P pairing domain', () => {
+  it('refreshes the catalog projection after reading paired computers', async () => {
+    const { api, management, pairing } = setup()
+
+    await pairing.read(serviceId)
+
+    expect(api.catalog).toHaveBeenCalledTimes(1)
+    expect(management.catalog.value?.catalogId).toBe('catalog-id')
+  })
+
   it('shows a minted invite exactly once and does not keep it readable', async () => {
     const { pairing } = setup()
     await pairing.createInvite(serviceId, networkId)

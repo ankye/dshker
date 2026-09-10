@@ -1,8 +1,14 @@
 import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { P2PPairView } from '@/shared/p2p-management'
-import { p2pConnections, p2pPairing, p2pWorkReconciliation } from '@/app/domains/remote-connections'
+import type { P2PComputerView, P2PPairView } from '@/shared/p2p-management'
+import {
+  p2pConnections,
+  p2pManagement,
+  p2pPairing,
+  p2pWorkReconciliation
+} from '@/app/domains/remote-connections'
 import P2PPairingPanel from '../components/P2PPairingPanel.vue'
+import { resetRuntimeBrowserForTests, runtimeBrowser } from '../runtimeBrowserState'
 
 const serviceId = 'a'.repeat(64)
 const networkId = '2'.repeat(32)
@@ -28,10 +34,32 @@ const windowsMember: P2PPairView = {
   },
   localIsInitiator: true
 }
+const windowsComputer: P2PComputerView = {
+  connectionId: 'c'.repeat(32),
+  serviceId,
+  displayName: 'Windows-PC',
+  pairId: windowsMember.pairId,
+  networkId,
+  localDeviceId: windowsMember.initiator.deviceId,
+  remoteDeviceId: windowsMember.target.deviceId,
+  userId: windowsMember.target.userId,
+  localPublicKey: 'local-key',
+  remotePublicKey: 'remote-key',
+  pairRevision: 1,
+  pairState: 'active'
+}
 
 beforeEach(() => {
   const state = p2pPairing.state(serviceId)
   state.pairs = [windowsMember]
+  p2pManagement.catalog.value = {
+    revision: 'b'.repeat(64),
+    catalogId: 'd'.repeat(32),
+    services: [],
+    computers: [windowsComputer],
+    forgottenServiceIds: []
+  }
+  resetRuntimeBrowserForTests()
   vi.spyOn(p2pPairing, 'read').mockResolvedValue(undefined)
   vi.spyOn(p2pConnections, 'read').mockResolvedValue(undefined)
   vi.spyOn(p2pConnections, 'find').mockReturnValue(undefined)
@@ -42,6 +70,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   p2pPairing.state(serviceId).pairs = undefined
+  p2pManagement.catalog.value = null
+  resetRuntimeBrowserForTests()
 })
 
 describe('P2P member row', () => {
@@ -81,13 +111,20 @@ describe('P2P connect feedback', () => {
     state.pairs = undefined
   })
 
-  it('offers opening the workbench instead of connecting when already ready', () => {
+  it('opens one on-demand workbench instead of connecting when already ready', async () => {
     vi.spyOn(p2pConnections, 'isReady').mockReturnValue(true)
     const state = p2pPairing.state(serviceId)
     state.pairs = [windowsMember]
     const wrapper = mount(P2PPairingPanel, { props: { serviceId, networkId } })
     expect(wrapper.find('[data-testid="p2p-open-workbench"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="p2p-connection-connect"]').exists()).toBe(false)
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual(['local'])
+    await wrapper.get('[data-testid="p2p-open-workbench"]').trigger('click')
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
+      'local',
+      `peer:${windowsComputer.connectionId}`
+    ])
+    expect(wrapper.emitted('navigate')).toEqual([['runtime']])
     state.pairs = undefined
   })
 })

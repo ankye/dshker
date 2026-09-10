@@ -4,6 +4,7 @@ import { useTranslator } from '@/app/shared/i18n/useLocale'
 import P2PJoinPanel from './P2PJoinPanel.vue'
 import P2PNetworkAccountPanel from './P2PNetworkAccountPanel.vue'
 import RemoteSSHManagementPanel from './RemoteSSHManagementPanel.vue'
+import type { AppRouteId } from '@/app/shared/navigation/routes'
 
 type RemoteTab = 'connect' | 'account'
 
@@ -18,6 +19,7 @@ type RemoteTab = 'connect' | 'account'
  */
 const t = useTranslator()
 const activeTab = ref<RemoteTab>('connect')
+const emit = defineEmits<{ navigate: [route: AppRouteId] }>()
 </script>
 
 <template>
@@ -57,7 +59,7 @@ const activeTab = ref<RemoteTab>('connect')
       data-testid="remote-pane-connect"
     >
       <p class="remote-tab-description">{{ t('p2p.tabs.connectDescription') }}</p>
-      <RemoteSSHManagementPanel />
+      <RemoteSSHManagementPanel @navigate="emit('navigate', $event)" />
       <P2PJoinPanel />
     </section>
 
@@ -68,7 +70,7 @@ const activeTab = ref<RemoteTab>('connect')
       aria-labelledby="remote-tab-account"
       data-testid="remote-pane-account"
     >
-      <P2PNetworkAccountPanel />
+      <P2PNetworkAccountPanel @navigate="emit('navigate', $event)" />
     </section>
   </div>
 </template>

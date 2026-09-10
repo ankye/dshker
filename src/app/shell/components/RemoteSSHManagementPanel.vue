@@ -5,9 +5,12 @@ import RemoteConnectionEditor from './RemoteConnectionEditor.vue'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/messages.zh-CN'
 import type { RemoteConnectionErrorCode } from '@/shared/contracts'
+import { runtimeBrowser } from '../runtimeBrowserState'
+import type { AppRouteId } from '@/app/shared/navigation/routes'
 
 const t = useTranslator()
 const remote = useRemoteConnections()
+const emit = defineEmits<{ navigate: [route: AppRouteId] }>()
 const form = reactive({ displayName: '', host: '', port: '', user: '' })
 
 const REMOTE_ERROR_KEYS: Readonly<Record<RemoteConnectionErrorCode, MessageKey>> = {
@@ -71,6 +74,10 @@ function testStatusLabel(kind: 'untested' | 'testing' | 'passed' | 'failed'): st
 function errorLabel(code: RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'): string {
   if (code === 'unconfirmed') return t('remote.edit.unconfirmed')
   return code === 'bridge' ? t('remote.error.bridge') : t(REMOTE_ERROR_KEYS[code])
+}
+
+function openWorkbench(connectionId: string): void {
+  if (runtimeBrowser.openRemoteTab(`remote:${connectionId}`)) emit('navigate', 'runtime')
 }
 </script>
 
@@ -159,6 +166,14 @@ function errorLabel(code: RemoteConnectionErrorCode | 'bridge' | 'unconfirmed'):
               @click="remote.disconnect(connection.connectionId)"
             >
               {{ t('remote.disconnect') }}
+            </button>
+            <button
+              class="prototype-button prototype-button--primary"
+              type="button"
+              :data-testid="`remote-open-workbench-${connection.connectionId}`"
+              @click="openWorkbench(connection.connectionId)"
+            >
+              {{ t('remote.openWorkbench') }}
             </button>
             <details class="connect-row-management">
               <summary>{{ t('remote.connectLayout.manage') }}</summary>

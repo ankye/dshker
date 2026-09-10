@@ -48,6 +48,10 @@ export class P2PPairingDomain {
       const state = this.state(serviceId)
       state.pairs = result.data
       state.resultUnconfirmed = false
+      // The main-side pairs read also synchronises the coordinator's current
+      // members into its catalog. Refresh that projection so the shell's fixed
+      // Run tabs reflect the same authoritative list immediately.
+      await this.management.readCatalog()
     }
   }
 

@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { P2PManagementApi } from '@/shared/p2p-management'
+import {
+  P2P_BUILTIN_SERVICE,
+  type P2PManagementApi,
+  type P2PCatalogView
+} from '@/shared/p2p-management'
 import { P2PManagementDomain } from './p2pManagement'
 import { P2PConnectionsDomain } from './p2pConnections'
 import { P2PNetworkDomain } from './p2pNetwork'
@@ -87,6 +91,62 @@ describe('P2P network layer', () => {
     } finally {
       window.dshLauncher = previous
     }
+  })
+
+  it('hydrates the catalog at startup so paired computers get Run tabs immediately', async () => {
+    const builtin = {
+      ...P2P_BUILTIN_SERVICE,
+      serviceId,
+      publicKey: 'pinned-key'
+    }
+    const catalog: P2PCatalogView = {
+      revision: 'revision',
+      catalogId: 'catalog',
+      services: [builtin],
+      computers: [],
+      forgottenServiceIds: []
+    }
+    const refreshed = {
+      ...catalog,
+      revision: 'refreshed',
+      computers: [
+        {
+          connectionId: 'connection-a',
+          serviceId,
+          displayName: 'Studio',
+          pairId: 'pair-a',
+          networkId: 'network-a',
+          localDeviceId: 'local-device',
+          remoteDeviceId: 'remote-device',
+          userId: 'user-a',
+          localPublicKey: 'local-key',
+          remotePublicKey: 'remote-key',
+          pairRevision: 1,
+          pairState: 'active' as const
+        }
+      ]
+    }
+    const api = {
+      catalog: vi.fn(async () => ({ ok: true as const, data: refreshed })),
+      pairs: vi.fn(async () => ({ ok: true as const, data: [] })),
+      serviceSessions: vi.fn(async () => ({
+        ok: true as const,
+        data: [{ serviceId, state: 'online' as const, code: '' }]
+      }))
+    } as unknown as P2PManagementApi
+    const management = new P2PManagementDomain(() => api)
+    management.catalog.value = catalog
+    management.selectedServiceId.value = serviceId
+    management.builtinProvisioned.value = true
+    const network = new P2PNetworkDomain(management, new P2PConnectionsDomain(management))
+
+    await network.start()
+
+    expect(api.pairs).toHaveBeenCalledWith(expect.objectContaining({ serviceId }))
+    // The catalog read adopts the member list after the main-side pairs
+    // operation has synchronised it.
+    expect(api.catalog).toHaveBeenCalledTimes(1)
+    expect(management.catalog.value).toEqual(refreshed)
   })
 
   it('leaves the last read intact when a refused read returns nothing', async () => {

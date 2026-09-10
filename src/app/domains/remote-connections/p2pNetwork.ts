@@ -92,6 +92,17 @@ export class P2PNetworkDomain {
     // Their own polling only continues an in-flight attempt, so without a first
     // read here every peer tab reported an unread state forever.
     await this.connections.read()
+
+    // `pairs` also refreshes the main-owned member pins from the coordinator.
+    // That refresh writes the current remote computers into the catalog, which
+    // is the source the Run route uses to create one fixed tab per computer.
+    // Do this at shell startup rather than waiting for the user to open the
+    // pairing panel; otherwise a paired LAN computer exists on the server but
+    // the Run route shows only Local until another route happens to mount.
+    const serviceId = this.management.selectedServiceId.value
+    if (serviceId === undefined) return
+    const result = await this.management.runRead('pairs', { serviceId })
+    if (result.ok) await this.management.readCatalog()
   }
 
   /**

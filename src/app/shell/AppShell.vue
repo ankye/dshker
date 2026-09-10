@@ -285,7 +285,7 @@ function openConsoleRoute(): void {
           :status="shell.bootstrapStatus.value"
           :status-kind="statusKind"
         >
-          <RemoteConnectionsPanel />
+          <RemoteConnectionsPanel @navigate="shell.selectRoute" />
         </RouteStage>
 
         <RouteStage

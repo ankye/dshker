@@ -3,11 +3,47 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import { apiFail, apiOk, type DesktopApi, type LauncherHarnessState } from '@/shared/contracts'
 import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
-import { remoteConnectionsState } from '@/app/domains/remote-connections'
+import {
+  p2pConnections,
+  p2pManagement,
+  remoteConnectionsState
+} from '@/app/domains/remote-connections'
+import type { P2PComputerView, P2PConnectionView } from '@/shared/p2p-management'
 import RuntimeTabsPanel from '../components/RuntimeTabsPanel.vue'
-import { runtimeBrowser } from '../runtimeBrowserState'
+import { resetRuntimeBrowserForTests, runtimeBrowser } from '../runtimeBrowserState'
 
 const runtimeUrl = 'http://127.0.0.1:3088/?token=must-not-be-copied'
+const peerComputer: P2PComputerView = {
+  connectionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  serviceId: 'a'.repeat(64),
+  displayName: '办公室 Windows',
+  pairId: '11111111111111111111111111111111',
+  networkId: '2'.repeat(32),
+  localDeviceId: '3'.repeat(32),
+  remoteDeviceId: '4'.repeat(32),
+  userId: '5'.repeat(32),
+  localPublicKey: 'local-key',
+  remotePublicKey: 'remote-key',
+  pairRevision: 1,
+  pairState: 'active'
+}
+const peerConnection: P2PConnectionView = {
+  serviceId: peerComputer.serviceId,
+  pairId: peerComputer.pairId,
+  attemptId: '6'.repeat(32),
+  generation: 1,
+  stage: 'ready',
+  error: '',
+  path: { localType: 'host', remoteType: 'host', protocol: 'udp' },
+  runtimeGeneration: 1
+}
+const offlinePeer: P2PComputerView = {
+  ...peerComputer,
+  connectionId: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+  displayName: '离线 Windows',
+  pairId: '22222222222222222222222222222222'
+}
+const mountedWrappers = new Set<VueWrapper>()
 
 function runningState(): LauncherHarnessState {
   return {
@@ -65,9 +101,16 @@ function installRuntimeApi(options: {
 async function mountRunningPanel(): Promise<VueWrapper> {
   harnessState.value = runningState()
   await nextTick()
-  const wrapper = mount(RuntimeTabsPanel)
+  const wrapper = mount(RuntimeTabsPanel, { attachTo: document.body })
+  mountedWrappers.add(wrapper)
   await flushPromises()
   return wrapper
+}
+
+function getAddMenu(): HTMLElement {
+  const menu = document.querySelector<HTMLElement>('[data-testid="runtime-add-tab-menu"]')
+  if (menu === null) throw new Error('Expected the teleported add-tab menu to be mounted')
+  return menu
 }
 
 function prepareWebview(wrapper: VueWrapper, zoomFactor = 1) {
@@ -99,15 +142,25 @@ function prepareWebview(wrapper: VueWrapper, zoomFactor = 1) {
 
 describe('RuntimeTabsPanel rendering controls', () => {
   beforeEach(() => {
-    runtimeBrowser.activeTabId.value = 'local'
+    resetRuntimeBrowserForTests()
     remoteConnectionsState.value = { connections: [] }
+    p2pManagement.catalog.value = null
+    p2pConnections.state.peers = undefined
+    p2pConnections.state.helperError = ''
+    p2pConnections.state.resultUnconfirmed = false
     harnessState.value = undefined
     vi.restoreAllMocks()
   })
 
   afterEach(() => {
-    runtimeBrowser.activeTabId.value = 'local'
+    for (const wrapper of mountedWrappers) wrapper.unmount()
+    mountedWrappers.clear()
+    resetRuntimeBrowserForTests()
     remoteConnectionsState.value = { connections: [] }
+    p2pManagement.catalog.value = null
+    p2pConnections.state.peers = undefined
+    p2pConnections.state.helperError = ''
+    p2pConnections.state.resultUnconfirmed = false
     harnessState.value = undefined
     window.dshLauncher = undefined
   })
@@ -132,7 +185,7 @@ describe('RuntimeTabsPanel rendering controls', () => {
     wrapper.unmount()
   })
 
-  it('renders fixed local and per-computer tabs without add or close controls', async () => {
+  it('renders opened local and remote tabs without add or close controls', async () => {
     remoteConnectionsState.value = {
       connections: [
         {
@@ -147,13 +200,177 @@ describe('RuntimeTabsPanel rendering controls', () => {
         }
       ]
     }
+    runtimeBrowser.openRemoteTab('remote:11111111-1111-4111-8111-111111111111')
     installRuntimeApi({})
     const wrapper = await mountRunningPanel()
     expect(wrapper.findAll('[role="tab"]')).toHaveLength(2)
     expect(wrapper.text()).toContain('本地')
     expect(wrapper.text()).toContain('工作室 Mac')
-    expect(wrapper.find('[data-testid="runtime-new-tab"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="runtime-add-tab"]').exists()).toBe(true)
     expect(wrapper.find('.browser-tab-close').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('lists unopened LAN and SSH computers, then creates only the chosen tab', async () => {
+    remoteConnectionsState.value = {
+      connections: [
+        {
+          connectionId: '11111111-1111-4111-8111-111111111111',
+          configRevision: 'a'.repeat(64),
+          displayName: '工作室 Mac',
+          host: 'studio-mac',
+          port: 22,
+          user: 'dev',
+          status: { kind: 'ready', url: 'http://127.0.0.1:41001/?token=remote' },
+          testStatus: { kind: 'passed' }
+        },
+        {
+          connectionId: '22222222-2222-4222-8222-222222222222',
+          configRevision: 'b'.repeat(64),
+          displayName: '离线 Mac',
+          host: 'offline-mac',
+          port: 22,
+          user: 'dev',
+          status: { kind: 'disconnected' },
+          testStatus: { kind: 'untested' }
+        }
+      ]
+    }
+    p2pManagement.catalog.value = {
+      revision: 'b'.repeat(64),
+      catalogId: 'd'.repeat(32),
+      services: [],
+      computers: [peerComputer, offlinePeer],
+      forgottenServiceIds: []
+    }
+    p2pConnections.state.peers = [peerConnection]
+    installRuntimeApi({})
+    const wrapper = await mountRunningPanel()
+    await wrapper.get('[data-testid="runtime-add-tab"]').trigger('click')
+
+    const menu = getAddMenu()
+    expect(menu.textContent).toContain('局域网电脑')
+    expect(menu.textContent).toContain('SSH 连接')
+    const peerOption = menu.querySelector<HTMLButtonElement>(
+      '[data-testid="runtime-add-peer-cccccccc-cccc-4ccc-8ccc-cccccccccccc"]'
+    )
+    expect(peerOption).not.toBeNull()
+    expect(peerOption?.disabled).toBe(false)
+    const sshOption = menu.querySelector<HTMLButtonElement>(
+      '[data-testid="runtime-add-ssh-11111111-1111-4111-8111-111111111111"]'
+    )
+    expect(sshOption).not.toBeNull()
+    expect(sshOption?.disabled).toBe(false)
+    const offlinePeerOption = menu.querySelector<HTMLButtonElement>(
+      '[data-testid="runtime-add-peer-dddddddd-dddd-4ddd-8ddd-dddddddddddd"]'
+    )
+    expect(offlinePeerOption?.disabled).toBe(true)
+    expect(offlinePeerOption?.classList.contains('runtime-add-tab-option--disabled')).toBe(true)
+    const offlineSshOption = menu.querySelector<HTMLButtonElement>(
+      '[data-testid="runtime-add-ssh-22222222-2222-4222-8222-222222222222"]'
+    )
+    expect(offlineSshOption?.disabled).toBe(true)
+    expect(menu.textContent).toContain('暂不可用')
+    expect(
+      Array.from(
+        menu.querySelectorAll<HTMLButtonElement>('[data-testid^="runtime-add-peer-"]')
+      ).map((option) => option.dataset.testid)
+    ).toEqual([
+      'runtime-add-peer-cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'runtime-add-peer-dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+    ])
+    expect(
+      Array.from(menu.querySelectorAll<HTMLButtonElement>('[data-testid^="runtime-add-ssh-"]')).map(
+        (option) => option.dataset.testid
+      )
+    ).toEqual([
+      'runtime-add-ssh-11111111-1111-4111-8111-111111111111',
+      'runtime-add-ssh-22222222-2222-4222-8222-222222222222'
+    ])
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual(['local'])
+
+    peerOption?.click()
+    await nextTick()
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
+      'local',
+      'peer:cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    ])
+    expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
+
+    await wrapper.get('[data-testid="runtime-add-tab"]').trigger('click')
+    const reopenedMenu = getAddMenu()
+    expect(
+      reopenedMenu.querySelector(
+        '[data-testid="runtime-add-peer-cccccccc-cccc-4ccc-8ccc-cccccccccccc"]'
+      )
+    ).toBeNull()
+    expect(
+      reopenedMenu.querySelector(
+        '[data-testid="runtime-add-ssh-11111111-1111-4111-8111-111111111111"]'
+      )
+    ).not.toBeNull()
+
+    reopenedMenu.querySelector<HTMLButtonElement>('[data-testid="runtime-add-tab-close"]')?.click()
+    await nextTick()
+    expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
+    wrapper.unmount()
+  })
+
+  it('closes the add menu with Escape', async () => {
+    installRuntimeApi({})
+    const wrapper = await mountRunningPanel()
+    const trigger = wrapper.get('[data-testid="runtime-add-tab"]')
+    await trigger.trigger('click')
+    const menu = getAddMenu()
+    expect(menu.style.left).toMatch(/px$/u)
+    expect(menu.style.width).toMatch(/px$/u)
+    expect(menu.style.maxHeight).toMatch(/px$/u)
+
+    document.dispatchEvent(new Event('pointerdown', { bubbles: true }))
+    await nextTick()
+    expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
+
+    await trigger.trigger('click')
+    expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).not.toBeNull()
+
+    await trigger.trigger('keydown', { key: 'Escape' })
+    await nextTick()
+    expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
+    expect(document.activeElement).toBe(trigger.element)
+    wrapper.unmount()
+  })
+
+  it('mounts only the local guest until a remote workbench is opened', async () => {
+    remoteConnectionsState.value = {
+      connections: [
+        {
+          connectionId: '11111111-1111-4111-8111-111111111111',
+          configRevision: 'a'.repeat(64),
+          displayName: '工作室 Mac',
+          host: 'studio-mac',
+          port: 22,
+          user: 'dev',
+          status: { kind: 'ready', url: 'http://127.0.0.1:41001/?token=remote' },
+          testStatus: { kind: 'passed' }
+        },
+        {
+          connectionId: '22222222-2222-4222-8222-222222222222',
+          configRevision: 'b'.repeat(64),
+          displayName: '办公室 PC',
+          host: 'office-pc',
+          port: 22,
+          user: 'dev',
+          status: { kind: 'ready', url: 'http://127.0.0.1:41002/?token=remote' },
+          testStatus: { kind: 'passed' }
+        }
+      ]
+    }
+    installRuntimeApi({})
+    const wrapper = await mountRunningPanel()
+    expect(wrapper.findAll('[role="tab"]')).toHaveLength(1)
+    expect(wrapper.get('[data-testid="runtime-tab-local"]')).toBeDefined()
+    expect(wrapper.findAll('webview')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="runtime-webview-local"]').exists()).toBe(true)
     wrapper.unmount()
   })
 

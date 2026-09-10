@@ -133,7 +133,7 @@ approval took effect.
    _attempting a direct connection_ → _starting the remote runtime_ → _connected_.
    Only **connected** means the workbench is usable. The intermediate stages are
    not a connection, and the app does not present them as one.
-2. Under **Run**, the computer has its own fixed tab.
+2. Under **Run**, click **+** and choose the computer from the floating **LAN computers** list to create its tab on demand. Computers without a ready connection remain at the bottom and are disabled.
 3. Read the other computer's **authorized directories**, pick one, and browse
    it. Directory names come from the other computer; the folder structure is
    resolved there using that computer's own rules.
@@ -155,7 +155,7 @@ quietly redirected.
 Two different scopes, and the difference matters:
 
 - **A computer's name** is local to this computer. Renaming is safe at any time
-  and does not interrupt a live connection or reload its tab.
+  and does not interrupt a live connection or reload its already-open tab.
 - **A server's configuration is shared** by every computer paired through that
   server. Changing it affects all of them, so the app refuses to save while any
   of those computers is busy. Wait until they are idle.

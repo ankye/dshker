@@ -710,10 +710,10 @@ export const enUS: Record<MessageKey, string> = {
   'remote.error.tunnel': 'The SSH tunnel could not start or has exited.',
   'remote.list.title': 'Managed computers',
   'remote.list.description':
-    'After connection, the Run page enables this computer’s fixed tab automatically.',
+    'A remote tab is created only when you choose “Open workbench”, so a large fleet stays light.',
   'remote.empty': 'No remote computers yet',
   'remote.empty.description':
-    'The first computer you add appears in the Run tab strip immediately.',
+    'After adding a computer, choose “Open workbench” on its row to create a tab on demand.',
   'remote.status.disconnected': 'Disconnected',
   'remote.status.connecting': 'Connecting',
   'remote.status.ready': 'Connected',
@@ -729,6 +729,7 @@ export const enUS: Record<MessageKey, string> = {
   'remote.disconnect': 'Disconnect',
   'remote.retry': 'Retry',
   'remote.remove': 'Remove',
+  'remote.openWorkbench': 'Open workbench',
   'runtime.localTab': 'Local',
   'runtime.remoteUnavailable': 'Remote DSH is not connected',
   'runtime.remoteUnavailable.description':
@@ -748,6 +749,17 @@ export const enUS: Record<MessageKey, string> = {
     'Once it starts, the page URL it announces appears here — no manual entry needed.',
   'runtime.notRunning.action': 'Go to Launch',
   'runtime.defaultTitle': 'DSH Web',
+  'runtime.addTab.button': 'Add remote tab',
+  'runtime.addTab.title': 'Add remote workbench',
+  'runtime.addTab.description': 'Choose a LAN or SSH computer to create a new Run tab.',
+  'runtime.addTab.lan': 'LAN computers',
+  'runtime.addTab.ssh': 'SSH connections',
+  'runtime.addTab.count': 'Available / total',
+  'runtime.addTab.unavailable': 'Unavailable',
+  'runtime.addTab.empty':
+    'No remote computer can be added. Configure one in Remote connections first.',
+  'runtime.addTab.manage': 'Manage remote connections',
+  'runtime.addTab.close': 'Close add-tab panel',
   'runtime.url': 'Page URL',
   'runtime.zoom': 'Page zoom',
   'runtime.zoom.decrease': 'Zoom out',

@@ -20,6 +20,7 @@ import { isLoopbackAddress, runtimeBrowser, type RuntimeTabId } from '../runtime
 import EmptyState from './EmptyState.vue'
 import RemoteRunActions from './RemoteRunActions.vue'
 import P2PRunActions from './P2PRunActions.vue'
+import RuntimeTabAddMenu from './RuntimeTabAddMenu.vue'
 
 /** The Electron <webview> members this panel drives. */
 interface RuntimeWebview extends HTMLElement {
@@ -132,8 +133,7 @@ function activeFrame(): RuntimeWebview | undefined {
   return id === undefined ? undefined : frames.value[id]
 }
 
-// Tab lifecycle follows the runtime at module level: a fresh launch opens its
-// first page automatically, and stopping the runtime closes every tab.
+// Local follows the supervised runtime; remote workspaces stay mounted until removed.
 
 // The address bar follows the focused tab, including one restored after the run
 // route was left and re-entered.
@@ -391,27 +391,30 @@ onUnmounted(() => {
       </template>
     </EmptyState>
     <template v-else>
-      <div class="browser-tab-strip" role="tablist" :aria-label="t('runtime.title')">
-        <button
-          v-for="tab in browser.tabs.value"
-          :key="tab.id"
-          class="browser-tab"
-          type="button"
-          role="tab"
-          :aria-selected="browser.activeTabId.value === tab.id"
-          :data-active="browser.activeTabId.value === tab.id"
-          :data-state="
-            tab.source === 'local' ? (tab.url ? 'ready' : 'disconnected') : tab.status?.kind
-          "
-          :title="tab.url ?? tab.title"
-          :data-testid="`runtime-tab-${tab.id}`"
-          @click="browser.activeTabId.value = tab.id"
-        >
-          <span class="browser-tab-status" aria-hidden="true" />
-          <span class="browser-tab-title">{{
-            tab.source === 'local' ? t('runtime.localTab') : tab.title
-          }}</span>
-        </button>
+      <div class="browser-tabbar">
+        <div class="browser-tab-strip" role="tablist" :aria-label="t('runtime.title')">
+          <button
+            v-for="tab in browser.tabs.value"
+            :key="tab.id"
+            class="browser-tab"
+            type="button"
+            role="tab"
+            :aria-selected="browser.activeTabId.value === tab.id"
+            :data-active="browser.activeTabId.value === tab.id"
+            :data-state="
+              tab.source === 'local' ? (tab.url ? 'ready' : 'disconnected') : tab.status?.kind
+            "
+            :title="tab.url ?? tab.title"
+            :data-testid="`runtime-tab-${tab.id}`"
+            @click="browser.activeTabId.value = tab.id"
+          >
+            <span class="browser-tab-status" aria-hidden="true" />
+            <span class="browser-tab-title">{{
+              tab.source === 'local' ? t('runtime.localTab') : tab.title
+            }}</span>
+          </button>
+        </div>
+        <RuntimeTabAddMenu @navigate="emit('navigate', $event)" />
       </div>
 
       <div v-if="browser.activeTab.value?.url" class="browser-bar">
@@ -665,8 +668,16 @@ onUnmounted(() => {
 }
 
 /* Browser chrome stays compact so the DSH page owns the visual canvas. */
+.browser-tabbar {
+  display: flex;
+  min-width: 0;
+  align-items: flex-start;
+  border-bottom: 1px solid var(--color-border);
+}
+
 .browser-tab-strip {
   display: flex;
+  flex: 1;
   min-width: 0;
   align-items: flex-end;
   gap: 0.125rem;

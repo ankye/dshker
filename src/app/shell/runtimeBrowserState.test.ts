@@ -3,7 +3,11 @@ import { nextTick } from 'vue'
 import { harnessState } from '@/app/domains/launcher-harness/useLauncherHarness'
 import { remoteConnectionsState } from '@/app/domains/remote-connections'
 import type { LauncherHarnessState } from '@/shared/contracts'
-import { isLoopbackAddress, runtimeBrowser } from './runtimeBrowserState'
+import {
+  isLoopbackAddress,
+  resetRuntimeBrowserForTests,
+  runtimeBrowser
+} from './runtimeBrowserState'
 
 const LOCAL_URL = 'http://127.0.0.1:3088/?token=local'
 const REMOTE_URL = 'http://127.0.0.1:41001/?token=remote'
@@ -40,7 +44,7 @@ describe('fixed runtime workspaces', () => {
   beforeEach(async () => {
     harnessState.value = undefined
     remoteConnectionsState.value = { connections: [] }
-    runtimeBrowser.activeTabId.value = 'local'
+    resetRuntimeBrowserForTests()
     await nextTick()
   })
 
@@ -58,7 +62,12 @@ describe('fixed runtime workspaces', () => {
     expect(runtimeBrowser.tabs.value[0]?.url).toBeUndefined()
   })
 
-  it('projects one non-disposable tab per registered computer', async () => {
+  it('does not invent a tab for an unknown computer', () => {
+    expect(runtimeBrowser.openRemoteTab('remote:missing')).toBe(false)
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual(['local'])
+  })
+
+  it('keeps remote workspaces lazy until explicitly opened', async () => {
     remoteConnectionsState.value = {
       connections: [
         {
@@ -83,6 +92,10 @@ describe('fixed runtime workspaces', () => {
         }
       ]
     }
+    await nextTick()
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual(['local'])
+    expect(runtimeBrowser.openRemoteTab('remote:11111111-1111-4111-8111-111111111111')).toBe(true)
+    expect(runtimeBrowser.openRemoteTab('remote:22222222-2222-4222-8222-222222222222')).toBe(true)
     await nextTick()
     expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
       'local',
@@ -110,6 +123,7 @@ describe('fixed runtime workspaces', () => {
       ]
     }
     await nextTick()
+    expect(runtimeBrowser.openRemoteTab(`remote:${connectionId}`)).toBe(true)
     runtimeBrowser.updateTab(`remote:${connectionId}`, {
       url: `${REMOTE_URL}session/1`,
       title: 'Session'
@@ -168,6 +182,7 @@ describe('fixed runtime workspaces', () => {
       ]
     }
     await nextTick()
+    expect(runtimeBrowser.openRemoteTab(`remote:${connectionId}`)).toBe(true)
     runtimeBrowser.activeTabId.value = `remote:${connectionId}`
     remoteConnectionsState.value = { connections: [] }
     await nextTick()

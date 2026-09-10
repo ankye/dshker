@@ -44,8 +44,9 @@ describe('run guest attach policy', () => {
     expect(attach({ src: loopback, partition: peerPartition(serviceId, pairA) }).denied).toBe(false)
   })
 
-  it('admits an attach that names no partition, keeping existing behaviour', () => {
+  it('admits an attach that names no partition, including Electron’s empty-string form', () => {
     expect(attach({ src: loopback }).denied).toBe(false)
+    expect(attach({ src: loopback, partition: '' }).denied).toBe(false)
   })
 
   it('refuses a hand-written partition that this app never allocated', () => {
@@ -54,7 +55,6 @@ describe('run guest attach policy', () => {
       'persist:someone-else',
       'persist:',
       'dsh-peer-1234',
-      '',
       42,
       null
     ])

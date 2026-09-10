@@ -1,13 +1,26 @@
 # Changelog
 
-## 0.1.26 — 2026-09-10
+## 0.1.27 — 2026-09-11
 
-- Updating a managed plugin no longer fails the whole operation when a previous
-  build left modified output inside the Launcher-owned clone. The checkout
-  refused to overwrite it, and the refusal surfaced as "the core did not
-  start", which pointed at the wrong remedy; the clone now converges to the
-  fetched revision first, and a refused update explains itself as an extension
-  failure instead.
+- Fixed the macOS application icon package so Finder and Applications display
+  the complete multi-layer DSHKer icon instead of a broken or blurry fallback.
+
+- Updating a managed plugin now converges its Launcher-owned clone to the
+  fetched revision before checkout. Build residue can no longer brick an
+  extension update or surface as a misleading core-launch failure.
+
+- Fixed a blank Run page after the P2P security hardening. Electron 42 reports
+  an omitted WebView session partition as an empty string; the strict policy
+  now admits only that exact platform representation while continuing to reject
+  arbitrary partition labels.
+
+- Remote workspaces are created on demand. Run starts with Local only; click
+  “+” and choose a computer from the LAN or SSH list to create and focus its
+  non-closable tab. The picker is a bounded floating panel that lists ready
+  workspaces first and keeps unavailable ones visible but disabled with their
+  real status.
+
+## 0.1.26 — 2026-09-10
 
 - The Connect tab now matches the compact network-management layout: saved
   computers come first, testing and connection status remain visible, and add,

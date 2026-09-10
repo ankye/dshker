@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { nextTick } from 'vue'
 import type { P2PCatalogView, P2PComputerView, P2PConnectionView } from '@/shared/p2p-management'
 import { p2pConnections, p2pManagement } from '@/app/domains/remote-connections'
-import { runtimeBrowser } from '../runtimeBrowserState'
+import { resetRuntimeBrowserForTests, runtimeBrowser } from '../runtimeBrowserState'
 
 const serviceId = 'a'.repeat(64)
 const connectionId = 'c'.repeat(32)
@@ -57,18 +57,30 @@ function peerTab() {
 beforeEach(() => {
   p2pManagement.catalog.value = catalog([computer()])
   vi.spyOn(p2pConnections, 'isReady').mockReturnValue(false)
+  resetRuntimeBrowserForTests()
+  runtimeBrowser.openRemoteTab(`peer:${connectionId}`)
 })
 
 afterEach(async () => {
   vi.restoreAllMocks()
   p2pConnections.state.peers = undefined
   p2pManagement.catalog.value = null
-  runtimeBrowser.activeTabId.value = 'local'
+  resetRuntimeBrowserForTests()
   await nextTick()
 })
 
 describe('paired computer Run tabs', () => {
-  it('creates one fixed tab per paired computer', () => {
+  it('keeps peer workspaces lazy until explicitly opened', () => {
+    resetRuntimeBrowserForTests()
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual(['local'])
+    expect(runtimeBrowser.openRemoteTab(`peer:${connectionId}`)).toBe(true)
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
+      'local',
+      `peer:${connectionId}`
+    ])
+  })
+
+  it('retains one tab per explicitly opened paired computer', () => {
     expect(peerTab()).toMatchObject({ source: 'peer', connectionId, title: 'Studio' })
   })
 

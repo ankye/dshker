@@ -10,11 +10,11 @@ One desktop home for your local and remote DeepSeek Harness sessions.
 
 ## Core features
 
-- **Multiple computers, one workspace** — manage trusted SSH connections, test the full DSH session path, and switch between fixed Local and per-computer Run tabs without manually copying DSH Web credentials.
+- **Multiple computers, one workspace** — manage trusted SSH connections, test the full DSH session path, and open per-computer Run tabs on demand alongside Local without manually copying DSH Web credentials.
 - **One-click DSH Web** — prepare the bundled Harness seed, select a core commit, and start the standard DSH Web command.
 - **Version control** — refresh remote history, inspect commits, and explicitly switch the managed DSH core.
 - **Extension management** — see installed extensions and browse the curated Awesome DSH Plugin catalog.
-- **Console and fixed runtime tabs** — follow exact process output, stop the managed process, and keep one Local tab plus one durable tab for every registered computer.
+- **Console and on-demand runtime tabs** — follow exact process output, stop the managed process, and keep Local available while creating a remote tab only when you choose a ready workspace from Run’s **+** picker.
 - **Token usage** — read session and daily model totals from native DSH logs without writing native DSH data.
 - **Safe ownership boundaries** — keep Harness, plugins, presets, settings, and native `~/.dsh` data in their declared roots without silently replacing them.
 
@@ -33,14 +33,14 @@ Keep your DSH machines together without exposing DSH Web to the network. The cur
 - **Computer management:** add a display name, host, SSH port and user; edit saved connections or remove computers you no longer need. Disconnect before changing connection details.
 - **Test before connecting:** verify SSH authentication, the remote DSHKer handshake and DSH access. A successful test is separate from an active connection.
 - **Visible status:** green indicates readiness or a passed test; red indicates failure, with text describing the state. Connect and disconnect explicitly.
-- **Persistent tabs:** one Local tab and one fixed, non-closable tab per registered computer. Disconnecting does not remove the computer's tab.
+- **On-demand tabs:** one Local tab is always available; click **+** in Run, then choose a computer from the floating **LAN computers** or **SSH connections** list to create its non-closable tab. Ready workspaces are listed first; unavailable ones remain visible but disabled at the bottom. Disconnecting does not remove an opened computer tab.
 - **No manual DSH token copying:** the authenticated connection obtains the DSH Web credential. SSH authentication is still required; the app neither asks for SSH passwords nor transfers private keys.
 
 To connect:
 
 1. Run DSHKer on the remote computer and ensure it can start its managed DSH Web session.
 2. Configure the remote SSH server and verify access using your system OpenSSH configuration or agent, including trusted host keys.
-3. Open **Remote connections**, enter the computer details, choose **Test**, then **Connect**. Open its tab under **Run**.
+3. Open **Remote connections**, enter the computer details, choose **Test**, then **Connect**. In **Run**, click **+** and choose the computer from the SSH list.
 
 The form's port is the **SSH port**, not the DSH Web port. DSHKer obtains the current DSH endpoint instead of assuming `3080`. If you see `remote.peer_unavailable`, check that remote DSHKer is running and can provide a DSH session; an accessible SSH server alone is not enough.
 
@@ -127,7 +127,7 @@ Then use the sidebar in this order when needed:
 4. **Token usage** — inspect session and daily model totals from native DSH logs.
 5. **Settings** — manage DSH and Launcher settings, including update checks.
 6. **Remote connections** — register, test, connect, and monitor trusted DSHKer computers through loopback SSH tunnels.
-7. **Run** — use the fixed Local and remote computer tabs for connected DSH Web sessions.
+7. **Run** — use Local and open remote computer tabs on demand for DSH Web sessions.
 
 For step-by-step details, troubleshooting, and the directory ownership model, read the [English usage guide](docs/usage.en.md) or [Chinese usage guide](docs/usage.zh-CN.md).
 

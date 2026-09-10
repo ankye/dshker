@@ -6,6 +6,7 @@ import {
   resetRemoteConnectionsForTests
 } from '@/app/domains/remote-connections'
 import RemoteConnectionsPanel from '../components/RemoteConnectionsPanel.vue'
+import { resetRuntimeBrowserForTests, runtimeBrowser } from '../runtimeBrowserState'
 
 const disconnected: RemoteConnectionsState = {
   connections: [
@@ -79,10 +80,12 @@ describe('RemoteConnectionsPanel', () => {
   beforeEach(() => {
     resetRemoteConnectionsForTests()
     remoteConnectionEditor.clear()
+    resetRuntimeBrowserForTests()
   })
   afterEach(() => {
     resetRemoteConnectionsForTests()
     remoteConnectionEditor.clear()
+    resetRuntimeBrowserForTests()
     window.dshLauncher = undefined
   })
 
@@ -237,5 +240,20 @@ describe('RemoteConnectionsPanel', () => {
     expect(testBadge.attributes('data-state')).toBe('passed')
     expect(testBadge.text()).toContain('测试通过')
     expect(wrapper.get('.remote-status').attributes('data-state')).toBe('disconnected')
+  })
+
+  it('creates a remote workbench tab only after the row action is chosen', async () => {
+    installApi(disconnected)
+    const wrapper = mount(RemoteConnectionsPanel)
+    await flushPromises()
+
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual(['local'])
+    await wrapper.get('[data-testid^="remote-open-workbench-"]').trigger('click')
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
+      'local',
+      'remote:11111111-1111-4111-8111-111111111111'
+    ])
+    expect(wrapper.emitted('navigate')).toEqual([['runtime']])
+    wrapper.unmount()
   })
 })
