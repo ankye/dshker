@@ -1,8 +1,9 @@
-import { ipcMain } from 'electron'
+import { BrowserWindow, ipcMain } from 'electron'
 import { apiFail, apiOk } from '../../../src/shared/contracts'
 import {
   P2P_MANAGEMENT_CHANNELS,
   P2P_MANAGEMENT_ERROR_CODES,
+  P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
   type P2PManagementErrorCode,
   type P2PManagementOperation,
   type P2PManagementRequest,
@@ -26,11 +27,26 @@ import {
 import { PeerManagementRequests } from './management-requests'
 import { PeerHelperError } from './wire'
 
-/** Owner methods the IPC may dispatch to; every operation is now implemented. */
+/**
+ * Owner methods the IPC may dispatch to; every operation is now implemented.
+ *
+ * Every member is a dispatched operation, and the admission tests rely on that:
+ * they assert no member is touched by a refused request. A subscription is
+ * therefore passed separately rather than added here.
+ */
 export type PeerManagementOwner = Pick<PeerManagement, Exclude<P2PManagementOperation, 'cancel'>>
 
-/** No raw RPC dispatch, paths, keys or tokens cross this boundary. */
-export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
+/**
+ * No raw RPC dispatch, paths, keys or tokens cross this boundary.
+ *
+ * `sessions` is separate from `owner` because it is a subscription, not a
+ * dispatched operation: it is registered once at startup, whereas every member
+ * of `owner` must stay untouched until a request is admitted.
+ */
+export function registerPeerManagementIpc(
+  owner: PeerManagementOwner,
+  sessions?: { onSessionChange(listener: () => void): () => void }
+): void {
   const requests = new PeerManagementRequests()
   function register<K extends Exclude<P2PManagementOperation, 'cancel'>>(
     method: K,
@@ -152,6 +168,13 @@ export function registerPeerManagementIpc(owner: PeerManagementOwner): void {
   // The network layer: this computer's session with each coordinator, which is
   // what presence and pairing depend on. A pair connection is reported above.
   register('serviceSessions', false, async () => owner.serviceSessions())
+  // Sessions are established after the window exists, so the renderer's first
+  // read can observe a state that is already stale. Push the change instead of
+  // leaving it to be discovered.
+  sessions?.onSessionChange(() => {
+    for (const window of BrowserWindow.getAllWindows())
+      if (!window.isDestroyed()) window.webContents.send(P2P_SERVICE_SESSIONS_CHANGED_CHANNEL)
+  })
   // Starting a connection is a write: it consumes an attempt and a generation.
   register('connect', true, async (r, s) =>
     projectPeerConnection(r.serviceId, await owner.connect(r.serviceId, r.pairId, s))

@@ -413,11 +413,27 @@ export type P2PManagementRequest<K extends P2PManagementOperation> = {
   version: typeof P2P_MANAGEMENT_VERSION
   requestId: number
 } & P2PManagementInputs[K]
-export type P2PManagementApi = Readonly<{
-  [K in P2PManagementOperation]: (
-    request: P2PManagementRequest<K>
-  ) => Promise<ApiResult<P2PManagementResults[K], P2PManagementErrorCode>>
-}>
+/**
+ * Push channel for session changes.
+ *
+ * Not an operation: it carries no request and is never admitted as one. Sessions
+ * are established after the window exists so an unreachable coordinator cannot
+ * delay startup, which means the renderer's first read can legitimately observe
+ * a state that is already stale.
+ */
+export const P2P_SERVICE_SESSIONS_CHANGED_CHANNEL =
+  'dsh-launcher:p2p:service-sessions-changed' as const
+
+export type P2PManagementApi = Readonly<
+  {
+    [K in P2PManagementOperation]: (
+      request: P2PManagementRequest<K>
+    ) => Promise<ApiResult<P2PManagementResults[K], P2PManagementErrorCode>>
+  } & {
+    /** Subscribes to session changes; returns an unsubscribe function. */
+    onServiceSessionsChange(listener: () => void): () => void
+  }
+>
 
 /** Codes only, never native exception messages or helper-supplied arbitrary text. */
 export const P2P_MANAGEMENT_ERROR_CODES = [

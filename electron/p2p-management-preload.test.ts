@@ -16,7 +16,13 @@ describe('formal P2P preload capability surface', () => {
     const desktop = mocks.exposed.get('dshLauncher') as { p2pManagement: P2PManagementApi }
     expect(Object.isFrozen(desktop)).toBe(true)
     expect(Object.isFrozen(desktop.p2pManagement)).toBe(true)
-    expect(Object.keys(desktop.p2pManagement).sort()).toEqual(Object.keys(channels).sort())
+    // Exactly the named operations, plus the one subscription. Sessions are
+    // established after the window exists, so the renderer needs to be told when
+    // one changes; it carries no request and cannot invoke anything.
+    expect(Object.keys(desktop.p2pManagement).sort()).toEqual(
+      [...Object.keys(channels), 'onServiceSessionsChange'].sort()
+    )
+    expect(typeof desktop.p2pManagement.onServiceSessionsChange).toBe('function')
     const response = { ok: false, code: 'p2p.invalid_request', message: 'p2p.invalid_request' }
     mocks.invoke.mockResolvedValue(response)
     for (const name of Object.keys(channels) as (keyof typeof channels)[]) {

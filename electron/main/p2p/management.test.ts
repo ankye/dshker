@@ -242,6 +242,38 @@ describe('bringing enrolled services online at startup', () => {
     ])
   })
 
+  it('recovers an offline service on the maintenance sweep', async () => {
+    // A one-shot startup pass left a launcher offline for the rest of its run if
+    // the coordinator was briefly unreachable. The sweep retries only what is
+    // not already online.
+    const f = fixture()
+    await f.owner.goOnline()
+    expect(await f.owner.serviceSessions()).toEqual([
+      { serviceId, state: 'offline', code: 'p2p.device_unregistered' }
+    ])
+    enrolled()
+    // A real short interval rather than fake timers: one sweep awaits catalog
+    // inspection, runtime readiness, activation and restore, so advancing the
+    // clock by one tick does not guarantee the sweep has finished.
+    f.owner.startSessionMaintenance(10)
+    await vi.waitFor(async () =>
+      expect(await f.owner.serviceSessions()).toEqual([{ serviceId, state: 'online', code: '' }])
+    )
+  })
+
+  it('notifies once per actual session change, not per sweep', async () => {
+    const f = fixture()
+    enrolled()
+    const changed = vi.fn()
+    f.owner.onSessionChange(changed)
+    await f.owner.goOnline()
+    expect(changed).toHaveBeenCalledTimes(1)
+    // An online service is left alone, so repeated sweeps report nothing.
+    f.owner.startSessionMaintenance(10)
+    await new Promise((resolve) => setTimeout(resolve, 60))
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
   it('reports an unattempted service as offline with no invented reason', async () => {
     // Never having tried is not a refusal, so no code is supplied for one.
     const f = fixture()

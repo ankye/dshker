@@ -53,6 +53,37 @@ describe('P2P network layer', () => {
     expect(network.isOnline('service-b')).toBe(false)
   })
 
+  it('adopts a pushed change instead of waiting to be asked again', async () => {
+    // Startup brings services online after the window exists, so the first read
+    // observes "not attempted yet". Without the push that stale answer persisted
+    // and the launcher kept reporting itself offline for the rest of its run.
+    let notify: (() => void) | undefined
+    const serviceSessions = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: true, data: [{ serviceId, state: 'offline', code: '' }] })
+      .mockResolvedValue({ ok: true, data: [{ serviceId, state: 'online', code: '' }] })
+    const api = {
+      serviceSessions,
+      onServiceSessionsChange: (listener: () => void) => {
+        notify = listener
+        return () => (notify = undefined)
+      }
+    } as unknown as P2PManagementApi
+    const previous = window.dshLauncher
+    window.dshLauncher = { p2pManagement: api } as never
+    try {
+      const management = new P2PManagementDomain(() => api)
+      const network = new P2PNetworkDomain(management)
+      await network.start()
+      expect(network.isOnline(serviceId)).toBe(false)
+      notify?.()
+      await vi.waitFor(() => expect(network.isOnline(serviceId)).toBe(true))
+      network.stop()
+    } finally {
+      window.dshLauncher = previous
+    }
+  })
+
   it('leaves the last read intact when a refused read returns nothing', async () => {
     const api = {
       serviceSessions: vi

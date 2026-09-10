@@ -3,19 +3,26 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import {
   P2P_MANAGEMENT_CHANNELS as channels,
+  P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
   type P2PManagementOperation
 } from '../../../src/shared/p2p-management'
 import { registerPeerManagementIpc, type PeerManagementOwner } from './management-ipc'
 import { parseManagementRequest } from './management-admission'
 import { PeerHelperError } from './wire'
 
-const mocks = vi.hoisted(() => ({ handlers: new Map<string, (...args: any[]) => any>() }))
+const mocks = vi.hoisted(() => ({
+  handlers: new Map<string, (...args: any[]) => any>(),
+  windows: [] as { isDestroyed(): boolean; webContents: { send: (channel: string) => void } }[]
+}))
 vi.mock('electron', () => ({
   ipcMain: {
     handle: (channel: string, handler: (...args: any[]) => any) =>
       mocks.handlers.set(channel, handler)
   },
-  BrowserWindow: { fromWebContents: (sender: { owned: boolean }) => (sender.owned ? {} : null) },
+  BrowserWindow: {
+    fromWebContents: (sender: { owned: boolean }) => (sender.owned ? {} : null),
+    getAllWindows: () => mocks.windows
+  },
   app: {},
   Menu: {}
 }))
@@ -239,6 +246,30 @@ describe('P2P named management admission', () => {
       for (const handler of Object.values(owner)) expect(handler).not.toHaveBeenCalled()
     }
   )
+
+  it('pushes session changes without exposing a dispatched operation', async () => {
+    // The subscription is registered at startup, so it cannot live on the owner:
+    // the assertions above require every owner member to stay untouched until a
+    // request is admitted.
+    const { owner } = fixture()
+    const listeners: (() => void)[] = []
+    registerPeerManagementIpc(owner as unknown as PeerManagementOwner, {
+      onSessionChange: (listener) => {
+        listeners.push(listener)
+        return () => undefined
+      }
+    })
+    expect(listeners).toHaveLength(1)
+    for (const handler of Object.values(owner)) expect(handler).not.toHaveBeenCalled()
+    const send = vi.fn()
+    mocks.windows = [{ isDestroyed: () => false, webContents: { send } }]
+    listeners[0]?.()
+    // The change reaches the renderer, and does so without dispatching an
+    // operation: the renderer decides when to re-read.
+    expect(send).toHaveBeenCalledWith(P2P_SERVICE_SESSIONS_CHANGED_CHANNEL)
+    for (const handler of Object.values(owner)) expect(handler).not.toHaveBeenCalled()
+    mocks.windows = []
+  })
 
   it.each(Object.keys(channels) as P2PManagementOperation[])(
     '%s rejects foreign windows, subframes and origins using production sender policy',

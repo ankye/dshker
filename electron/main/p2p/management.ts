@@ -49,6 +49,8 @@ export class PeerManagement {
    * layer: a pair connection is tracked separately by the runtime host.
    */
   readonly #sessions = new Map<string, { state: 'online' | 'offline'; code: string }>()
+  readonly #sessionListeners = new Set<() => void>()
+  #sessionSweep: ReturnType<typeof setInterval> | undefined
   readonly #resolveSettingsRoot: () => Promise<string>
 
   constructor(options: Options) {
@@ -64,6 +66,8 @@ export class PeerManagement {
   }
 
   async close(): Promise<void> {
+    if (this.#sessionSweep !== undefined) clearInterval(this.#sessionSweep)
+    this.#sessionSweep = undefined
     this.#lifetime.abort()
     this.#clearSession()
     await this.#host.close()
@@ -93,7 +97,7 @@ export class PeerManagement {
       if (this.#lifetime.signal.aborted) break
       try {
         const session = await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
-        this.#sessions.set(service.serviceId, { state: 'online', code: '' })
+        this.#setSession(service.serviceId, 'online', '')
         // Devices in the same network are already authorized to reach each other,
         // so pair them without an invite. Joining a network would otherwise grant
         // nothing on its own. A refusal here still leaves the service online.
@@ -104,11 +108,72 @@ export class PeerManagement {
         // The refusal is retained rather than discarded: without it the surface
         // could only say "offline" and never why, which left the cause of a
         // down session undiscoverable from the product.
-        this.#sessions.set(service.serviceId, { state: 'offline', code })
+        this.#setSession(service.serviceId, 'offline', code)
         results.push({ serviceId: service.serviceId, online: false, code })
       }
     }
     return results
+  }
+
+  /**
+   * Notifies when a session changes.
+   *
+   * goOnline runs after the window exists so an unreachable coordinator cannot
+   * delay startup. Without a change notification the renderer's first read
+   * therefore observed "not attempted yet" and nothing ever corrected it, so the
+   * status stayed offline for a computer that had since come online.
+   */
+  onSessionChange(listener: () => void): () => void {
+    this.#sessionListeners.add(listener)
+    return () => this.#sessionListeners.delete(listener)
+  }
+
+  /**
+   * Re-establishes any service that is not currently online.
+   *
+   * A session is not self-healing: the coordinator can drop it, the network can
+   * change, or the machine can wake from sleep, and nothing in the one-shot
+   * startup pass would notice. Only services that are already offline are
+   * retried, so an online service is never disturbed by the sweep.
+   *
+   * Failure is per service and never escapes: an unreachable coordinator leaves
+   * the app usable and simply offline, exactly as at startup.
+   */
+  startSessionMaintenance(intervalMilliseconds = 60_000): void {
+    if (this.#sessionSweep !== undefined) return
+    this.#sessionSweep = setInterval(() => {
+      if (this.#lifetime.signal.aborted) return
+      void this.#sweepSessions()
+    }, intervalMilliseconds)
+    // Node keeps the process alive for a pending timer; this one must not.
+    this.#sessionSweep.unref?.()
+  }
+
+  async #sweepSessions(): Promise<void> {
+    const snapshot = await this.#catalog.inspect().catch(() => undefined)
+    if (!snapshot) return
+    for (const service of snapshot.record.services) {
+      if (this.#lifetime.signal.aborted) return
+      if (this.#sessions.get(service.serviceId)?.state === 'online') continue
+      try {
+        await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
+        this.#setSession(service.serviceId, 'online', '')
+      } catch (error) {
+        this.#setSession(
+          service.serviceId,
+          'offline',
+          error instanceof PeerHelperError ? error.code : 'p2p.internal_error'
+        )
+      }
+    }
+  }
+
+  /** Records one session and notifies only on an actual change. */
+  #setSession(serviceId: string, state: 'online' | 'offline', code: string): void {
+    const previous = this.#sessions.get(serviceId)
+    if (previous?.state === state && previous.code === code) return
+    this.#sessions.set(serviceId, { state, code })
+    for (const listener of this.#sessionListeners) listener()
   }
 
   /**
@@ -766,7 +831,7 @@ export class PeerManagement {
     // computer no longer had.
     for (const [serviceId, session] of this.#sessions)
       if (session.state === 'online')
-        this.#sessions.set(serviceId, { state: 'offline', code: 'p2p.helper_unavailable' })
+        this.#setSession(serviceId, 'offline', 'p2p.helper_unavailable')
     this.#restored.clear()
     this.#session?.projects.close()
     this.#session?.connections.close()

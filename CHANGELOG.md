@@ -76,6 +76,13 @@
   unknown status that only resolved after visiting that tab. A session is also
   ended when the runtime is lost, rather than continuing to claim reach the
   computer no longer has.
+- Coming online is now maintained rather than attempted once. Sessions are
+  established after the window opens, so the first status read could observe a
+  state that was already stale and nothing corrected it; main now pushes session
+  changes to the window. A periodic sweep also retries any service that is not
+  online, so a coordinator that was briefly unreachable, a network change or a
+  wake from sleep no longer leaves the launcher offline for the rest of its run.
+  Services already online are left untouched by the sweep.
 - This candidate remains an interop-testing prerelease: not marked latest,
   not in the stable update feed.
 

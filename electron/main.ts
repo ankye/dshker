@@ -131,6 +131,10 @@ async function start(): Promise<void> {
   // other machine and to the web console. Deliberately not awaited: an
   // unreachable coordinator must not delay the window.
   void bringPeerServicesOnline(services.peerManagement)
+  // A session is not self-healing: the coordinator can drop it, the network can
+  // change, or the machine can wake from sleep. The startup pass alone left a
+  // launcher offline for the rest of its run once anything interrupted it.
+  services.peerManagement.startSessionMaintenance()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

@@ -31,6 +31,7 @@ export interface P2PNetworkState {
  */
 export class P2PNetworkDomain {
   readonly #state = reactive<P2PNetworkState>({ sessions: undefined })
+  #unsubscribe: (() => void) | undefined
   constructor(private readonly management: P2PManagementDomain) {}
 
   get state(): P2PNetworkState {
@@ -79,8 +80,29 @@ export class P2PNetworkDomain {
    * rather than colliding.
    */
   async start(): Promise<void> {
+    this.#subscribe()
     await this.management.ensureBuiltinService()
     await this.read()
+  }
+
+  /**
+   * Follows session changes pushed by main.
+   *
+   * Startup establishes sessions after the window exists, so the first read can
+   * legitimately observe a state that is already stale. Polling would also find
+   * the change eventually, but only after showing the wrong answer for a while.
+   */
+  #subscribe(): void {
+    if (this.#unsubscribe !== undefined) return
+    const api = window.dshLauncher?.p2pManagement
+    if (api?.onServiceSessionsChange === undefined) return
+    this.#unsubscribe = api.onServiceSessionsChange(() => void this.read())
+  }
+
+  /** Releases the subscription; used by tests and any future shell teardown. */
+  stop(): void {
+    this.#unsubscribe?.()
+    this.#unsubscribe = undefined
   }
 }
 

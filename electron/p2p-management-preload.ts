@@ -1,6 +1,7 @@
 import { ipcRenderer } from 'electron'
 import {
   P2P_MANAGEMENT_CHANNELS as channels,
+  P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
   type P2PManagementApi
 } from '../src/shared/p2p-management'
 
@@ -40,6 +41,13 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
   disconnect: (request) => ipcRenderer.invoke(channels.disconnect, request),
   localDevice: (request) => ipcRenderer.invoke(channels.localDevice, request),
   serviceSessions: (request) => ipcRenderer.invoke(channels.serviceSessions, request),
+  onServiceSessionsChange: (listener: () => void): (() => void) => {
+    const onChanged = (): void => listener()
+    ipcRenderer.on(P2P_SERVICE_SESSIONS_CHANGED_CHANNEL, onChanged)
+    return () => {
+      ipcRenderer.removeListener(P2P_SERVICE_SESSIONS_CHANGED_CHANNEL, onChanged)
+    }
+  },
   networkDevices: (request) => ipcRenderer.invoke(channels.networkDevices, request),
   cancel: (request) => ipcRenderer.invoke(channels.cancel, request)
 })
