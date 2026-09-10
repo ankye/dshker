@@ -275,6 +275,7 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.myNetwork.online': 'Online',
   'p2p.myNetwork.offline': 'Offline',
   'p2p.myNetwork.banned': 'Banned',
+  'p2p.myNetwork.unpaired': 'No paired computer',
   'p2p.myNetwork.notJoinedHint': 'Enter a network ID to join the network without logging in.',
   'p2p.myNetwork.builtinRemoved': 'The official server was removed and cannot be re-added.',
   'p2p.myNetwork.serviceUnavailable': 'The official server is unavailable. Try again shortly.',

@@ -157,7 +157,7 @@ describe('P2P 「我的网络」 card', () => {
     expect(joinNetwork).not.toHaveBeenCalled()
   })
 
-  it('shows the registered card with no input, honest offline status and a leave action', async () => {
+  it('shows the registered card with no input, an honest unpaired status and a leave action', async () => {
     const ui = await render({})
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pEnrollment.state(serviceId).registration = registered
@@ -168,9 +168,41 @@ describe('P2P 「我的网络」 card', () => {
     expect(info.text()).toContain('device-a')
     expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(false)
-    // Offline unless a live ready connection stage proves otherwise.
-    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('离线')
+    // Online requires a live ready connection, which requires a pair. With no
+    // paired computer that stage is unreachable, so calling it offline reported a
+    // connection problem the user had no way to act on.
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('尚无配对设备')
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).not.toContain('离线')
     expect(ui.find('[data-testid="p2p-leave-network"]').exists()).toBe(true)
+  })
+
+  it('still reports offline for a paired computer without a ready connection', async () => {
+    const ui = await render({})
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pEnrollment.state(serviceId).registration = registered
+    // A pair makes the ready stage reachable, so its absence is a real offline
+    // state rather than a missing setup step. The strict definition is unchanged.
+    domain.p2pManagement.catalog.value = {
+      ...saved,
+      computers: [
+        {
+          connectionId: 'connection-a',
+          serviceId,
+          displayName: 'Other computer',
+          pairId: 'pair-a',
+          networkId: 'network-a',
+          localDeviceId: 'device-a',
+          remoteDeviceId: 'device-b',
+          userId: 'user-a',
+          localPublicKey: 'local-key',
+          remotePublicKey: 'remote-key',
+          pairRevision: 1,
+          pairState: 'active'
+        }
+      ]
+    }
+    await flushPromises()
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('离线')
   })
 
   it('offers no leave without a session and says why, rather than failing on click', async () => {

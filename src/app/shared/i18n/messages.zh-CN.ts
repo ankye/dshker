@@ -229,6 +229,7 @@ export const zhCN = {
   'p2p.myNetwork.online': '在线',
   'p2p.myNetwork.offline': '离线',
   'p2p.myNetwork.banned': '被封禁',
+  'p2p.myNetwork.unpaired': '尚无配对设备',
   'p2p.myNetwork.notJoinedHint': '输入网络 ID 即可免登录加入网络。',
   'p2p.myNetwork.builtinRemoved': '官方服务器已被移除，无法重新添加。',
   'p2p.myNetwork.serviceUnavailable': '官方服务器暂不可用，请稍后重试。',
