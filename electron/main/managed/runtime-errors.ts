@@ -16,6 +16,8 @@ export type ManagedHarnessRuntimeErrorCode =
   | 'runtime.operation_in_progress'
   /** A version or plugin change was refused because DSH Web is still running. */
   | 'runtime.busy_running'
+  /** A launch port is held by a process the Launcher may not stop. */
+  | 'runtime.port_in_use'
   /** The DSH CLI refused a plugin install or uninstall. */
   | 'runtime.plugin_operation_failed'
   /** The persisted active-version pointer exists but is not a valid record. */

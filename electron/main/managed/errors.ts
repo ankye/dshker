@@ -36,6 +36,8 @@ export type ManagedRootErrorCode =
   | 'managed.harness_launch_failed'
   | 'managed.harness_launch_in_progress'
   | 'managed.harness_busy_running'
+  /** A launch port is held by another program the Launcher must not stop. */
+  | 'managed.harness_port_in_use'
   | 'managed.harness_worktree_invalid'
   | 'managed.harness_input_invalid'
   | 'managed.harness_plugin_operation_failed'

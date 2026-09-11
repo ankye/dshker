@@ -47,6 +47,7 @@ import {
   LAUNCH_PREFERENCES_FORMAT,
   parseLaunchPreferencesPort
 } from './launch-preferences'
+import { foreignPortFailure, preparePortForLaunch } from './port-occupancy'
 
 /** A plugin command may resolve locally, but must never leave the UI busy indefinitely. */
 const PLUGIN_COMMAND_TIMEOUT_MILLISECONDS = 120_000
@@ -735,6 +736,7 @@ export class LauncherHarnessService {
     this.#appendLauncherEvent('Checking the selected Harness checkout and launch settings.')
     try {
       await this.#loadPort()
+      await this.#prepareLaunchPort()
       const active = await this.#requireActiveVersion()
       const readiness = await readHarnessReadiness(active.directory)
       if (readiness.kind !== 'ready') {
@@ -807,6 +809,19 @@ export class LauncherHarnessService {
     })
     return this.getState()
   }
+  /** Stops a leftover DSH Web holding the fixed launch port; foreign holders are refused. */
+  async #prepareLaunchPort(): Promise<void> {
+    if (this.#port.mode !== 'fixed') return
+    const decision = await preparePortForLaunch(this.#port.port)
+    if (decision.kind === 'cleared') {
+      this.#appendLauncherEvent(
+        `Stopped a leftover DSH Web process holding port ${this.#port.port}.`
+      )
+      return
+    }
+    if (decision.kind === 'foreign') throw foreignPortFailure(this.#port.port, decision.occupant)
+  }
+
   /**
    * Records the port the next launch will request.
    *

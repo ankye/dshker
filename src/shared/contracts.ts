@@ -125,6 +125,8 @@ export type ManagedOperationErrorCode =
   | 'managed.harness_launch_in_progress'
   /** A version or plugin operation was refused because DSH Web is still running. */
   | 'managed.harness_busy_running'
+  /** A launch port is held by another program the Launcher must not stop. */
+  | 'managed.harness_port_in_use'
   /** The Launcher-owned checkout cannot serve the requested operation. */
   | 'managed.harness_worktree_invalid'
   /** The renderer supplied a selection the service rejected. */

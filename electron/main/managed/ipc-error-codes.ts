@@ -28,6 +28,7 @@ export const RUNTIME_ERROR_CODES: readonly ManagedHarnessRuntimeErrorCode[] = [
   'runtime.child_crashed',
   'runtime.operation_in_progress',
   'runtime.busy_running',
+  'runtime.port_in_use',
   'runtime.plugin_operation_failed',
   'runtime.version_pointer_invalid',
   'runtime.not_found'
@@ -47,6 +48,7 @@ export const LAUNCHER_HARNESS_ERROR_CODES: Readonly<
 > = {
   'runtime.input_invalid': 'managed.harness_input_invalid',
   'runtime.busy_running': 'managed.harness_busy_running',
+  'runtime.port_in_use': 'managed.harness_port_in_use',
   'runtime.operation_in_progress': 'managed.harness_launch_in_progress',
   'runtime.worktree_invalid': 'managed.harness_worktree_invalid',
   'runtime.version_pointer_invalid': 'managed.harness_worktree_invalid',

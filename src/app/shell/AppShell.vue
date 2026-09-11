@@ -103,6 +103,7 @@ const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.
   'managed.harness_worktree_invalid': 'toast.error.harnessWorktreeInvalid',
   'managed.harness_input_invalid': 'toast.error.harnessInputInvalid',
   'managed.harness_plugin_operation_failed': 'toast.error.harnessPluginOperationFailed',
+  'managed.harness_port_in_use': 'toast.error.harnessPortInUse',
   'managed.git_operation_failed': 'toast.error.gitOperationFailed'
 }
 
@@ -115,6 +116,7 @@ const TOAST_ERROR_DETAIL_KEYS: Readonly<Record<string, Parameters<typeof shell.t
   'managed.harness_worktree_invalid': 'toast.error.detail.harnessWorktreeInvalid',
   'managed.harness_input_invalid': 'toast.error.detail.harnessInputInvalid',
   'managed.harness_plugin_operation_failed': 'toast.error.detail.harnessPluginOperationFailed',
+  'managed.harness_port_in_use': 'toast.error.detail.harnessPortInUse',
   'managed.git_operation_failed': 'toast.error.detail.gitOperationFailed'
 }
 

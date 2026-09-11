@@ -8,6 +8,7 @@ export const zhCNErrors = {
   'toast.error.harnessWorktreeInvalid': '内核目录不可用',
   'toast.error.harnessInputInvalid': '操作参数无效',
   'toast.error.harnessPluginOperationFailed': '扩展安装或卸载失败',
+  'toast.error.harnessPortInUse': '启动端口被其他程序占用',
   'toast.error.gitOperationFailed': 'Git 操作失败',
   'toast.error.detail.bridge': '桌面能力未就绪，读取和注册目录暂不可用。请重启 Launcher 后重试。',
   'toast.error.detail.harnessLaunchFailed':
@@ -20,6 +21,8 @@ export const zhCNErrors = {
   'toast.error.detail.harnessInputInvalid': '该选项已不再有效。请刷新列表后重新选择。',
   'toast.error.detail.harnessPluginOperationFailed':
     'DSH 扩展命令执行失败，扩展列表保持原样。请在“控制台”查看输出后重试。',
+  'toast.error.detail.harnessPortInUse':
+    '启动所需的端口正被其他程序使用，Launcher 不会擅自停止它。请停止占用端口的程序后重试。',
   'toast.error.detail.gitOperationFailed': '仓库未变更。请检查网络与分支权限后重试。',
   'toast.error.detail.unknown': '操作未生效。请在“控制台”查看输出后重试。',
   'toast.error.code': '错误码',
@@ -36,6 +39,7 @@ export const enUSErrors = {
   'toast.error.harnessWorktreeInvalid': 'The core directory is unavailable',
   'toast.error.harnessInputInvalid': 'The selection is invalid',
   'toast.error.harnessPluginOperationFailed': 'Extension install or removal failed',
+  'toast.error.harnessPortInUse': 'The launch port is held by another program',
   'toast.error.gitOperationFailed': 'The Git operation failed.',
   'toast.error.detail.bridge':
     'Desktop capabilities are not ready, so reading and registering directories is unavailable. Restart the Launcher and retry.',
@@ -51,6 +55,8 @@ export const enUSErrors = {
     'That selection is no longer valid. Refresh the list and choose again.',
   'toast.error.detail.harnessPluginOperationFailed':
     'The DSH extension command failed and the extension list is unchanged. Check the Console output and retry.',
+  'toast.error.detail.harnessPortInUse':
+    'The launch port is in use by another program, which the Launcher will not stop on its own. Stop the program holding the port and retry.',
   'toast.error.detail.gitOperationFailed':
     'The repository is unchanged. Check network access and branch permissions, then retry.',
   'toast.error.detail.unknown': 'The operation had no effect. Check the Console output and retry.',
