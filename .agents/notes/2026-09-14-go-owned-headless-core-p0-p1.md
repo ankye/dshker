@@ -64,6 +64,31 @@ exits when its parent channel closes.
    nothing to do with any test result. The helper is now split across a
    `windows` and a `!windows` file.
 
+## Verified mechanism for the macOS credential provider
+
+Design D4 commits to shelling out to `security` with the secret on stdin,
+because `CGO_ENABLED=0` rules out the Security framework through cgo. Probed on
+macOS before writing any code against it:
+
+```bash
+printf '<secret>\n<secret>\n' | security add-generic-password -a <account> -s <service> -U -w
+security find-generic-password -a <account> -s <service> -w
+security delete-generic-password -a <account> -s <service>
+```
+
+Three details that would otherwise be rediscovered painfully:
+
+1. `-w` with **no** value is what makes `security` read stdin. Passing the
+   secret as the `-w` argument works too but puts it in `argv`, where any
+   process on the machine can read it from `ps`; that is the plaintext path
+   D4 forbids.
+2. The prompt asks for the secret **twice** ("password data for new item" then
+   "retype password for new item"). Writing it once yields "passwords do not
+   match" and exit 0, so a naive implementation would appear to succeed while
+   storing nothing. The value must be written as two lines.
+3. `find-generic-password -w` prints the secret on stdout, which is the
+   intended read path, and `add-generic-password` needs `-U` to overwrite an
+   existing item instead of failing with "already exists".
 ## Environment note
 
 The Windows checkout runs Go 1.26.4 with `GOTOOLCHAIN=auto` while `go.mod`
