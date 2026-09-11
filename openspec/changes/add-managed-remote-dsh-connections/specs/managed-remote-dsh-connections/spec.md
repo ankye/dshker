@@ -96,7 +96,7 @@ The Remote Connections page SHALL expose a named test operation for each compute
 - **THEN** the Launcher rejects another test or connection attempt with `remote.connection_busy`
 
 ### Requirement: Named renderer authority only
-The renderer SHALL receive only typed catalog projections, connection and test states, and named create, test, connect, disconnect, and remove operations. Electron main SHALL own OpenSSH and file-transfer resolution, subprocess arguments, temporary files, peer secrets, DSH session credentials, HTTP peer calls, persistence, and process shutdown.
+The renderer SHALL receive only typed catalog projections, connection and test states, and named create, test, connect, disconnect, and remove operations. The trusted core SHALL own OpenSSH and file-transfer resolution, subprocess arguments, temporary files, peer secrets, DSH session credentials, HTTP peer calls, persistence, and process shutdown; the Electron shell proxies named operations and never exposes that authority to the renderer.
 
 #### Scenario: Renderer submits a connection operation
 - **WHEN** the trusted renderer submits one admitted request containing only documented fields or a registered computer identity

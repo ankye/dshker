@@ -10,8 +10,10 @@ context: |
   outside the Launcher registry and is reused across revisions. Installation and workspace records
   bind those roots by identity and controlled relative namespace.
   Only the selected checkout's dsh CLI with a named profile may launch Harness. The
-  renderer is context-isolated and uses a typed preload API; the main process owns Git,
-  filesystem, native dialog, subprocess, and secret-storage access.
+  renderer is context-isolated and uses a typed preload API. The trusted core owns Git,
+  filesystem, subprocess, and secret storage; the Electron shell owns the window, native
+  dialogs, the guest surface, and the renderer-facing typed API, and proxies named
+  operations to the core.
   Missing paths, tools, versions, fields, profiles, or services fail explicitly. Do not
   infer a path, select another ref, use another dsh executable, or add fallback behavior.
   Keep macOS and Windows behavior, packaging, signing, and verification aligned.

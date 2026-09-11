@@ -341,7 +341,7 @@ The Launcher SHALL materialise each version in its own directory (a `git worktre
 #### Scenario: User starts the controller process
 
 - **WHEN** the user starts a managed DSH worktree from Controller
-- **THEN** the view reflects only the child lifecycle state confirmed by Electron main
+- **THEN** the view reflects only the child lifecycle state confirmed by the trusted core
 - **AND** it exposes the exact managed revision that owns the process
 
 #### Scenario: User opens a Run page

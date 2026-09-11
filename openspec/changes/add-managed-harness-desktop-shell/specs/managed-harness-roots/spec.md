@@ -104,7 +104,7 @@ The renderer SHALL never submit an arbitrary path for a managed operation. A pat
 #### Scenario: Renderer supplies an ungranted path
 
 - **WHEN** a renderer request includes an arbitrary absolute path or a capability with the wrong purpose
-- **THEN** Electron main rejects the request before filesystem or subprocess activity
+- **THEN** the trusted core rejects the request before filesystem or subprocess activity
 
 ### Requirement: Launcher-owned persistence fails closed
 

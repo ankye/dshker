@@ -88,7 +88,7 @@ Readiness SHALL come from exactly one signal: the child's own startup URL announ
 
 #### Scenario: Launcher exits while DSH Web runs
 
-- **WHEN** the Electron main process receives a normal quit request, `SIGINT`, or `SIGTERM` while its DSH child is running or starting
+- **WHEN** the trusted core receives a normal quit request, `SIGINT`, or `SIGTERM` while its DSH child is running or starting
 - **THEN** the Launcher signals the complete managed process tree and waits for the pnpm root child to exit
 - **AND** it does not relinquish main-process ownership while that termination is unresolved
 
