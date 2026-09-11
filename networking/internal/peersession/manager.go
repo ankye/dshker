@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -198,6 +199,25 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		}
 		return result, nil
 	}
+}
+
+// namedRefusal reports why an attempt failed.
+//
+// The renderer only accepts named p2p codes, so an unnamed error is replaced by
+// a generic one; a named refusal is passed through. Overwriting every failure
+// with one constant made a transport failure and a missing remote runtime
+// indistinguishable from the UI, which is exactly the question being asked.
+func namedRefusal(err error, transportReady bool) string {
+	code := err.Error()
+	if strings.HasPrefix(code, "p2p.") && !strings.ContainsAny(code, " \r\n\t") {
+		return code
+	}
+	if !transportReady {
+		// A deadline here means the direct path never came up. There is no relay,
+		// so the honest refusal is that the two networks cannot reach each other.
+		return "p2p.direct_unavailable"
+	}
+	return "p2p.runtime_unavailable"
 }
 
 func (manager *Manager) finish(pairID string, connection *session) {
@@ -394,8 +414,13 @@ func (manager *Manager) run(connection *session) {
 		state.Stage = "ready"
 		connection.result = Connected{State: state, URL: gateway.URL}
 	} else {
+		// The runtime is only attempted once the direct path is ready, so a
+		// failure that never reached that stage is a transport failure. No relay
+		// is offered, so that case is reported as "no direct path" rather than as
+		// a runtime problem: the two need different user action.
+		transportReady := state.Stage == "starting-runtime"
 		state.Stage = "failed"
-		state.Error = "p2p.runtime_unavailable"
+		state.Error = namedRefusal(err, transportReady)
 	}
 	connection.mu.Unlock()
 	close(connection.ready)

@@ -7,9 +7,10 @@ import { assertAccountId } from './account-records'
 import { PeerAccounts } from './accounts'
 import { PeerCatalog } from './catalog'
 import { PeerConnections } from './connections'
-import { PeerCredentialStore } from './credentials'
+import { PeerCredentialStore, type PeerCredential } from './credentials'
 import { PeerEnrollment } from './enrollment'
 import { PeerPairing } from './pairing'
+import type { PeerPairMember, PeerPairMemberDevice } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
 import type { PeerRpc } from './rpc'
 import { PeerRuntimeHost } from './runtime-host'
@@ -134,7 +135,9 @@ export class PeerManagement {
    * A session is not self-healing: the coordinator can drop it, the network can
    * change, or the machine can wake from sleep, and nothing in the one-shot
    * startup pass would notice. Only services that are already offline are
-   * retried, so an online service is never disturbed by the sweep.
+   * retried, so an online service's session is never disturbed by the sweep;
+   * an online service only has its network membership re-synced, because that
+   * can change while the session itself stays up.
    *
    * Failure is per service and never escapes: an unreachable coordinator leaves
    * the app usable and simply offline, exactly as at startup.
@@ -154,7 +157,14 @@ export class PeerManagement {
     if (!snapshot) return
     for (const service of snapshot.record.services) {
       if (this.#lifetime.signal.aborted) return
-      if (this.#sessions.get(service.serviceId)?.state === 'online') continue
+      if (this.#sessions.get(service.serviceId)?.state === 'online') {
+        // The session staying up does not mean membership stood still: a machine
+        // can join the network while this one is already online. Refresh the
+        // catalog the Run tabs read so the list converges without a restart.
+        if (this.#session)
+          await this.#refreshMembers(service.serviceId, this.#session, this.#lifetime.signal)
+        continue
+      }
       try {
         await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
         this.#setSession(service.serviceId, 'online', '')
@@ -428,9 +438,7 @@ export class PeerManagement {
         throw error
     }
     this.#restored.add(serviceId)
-    await this.#syncMembers(serviceId, session, saved.credential, this.#signal(signal)).catch(
-      () => undefined
-    )
+    await this.#refreshMembers(serviceId, session, this.#signal(signal), saved.credential)
     return session
   }
 
@@ -460,10 +468,44 @@ export class PeerManagement {
   }
 
   /**
-   * Trusts network membership instead of per-pair invites: every other device
-   * bound to one of this user's networks is pinned (with its real server-vouched
-   * key) and recorded in the catalog, so the Run tabs and the member list render
-   * it and direct connections are authorized by co-membership on the server.
+   * Re-records the coordinator's current network members into the catalog.
+   *
+   * Membership is the trust source the Run tabs and the member list read, and it
+   * changes while this computer stays online: another machine can join a network,
+   * or the first sync can run before the login that authorises the listing. The
+   * sync is therefore repeatable rather than a side effect of the first device
+   * restore — otherwise a late-joining computer never reaches the catalog until
+   * the helper restarts. Best-effort by design: a coordinator refusal must not
+   * fail the read that triggered it, and without an enrolled credential there is
+   * no identity to speak as.
+   */
+  async #refreshMembers(
+    serviceId: string,
+    session: Session,
+    signal: AbortSignal,
+    credential?: PeerCredential
+  ): Promise<void> {
+    const enrollee =
+      credential ?? (await this.#credentials.load(serviceId).catch(() => undefined))?.credential
+    if (!enrollee || enrollee.serviceId !== serviceId) return
+    await this.#syncMembers(serviceId, session, enrollee, signal).catch((error) => {
+      // Best-effort: the caller's read must still succeed. The refusal is logged
+      // rather than dropped, because a silent failure here is indistinguishable
+      // from "the coordinator reports no members" from every user surface.
+      console.error('[p2p] network member sync failed:', error)
+    })
+  }
+
+  /**
+   * Re-records the coordinator's pairs as the catalog the Run route renders.
+   *
+   * Trust is still network membership, but the network device directory
+   * deliberately withholds credential material: the peer's real public key only
+   * ever reaches this device through `pairs.identity`. Sourcing the catalog from
+   * the pairs is therefore the only correct read — the previous source
+   * (`networks.devices`) carries no key at all, so every member was silently
+   * skipped and the catalog stayed empty while the device directory showed the
+   * computer online.
    */
   async #syncMembers(
     serviceId: string,
@@ -471,96 +513,66 @@ export class PeerManagement {
     credential: { deviceId: string; userId: string; name: string; publicKey: string },
     signal: AbortSignal
   ): Promise<void> {
-    const token = await this.#sessionToken(serviceId, session, signal)
-    // The helper returns bare arrays for these listing RPCs.
-    const list = await session.rpc.call('networks.list', { serviceId, data: { token } }, signal)
-    if (!Array.isArray(list)) return
-    const memberByNetwork: { networkId: string; device: Record<string, unknown> }[] = []
-    for (const entry of list) {
-      const networkId = (entry as { networkId?: unknown }).networkId
-      if (typeof networkId !== 'string') continue
-      const devices = await session.rpc.call(
-        'networks.devices',
-        { serviceId, data: { token, networkId } },
-        signal
-      )
-      for (const device of Array.isArray(devices) ? devices : []) {
-        const record = device as Record<string, unknown>
-        if (record.deviceId === credential.deviceId) continue
-        if (typeof record.deviceId !== 'string' || typeof record.publicKey !== 'string') continue
-        memberByNetwork.push({ networkId, device: record })
-      }
+    const members = await session.pairing.members(serviceId, signal)
+    // Re-pin every active pair: a restored device is handed an empty pin list,
+    // and the helper admits a connection only for a pair it has pinned. Pinning
+    // is best-effort per pair so one refusal cannot block the catalog.
+    for (const member of members) {
+      if (member.state !== 'active') continue
+      const remote = remoteSide(member, credential.deviceId)
+      if (remote === undefined) continue
+      // The helper's pin map is keyed by the connection id, which is the remote
+      // device id — the same value the coordinator authorizes an attempt by.
+      // A pin refusal must not block the catalog: the computer still belongs in
+      // the list. The refusal is logged rather than dropped, because a silent
+      // failure here is invisible from every user surface.
+      await session.pairing
+        .pin(serviceId, member, remote.deviceId, this.#lifetime.signal)
+        .catch((error) => console.error('[p2p] pair pin failed:', error))
     }
-    // Pin each member individually; pairs.pin is callable at any time.
-    for (const { networkId, device } of memberByNetwork) {
-      await session.rpc.call(
-        'pairs.pin',
-        {
-          serviceId,
-          data: {
-            pair: {
-              pairId: String(device.deviceId),
-              networkId,
-              initiator: credential.deviceId,
-              target: String(device.deviceId),
-              state: 'active',
-              revision: 1,
-              expiresAt: 0
-            },
-            initiator: {
-              deviceId: credential.deviceId,
-              userId: credential.userId,
-              publicKey: credential.publicKey,
-              name: credential.name,
-              presence: 'offline'
-            },
-            target: {
-              deviceId: String(device.deviceId),
-              userId: String(device.userId ?? credential.userId),
-              publicKey: String(device.publicKey),
-              name: String(device.name ?? ''),
-              presence: 'offline'
-            }
-          }
-        },
-        this.#lifetime.signal
-      )
-    }
-    await this.#recordMembers(serviceId, credential, memberByNetwork)
+    await this.#recordMembers(serviceId, credential, members)
   }
 
-  async #sessionToken(serviceId: string, session: Session, signal: AbortSignal): Promise<string> {
-    await session.accounts.currentUser(serviceId, signal)
-    const token = session.accounts.sessionToken(serviceId)
-    if (!token) throw new PeerHelperError('p2p.user_login_required')
-    return token
-  }
-
-  /** Persists members as computer records so tabs and lists survive restarts. */
+  /** Persists the current pairs as computer records so tabs and lists survive restarts. */
   async #recordMembers(
     serviceId: string,
     credential: { deviceId: string; userId: string; publicKey: string },
-    members: { networkId: string; device: Record<string, unknown> }[]
+    members: readonly PeerPairMember[]
   ): Promise<void> {
     const saved = await this.#catalog.inspect()
     if (!saved) throw new PeerHelperError('p2p.not_enabled')
     const computers = saved.record.computers.filter((computer) => computer.serviceId !== serviceId)
-    for (const { networkId, device } of members) {
-      const remoteKey = String(device.publicKey)
-      if (remoteKey === credential.publicKey) continue
+    const recorded = new Set(computers.map((computer) => computer.connectionId))
+    for (const member of members) {
+      // The catalog only admits a positive revision and an active pair.
+      if (member.state !== 'active' || member.revision <= 0) continue
+      const remote = remoteSide(member, credential.deviceId)
+      if (remote === undefined) continue
+      const local = remote === member.initiator ? member.target : member.initiator
+      if (local.deviceId !== credential.deviceId) continue
+      if (!samePublicKey(local.publicKey, credential.publicKey)) continue
+      if (remote.deviceId === local.deviceId) continue
+      // One fixed tab per computer: a second pair with the same peer (over
+      // another network) must not create a duplicate connection id.
+      if (recorded.has(remote.deviceId)) continue
+      recorded.add(remote.deviceId)
       computers.push({
-        connectionId: String(device.deviceId),
+        connectionId: remote.deviceId,
         serviceId,
-        displayName: String(device.name ?? device.deviceId),
-        pairId: String(device.deviceId),
-        networkId,
-        localDeviceId: credential.deviceId,
-        remoteDeviceId: String(device.deviceId),
-        userId: credential.userId,
-        localPublicKey: credential.publicKey,
-        remotePublicKey: remoteKey,
-        pairRevision: 1,
-        pairState: 'active' as const
+        displayName: remote.name.length > 0 ? remote.name : remote.deviceId,
+        // The coordinator keys a connection attempt by the TARGET DEVICE ID and
+        // the lease reports it back the same way, so the id every consumer
+        // (peer.connect, the connection stage lookup) must use is the device id,
+        // not the pairs-table row id.
+        pairId: remote.deviceId,
+        networkId: member.networkId,
+        localDeviceId: local.deviceId,
+        remoteDeviceId: remote.deviceId,
+        userId: local.userId,
+        localPublicKey: local.publicKey,
+        remotePublicKey: remote.publicKey,
+        pairRevision: member.revision,
+        pairState: 'active'
       })
     }
     await this.#catalog.commit(saved.revision, { ...saved.record, computers })
@@ -569,12 +581,15 @@ export class PeerManagement {
   /**
    * Lists network members as the pairing surface.
    *
-   * Trust is network membership: every bound device appears as an active
-   * member offering a direct connection, rather than an invite flow. Read from
-   * the locally synced catalog; no server round-trip.
+   * Trust is network membership: every bound device appears as an active member
+   * offering a direct connection, rather than an invite flow. Membership is
+   * re-synced from the coordinator on every read, because the catalog it projects
+   * is otherwise only written once per helper lifetime and a machine that joins
+   * later would never reach the Run tabs.
    */
   async pairs(serviceId: string, signal: AbortSignal) {
-    await this.#readyAsDevice(serviceId, signal)
+    const session = await this.#readyAsDevice(serviceId, signal)
+    await this.#refreshMembers(serviceId, session, this.#signal(signal))
     const saved = await this.#catalog.inspect()
     if (!saved) throw new PeerHelperError('p2p.not_enabled')
     return saved.record.computers
@@ -850,6 +865,21 @@ export class PeerManagement {
 }
 
 /** Formats one network member as an always-active pair view entry. */
+/** The peer side of a pair, or undefined when this device is not one of its ends. */
+function remoteSide(
+  member: PeerPairMember,
+  localDeviceId: string
+): PeerPairMemberDevice | undefined {
+  if (member.initiator.deviceId === localDeviceId) return member.target
+  if (member.target.deviceId === localDeviceId) return member.initiator
+  return undefined
+}
+
+/** Compares two base64 public keys by their bytes rather than their encoding. */
+function samePublicKey(left: string, right: string): boolean {
+  return Buffer.from(left, 'base64').equals(Buffer.from(right, 'base64'))
+}
+
 function memberAsPair(computer: {
   connectionId: string
   serviceId: string

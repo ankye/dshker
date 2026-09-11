@@ -1,13 +1,19 @@
 # Changelog
 
-## 0.1.28 — Unreleased
+## 0.1.28 — 2026-09-11
 
-- A computer that was already online in the network device directory now also
-  appears in the Run route’s “+ / 添加远程工作台” picker. Membership was only
-  recorded on the first device restore of a Launcher session, so a computer that
-  joined the network later stayed invisible — and had no fixed Run tab — until
-  the Launcher was restarted. Membership is now re-read with the pairing list and
-  on the background session sweep.
+- A computer that is online in a shared network now appears in the Run route's
+  “+ / 添加远程工作台” picker, and can be connected to. The Launcher built that
+  list from the coordinator's device directory, which deliberately carries no
+  device keys, so pairing was never recorded and the list stayed empty while the
+  device directory showed the computer online. The list is now built from the
+  pairing records, and the identifier sent to the coordinator is the remote
+  device's id — the id it authorises a connection by.
+
+- A failed remote connection now reports why. Every attempt used to be reported
+  as “remote runtime unavailable”, so a network that cannot establish a direct
+  path was indistinguishable from a remote machine that was not serving DSH.
+  “No direct path” is now reported as such.
 
 - Starting DSH Web no longer fails blindly when its fixed port is still held by
   a leftover DSH Web process, e.g. one left behind by an earlier crash or by a

@@ -3,9 +3,12 @@ import {
   assertConfirmedFingerprint,
   peerInvite,
   peerPairIdentity,
+  peerPairMember,
   peerPairs,
   type PeerInvite,
-  type PeerPair
+  type PeerPair,
+  type PeerPairMember,
+  type PeerPairMemberDevice
 } from './pair-records'
 import { assertAccountId } from './account-records'
 import { PeerHelperError } from './wire'
@@ -58,6 +61,51 @@ export class PeerPairing {
     return this.#operation(serviceId, signal, async () => {
       const local = await this.localDeviceId(serviceId, signal)
       return peerPairs(await this.#call(serviceId, 'pairs.adopt', {}, signal), local)
+    })
+  }
+
+  /**
+   * Reads every pair with both real identities, for the main-owned catalog.
+   *
+   * `pairs.list` carries ids only, so each id is resolved through
+   * `pairs.identity`. The raw public keys those replies carry are what the
+   * catalog stores and what a re-pin after a restore needs; they never reach the
+   * renderer, which keeps reading fingerprints.
+   */
+  members(serviceId: string, signal: AbortSignal): Promise<PeerPairMember[]> {
+    return this.#operation(serviceId, signal, async () => {
+      const local = await this.localDeviceId(serviceId, signal)
+      const pairs = peerPairs(await this.#call(serviceId, 'pairs.list', {}, signal), local)
+      const members: PeerPairMember[] = []
+      for (const pair of pairs) {
+        members.push(
+          peerPairMember(
+            await this.#call(serviceId, 'pairs.identity', { pairId: pair.pairId }, signal),
+            local
+          )
+        )
+      }
+      return members
+    })
+  }
+
+  /**
+   * Pins one confirmed pair into the helper.
+   *
+   * A restored device starts with no pins — `device.restore` is handed an empty
+   * list — and the helper admits a connection only for a pair it has pinned, so
+   * main re-pins every active pair the coordinator reports. The payload is the
+   * helper's full identity record, not an id.
+   */
+  pin(
+    serviceId: string,
+    member: PeerPairMember,
+    connectionId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    assertAccountId(connectionId)
+    return this.#operation(serviceId, signal, async () => {
+      await this.#call(serviceId, 'pairs.pin', pinIdentity(member, connectionId), signal)
     })
   }
 
@@ -251,5 +299,37 @@ export class PeerPairing {
 
   #admit(): void {
     if (this.#closed) throw new PeerHelperError('p2p.helper_closed')
+  }
+}
+
+/**
+ * The helper's `pairs.pin` payload: a full identity record, not just an id.
+ *
+ * `manager.Pin` re-checks the pair state, revision, both device ids and both
+ * public keys, so an id-only payload is refused as `p2p.identity_mismatch`.
+ */
+function pinIdentity(member: PeerPairMember, connectionId: string): Record<string, unknown> {
+  const side = (device: PeerPairMemberDevice): Record<string, unknown> => ({
+    deviceId: device.deviceId,
+    userId: device.userId,
+    publicKey: device.publicKey,
+    name: device.name,
+    presence: device.presence
+  })
+  return {
+    pair: {
+      // The coordinator keys a connection attempt by the TARGET DEVICE ID, and
+      // the helper keys its pin map by this same value, so the id carried here
+      // is the connection id — not the pairs-table row id.
+      pairId: connectionId,
+      networkId: member.networkId,
+      initiator: member.initiator.deviceId,
+      target: member.target.deviceId,
+      state: member.state,
+      revision: member.revision,
+      expiresAt: member.expiresAt
+    },
+    initiator: side(member.initiator),
+    target: side(member.target)
   }
 }

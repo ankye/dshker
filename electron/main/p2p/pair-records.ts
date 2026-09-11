@@ -146,6 +146,71 @@ export function peerPairIdentity(value: unknown, localDeviceId: string): PeerPai
   return { ...pair, initiator, target, localIsInitiator: localDeviceId === initiator.deviceId }
 }
 
+/** A device side of a pair, with the real public key retained for main-owned use. */
+export interface PeerPairMemberDevice {
+  deviceId: string
+  userId: string
+  name: string
+  publicKey: string
+  presence: PeerPresence
+}
+
+/**
+ * One pair with both real identities, including their public keys.
+ *
+ * The catalog the Run route reads stores those keys and a re-pin needs them, and
+ * both live only in main. `PeerPair` deliberately projects them down to
+ * fingerprints for the renderer, so this is the separate main-internal shape.
+ */
+export interface PeerPairMember {
+  pairId: string
+  networkId: string
+  state: PeerPairState
+  revision: number
+  expiresAt: number
+  initiator: PeerPairMemberDevice
+  target: PeerPairMemberDevice
+}
+
+function peerPairMemberDevice(value: unknown): PeerPairMemberDevice {
+  const record = exactPeerObject(value, ['deviceId', 'userId', 'publicKey', 'name', 'presence'])
+  assertAccountId(record.deviceId)
+  assertAccountId(record.userId)
+  assertAccountText(record.name)
+  if (!PRESENCE.includes(record.presence as PeerReportedPresence))
+    throw new PeerHelperError('p2p.invalid_device_state')
+  return {
+    deviceId: record.deviceId,
+    userId: record.userId,
+    name: record.name,
+    // Canonical base64, so the catalog's own base64 round-trip check holds.
+    publicKey: peerPublicKey(record.publicKey).toString('base64'),
+    presence: usablePresence(record.presence as PeerReportedPresence)
+  }
+}
+
+/**
+ * Validates one `pairs.identity` reply and keeps both public keys.
+ *
+ * This is what lets main build the catalog: the network device directory
+ * deliberately withholds credential material, and a pair identity is the only
+ * place this device is handed the peer's real key.
+ */
+export function peerPairMember(value: unknown, localDeviceId: string): PeerPairMember {
+  const record = exactPeerObject(value, ['pair', 'initiator', 'target'])
+  const pair = peerPairCore(record.pair)
+  const initiator = peerPairMemberDevice(record.initiator)
+  const target = peerPairMemberDevice(record.target)
+  const sides = record.pair as { initiator: string; target: string }
+  if (initiator.deviceId !== sides.initiator || target.deviceId !== sides.target)
+    throw new PeerHelperError('p2p.identity_mismatch')
+  if (initiator.deviceId === target.deviceId || initiator.publicKey === target.publicKey)
+    throw new PeerHelperError('p2p.identity_mismatch')
+  if (localDeviceId !== initiator.deviceId && localDeviceId !== target.deviceId)
+    throw new PeerHelperError('p2p.identity_mismatch')
+  return { ...pair, initiator, target }
+}
+
 /** Validates a `pairs.list` reply; duplicate pair ids indicate a broken source. */
 export function peerPairs(value: unknown, localDeviceId: string): PeerPair[] {
   if (!Array.isArray(value)) throw new PeerHelperError('p2p.invalid_payload')

@@ -289,6 +289,76 @@ describe('bringing enrolled services online at startup', () => {
     expect(f.call.mock.calls.map(([method]) => method)).toContain('pairs.adopt')
   })
 
+  it('builds the catalog from the pair identities, not the keyless device directory', async () => {
+    // The network device directory deliberately withholds credential material, so
+    // a catalog built from it skipped every member and stayed empty even though
+    // the pair existed. The only place this device is handed the peer's real key
+    // is pairs.identity, so the catalog must come from the pairs.
+    const f = fixture()
+    enrolled()
+    await f.owner.login(serviceId, user.username, 'test-password', new AbortController().signal)
+    const remoteDeviceId = '4'.repeat(32)
+    const remoteKey = Buffer.alloc(32, 2).toString('base64')
+    const pairId = '7'.repeat(32)
+    const pairRecord = {
+      pairId,
+      networkId,
+      initiator: deviceId,
+      target: remoteDeviceId,
+      state: 'active',
+      revision: 1,
+      expiresAt: 0
+    }
+    const identity = {
+      pair: pairRecord,
+      initiator: {
+        deviceId,
+        userId: user.userId,
+        publicKey,
+        name: 'This machine',
+        presence: 'online'
+      },
+      target: {
+        deviceId: remoteDeviceId,
+        userId: user.userId,
+        publicKey: remoteKey,
+        name: 'Remote',
+        presence: 'online'
+      }
+    }
+    let listed: unknown[] = []
+    f.call.mockImplementation(async (method: string) => {
+      if (method === 'user.current') return user
+      if (method === 'device.restore') return { deviceId }
+      if (method === 'pairs.list') return listed
+      if (method === 'pairs.identity') return identity
+      if (method === 'pairs.pin') return {}
+      throw new PeerHelperError('p2p.invalid_operation')
+    })
+    // Nothing paired yet: the directory is never consulted and nothing appears.
+    expect(await f.owner.pairs(serviceId, new AbortController().signal)).toEqual([])
+    expect(f.call.mock.calls.map(([method]) => method)).not.toContain('networks.devices')
+    // The coordinator now reports the pair, and its identity carries the key.
+    listed = [pairRecord]
+    const result = await f.owner.pairs(serviceId, new AbortController().signal)
+    // The connection id is the TARGET DEVICE ID, because that is what the
+    // coordinator keys an attempt by; the pairs-table row id is not it.
+    expect(result.map((pair) => pair.pairId)).toEqual([remoteDeviceId])
+    expect(
+      f
+        .record()
+        .computers.map((computer) => [
+          computer.connectionId,
+          computer.pairId,
+          computer.remoteDeviceId,
+          computer.remotePublicKey,
+          computer.pairState
+        ])
+    ).toEqual([[remoteDeviceId, remoteDeviceId, remoteDeviceId, remoteKey, 'active']])
+    // The restored device starts with no pins, so the pair is re-pinned.
+    expect(f.call.mock.calls.map(([method]) => method)).toContain('pairs.pin')
+  })
+
   it('stays online when adoption is refused', async () => {
     // Adoption is an enhancement, not a precondition: a coordinator that rejects
     // it must not take the service offline.
