@@ -117,7 +117,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	must(t, exec.CommandContext(ctx, binary, "init", "--config", configPath).Run())
 	password := protocol.NewID() + protocol.NewID()
-	create := exec.CommandContext(ctx, binary, "user-add", "--config", configPath, "--username", "process-test")
+	create := exec.CommandContext(ctx, binary, "user-add", "--config", configPath, "--username", "process@test.local")
 	create.Stdin = strings.NewReader(password + "\n")
 	must(t, create.Run())
 	cert, err := x509.ParseCertificate(der)
@@ -129,7 +129,7 @@ func newFixture(t *testing.T) *fixture {
 	t.Cleanup(client.Close)
 	f := &fixture{binary: binary, configPath: configPath, root: der, endpoints: endpoints, client: client, ctx: ctx}
 	f.startServer(t)
-	session, err := client.Login(ctx, "process-test", password)
+	session, err := client.Login(ctx, "process@test.local", password)
 	must(t, err)
 	f.userSession = session
 	network, err := client.CreateNetwork(ctx, session.Token, "two-process-network")

@@ -61,6 +61,7 @@ type childDriver struct {
 	signals        *controlplane.Signals
 	transport      *peer.Transport
 	lease          protocol.Lease
+	revoked        bool
 	writeMu        sync.Mutex
 	statsMu        sync.Mutex
 	packets, bytes int
@@ -207,7 +208,17 @@ func (d *childDriver) execute(ctx context.Context, input command) (result, error
 	}
 	switch input.Op {
 	case "connect":
-		lease, err := d.client.Begin(ctx, d.config.Pin.Pair.PairID, input.Generation)
+		pin := d.config.Pin
+		local, remote := pin.Initiator, pin.Target
+		if local.DeviceID != d.config.Device.DeviceID {
+			local, remote = remote, local
+		}
+		if d.revoked {
+			return value, errors.New("p2p.pair_unauthorized")
+		}
+		// The coordinator authorizes by network co-membership: the attempt
+		// targets the other device identity of the confirmed pair.
+		lease, err := d.client.Begin(ctx, remote.DeviceID, input.Generation)
 		if err != nil {
 			return value, err
 		}
@@ -278,21 +289,27 @@ func (d *childDriver) execute(ctx context.Context, input command) (result, error
 
 func (d *childDriver) start(ctx context.Context, lease protocol.Lease) error {
 	pin := d.config.Pin
-	if lease.PairID != pin.Pair.PairID || pin.Pair.State != "active" {
-		return errors.New("p2p.pair_unauthorized")
-	}
 	local, remote := pin.Initiator, pin.Target
 	if local.DeviceID != d.config.Device.DeviceID {
 		local, remote = remote, local
 	}
-	if local.DeviceID != d.config.Device.DeviceID || !ed25519.PublicKey(local.PublicKey).Equal(ed25519.PublicKey(d.config.Device.PublicKey)) {
+	// The lease identifies the far side by device identity (co-membership):
+	// outgoing attempts name the target, incoming attempts name this device
+	// while FromDeviceID is the initiator.
+	if d.revoked || local.DeviceID != d.config.Device.DeviceID || pin.Pair.State != "active" {
+		return errors.New("p2p.pair_unauthorized")
+	}
+	if lease.PairID != remote.DeviceID && lease.FromDeviceID != remote.DeviceID {
+		return errors.New("p2p.pair_unauthorized")
+	}
+	if !ed25519.PublicKey(local.PublicKey).Equal(ed25519.PublicKey(d.config.Device.PublicKey)) {
 		return errors.New("p2p.identity_mismatch")
 	}
 	if d.transport != nil {
 		d.transport.Close()
 	}
 	scope := protocol.SignalScope{PairID: lease.PairID, AttemptID: lease.AttemptID, Generation: lease.Generation, FromDeviceID: lease.FromDeviceID, ToDeviceID: lease.ToDeviceID}
-	transport, err := peer.NewTransport(ctx, peer.TransportOptions{UserID: d.config.Device.UserID, NetworkID: pin.Pair.NetworkID, STUNAddress: d.config.Endpoints.STUNAddress, LocalDeviceID: local.DeviceID, PeerDeviceID: remote.DeviceID, PrivateKey: d.config.Private, PeerKey: remote.PublicKey, ServiceKey: d.config.Authority.PublicKey, Scope: scope, Revision: pin.Pair.Revision, Lease: lease})
+	transport, err := peer.NewTransport(ctx, peer.TransportOptions{UserID: d.config.Device.UserID, NetworkID: pin.Pair.NetworkID, STUNAddress: d.config.Endpoints.STUNAddress, LocalDeviceID: local.DeviceID, PeerDeviceID: remote.DeviceID, PrivateKey: d.config.Private, PeerKey: remote.PublicKey, ServiceKey: d.config.Authority.PublicKey, Scope: scope, Revision: lease.Revision, Lease: lease})
 	if err != nil {
 		return err
 	}
@@ -344,9 +361,16 @@ func (d *childDriver) signal(ctx context.Context, event controlplane.SignalEvent
 	case "attempt":
 		return d.start(ctx, event.Lease)
 	case "revoked":
-		if d.transport != nil && event.PairID == d.lease.PairID {
-			d.transport.Close()
-			d.emit(result{Event: "revoked", Attempt: d.lease.AttemptID})
+		// Revocation events carry the pair record id, which stays the local
+		// key of the confirmed pair even though leases name the target device.
+		// The coordinator no longer consults pair records for attempts, so the
+		// local side refuses a revoked pair itself.
+		if event.PairID == d.config.Pin.Pair.PairID {
+			d.revoked = true
+			if d.transport != nil {
+				d.transport.Close()
+				d.emit(result{Event: "revoked", Attempt: d.lease.AttemptID})
+			}
 		}
 	case "signal":
 		if d.transport == nil || event.Signal.AttemptID != d.lease.AttemptID {

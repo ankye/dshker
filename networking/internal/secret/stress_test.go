@@ -31,7 +31,7 @@ func TestStressConcurrentStoreOperations(t *testing.T) {
 			key := fmt.Sprintf("key.%d", worker)
 			value := expected[worker]
 			for round := 0; round < rounds; round++ {
-				if err = store.Set(key, value); err != nil {
+				if err := store.Set(key, value); err != nil {
 					failures <- fmt.Errorf("worker %d set %d: %w", worker, round, err)
 					return
 				}

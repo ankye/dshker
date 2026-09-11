@@ -54,6 +54,7 @@ type Manager struct {
 	closed          bool
 }
 type session struct {
+	PairID    string
 	lease     protocol.Lease
 	transport *peer.Transport
 	ctx       context.Context
@@ -136,7 +137,8 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		manager.mu.Unlock()
 		return Connected{}, errors.New("p2p.helper_unavailable")
 	}
-	if _, exists := manager.pins[pairID]; !exists {
+	pin, exists := manager.pins[pairID]
+	if !exists {
 		manager.mu.Unlock()
 		return Connected{}, errors.New("p2p.pair_unauthorized")
 	}
@@ -145,6 +147,7 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		return Connected{}, errors.New("p2p.connection_busy")
 	}
 	connection := newSession(manager.ctx)
+	connection.PairID = pairID
 	manager.sessions[pairID] = connection
 	manager.mu.Unlock()
 	stopCancellation := context.AfterFunc(ctx, connection.cancel)
@@ -155,11 +158,17 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 			manager.finish(pairID, connection)
 		}
 	}()
-	lease, err := manager.client.Begin(connection.ctx, pairID, generation)
+	// The coordinator authorizes an attempt by network co-membership: the
+	// request targets the far device identity of the confirmed pair.
+	target, err := manager.targetDevice(pin)
 	if err != nil {
 		return Connected{}, err
 	}
-	_, err = manager.start(lease, connection)
+	lease, err := manager.client.Begin(connection.ctx, target, generation)
+	if err != nil {
+		return Connected{}, err
+	}
+	_, err = manager.start(pairID, lease, connection)
 	if err != nil {
 		manager.end(lease)
 		return Connected{}, err
@@ -275,14 +284,14 @@ func (manager *Manager) Close() {
 	}
 }
 
-func (manager *Manager) start(lease protocol.Lease, reserved *session) (*session, error) {
+func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *session) (*session, error) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	pin, exists := manager.pins[lease.PairID]
+	pin, exists := manager.pins[pairID]
 	if !exists || manager.closed {
 		return nil, errors.New("p2p.pair_unauthorized")
 	}
-	current, busy := manager.sessions[lease.PairID]
+	current, busy := manager.sessions[pairID]
 	if (reserved == nil && busy) || (reserved != nil && (!busy || current != reserved)) {
 		return nil, errors.New("p2p.connection_busy")
 	}
@@ -293,34 +302,87 @@ func (manager *Manager) start(lease protocol.Lease, reserved *session) (*session
 	if local.DeviceID != manager.config.Device.DeviceID {
 		local, remote = remote, local
 	}
+	// The lease names the far side by device identity (co-membership), the
+	// pinned pair record only supplies its key and grants the local scope.
+	if reserved != nil && remote.DeviceID != lease.ToDeviceID {
+		return nil, errors.New("p2p.identity_mismatch")
+	}
+	if reserved == nil && remote.DeviceID != lease.FromDeviceID {
+		return nil, errors.New("p2p.pair_unauthorized")
+	}
 	connection := reserved
 	if connection == nil {
 		connection = newSession(manager.ctx)
 	}
 	scope := protocol.SignalScope{AttemptID: lease.AttemptID, PairID: lease.PairID, Generation: lease.Generation, FromDeviceID: lease.FromDeviceID, ToDeviceID: lease.ToDeviceID}
-	transport, err := peer.NewTransport(connection.ctx, peer.TransportOptions{UserID: local.UserID, NetworkID: pin.Pair.NetworkID, STUNAddress: manager.config.Endpoints.STUNAddress, LocalDeviceID: local.DeviceID, PeerDeviceID: remote.DeviceID, PrivateKey: manager.config.PrivateKey, PeerKey: remote.PublicKey, ServiceKey: manager.config.Authority.PublicKey, Scope: scope, Revision: pin.Pair.Revision, Lease: lease})
+	transport, err := peer.NewTransport(connection.ctx, peer.TransportOptions{UserID: local.UserID, NetworkID: pin.Pair.NetworkID, STUNAddress: manager.config.Endpoints.STUNAddress, LocalDeviceID: local.DeviceID, PeerDeviceID: remote.DeviceID, PrivateKey: manager.config.PrivateKey, PeerKey: remote.PublicKey, ServiceKey: manager.config.Authority.PublicKey, Scope: scope, Revision: lease.Revision, Lease: lease})
 	if err != nil {
 		connection.cancel()
 		return nil, err
 	}
+	connection.PairID = pairID
 	connection.lease, connection.transport = lease, transport
-	manager.sessions[lease.PairID] = connection
+	manager.sessions[pairID] = connection
 	go manager.run(connection)
 	return connection, nil
+}
+
+// targetDevice returns the far device identity of a pinned pair, normalizing
+// the pair so the local device is the initiator or the target side.
+func (manager *Manager) targetDevice(pin controlplane.PairIdentity) (string, error) {
+	local, remote := pin.Initiator, pin.Target
+	if local.DeviceID != manager.config.Device.DeviceID {
+		local, remote = remote, local
+	}
+	if local.DeviceID != manager.config.Device.DeviceID || local.DeviceID == remote.DeviceID {
+		return "", errors.New("p2p.identity_mismatch")
+	}
+	return remote.DeviceID, nil
+}
+
+// pairForRemoteLocked finds the confirmed pair whose far device and network
+// match an incoming attempt. Caller holds manager.mu.
+func (manager *Manager) pairForRemoteLocked(remoteDeviceID, networkID string) (string, bool) {
+	for pairID, pin := range manager.pins {
+		local, remote := pin.Initiator, pin.Target
+		if local.DeviceID != manager.config.Device.DeviceID {
+			local, remote = remote, local
+		}
+		if remote.DeviceID == remoteDeviceID && pin.Pair.NetworkID == networkID && pin.Pair.State == "active" {
+			return pairID, true
+		}
+	}
+	return "", false
+}
+
+// sessionByAttemptLocked finds the session whose lease carries an attempt id.
+// Caller holds manager.mu.
+func (manager *Manager) sessionByAttemptLocked(attemptID string) *session {
+	for _, connection := range manager.sessions {
+		if connection.lease.AttemptID == attemptID {
+			return connection
+		}
+	}
+	return nil
 }
 
 func (manager *Manager) receive() {
 	for event := range manager.signals.Events() {
 		if event.Type == "attempt" {
 			if event.Lease.FromDeviceID != manager.config.Device.DeviceID {
-				manager.start(event.Lease, nil)
+				manager.mu.Lock()
+				pairID, ok := manager.pairForRemoteLocked(event.Lease.FromDeviceID, event.Lease.NetworkID)
+				manager.mu.Unlock()
+				if ok {
+					manager.start(pairID, event.Lease, nil)
+				}
 			}
 			continue
 		}
 		manager.mu.Lock()
 		connection := manager.sessions[event.PairID]
 		if event.Type == "signal" {
-			connection = manager.sessions[event.Signal.PairID]
+			connection = manager.sessionByAttemptLocked(event.Signal.AttemptID)
 		}
 		if event.Type == "revoked" {
 			delete(manager.pins, event.PairID)
@@ -363,7 +425,7 @@ func (manager *Manager) receive() {
 func (manager *Manager) run(connection *session) {
 	renewed := make(chan struct{})
 	go func() { defer close(renewed); manager.renew(connection) }()
-	state := State{PairID: connection.lease.PairID, AttemptID: connection.lease.AttemptID, Generation: connection.lease.Generation, Stage: "punching"}
+	state := State{PairID: connection.PairID, AttemptID: connection.lease.AttemptID, Generation: connection.lease.Generation, Stage: "punching"}
 	manager.emit(state)
 	defer func() {
 		connection.cancel()
