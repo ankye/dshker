@@ -16,10 +16,10 @@
 
 ## 3. P2 — Networking ownership moves to the core
 
-- [ ] 3.1 Owner: core. Depends: 2.4. Implement the `SecretStore` interface with a Windows DPAPI provider and verify a credential round-trips across two runs with no plaintext on disk.
-- [ ] 3.2 Owner: core. Depends: 3.1. Add the macOS Keychain provider reachable with `CGO_ENABLED=0` and verify a credential round-trips across two runs.
+- [x] 3.1 Owner: core. Depends: 2.4. Implement the `SecretStore` interface with a Windows DPAPI provider and verify a credential round-trips across two runs with no plaintext on disk.
+- [x] 3.2 Owner: core. Depends: 3.1. Add the macOS Keychain provider reachable with `CGO_ENABLED=0` and verify a credential round-trips across two runs.
 - [ ] 3.3 Owner: core. Depends: 3.1. Add the Linux Secret Service provider and verify a credential round-trips across two runs.
-- [ ] 3.4 Owner: core. Depends: 3.1. Fail explicitly when no provider is available; verify the typed refusal and that nothing is persisted.
+- [x] 3.4 Owner: core. Depends: 3.1. Fail explicitly when no provider is available; verify the typed refusal and that nothing is persisted.
 - [ ] 3.5 Owner: core. Depends: 3.1. Migrate an existing `safeStorage`-wrapped device credential once: read it in the shell, write it into the native provider, then remove the legacy record; verify a credential created by the previous release still connects after the upgrade on macOS and Windows.
 - [ ] 3.6 Owner: core. Depends: 3.5. Move the device catalog, pairing, and connection state machine into the core and delete the Electron writers in the same phase; verify the existing p2p suite (`electron/main/p2p`, 340 cases) is ported or replaced and passes.
 - [ ] 3.7 Owner: core. Depends: 3.6. Answer `runtime.connect`, `runtime.invalidate`, `remote.roots`, and `remote.directory` inside the core; verify a peer connection completes with no Electron process running.

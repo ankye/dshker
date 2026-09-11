@@ -56,6 +56,8 @@ A `SecretStore` interface has one implementation per platform: Windows DPAPI (`g
 
 Rejected: keeping Electron `safeStorage` (defeats the headless goal). Rejected: an unprotected file store, even behind a flag.
 
+The core receives its data root as an explicit `--data` argument, never an implied default. Windows stores DPAPI-protected blobs under that root (one private file, mode 0600, replaced atomically), and macOS keeps items in the Keychain. The bootstrap record is unchanged, so the frozen version 1 contract stays whole.
+
 ### D5. One writer per store, switched by migration step
 
 Each persisted store has exactly one writer during any phase: the root registry, the device catalog, the credential records, and launch preferences. A phase that moves a store to the core also removes the Electron writer in the same phase; no dual-write and no runtime fallback.
