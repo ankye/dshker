@@ -25,6 +25,18 @@ design D4), which keeps the frozen version 1 bootstrap record untouched.
 
 ## Verified
 
+- Stress: `TestStressConcurrentCalls` (8,000 concurrent echo calls over one
+  private channel, all byte-exact), `TestStressHelperBusySaturation` (32-deep
+  burst at a slow handler answered with `p2p.helper_busy`, every response id
+  answered exactly once), and `TestStressConcurrentStoreOperations` (8
+  concurrent writers over one store). The concurrent-writer stress caught a
+  real Windows DPAPI bug: with no serialization, concurrent Set calls raced
+  on the shared .tmp path; the store now serializes read-modify-write under a
+  mutex (the core is the single writer per D5, one core per data root per D6),
+  and write errors carry the underlying detail. Windows SDDL verification is
+  byte-level: a probe dumped the descriptor, and the parse now reads
+  AclSize and AceCount from the right offsets (the first attempt misread
+  AclSize 44 as the ACE count).
 - macOS: real Keychain round trip through `TestKeychainRoundTrip` (set,
   overwrite via -U, read, fresh Open read, delete, idempotent delete).
 - Windows: real DPAPI round trip through `TestDPAPIRoundTripAndFreshOpen`,

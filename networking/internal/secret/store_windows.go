@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -30,14 +31,20 @@ func Open(dataRoot string) (Store, error) {
 	if err != nil || !info.IsDir() {
 		return nil, ErrUnavailable
 	}
-	return dpapiStore{path: filepath.Join(dataRoot, blobFileName)}, nil
+	return &dpapiStore{path: filepath.Join(dataRoot, blobFileName)}, nil
 }
 
 type dpapiStore struct {
+	// mu serializes read-modify-write cycles. The design (D5) names one writer
+	// per store — the core process — and D6 guarantees one core per data root;
+	// the mutex makes concurrent callers inside that process safe as well. The
+	// whole file is replaced atomically, so a reader either sees the previous
+	// complete store or the next one, never a torn record.
+	mu   sync.Mutex
 	path string
 }
 
-func (store dpapiStore) Get(key string) ([]byte, error) {
+func (store *dpapiStore) Get(key string) ([]byte, error) {
 	blobs, err := store.read()
 	if err != nil {
 		return nil, err
@@ -57,7 +64,9 @@ func (store dpapiStore) Get(key string) ([]byte, error) {
 	return value, nil
 }
 
-func (store dpapiStore) Set(key string, value []byte) error {
+func (store *dpapiStore) Set(key string, value []byte) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	blobs, err := store.read()
 	if err != nil && !errors.Is(err, ErrMissing) {
 		return err
@@ -73,7 +82,9 @@ func (store dpapiStore) Set(key string, value []byte) error {
 	return store.setBlobs(blobs)
 }
 
-func (store dpapiStore) Delete(key string) error {
+func (store *dpapiStore) Delete(key string) error {
+	store.mu.Lock()
+	defer store.mu.Unlock()
 	blobs, err := store.read()
 	if errors.Is(err, ErrMissing) {
 		return nil
@@ -90,23 +101,23 @@ func (store dpapiStore) Delete(key string) error {
 
 // setBlobs replaces the whole file atomically. Design decision D5 names one
 // writer per store, so the core is the only process that touches this file.
-func (store dpapiStore) setBlobs(blobs map[string]string) error {
+func (store *dpapiStore) setBlobs(blobs map[string]string) error {
 	data, err := json.Marshal(blobs)
 	if err != nil {
 		return ErrWrite
 	}
 	temporary := store.path + ".tmp"
 	if err = os.WriteFile(temporary, data, 0o600); err != nil {
-		return ErrWrite
+		return fmt.Errorf("%w: %v", ErrWrite, err)
 	}
 	if err = os.Rename(temporary, store.path); err != nil {
 		_ = os.Remove(temporary)
-		return ErrWrite
+		return fmt.Errorf("%w: %v", ErrWrite, err)
 	}
 	return nil
 }
 
-func (store dpapiStore) read() (map[string]string, error) {
+func (store *dpapiStore) read() (map[string]string, error) {
 	data, err := os.ReadFile(store.path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, ErrMissing
