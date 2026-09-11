@@ -521,6 +521,19 @@ func (manager *Manager) runtimeOwner(connection *session) runtimebridge.RuntimeO
 	}
 }
 
+// renewRefusal reports a renewal failure that ends the session. A refusal is a
+// typed authorization or scope rejection; anything else (server restart, the
+// store aborting mid-request, a dropped coordinator) is transient and retried
+// until the local lease timer ends the session in the ordinary path.
+func renewRefusal(err error) bool {
+	switch err.Error() {
+	case "p2p.pair_unauthorized", "p2p.device_unauthorized", "p2p.lease_scope_mismatch", "p2p.identity_mismatch":
+		return true
+	default:
+		return false
+	}
+}
+
 func (manager *Manager) renew(connection *session) {
 	ticker := time.NewTicker(20 * time.Second)
 	defer ticker.Stop()
@@ -533,7 +546,7 @@ func (manager *Manager) renew(connection *session) {
 			if err == nil {
 				err = connection.transport.UpdateLease(lease)
 			}
-			if err != nil && err.Error() != "p2p.server_unavailable" {
+			if err != nil && renewRefusal(err) {
 				connection.cancel()
 				return
 			}
