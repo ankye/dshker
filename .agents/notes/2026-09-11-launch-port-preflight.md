@@ -18,7 +18,7 @@ webserver ... EADDRINUSE".
 
 - `electron/main/managed/port-occupancy.ts` (new): port-holder detection and
   decision. POSIX uses `lsof -nP -iTCP:<port> -sTCP:LISTEN` then `ps -o
-  command=`; Windows uses `netstat -ano` then `wmic`. Pid parsing ignores
+command=`; Windows uses `netstat -ano` then `wmic`. Pid parsing ignores
   headers and non-numeric fields; an unreadable command line still keeps the
   pid. `isResidualDshWebCommand` matches `dsh web` or `bin.(j|t)s web`.
   `terminatePortOccupant` SIGTERM, then poll, then SIGKILL, tolerating ESRCH.

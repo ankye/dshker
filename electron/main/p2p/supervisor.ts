@@ -41,7 +41,7 @@ export class PeerSupervisor {
   }
 
   static async start(options: PeerSupervisorOptions, signal: AbortSignal): Promise<PeerSupervisor> {
-    const executable = await verifyPeerResource(options.resourcesRoot)
+    const executable = await verifyHelperResource(options.resourcesRoot, 'dshker-peer')
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
     const { directory, path: socketPath } = await createPeerChannel()
     const child = spawn(executable, [], {
@@ -98,7 +98,7 @@ export class PeerSupervisor {
   }
 }
 
-async function stopChild(
+export async function stopChild(
   child: ChildProcessWithoutNullStreams,
   exit: Promise<void>
 ): Promise<void> {
@@ -109,7 +109,7 @@ async function stopChild(
   if (!(await exitedWithin(exit, 5_000))) throw new PeerHelperError('p2p.helper_shutdown_failed')
 }
 
-function exitedWithin(exit: Promise<void>, milliseconds: number): Promise<boolean> {
+export function exitedWithin(exit: Promise<void>, milliseconds: number): Promise<boolean> {
   return new Promise((resolve) => {
     const timer = setTimeout(() => resolve(false), milliseconds)
     void exit.then(() => {
@@ -119,7 +119,15 @@ function exitedWithin(exit: Promise<void>, milliseconds: number): Promise<boolea
   })
 }
 
-async function verifyPeerResource(root: string): Promise<string> {
+// The packaged helper directory holds two executables and two manifests:
+// dshker-peer (manifest.json, frozen schema) and dshkerd
+// (dshkerd-manifest.json). Both runtime-verify their own bytes.
+export async function verifyHelperResource(
+  root: string,
+  name: 'dshker-peer' | 'dshkerd'
+): Promise<string> {
+  if (name !== 'dshker-peer' && name !== 'dshkerd')
+    throw new PeerHelperError('p2p.invalid_arguments')
   if (
     !isAbsolute(root) ||
     !['darwin', 'linux', 'win32'].includes(process.platform) ||
@@ -128,13 +136,14 @@ async function verifyPeerResource(root: string): Promise<string> {
     throw new PeerHelperError('p2p.helper_platform_unsupported')
   const target = `${process.platform}-${process.arch}`
   const directory = join(root, 'p2p', target)
-  const name = process.platform === 'win32' ? 'dshker-peer.exe' : 'dshker-peer'
-  const executable = join(directory, name)
+  const fileName = process.platform === 'win32' ? name + '.exe' : name
+  const executable = join(directory, fileName)
+  const manifestFile = name === 'dshkerd' ? 'dshkerd-manifest.json' : 'manifest.json'
   try {
     const info = await lstat(executable)
     if (!info.isFile() || info.isSymbolicLink()) throw new PeerHelperError('p2p.helper_invalid')
     const manifest = exactPeerObject(
-      parsePeerJson(await readFile(join(directory, 'manifest.json'), 'utf8')),
+      parsePeerJson(await readFile(join(directory, manifestFile), 'utf8')),
       ['version', 'target', 'file', 'sha256']
     )
     const digest = createHash('sha256')
@@ -143,7 +152,7 @@ async function verifyPeerResource(root: string): Promise<string> {
     if (
       manifest.version !== 1 ||
       manifest.target !== target ||
-      manifest.file !== name ||
+      manifest.file !== fileName ||
       manifest.sha256 !== digest
     )
       throw new PeerHelperError('p2p.helper_integrity_failed')

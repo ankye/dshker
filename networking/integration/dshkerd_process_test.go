@@ -115,3 +115,79 @@ func TestCoreDaemonServesThePrivateChannel(t *testing.T) {
 		t.Fatal("dshkerd outlived its parent channel")
 	}
 }
+
+// TestCoreDaemonServesWithADataRoot covers the --data argument the
+// CoreSupervisor passes: the daemon refuses a malformed root, opens the
+// platform secret store rooted at the directory at boot, and serves
+// core.version end to end.
+func TestCoreDaemonServesWithADataRoot(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "dshkerd")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", binary, corePackage)
+	build.Stderr = os.Stderr
+	must(t, build.Run())
+
+	if exec.Command(binary, "--data").Run() == nil {
+		t.Fatal("dshkerd accepted --data without a value")
+	}
+	if runtime.GOOS == "windows" {
+		if exec.Command(binary, "--data", filepath.Join(t.TempDir(), "absent")).Run() == nil {
+			t.Fatal("dshkerd accepted a nonexistent --data root")
+		}
+	}
+
+	endpoint := coreEndpoint(t)
+	secretValue := strings.Repeat("b", 64)
+	cmd := exec.Command(binary, "--data", t.TempDir())
+	stdin, err := cmd.StdinPipe()
+	must(t, err)
+	stdout, err := cmd.StdoutPipe()
+	must(t, err)
+	daemon := launch(t, cmd)
+
+	record, err := json.Marshal(localrpc.Bootstrap{Version: 1, Socket: endpoint, Secret: secretValue})
+	must(t, err)
+	_, err = stdin.Write(append(record, '\n'))
+	must(t, err)
+	must(t, stdin.Close())
+
+	line, err := bufio.NewReader(stdout).ReadString('\n')
+	must(t, err)
+	if line != coreReadiness {
+		t.Fatalf("readiness = %q", line)
+	}
+
+	conn, err := dialCore(endpoint)
+	must(t, err)
+	authentication, err := json.Marshal(localrpc.Authentication{Version: 1, Secret: secretValue})
+	must(t, err)
+	_, err = conn.Write(append(authentication, '\n'))
+	must(t, err)
+	acknowledgement := make([]byte, len(coreAuthenticated))
+	_, err = io.ReadFull(conn, acknowledgement)
+	must(t, err)
+	if string(acknowledgement) != coreAuthenticated {
+		t.Fatalf("authentication = %q", acknowledgement)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	parent := localrpc.New(ctx, conn, func(context.Context, string, json.RawMessage) (any, error) {
+		return nil, errors.New("p2p.invalid_operation")
+	})
+	payload, err := parent.Call(ctx, "core.version", struct{}{})
+	must(t, err)
+	if !strings.Contains(string(payload), "\"methodTableVersion\":1") {
+		t.Fatalf("core.version = %s", payload)
+	}
+
+	// The core is a child, not a daemon: it exits when its parent channel ends.
+	parent.Close()
+	select {
+	case <-daemon.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("dshkerd outlived its parent channel")
+	}
+}

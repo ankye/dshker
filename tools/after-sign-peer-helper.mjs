@@ -32,27 +32,40 @@ export default async function afterSign(context) {
   for (const entry of targets) {
     if (!entry.isDirectory()) continue
     const directory = join(root, entry.name)
-    const manifestPath = join(directory, 'manifest.json')
 
-    let manifest
+    let files
     try {
-      manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+      files = await readdir(directory, { withFileTypes: true })
     } catch {
-      throw new Error(`peer helper manifest unreadable for ${entry.name}`)
+      throw new Error(`peer helper directory unreadable for ${entry.name}`)
     }
-    if (manifest.version !== 1 || typeof manifest.file !== 'string') {
-      throw new Error(`peer helper manifest unsupported for ${entry.name}`)
-    }
-    if (manifest.target !== entry.name) {
-      throw new Error(`peer helper manifest target ${manifest.target} is not ${entry.name}`)
-    }
+    // Every manifest in the target directory is resealed: the frozen peer
+    // helper's manifest.json and the core's dshkerd-manifest.json both describe
+    // code-signed executables whose digest signing invalidates.
+    for (const file of files) {
+      if (!file.isFile() || !file.name.endsWith('.json')) continue
+      const manifestPath = join(directory, file.name)
 
-    const binary = await readFile(join(directory, manifest.file))
-    const sha256 = createHash('sha256').update(binary).digest('hex')
-    if (sha256 === manifest.sha256) continue
+      let manifest
+      try {
+        manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+      } catch {
+        throw new Error(`peer helper manifest unreadable for ${entry.name}`)
+      }
+      if (manifest.version !== 1 || typeof manifest.file !== 'string') {
+        throw new Error(`peer helper manifest unsupported for ${entry.name}`)
+      }
+      if (manifest.target !== entry.name) {
+        throw new Error(`peer helper manifest target ${manifest.target} is not ${entry.name}`)
+      }
 
-    await writeFile(manifestPath, `${JSON.stringify({ ...manifest, sha256 })}\n`)
-    console.log(`  • peer helper manifest resealed  target=${entry.name}`)
+      const binary = await readFile(join(directory, manifest.file))
+      const sha256 = createHash('sha256').update(binary).digest('hex')
+      if (sha256 === manifest.sha256) continue
+
+      await writeFile(manifestPath, `${JSON.stringify({ ...manifest, sha256 })}\n`)
+      console.log(`  • peer helper manifest resealed  target=${entry.name} file=${file.name}`)
+    }
   }
 }
 

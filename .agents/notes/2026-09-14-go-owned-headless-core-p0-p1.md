@@ -89,6 +89,7 @@ Three details that would otherwise be rediscovered painfully:
 3. `find-generic-password -w` prints the secret on stdout, which is the
    intended read path, and `add-generic-password` needs `-U` to overwrite an
    existing item instead of failing with "already exists".
+
 ## Environment note
 
 The Windows checkout runs Go 1.26.4 with `GOTOOLCHAIN=auto` while `go.mod`
