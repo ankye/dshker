@@ -56,14 +56,16 @@ func (p *process) stop(t *testing.T, abrupt bool) {
 	if graceful {
 		// EOF on the control pipe is the cross-platform graceful-stop
 		// contract for children that read commands from stdin.
-		_, piped := p.cmd.Stdin.(io.Closer)
-		if piped {
-			_ = p.cmd.Stdin.(io.Closer).Close()
-		}
-		// os.Interrupt is not deliverable to child processes on Windows
-		// (Process.Signal there supports Kill only), so piped children are
-		// stopped by the EOF above and unpiped ones terminate directly.
-		if !piped || runtime.GOOS != "windows" {
+		if stdin, piped := p.cmd.Stdin.(io.Closer); piped {
+			_ = stdin.Close()
+			_ = p.cmd.Process.Signal(os.Interrupt)
+		} else if runtime.GOOS == "windows" {
+			// os.Interrupt is not deliverable to child processes on Windows
+			// (Process.Signal there supports Kill only). Piped children stop
+			// on the stdin EOF above; unpiped ones (the coordinator)
+			// terminate directly instead of waiting out the grace period.
+			graceful = false
+		} else {
 			_ = p.cmd.Process.Signal(os.Interrupt)
 		}
 	}
