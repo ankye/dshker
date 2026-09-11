@@ -71,6 +71,11 @@
   a foreign frame version and a second unbootstrapped client, distinguishes
   `p2p.not_implemented` from `p2p.invalid_operation`, and exits with its
   parent channel. The shell half of P1 (tasks 2.3 to 2.5) is not started.
+- P2.1 (2026-09-14, commit `4d4a2cf`): `internal/secret` ships the macOS
+  Keychain and Windows DPAPI providers with no plaintext path. Both verified
+  with real round trips on their platforms, including a fresh Open over the
+  persisted value and the no-plaintext on-disk assertion. Linux refuses
+  explicitly; the runtime check needs a Linux host and lands with 3.3.
 - Fixed while verifying: `internal/runtimebridge/directory_test.go` did not
   compile off Windows because it referenced `syscall.ERROR_PRIVILEGE_NOT_HELD`
   without a build tag, so a whole-repo `go test ./...` was impossible on
