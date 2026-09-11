@@ -373,3 +373,5 @@ Go race 在工具链支持的真实平台运行；不支持的架构需明确记
 - [x] 11.3 管理器不再静默丢弃入站 attempt 的 start 错误（internal/peersession/manager.go）：同时刻 begin 面（发起侧）有状态输出而目标侧无任何输出，靠 stderr 一行定位 11.2；错误改为打印后继续接收循环。
 - [ ] 11.4 直连路径受网络承载约束：本现场跨机 UDP（ZeroTier 虚拟网）双向不通（ICMP/TCP 通、裸 UDP 丢弃、Windows 防火墙放行后仍不通），ICE 直连协商以 \`p2p.direct_unavailable\` 如实失败；同机 fixture 直连路径全绿。结论：直连 UDP 的可用性最终取决于承载网，产品保持不回退 relay，失败码分层已被 3.8/11.5 校准。已有 fixture 之外的公网/实体 LAN 直连验收留待真实部署环境。
 - [ ] 11.5 real-DSH 目标侧运行时：Windows 上由 dshker-server 反代/p2p 隧道驱动 DSH web 时，web 需以托管版本或自检出（versions 目录临时移开）运行；本次以 ssh 反代（TCP 承载）验证 mac → win:3080 的 DSH web 全链路（401 鉴权门 + token 303），p2p 隧道承载的 HTTP 验证随 11.4 的网络环境解决后补。
+- [x] 11.6 续期错误分类（internal/peersession/manager.go）：续期失败仅在明确的授权/范围拒绝码时终结会话；协调器中途崩溃（sqlite abort chunk 等瞬态文本）一律重试，会话寿命由本端租约计时器裁决。Windows -race 下暴露、两端靶向复测通过（mac 142.5s / win 145.17s）。
+- [x] 11.7 Windows -race 全量通过：winlibs (MSVCRT) 提供 gcc 使 cgo/-race 可用；go-winio/x-sys 的标准 SID 指针运算触发 checkptr 误报（fatal error: checkptr … invalid allocation，非数据竞争），以 `-gcflags=all=-d=checkptr=0` 运行（数据竞争检测不受影响），两端全量 -race 均 exit 0。
