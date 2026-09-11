@@ -1,13 +1,13 @@
 ## 1. P0 — Freeze the shell/core contract
 
-- [ ] 1.1 Owner: core. Depends: none. Document the bootstrap record (version, endpoint, per-run secret) and the RPC frame header in `networking/docs/`; verify by a review that the record matches what `localrpc.AcceptMain` already consumes on macOS and Windows.
-- [ ] 1.2 Owner: core. Depends: 1.1. Publish the initial core method table (the p2p, remote, runtime, and managed operations the shell will call, plus the four parent-role methods the peer calls back) as a versioned list; verify every method has a typed success and refusal shape.
-- [ ] 1.3 Owner: core. Depends: 1.2. Add a Go conformance test that drives a fake parent through bootstrap, one call, one refusal, and a version mismatch; verify `go test ./internal/localrpc/... ./internal/helper/...` passes on macOS and Windows.
+- [x] 1.1 Owner: core. Depends: none. Document the bootstrap record (version, endpoint, per-run secret) and the RPC frame header in `networking/docs/`; verify by a review that the record matches what `localrpc.AcceptMain` already consumes on macOS and Windows.
+- [x] 1.2 Owner: core. Depends: 1.1. Publish the initial core method table (the p2p, remote, runtime, and managed operations the shell will call, plus the four parent-role methods the peer calls back) as a versioned list; verify every method has a typed success and refusal shape.
+- [x] 1.3 Owner: core. Depends: 1.2. Add a Go conformance test that drives a fake parent through bootstrap, one call, one refusal, and a version mismatch; verify `go test ./internal/localrpc/... ./internal/helper/...` passes on macOS and Windows.
 - [ ] 1.4 Owner: shell. Depends: 1.2. Record the current renderer-visible operations and their projections so the proxy in P1 can be checked against them; verify by asserting the frozen preload surface still matches `src/shared/contracts.ts` with no additions or removals.
 
 ## 2. P1 — Core skeleton and shell proxy
 
-- [ ] 2.1 Owner: core. Depends: 1.3. Add the `dshkerd` entry point that acquires the bootstrap, serves the private endpoint, and refuses unversioned or unbootstrapped calls; verify with the conformance test plus a negative test that a second, unbootstrapped client is refused on macOS and Windows.
+- [x] 2.1 Owner: core. Depends: 1.3. Add the `dshkerd` entry point that acquires the bootstrap, serves the private endpoint, and refuses unversioned or unbootstrapped calls; verify with the conformance test plus a negative test that a second, unbootstrapped client is refused on macOS and Windows.
 - [ ] 2.2 Owner: core. Depends: 2.1. Implement the per-user endpoint guard (Windows security descriptor, Unix socket permissions) and verify access is refused for a different OS user.
 - [ ] 2.3 Owner: shell. Depends: 2.1. Spawn `dshkerd` from Electron main, perform the bootstrap, and route one existing renderer operation through it end to end; verify the renderer test for that operation passes unchanged on macOS and Windows.
 - [ ] 2.4 Owner: shell. Depends: 2.3. Implement the typed proxy layer that maps named renderer operations onto core operations and projects only the existing fields; verify no renderer or preload file changes are required.
@@ -52,3 +52,27 @@
 - [ ] 7.3 Owner: docs. Depends: 7.1. Amend `add-managed-harness-desktop-shell`, `add-self-hosted-p2p-dsh-connections`, and `add-managed-remote-dsh-connections` so their deltas no longer assign subprocess, secret-storage, or remote-route ownership to the Electron main process; verify each still validates strictly.
 - [ ] 7.4 Owner: docs. Depends: 7.3. Update `openspec/config.yaml` context to name the core as the owner of subprocess and secret storage; verify no active artifact contradicts it.
 - [ ] 7.5 Owner: quality. Depends: 7.2. Run the packaged end-to-end pass on macOS and Windows covering desktop hosting, desktop-to-desktop connection, and headless-to-desktop connection; record the evidence under `.run/`.
+
+## Verification log
+
+- P0 (2026-09-14): the shell/core contract is frozen in
+  `networking/docs/shell-core-protocol.md`, published in code as
+  `localrpc.Methods` at table version 1, and driven end to end by
+  `internal/localrpc/conformance_test.go`. On macOS every Go package passes
+  except `integration`, which requires `DSHKER_SERVER_BINARY`.
+  `GOOS=windows go vet ./...` typechecks.
+- Two planning corrections came out of task 1.2, recorded in section 6 of the
+  contract: the parent role has two methods (`runtime.connect`, `peer.state`),
+  not the four the task assumed, and per-method field shapes are enumerated
+  per phase instead of being guessed up front.
+- Task 2.1 is complete for the core half only: `cmd/dshkerd` acquires the
+  bootstrap, serves the private endpoint, refuses a foreign bootstrap version,
+  a foreign frame version and a second unbootstrapped client, distinguishes
+  `p2p.not_implemented` from `p2p.invalid_operation`, and exits with its
+  parent channel. The shell half of P1 (tasks 2.3 to 2.5) is not started.
+- Fixed while verifying: `internal/runtimebridge/directory_test.go` did not
+  compile off Windows because it referenced `syscall.ERROR_PRIVILEGE_NOT_HELD`
+  without a build tag, so a whole-repo `go test ./...` was impossible on
+  macOS. The link helper is now split across `directory_link_windows_test.go`
+  and `directory_link_nonwindows_test.go`.
+

@@ -1,12 +1,9 @@
 package runtimebridge
 
 import (
-	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
-	"syscall"
 	"testing"
 )
 
@@ -138,24 +135,6 @@ func TestAllowsSymlinkStayingInsideRoot(t *testing.T) {
 	ref := encodeRef(root.RootID, link)
 	if _, _, code := listDirectory(directoryRequest{Version: 1, RootID: root.RootID, Ref: ref}, []Root{root}); code != "" {
 		t.Fatalf("in-root symlink was refused: %q", code)
-	}
-}
-
-// linkDirectory uses a junction when Windows blocks ordinary symlink creation.
-// Junctions exercise the same containment boundary without requiring Developer
-// Mode or elevation.
-func linkDirectory(t *testing.T, target, link string) {
-	t.Helper()
-	if err := os.Symlink(target, link); err == nil {
-		return
-	} else if runtime.GOOS != "windows" ||
-		(!errors.Is(err, syscall.EPERM) &&
-			!errors.Is(err, syscall.EACCES) &&
-			!errors.Is(err, syscall.ERROR_PRIVILEGE_NOT_HELD)) {
-		t.Fatalf("symlink: %v", err)
-	}
-	if output, err := exec.Command("cmd", "/c", "mklink", "/J", link, target).CombinedOutput(); err != nil {
-		t.Fatalf("junction: %v (%s)", err, output)
 	}
 }
 
