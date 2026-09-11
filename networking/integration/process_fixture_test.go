@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -51,10 +52,23 @@ func (p *process) stop(t *testing.T, abrupt bool) {
 		return
 	default:
 	}
-	if abrupt {
+	graceful := !abrupt
+	if graceful {
+		// EOF on the control pipe is the cross-platform graceful-stop
+		// contract for children that read commands from stdin.
+		_, piped := p.cmd.Stdin.(io.Closer)
+		if piped {
+			_ = p.cmd.Stdin.(io.Closer).Close()
+		}
+		// os.Interrupt is not deliverable to child processes on Windows
+		// (Process.Signal there supports Kill only), so piped children are
+		// stopped by the EOF above and unpiped ones terminate directly.
+		if !piped || runtime.GOOS != "windows" {
+			_ = p.cmd.Process.Signal(os.Interrupt)
+		}
+	}
+	if !graceful {
 		must(t, p.cmd.Process.Kill())
-	} else {
-		_ = p.cmd.Process.Signal(os.Interrupt)
 	}
 	select {
 	case <-p.done:
