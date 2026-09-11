@@ -39,7 +39,10 @@ func (lease Lease) Verify(public ed25519.PublicKey, scope SignalScope, userID, n
 	if !ValidID(lease.AttemptID) || !ValidID(lease.PairID) || !ValidID(lease.FromDeviceID) || !ValidID(lease.ToDeviceID) || lease.FromDeviceID == lease.ToDeviceID {
 		return errors.New("p2p.lease_scope_mismatch")
 	}
-	if lease.ExpiresAt <= now.Unix() || lease.ExpiresAt > now.Add(time.Minute).Unix() {
+	// The upper bound absorbs coordinator-granted lease TTLs (the deployed
+	// server grants roughly 65s) while still rejecting far-future or forged
+	// expiries beyond any plausible skew.
+	if lease.ExpiresAt <= now.Unix() || lease.ExpiresAt > now.Add(2*time.Minute).Unix() {
 		return errors.New("p2p.lease_expired")
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(lease.Signature)

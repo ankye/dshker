@@ -363,3 +363,13 @@ Go race 在工具链支持的真实平台运行；不支持的架构需明确记
 - [ ] 10.5 支持删除/离开：已配置服务可删除（forgottenServiceIds 遗忘机制）；已登记设备在「等待审核」中可取消、审核通过后可「离开网络」（解绑设备）。UI 增加删除/取消/离开按钮与确认，删除后不允许悄悄恢复。Owner: client p2p + server；依赖: 10.1、10.3、10.4；验证: 删除服务不复活、离开网络后不能自动恢复配对、取消等待审核不产生残留。
 - [ ] 10.6 网络与账户：未登录显示登录注册页，使用邮箱+密码登录/注册；登录后网络管理 CRUD（每用户最多 2 个网络，第 3 个拒绝），点网络进入该网络管理界面做设备 CRUD 与认证（批准/拒绝/撤销配对、绑定/解绑设备、查看设备列表与在线状态）。Owner: renderer + server accounts；依赖: 10.3、10.4；验证: 邮箱登录注册、2 网络上限、网络内设备 CRUD/认证全流程 typed locale，跨仓 server 支持邮箱与注册接口。
 - [ ] 10.7 连接监督与自动重连：客户端启动后自动连接已配置服务器并获取本机登记/membership 状态驱动 UI；定时健康检测（正常 >= 30s）；失败后指数退避重连（1s 起倍增、上限 60s、成功后回落）；重连期间保持最后一次已知状态、成功后以服务器权威状态刷新；退出/主动断开停止定时器。Owner: Electron p2p supervision + renderer；依赖: 10.1、10.3、10.4；验证: 启动取状态、正常轮询、断线重连/退避/回落、退出清理定时器的自动化与真实服务器场景通过。
+
+## 11. 实跑校准：部署服务器共同成员制 + 租约窗口 + 直连网络约束（2026-09-11）
+
+真实部署服务器（https://my.ffkey.com:8443，开放注册）双端实跑校准，全部由 live-drive（networking/tools/live-drive，\`//go:build live\`）在 macOS 10.147.17.251 ↔ Windows 10.147.17.110 上实证：
+
+- [x] 11.1 部署服务器为共同成员制：无 share/invite/confirm；配对由 \`pairs.adopt\`（AdoptNetwork）从设备自身网络绑定派生，已存在配对不重复回显（枚举须走 \`Pairs\` 列表）；租约的 \`pairId\` 即目标设备 ID 且 \`revision\` 恒 1。客户端按此对齐（\`49a61bb\` 已含）。验证：A（mac）登记、B（win）登记+adopt 派生配对、A 侧 adopt+pairs 枚举取到 active 配对、B 侧 serve 收到 attempt。
+- [x] 11.2 租约有效期校验上限放宽 60s → 2min（internal/protocol/lease.go）：部署服务器授予 ~62-65s TTL 的租约，原 60s 上限导致目标侧在收到 attempt 时以 \`p2p.lease_expired\` 拒绝（initiator 因校验时点早 1-2s 恰好通过），表现为目标侧静默、发起侧 \`p2p.direct_unavailable\`。实测修复后目标侧正常建会（B-STATE punching）。上限保留以拒绝远期/伪造租约。
+- [x] 11.3 管理器不再静默丢弃入站 attempt 的 start 错误（internal/peersession/manager.go）：同时刻 begin 面（发起侧）有状态输出而目标侧无任何输出，靠 stderr 一行定位 11.2；错误改为打印后继续接收循环。
+- [ ] 11.4 直连路径受网络承载约束：本现场跨机 UDP（ZeroTier 虚拟网）双向不通（ICMP/TCP 通、裸 UDP 丢弃、Windows 防火墙放行后仍不通），ICE 直连协商以 \`p2p.direct_unavailable\` 如实失败；同机 fixture 直连路径全绿。结论：直连 UDP 的可用性最终取决于承载网，产品保持不回退 relay，失败码分层已被 3.8/11.5 校准。已有 fixture 之外的公网/实体 LAN 直连验收留待真实部署环境。
+- [ ] 11.5 real-DSH 目标侧运行时：Windows 上由 dshker-server 反代/p2p 隧道驱动 DSH web 时，web 需以托管版本或自检出（versions 目录临时移开）运行；本次以 ssh 反代（TCP 承载）验证 mac → win:3080 的 DSH web 全链路（401 鉴权门 + token 303），p2p 隧道承载的 HTTP 验证随 11.4 的网络环境解决后补。

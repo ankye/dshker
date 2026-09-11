@@ -6,6 +6,8 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -374,7 +376,9 @@ func (manager *Manager) receive() {
 				pairID, ok := manager.pairForRemoteLocked(event.Lease.FromDeviceID, event.Lease.NetworkID)
 				manager.mu.Unlock()
 				if ok {
-					manager.start(pairID, event.Lease, nil)
+					if _, err := manager.start(pairID, event.Lease, nil); err != nil {
+						fmt.Fprintf(os.Stderr, "start %s: %v\n", pairID, err)
+					}
 				}
 			}
 			continue
