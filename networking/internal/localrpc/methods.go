@@ -31,6 +31,9 @@ type Method struct {
 // against the shipped dispatch by methods_test.go.
 var Methods = []Method{
 	{"core.version", RoleShell},
+	{"core.secret_delete", RoleShell},
+	{"core.secret_get", RoleShell},
+	{"core.secret_set", RoleShell},
 	{"device.enroll", RoleShell},
 	{"device.enrollmentResult", RoleShell},
 	{"device.enrollmentToken", RoleShell},

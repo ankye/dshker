@@ -3,6 +3,7 @@ package integration
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
@@ -190,4 +191,135 @@ func TestCoreDaemonServesWithADataRoot(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("dshkerd outlived its parent channel")
 	}
+}
+
+// coreSession owns one dshkerd process with an authenticated parent.
+type coreSession struct {
+	parent *localrpc.Peer
+	done   <-chan error
+}
+
+// bootCore launches a daemon session with the given arguments and returns it
+// with an authenticated parent peer ready to call.
+func bootCore(t *testing.T, binary string, args ...string) *coreSession {
+	t.Helper()
+	endpoint := coreEndpoint(t)
+	secretValue := strings.Repeat("c", 64)
+	cmd := exec.Command(binary, args...)
+	stdin, err := cmd.StdinPipe()
+	must(t, err)
+	stdout, err := cmd.StdoutPipe()
+	must(t, err)
+	daemon := launch(t, cmd)
+	record, err := json.Marshal(localrpc.Bootstrap{Version: 1, Socket: endpoint, Secret: secretValue})
+	must(t, err)
+	_, err = stdin.Write(append(record, '\n'))
+	must(t, err)
+	must(t, stdin.Close())
+	line, err := bufio.NewReader(stdout).ReadString('\n')
+	must(t, err)
+	if line != coreReadiness {
+		t.Fatalf("readiness = %q", line)
+	}
+	conn, err := dialCore(endpoint)
+	must(t, err)
+	authentication, err := json.Marshal(localrpc.Authentication{Version: 1, Secret: secretValue})
+	must(t, err)
+	_, err = conn.Write(append(authentication, '\n'))
+	must(t, err)
+	acknowledgement := make([]byte, len(coreAuthenticated))
+	_, err = io.ReadFull(conn, acknowledgement)
+	must(t, err)
+	if string(acknowledgement) != coreAuthenticated {
+		t.Fatalf("authentication = %q", acknowledgement)
+	}
+	return &coreSession{
+		parent: localrpc.New(context.Background(), conn, func(context.Context, string, json.RawMessage) (any, error) {
+			return nil, errors.New("p2p.invalid_operation")
+		}),
+		done: daemon.done,
+	}
+}
+
+// stop closes the parent channel and asserts the daemon follows it.
+func (session *coreSession) stop(t *testing.T) {
+	t.Helper()
+	session.parent.Close()
+	select {
+	case <-session.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("dshkerd outlived its parent channel")
+	}
+}
+
+// readSecret calls core.secret_get and returns the decoded plaintext.
+func readSecret(t *testing.T, parent *localrpc.Peer, ctx context.Context, key string) string {
+	t.Helper()
+	payload, err := parent.Call(ctx, "core.secret_get", map[string]string{"key": key})
+	must(t, err)
+	var response struct {
+		Value string `json:"value"`
+	}
+	if err := json.Unmarshal(payload, &response); err != nil {
+		t.Fatalf("secret_get payload %s: %v", payload, err)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(response.Value)
+	must(t, err)
+	return string(decoded)
+}
+
+// TestCoreDaemonSecretRoundTrip drives core.secret_set/get/delete through the
+// private channel. A daemon restart against the same data root must observe the
+// value the previous process persisted ("created by the previous release still
+// serves" at the method level), and a core without a data root must refuse
+// every secret method with a typed code instead of a fallback.
+func TestCoreDaemonSecretRoundTrip(t *testing.T) {
+	binary := filepath.Join(t.TempDir(), "dshkerd")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", binary, corePackage)
+	build.Stderr = os.Stderr
+	must(t, build.Run())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	dataRoot := t.TempDir()
+	key := "dshker.peer.credential." + strings.Repeat("d", 64)
+	plaintext := `{"serviceId":"` + strings.Repeat("e", 64) + `","name":"previous release"}`
+	value := base64.StdEncoding.EncodeToString([]byte(plaintext))
+
+	// First process: write the value and read it back, then exit.
+	first := bootCore(t, binary, "--data", dataRoot)
+	if _, err := first.parent.Call(ctx, "core.secret_set", map[string]string{"key": key, "value": value}); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	if got := readSecret(t, first.parent, ctx, key); got != plaintext {
+		t.Fatalf("set/get mismatch: %q != %q", got, plaintext)
+	}
+	first.stop(t)
+
+	// A restart against the same root must serve the persisted value; a delete
+	// then makes the key missing again.
+	second := bootCore(t, binary, "--data", dataRoot)
+	if got := readSecret(t, second.parent, ctx, key); got != plaintext {
+		t.Fatalf("restart lost the value: %q != %q", got, plaintext)
+	}
+	if _, err := second.parent.Call(ctx, "core.secret_delete", map[string]string{"key": key}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := second.parent.Call(ctx, "core.secret_get", map[string]string{"key": key}); err == nil || err.Error() != "p2p.secret_missing" {
+		t.Fatalf("get after delete = %v", err)
+	}
+	second.stop(t)
+
+	// A core without a data root has no provider and says so, typed.
+	third := bootCore(t, binary)
+	if _, err := third.parent.Call(ctx, "core.secret_get", map[string]string{"key": key}); err == nil || err.Error() != "p2p.secret_provider_unavailable" {
+		t.Fatalf("get without a root = %v", err)
+	}
+	if _, err := third.parent.Call(ctx, "core.secret_set", map[string]string{"key": key, "value": value}); err == nil || err.Error() != "p2p.secret_provider_unavailable" {
+		t.Fatalf("set without a root = %v", err)
+	}
+	third.stop(t)
 }

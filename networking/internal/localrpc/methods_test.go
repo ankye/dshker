@@ -54,7 +54,7 @@ func TestMethodTableMatchesShippedDispatch(t *testing.T) {
 	}
 }
 
-var methodLiteralPattern = regexp.MustCompile("\"([a-z][a-zA-Z]*\\.[a-zA-Z][a-zA-Z0-9]*(?:\\.[a-zA-Z][a-zA-Z0-9]*)*)\"")
+var methodLiteralPattern = regexp.MustCompile("\"([a-z][a-zA-Z]*\\.[a-zA-Z][a-zA-Z0-9_]*(?:\\.[a-zA-Z][a-zA-Z0-9_]*)*)\"")
 
 // implementedMethodNames collects the quoted group.name literals of the
 // packages that implement the peer surface.

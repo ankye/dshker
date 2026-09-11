@@ -47,10 +47,13 @@ func parseArguments(args []string) (string, error) {
 }
 
 func run(dataRoot string) error {
+	server := core.Serve{}
 	if dataRoot != "" {
-		if _, err := secret.Open(dataRoot); err != nil {
+		store, err := secret.Open(dataRoot)
+		if err != nil {
 			return err
 		}
+		server.Store = store
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancel()
@@ -58,7 +61,7 @@ func run(dataRoot string) error {
 	if err != nil {
 		return err
 	}
-	rpc := localrpc.New(ctx, conn, core.Handle)
+	rpc := localrpc.New(ctx, conn, server.Handle)
 	<-rpc.Done()
 	cancel()
 	rpc.Close()
