@@ -27,11 +27,14 @@ describe('P2P troubleshooting documentation', () => {
     }
   })
 
-  it('states the no-relay limit rather than implying every network works', async () => {
+  it('states the relay is opaque and blocked networks still fail honestly', async () => {
     for (const file of ['docs/p2p-connections.md', 'docs/p2p-connections.zh-CN.md']) {
       const doc = await readFile(path.join(appRoot, file), 'utf8')
       expect(doc).toMatch(/direct_unavailable/)
-      expect(doc.toLowerCase()).toMatch(/no relay|不使用中继/)
+      // Docs must describe the opaque relay fallback, not imply every network works.
+      expect(doc.toLowerCase()).toMatch(/relay|中继|TURN/)
+      // Fully blocked networks must still be presented as failing honestly.
+      expect(doc).toMatch(/cannot be established|cannot be traversed|无法建立|无法穿透/)
     }
   })
 

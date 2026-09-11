@@ -17,10 +17,12 @@ by a coordination server you host yourself.
 It is **not**:
 
 - A way to reach a computer over any network. Direct connections need a usable
-  UDP path. Some networks — symmetric NAT on both sides, UDP blocked entirely,
-  restrictive corporate egress — cannot be traversed. There is **no relay**, so
-  in those networks the connection reports `direct_unavailable` and fails
-  instead of silently falling back to a slower path through a third party.
+  UDP path. When the direct path cannot be established, the connection falls back
+  to **your own deployment server acting as an opaque relay** (TURN, RFC 8656):
+  the server forwards only the end-to-end encrypted packet stream (DTLS/SCTP
+  ciphertext) and can neither read nor inject the traffic. If neither a direct
+  nor a relayed path can be established, the connection reports
+  `direct_unavailable` and fails honestly.
 - A sandbox around DSH. Authorized directories only limit the folder picker in
   this app. Once a project is open, conversations, file access and tasks are
   governed by the DSH permission and approval policy **on the other computer**.
@@ -74,8 +76,9 @@ What the failures mean:
   refuses a server it cannot verify, so a self-signed certificate that this
   machine does not trust will not work.
 - **No STUN response.** UDP is blocked or the port is closed. This is the usual
-  reason pairing succeeds but connecting reports `direct_unavailable`. There is
-  no relay, so it must be fixed rather than worked around.
+  reason pairing succeeds but connecting reports `direct_unavailable`. The
+  relayed fallback also rides UDP (to your server), so a fully blocked UDP path
+  still cannot be traversed and must be fixed rather than worked around.
 
 A STUN pass proves this machine can reach the server over UDP. It does not prove
 the two computers can reach each other; only an actual connection shows that.
@@ -248,16 +251,16 @@ means the same thing everywhere, but what to do about it depends on the step.
 
 ### Connecting
 
-| Code                                                           | Meaning and what to do                                                                                                                       |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `direct_unavailable`                                           | No usable direct UDP path between the two networks. **There is no relay**, so this network cannot work. A limitation, not a bug.             |
-| Stuck at _attempting a direct connection_                      | Signalling or STUN is unreachable. Verify WSS and STUN with the preflight tool.                                                              |
-| `p2p.not_connected`                                            | The operation needs a live connection. Connect first.                                                                                        |
-| `p2p.connection_busy` / `p2p.helper_busy` / `p2p.service_busy` | An operation is in flight. Wait; do not click repeatedly.                                                                                    |
-| `p2p.stale_generation` / `p2p.attempt_mismatch`                | A callback from an older attempt arrived. This is **the protection working**: an old attempt cannot revive a new connection. Just reconnect. |
-| Connected, but the workbench does not load                     | The remote DSH did not start. Check DSH on the other computer.                                                                               |
-| `p2p.helper_unavailable` / `p2p.helper_closed`                 | The local helper process is unavailable or exited. Restart the app; if it recurs, send the logs.                                             |
-| `p2p.helper_authentication_failed`                             | The helper's private channel failed authentication. Abnormal; send the full error.                                                           |
+| Code                                                           | Meaning and what to do                                                                                                                                |
+| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `direct_unavailable`                                           | Neither a direct UDP path nor a relayed path through your deployment server could be established. Verify WSS/STUN and the server's TURN reachability. |
+| Stuck at _attempting a direct connection_                      | Signalling or STUN is unreachable. Verify WSS and STUN with the preflight tool.                                                                       |
+| `p2p.not_connected`                                            | The operation needs a live connection. Connect first.                                                                                                 |
+| `p2p.connection_busy` / `p2p.helper_busy` / `p2p.service_busy` | An operation is in flight. Wait; do not click repeatedly.                                                                                             |
+| `p2p.stale_generation` / `p2p.attempt_mismatch`                | A callback from an older attempt arrived. This is **the protection working**: an old attempt cannot revive a new connection. Just reconnect.          |
+| Connected, but the workbench does not load                     | The remote DSH did not start. Check DSH on the other computer.                                                                                        |
+| `p2p.helper_unavailable` / `p2p.helper_closed`                 | The local helper process is unavailable or exited. Restart the app; if it recurs, send the logs.                                                      |
+| `p2p.helper_authentication_failed`                             | The helper's private channel failed authentication. Abnormal; send the full error.                                                                    |
 
 ### Browsing remote directories / opening a project
 

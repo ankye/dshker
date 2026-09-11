@@ -319,7 +319,7 @@
       "artifact": "OPEN: physical two-machine pairing, connection and remote project acceptance; four-architecture packaging; one-hour soak with real DSH HTTP/WS; release evidence. These require a second physical machine and a self-hosted coordination server and are not satisfied by any test in this gate."
     },
     {
-      "artifact": "User documentation (docs/p2p-connections.md and .zh-CN.md) states the no-relay limit, the authorized-root-is-not-a-DSH-sandbox distinction, and that an installer build is not a release. Every error code it documents was verified to exist in src/shared/p2p-management.ts or the Go tree."
+      "artifact": "User documentation (docs/p2p-connections.md and .zh-CN.md) states the direct-first-with-opaque-relay behavior (a TURN fallback that only forwards end-to-end encrypted packets, with fully blocked networks still failing as direct_unavailable), the authorized-root-is-not-a-DSH-sandbox distinction, and that an installer build is not a release. Every error code it documents was verified to exist in src/shared/p2p-management.ts or the Go tree."
     },
     {
       "artifact": "tools/p2p-preflight.mjs was exercised against real endpoints on this machine: a genuine STUN Binding to stun.l.google.com:19302 succeeded, a dead UDP port timed out, an untrusted certificate (self-signed.badssl.com) was identified as a TLS trust failure, a real wss handshake completed, and a tampered helper binary was caught by checksum."

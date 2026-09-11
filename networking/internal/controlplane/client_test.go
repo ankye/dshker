@@ -148,6 +148,43 @@ func TestServiceIdentityNoncePinAndCertificateBinding(t *testing.T) {
 	}
 }
 
+func TestTurnCredentialsEndpointAndStrictFields(t *testing.T) {
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/turn-credentials" || r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"urls":       []string{"turn:127.0.0.1:3478"},
+			"username":   "1750000000:device-1",
+			"credential": "cGFzcw==",
+		})
+	})
+	client := testClient(t, handler)
+	creds, err := client.TurnCredentials(context.Background())
+	if err != nil {
+		t.Fatalf("TurnCredentials failed: %v", err)
+	}
+	if len(creds.URLs) != 1 || creds.URLs[0] != "turn:127.0.0.1:3478" {
+		t.Fatalf("unexpected urls: %v", creds.URLs)
+	}
+	if creds.Username != "1750000000:device-1" || creds.Credential != "cGFzcw==" {
+		t.Fatalf("unexpected credential: %+v", creds)
+	}
+}
+
+// TestTurnCredentialsMalformedResponseRefused keeps the client strict: a
+// coordinator answer without the required relay fields is a typed refusal,
+// never a silent empty relay.
+func TestTurnCredentialsMalformedResponseRefused(t *testing.T) {
+	client := testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{})
+	}))
+	if _, err := client.TurnCredentials(context.Background()); err == nil || err.Error() != "p2p.missing_field" {
+		t.Fatalf("malformed credential response was not refused strictly: %v", err)
+	}
+}
+
 func TestPairIdentityRejectsMissingCrossDeviceAndCrossUserFields(t *testing.T) {
 	a, _, _ := ed25519.GenerateKey(rand.Reader)
 	b, _, _ := ed25519.GenerateKey(rand.Reader)

@@ -124,7 +124,7 @@ func newFixture(t *testing.T) *fixture {
 	key, err := x509.MarshalPKCS8PrivateKey(private)
 	must(t, err)
 	endpoints := controlplane.Endpoints{HTTPSOrigin: "https://" + tcpAddress, WSSURL: "wss://" + tcpAddress + "/v1/signals", STUNAddress: udpAddress}
-	config := map[string]string{"httpsOrigin": endpoints.HTTPSOrigin, "wssUrl": endpoints.WSSURL, "stunAddress": udpAddress, "httpsListen": tcpAddress, "stunListen": udpAddress, "tlsCertPath": filepath.Join(directory, "tls.crt"), "tlsKeyPath": filepath.Join(directory, "tls.key"), "databasePath": filepath.Join(directory, "state.db"), "identityKeyPath": filepath.Join(directory, "identity.key")}
+	config := map[string]string{"httpsOrigin": endpoints.HTTPSOrigin, "wssUrl": endpoints.WSSURL, "stunAddress": udpAddress, "httpsListen": tcpAddress, "stunListen": udpAddress, "tlsCertPath": filepath.Join(directory, "tls.crt"), "tlsKeyPath": filepath.Join(directory, "tls.key"), "databasePath": filepath.Join(directory, "state.db"), "identityKeyPath": filepath.Join(directory, "identity.key"), "turnSharedSecret": "process-test-relay-secret-0123456789abcdef0000", "relayPublicIP": "127.0.0.1"}
 	data, err := json.Marshal(config)
 	must(t, err)
 	configPath := filepath.Join(directory, "config.json")

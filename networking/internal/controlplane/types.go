@@ -3,6 +3,15 @@ package controlplane
 
 import "github.com/ankye/dshker/networking/internal/protocol"
 
+// TurnCredentials is the device-scoped TURN relay credential set issued by the
+// coordinator. The relay forwards only end-to-end encrypted packets; these
+// credentials authorize the relay allocation, never plaintext access.
+type TurnCredentials struct {
+	URLs       []string `json:"urls"`
+	Username   string   `json:"username"`
+	Credential string   `json:"credential"`
+}
+
 type Endpoints struct {
 	HTTPSOrigin string `json:"httpsOrigin"`
 	WSSURL      string `json:"wssUrl"`

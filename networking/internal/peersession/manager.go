@@ -54,6 +54,9 @@ type Manager struct {
 	revokedPairs    map[string]string
 	sessions        map[string]*session
 	closed          bool
+	turnFetched     bool
+	turnCreds       controlplane.TurnCredentials
+	turnErr         error
 }
 type session struct {
 	PairID    string
@@ -224,8 +227,9 @@ func namedRefusal(err error, transportReady bool) string {
 		return code
 	}
 	if !transportReady {
-		// A deadline here means the direct path never came up. There is no relay,
-		// so the honest refusal is that the two networks cannot reach each other.
+		// A deadline here means neither the direct path nor the opaque TURN relay
+		// fallback came up, so the honest refusal is that the two networks cannot
+		// reach each other.
 		return "p2p.direct_unavailable"
 	}
 	return "p2p.runtime_unavailable"
@@ -287,6 +291,11 @@ func (manager *Manager) Close() {
 }
 
 func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *session) (*session, error) {
+	// Fetch relay credentials before taking the manager lock: the fetch may
+	// hit the network, and a fetch inside the lock would self-deadlock when
+	// turnEndpoints re-acquires it (start already holds it), blocking every
+	// other session path. A fetch failure simply leaves the direct-only path.
+	creds, credsErr := manager.turnEndpoints(manager.ctx)
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 	pin, exists := manager.pins[pairID]
@@ -317,7 +326,11 @@ func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *ses
 		connection = newSession(manager.ctx)
 	}
 	scope := protocol.SignalScope{AttemptID: lease.AttemptID, PairID: lease.PairID, Generation: lease.Generation, FromDeviceID: lease.FromDeviceID, ToDeviceID: lease.ToDeviceID}
-	transport, err := peer.NewTransport(connection.ctx, peer.TransportOptions{UserID: local.UserID, NetworkID: pin.Pair.NetworkID, STUNAddress: manager.config.Endpoints.STUNAddress, LocalDeviceID: local.DeviceID, PeerDeviceID: remote.DeviceID, PrivateKey: manager.config.PrivateKey, PeerKey: remote.PublicKey, ServiceKey: manager.config.Authority.PublicKey, Scope: scope, Revision: lease.Revision, Lease: lease})
+	turnURL, turnUsername, turnCredential := "", "", ""
+	if credsErr == nil && len(creds.URLs) > 0 {
+		turnURL, turnUsername, turnCredential = creds.URLs[0], creds.Username, creds.Credential
+	}
+	transport, err := peer.NewTransport(connection.ctx, peer.TransportOptions{UserID: local.UserID, NetworkID: pin.Pair.NetworkID, STUNAddress: manager.config.Endpoints.STUNAddress, TurnURL: turnURL, TurnUsername: turnUsername, TurnCredential: turnCredential, LocalDeviceID: local.DeviceID, PeerDeviceID: remote.DeviceID, PrivateKey: manager.config.PrivateKey, PeerKey: remote.PublicKey, ServiceKey: manager.config.Authority.PublicKey, Scope: scope, Revision: lease.Revision, Lease: lease})
 	if err != nil {
 		connection.cancel()
 		return nil, err
@@ -331,6 +344,33 @@ func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *ses
 
 // targetDevice returns the far device identity of a pinned pair, normalizing
 // the pair so the local device is the initiator or the target side.
+// turnEndpoints returns the device-scoped TURN relay credentials, fetched at
+// most once from the coordinator and cached for the manager lifetime. A fetch
+// failure leaves the session on the direct path only; the relay is an
+// enhancement, never a requirement.
+func (manager *Manager) turnEndpoints(ctx context.Context) (controlplane.TurnCredentials, error) {
+	manager.mu.Lock()
+	if manager.turnFetched {
+		creds, err := manager.turnCreds, manager.turnErr
+		manager.mu.Unlock()
+		return creds, err
+	}
+	manager.mu.Unlock()
+	// Fetch outside the mutex: the coordinator call may be slow or fail
+	// (server restart, transient network); holding manager.mu across it would
+	// block every other session path. The first writer wins the cache.
+	creds, err := manager.client.TurnCredentials(ctx)
+	manager.mu.Lock()
+	if !manager.turnFetched {
+		manager.turnFetched = true
+		manager.turnCreds = creds
+		manager.turnErr = err
+	}
+	result, finalErr := manager.turnCreds, manager.turnErr
+	manager.mu.Unlock()
+	return result, finalErr
+}
+
 func (manager *Manager) targetDevice(pin controlplane.PairIdentity) (string, error) {
 	local, remote := pin.Initiator, pin.Target
 	if local.DeviceID != manager.config.Device.DeviceID {

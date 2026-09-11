@@ -39,7 +39,12 @@ func TestTwoPeerProcessLoadAndReconnect(t *testing.T) {
 		c.call(t, command{Op: "status"})
 	}
 	started = time.Now()
+	// The reconnect loop is intentionally rapid -- verify the full cycle works
+	// back-to-back -- but is paced at 150ms per round so the burst stays under
+	// the coordinator admission budget (20 req/s per source), which is a DDoS
+	// guard, not a reconnect-rate contract.
 	for generation := uint64(2); generation <= 31; generation++ {
+		time.Sleep(150 * time.Millisecond)
 		a.call(t, command{Op: "disconnect"})
 		b.call(t, command{Op: "close-local"})
 		connect(t, a, b, generation)

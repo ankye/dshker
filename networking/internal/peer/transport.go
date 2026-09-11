@@ -18,17 +18,38 @@ import (
 )
 
 type TransportOptions struct {
-	UserID        string
-	NetworkID     string
-	STUNAddress   string
-	LocalDeviceID string
-	PeerDeviceID  string
-	PrivateKey    ed25519.PrivateKey
-	PeerKey       ed25519.PublicKey
-	ServiceKey    ed25519.PublicKey
-	Scope         protocol.SignalScope
-	Revision      uint64
-	Lease         protocol.Lease
+	UserID      string
+	NetworkID   string
+	STUNAddress string
+	// TurnURL/TurnUsername/TurnCredential, when present, add the deployment
+	// server as an opaque TURN relay fallback: the ICE agent can then complete
+	// the session through the relay when no direct UDP path exists.
+	TurnURL        string
+	TurnUsername   string
+	TurnCredential string
+	LocalDeviceID  string
+	PeerDeviceID   string
+	PrivateKey     ed25519.PrivateKey
+	PeerKey        ed25519.PublicKey
+	ServiceKey     ed25519.PublicKey
+	Scope          protocol.SignalScope
+	Revision       uint64
+	Lease          protocol.Lease
+}
+
+// iceServersFor renders the ICE server list for the options: the self-hosted
+// STUN endpoint, plus the TURN relay when credentials were issued.
+func iceServersFor(options TransportOptions) []webrtc.ICEServer {
+	servers := []webrtc.ICEServer{{URLs: []string{"stun:" + options.STUNAddress}}}
+	if options.TurnURL != "" {
+		servers = append(servers, webrtc.ICEServer{
+			URLs:           []string{options.TurnURL},
+			Username:       options.TurnUsername,
+			Credential:     options.TurnCredential,
+			CredentialType: webrtc.ICECredentialTypePassword,
+		})
+	}
+	return servers
 }
 
 type DirectPath struct {
@@ -68,7 +89,7 @@ func NewTransport(parent context.Context, options TransportOptions) (*Transport,
 	engine.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 	engine.SetICETimeouts(5*time.Second, 25*time.Second, 2*time.Second)
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(engine))
-	pc, err := api.NewPeerConnection(webrtc.Configuration{ICEServers: []webrtc.ICEServer{{URLs: []string{"stun:" + options.STUNAddress}}}})
+	pc, err := api.NewPeerConnection(webrtc.Configuration{ICEServers: iceServersFor(options)})
 	if err != nil {
 		return nil, err
 	}

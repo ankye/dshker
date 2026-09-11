@@ -246,7 +246,7 @@ async function checkStun(value) {
         finish({
           name: 'stun',
           ok: false,
-          detail: `No STUN response from ${host}:${port} within 8s. UDP is likely blocked on this network or the port is not open. Direct connections cannot work without a UDP path, and there is no relay fallback.`
+          detail: `No STUN response from ${host}:${port} within 8s. UDP is likely blocked on this network or the port is not open. Direct connections cannot work without a UDP path; the relayed fallback also rides UDP to your server, so check its TURN reachability.`
         }),
       8_000
     )

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- P2P connections now fall back to your deployment server as an **opaque relay**
+  (TURN, RFC 8656) when no direct UDP path can be established. The server only
+  forwards the end-to-end encrypted packet stream (DTLS/SCTP ciphertext) and can
+  neither read nor inject the traffic; a network where neither a direct nor a
+  relayed path works still reports `direct_unavailable`, honestly. A relay
+  credential fetch that stalls (for example while the server restarts) can no
+  longer stall other connections: the fetch runs outside the session lock and
+  degrades to the direct path on failure.
+
 ## 0.1.28 — 2026-09-11
 
 - A computer that is online in a shared network now appears in the Run route's

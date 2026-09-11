@@ -64,7 +64,7 @@ describe('p2p preflight tool', () => {
     const stun = check(report, 'stun')
     expect(stun.ok).toBe(false)
     // The message must name the real consequence, not just "failed".
-    expect(stun.detail).toMatch(/no relay/i)
+    expect(stun.detail).toMatch(/relay|TURN/i)
     expect(code).toBe(1)
   })
 

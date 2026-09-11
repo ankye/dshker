@@ -77,11 +77,13 @@ live server. Until two machines have completed a real session this is not
 advertised as an available desktop feature: a successful installer build is not
 a successful release.
 
-Two limits worth knowing before you plan around it: there is **no relay**, so
-networks without a usable UDP path fail with `direct_unavailable` instead of
-silently routing through a third party; and authorized directories only constrain the
-folder picker in this app — once a project is open, DSH's own permission and
-approval policy on the other computer still governs everything.
+Two limits worth knowing before you plan around it: when no direct UDP path
+can be established, the connection falls back to your own deployment server as
+an opaque relay (TURN) and only fails with `direct_unavailable` when neither
+path can be established — the relay never sees plaintext; and authorized
+directories only constrain the folder picker in this app — once a project is
+open, DSH's own permission and approval policy on the other computer still
+governs everything.
 
 See the [user guide](docs/p2p-connections.md) and the
 [implementation checklist](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md).

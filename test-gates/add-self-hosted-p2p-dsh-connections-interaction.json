@@ -75,7 +75,7 @@
       "invariants": [
         "punching and starting-runtime are never presented as connected",
         "the local DSH entry URL never appears in renderer state",
-        "no relay is used; a non-direct path is reported as direct_unavailable"
+        "the relay is an opaque TURN fallback that only forwards end-to-end encrypted packets; a session with neither a direct nor a relayed path is reported as direct_unavailable"
       ],
       "required_content_checks": ["text_order", "stage_labels"]
     },

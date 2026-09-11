@@ -222,6 +222,15 @@ func (client *Client) RenewLease(ctx context.Context, pairID, attemptID string) 
 	return result, err
 }
 
+// TurnCredentials fetches this device's TURN relay credentials from the
+// coordinator. A session whose direct ICE path cannot be established uses the
+// relay as the fallback transport; the relay only forwards ciphertext.
+func (client *Client) TurnCredentials(ctx context.Context) (TurnCredentials, error) {
+	var result TurnCredentials
+	err := client.call(ctx, "POST", "/v1/turn-credentials", "", struct{}{}, &result)
+	return result, err
+}
+
 func (client *Client) End(ctx context.Context, pairID, attemptID string) error {
 	var result struct {
 		AttemptID string `json:"attemptId"`

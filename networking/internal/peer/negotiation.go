@@ -140,7 +140,10 @@ func validateSDP(value string) (string, error) {
 			fingerprints = append(fingerprints, attribute.Value)
 		case "candidate":
 			candidate, err := ice.UnmarshalCandidate(attribute.Value)
-			if err != nil || candidate.Type() == ice.CandidateTypeRelay || !candidate.NetworkType().IsUDP() {
+			// Every candidate must ride UDP. Relay candidates are legal: the
+			// deployment server relays them only when no direct UDP path exists,
+			// and ICE still prefers the direct host/reflexive pair first.
+			if err != nil || !candidate.NetworkType().IsUDP() {
 				return "", errors.New("p2p.direct_unavailable")
 			}
 		}

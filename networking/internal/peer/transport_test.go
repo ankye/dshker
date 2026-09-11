@@ -14,6 +14,7 @@ import (
 
 	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/pion/stun/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 func optionsPair(t *testing.T) (TransportOptions, TransportOptions) {
@@ -189,6 +190,35 @@ func TestTamperedSDPRejectedBeforeChannel(t *testing.T) {
 	}
 	if second.Send([]byte("secret")) == nil {
 		t.Fatal("released data after identity mismatch")
+	}
+}
+
+func TestIceServersForDirectOnly(t *testing.T) {
+	servers := iceServersFor(TransportOptions{STUNAddress: "127.0.0.1:3478"})
+	if len(servers) != 1 {
+		t.Fatalf("expected direct-only ICE servers, got %d", len(servers))
+	}
+	if servers[0].URLs[0] != "stun:127.0.0.1:3478" {
+		t.Fatalf("unexpected STUN url %q", servers[0].URLs[0])
+	}
+	if servers[0].Credential != nil {
+		t.Fatal("stun server carries a credential")
+	}
+}
+
+func TestIceServersForWithRelayFallback(t *testing.T) {
+	servers := iceServersFor(TransportOptions{
+		STUNAddress:    "127.0.0.1:3478",
+		TurnURL:        "turn:127.0.0.1:3478",
+		TurnUsername:   "1750000000:device-1",
+		TurnCredential: "cGFzcw==",
+	})
+	if len(servers) != 2 {
+		t.Fatalf("expected direct+relay ICE servers, got %d", len(servers))
+	}
+	relay := servers[1]
+	if relay.URLs[0] != "turn:127.0.0.1:3478" || relay.Username != "1750000000:device-1" || relay.Credential != "cGFzcw==" || relay.CredentialType != webrtc.ICECredentialTypePassword {
+		t.Fatalf("unexpected relay server: %+v", relay)
 	}
 }
 

@@ -46,11 +46,13 @@ Device private keys and coordinator session tokens SHALL be protected by the ope
 
 ### Requirement: Preserved remote-access invariants
 
-The core SHALL keep the product's existing remote-access constraints: no relay or third-party transit is used, DSH Web stays bound to loopback and is reached only through the established peer or SSH path, and the core never exposes a general filesystem or shell capability to a peer.
+The core SHALL keep the product's remote-access constraints: the peer path prefers a direct UDP/ICE connection and falls back to the deployment server as an opaque relay (TURN, RFC 8656) that forwards only the end-to-end encrypted packet stream (DTLS/SCTP ciphertext) and can neither read nor inject traffic; DSH Web stays bound to loopback and is reached only through the established peer (direct or relayed) or SSH path; loopback-only validation of a resolved route stays; and the core never exposes a general filesystem or shell capability to a peer.
 
 #### Scenario: No direct path is available
 - **WHEN** two peers share a network but no direct UDP path can be established
-- **THEN** the attempt fails with the direct-path refusal and is not silently relayed
+- **THEN** the attempt falls back to the deployment server's opaque relay; if neither
+direct nor relayed path can be established, the attempt fails with
+`p2p.direct_unavailable` and the relay never sees plaintext
 
 #### Scenario: Peer requests something outside the contract
 - **WHEN** a peer asks for a path or command outside the authorized roots and the bound project

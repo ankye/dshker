@@ -38,7 +38,7 @@
 ## 5. P4 — Remote route moves to the core
 
 - [ ] 5.1 Owner: core. Depends: 4.5. Move OpenSSH and file-transfer resolution, the descriptor transfer, and the broker into the core; verify the SSH route connects with no Electron process running.
-- [ ] 5.2 Owner: core. Depends: 5.1. Keep the loopback-only validation and the no-relay invariant; verify a non-loopback resolved URL is refused and no relay path exists.
+- [ ] 5.2 Owner: core. Depends: 5.1. Keep the loopback-only validation and the opaque-relay invariant: the relay (TURN) forwards only end-to-end encrypted packets; verify a non-loopback resolved URL is refused and the relay cannot read plaintext.
 - [ ] 5.3 Owner: core. Depends: 5.1. Delete `electron/main/remote`; verify no shell code references it and the remote scenarios still pass.
 
 ## 6. P5 — Headless entry point and packaging

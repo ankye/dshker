@@ -12,7 +12,7 @@ The desired outcome: one Go native core owns networking, the reverse proxy, cred
 - **Credentials move to OS-native stores in Go**: macOS Keychain, Windows DPAPI, Linux Secret Service. No plaintext fallback; an unavailable provider fails explicitly.
 - **Electron starts `dshkerd` and talks to it over IPC** using the pattern the helper already uses: a one-shot bootstrap written to the child's stdin, then JSON-RPC frames over a private local socket (Unix socket / Windows named pipe with a per-user security descriptor). The renderer keeps its frozen typed preload surface and never receives the core socket.
 - **Headless CLI**: `dshkerd serve` plus named operations (`status`, `pair`, `connect`, `dsh start|stop`, `proxy`) so a machine with no desktop can be operated entirely from a shell.
-- **Preserved invariants**: no relay; DSH Web stays loopback-bound and is reached through the same SSH/peer path; managed roots stay separately registered; the renderer still receives no filesystem, shell, or subprocess capability.
+- **Preserved invariants**: direct-first with an opaque deployment-server relay (TURN) fallback that only forwards end-to-end encrypted packets; DSH Web stays loopback-bound and is reached through the same SSH/peer path; managed roots stay separately registered; the renderer still receives no filesystem, shell, or subprocess capability.
 
 ## Explicit non-goals
 
