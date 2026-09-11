@@ -89,7 +89,7 @@ func (transport *Transport) gather(ctx context.Context, description webrtc.Sessi
 	defer transport.mu.Unlock()
 	transport.localSequence++
 	scope := transport.options.Scope
-	signal := protocol.Signal{Version: 1, Type: kind, MessageID: protocol.NewID(), AttemptID: scope.AttemptID, Generation: scope.Generation, FromDeviceID: transport.options.LocalDeviceID, ToDeviceID: transport.options.PeerDeviceID, PairID: scope.PairID, Sequence: transport.localSequence, ExpiresAt: transport.lease.ExpiresAt, Payload: base64.RawURLEncoding.EncodeToString(body)}
+	signal := protocol.Signal{Version: 1, Type: kind, MessageID: protocol.NewID(), AttemptID: scope.AttemptID, Generation: scope.Generation, FromDeviceID: transport.options.LocalDeviceID, ToDeviceID: transport.options.PeerDeviceID, PairID: scope.PairID, Sequence: transport.localSequence, Payload: base64.RawURLEncoding.EncodeToString(body), ExpiresAt: protocol.SignalExpiry(time.Now())}
 	signal.Sign(transport.options.PrivateKey)
 	return signal, nil
 }

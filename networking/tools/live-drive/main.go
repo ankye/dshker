@@ -25,6 +25,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -383,9 +385,10 @@ func macConnect(ctx context.Context) {
 	select {}
 }
 
-func probe(url string) {
-	client := &http.Client{Timeout: 30 * time.Second}
-	request, err := http.NewRequest(http.MethodGet, url, nil)
+func probe(target string) {
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Timeout: 30 * time.Second, Jar: jar}
+	request, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		fatal("probe request:", err)
 	}
@@ -395,7 +398,8 @@ func probe(url string) {
 	}
 	body, _ := io.ReadAll(io.LimitReader(response.Body, 512))
 	response.Body.Close()
-	fmt.Println("A-PROBE", response.StatusCode, string(body))
+	session, _ := url.Parse(target)
+	fmt.Println("A-PROBE", response.StatusCode, len(jar.Cookies(session)), string(body))
 }
 
 func statePath() string {

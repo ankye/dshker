@@ -25,6 +25,29 @@ func TestStrictJSON(t *testing.T) {
 	}
 }
 
+func TestSignalExpiry(t *testing.T) {
+	issued := time.Unix(1700000000, 0)
+	expiry := SignalExpiry(issued)
+	// A signal issued with SignalExpiry is accepted at issue time, with a
+	// receiver clock up to 15s ahead, and rejected once the window passes.
+	if expiry <= issued.Unix() || expiry > issued.Add(SignalValidity).Unix() {
+		t.Fatalf("SignalExpiry outside validity window: %d", expiry)
+	}
+	if SignalExpiry(issued) != expiry {
+		t.Fatal("SignalExpiry not deterministic")
+	}
+	accept := []time.Time{issued, issued.Add(14 * time.Second)}
+	for _, at := range accept {
+		if expiry <= at.Unix() || expiry > at.Add(SignalValidity).Unix() {
+			t.Fatalf("signal issued at %d rejected by receiver at %d", issued.Unix(), at.Unix())
+		}
+	}
+	late := issued.Add(SignalValidity + time.Second)
+	if expiry > late.Unix() {
+		t.Fatal("signal still valid after its window")
+	}
+}
+
 func TestSignalSignatureAndScope(t *testing.T) {
 	public, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {

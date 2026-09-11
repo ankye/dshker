@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- A remote connection that succeeded through the **relay** no longer tears
+  itself down: the selected-path check rejected any pair involving a relay
+  candidate, so the first data-channel open on a relayed session was reported
+  as “no direct path”. A relayed UDP pair is now accepted like any other, and
+  ICE still prefers the direct path when one exists.
+- Pairing signals no longer expire before they are delivered: offers and
+  answers carried the lease's expiry as their own validity, which the
+  receiving peer always rejected as expired. Each signal now carries a
+  short, signal-scoped validity window.
+
 - P2P connections now fall back to your deployment server as an **opaque relay**
   (TURN, RFC 8656) when no direct UDP path can be established. The server only
   forwards the end-to-end encrypted packet stream (DTLS/SCTP ciphertext) and can

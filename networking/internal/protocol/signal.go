@@ -56,6 +56,17 @@ type Candidate struct {
 	Line      uint16 `json:"line"`
 }
 
+// SignalValidity is how long a signal may be considered deliverable: the
+// receiver accepts ExpiresAt within (now, now+SignalValidity].
+const SignalValidity = 60 * time.Second
+
+// SignalExpiry returns the ExpiresAt for a signal issued at issuedAt: the full
+// validity window minus a 15s clock-skew margin, so a peer with a slightly
+// ahead clock still accepts it.
+func SignalExpiry(issuedAt time.Time) int64 {
+	return issuedAt.Add(SignalValidity - 15*time.Second).Unix()
+}
+
 func (signal Signal) SigningBytes() []byte {
 	// Fixed-order JSON array with domain separation; integers never exceed JS exact range.
 	encoded, _ := json.Marshal([]any{"dshker.signal.v1", signal.Version, signal.Type,

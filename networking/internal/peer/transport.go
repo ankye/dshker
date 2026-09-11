@@ -228,7 +228,11 @@ func (transport *Transport) Path() (DirectPath, error) {
 		return DirectPath{}, errors.New("p2p.identity_mismatch")
 	}
 	pair, err := dtls.ICETransport().GetSelectedCandidatePair()
-	if err != nil || pair == nil || pair.Local == nil || pair.Remote == nil || pair.Local.Typ == webrtc.ICECandidateTypeRelay || pair.Remote.Typ == webrtc.ICECandidateTypeRelay || pair.Local.Protocol != webrtc.ICEProtocolUDP || pair.Remote.Protocol != webrtc.ICEProtocolUDP {
+	// A relayed candidate pair is a legal selected path: the deployment TURN
+	// server relays opaque UDP when no direct path exists, and ICE still
+	// prefers the direct host/reflexive pair first. Only the UDP transport
+	// requirement is enforced here.
+	if err != nil || pair == nil || pair.Local == nil || pair.Remote == nil || pair.Local.Protocol != webrtc.ICEProtocolUDP || pair.Remote.Protocol != webrtc.ICEProtocolUDP {
 		return DirectPath{}, errors.New("p2p.direct_unavailable")
 	}
 	return DirectPath{pair.Local.Typ.String(), pair.Remote.Typ.String(), "udp"}, nil
