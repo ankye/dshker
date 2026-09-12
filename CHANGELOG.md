@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Your paired device credential now lives in the **native secret store behind
+  the headless core** (macOS Keychain, Windows DPAPI) instead of an
+  Electron-encrypted file. An existing credential from a previous version
+  migrates itself once on first launch and keeps working; a core that cannot
+  start falls back to the previous behavior instead of failing the app.
+- Fixed a data-loss defect found during that migration: the macOS Keychain
+  writer silently truncated any secret longer than 128 bytes and corrupted
+  binary values. Secrets are now encoded and stored in chunks; no released
+  version was affected (the previous releases never used this path).
+
 ## 0.1.29 — 2026-09-12
 
 - A remote connection that succeeded through the **relay** no longer tears

@@ -21,6 +21,8 @@ import {
 } from './main/managed'
 import { SessionUsageReader } from './main/managed/session-usage-reader'
 import { PeerManagement } from './main/p2p/management'
+import { CoreSupervisor } from './main/core/supervisor'
+import { CoreSecrets, type CoreSecretPort } from './main/core/secrets'
 import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
@@ -184,6 +186,7 @@ async function registerLauncherServices(
   readonly remoteConnectionService: RemoteConnectionService
   readonly remotePeerBroker: RemotePeerBroker
   readonly peerManagement: PeerManagement
+  readonly coreSupervisor: CoreSupervisor | undefined
 }> {
   const managedWorkspaceService = await createManagedWorkspaceService(launcherRoot, locatorFilePath)
   await managedWorkspaceService.initializeDefaultRoots()
@@ -226,9 +229,31 @@ async function registerLauncherServices(
     launcherHarnessService
   })
   await remotePeerBroker.start()
+  // The headless core owns the native secret store. A core that cannot start
+  // (missing binary, bad data root) must not take the app down: the P2P
+  // credential store degrades to its legacy safeStorage path, exactly as it
+  // behaved before the core existed.
+  let coreSupervisor: CoreSupervisor | undefined
+  let coreSecrets: CoreSecretPort | undefined
+  try {
+    coreSupervisor = await CoreSupervisor.start(
+      {
+        resourcesRoot: app.isPackaged
+          ? process.resourcesPath
+          : path.join(app.getAppPath(), 'build'),
+        dataRoot: path.join(launcherRoot, 'core-data'),
+        onUnavailable: () => undefined
+      },
+      new AbortController().signal
+    )
+    coreSecrets = new CoreSecrets(coreSupervisor.rpc)
+  } catch (error) {
+    console.error('DSHKer Launcher could not start its headless core.', error)
+  }
   const peerManagement = new PeerManagement({
     resourcesRoot: app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build'),
     resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot(),
+    secrets: coreSecrets,
     runtime: launcherHarnessService
   })
   registerIpc({
@@ -262,7 +287,8 @@ async function registerLauncherServices(
     launcherUpdateService,
     remoteConnectionService,
     remotePeerBroker,
-    peerManagement
+    peerManagement,
+    coreSupervisor
   }
 }
 

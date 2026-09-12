@@ -7,6 +7,8 @@ export interface LauncherShutdownOwners {
   readonly remoteConnectionService: Pick<RemoteConnectionService, 'shutdown'>
   readonly remotePeerBroker: Pick<RemotePeerBroker, 'shutdown'>
   readonly peerManagement: Pick<PeerManagement, 'close'>
+  /** Present once the headless core is running; terminated with the shell. */
+  readonly coreSupervisor?: { close(): Promise<void> }
 }
 
 class LauncherShutdownError extends Error {
@@ -21,7 +23,8 @@ export async function shutdownLauncherOwners(owners: LauncherShutdownOwners): Pr
   const connectionResults = await Promise.allSettled([
     Promise.resolve().then(() => owners.peerManagement.close()),
     Promise.resolve().then(() => owners.remoteConnectionService.shutdown()),
-    Promise.resolve().then(() => owners.remotePeerBroker.shutdown())
+    Promise.resolve().then(() => owners.remotePeerBroker.shutdown()),
+    ...(owners.coreSupervisor ? [Promise.resolve().then(() => owners.coreSupervisor!.close())] : [])
   ])
   // Close incoming admission and forwarding before stopping the actual DSH child.
   const runtimeResults = await Promise.allSettled([
