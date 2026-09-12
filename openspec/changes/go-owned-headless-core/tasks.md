@@ -46,6 +46,7 @@
 - [ ] 6.1 Owner: core. Depends: 4.5. Implement `dshkerd serve` plus `status`, `pair`, `connect`, `dsh start|stop`, and `proxy`; verify each operation is usable from a shell with no desktop session.
 - [ ] 6.2 Owner: core. Depends: 6.1. Verify headless hosting on Linux, Windows, and macOS: a machine with no display hosts a workbench that a desktop peer opens.
 - [ ] 6.3 Owner: release. Depends: 6.1. Add the core binary to the per-platform build, manifest, and packaging steps; verify the packaged artifact carries a core whose manifest hash matches the file on macOS and Windows.
+  - Partial, recorded 2026-09-12: `tools/build-peer-helper.mjs` already ships `dshkerd` per platform and `CoreSupervisor` (`electron/main/core/supervisor.ts`) verifies the packaged bytes against the manifest hash at spawn. The headless `serve` entry point that 6.3 ultimately packages for is still pending 6.1.
 - [ ] 6.4 Owner: release. Depends: 6.3. Extend release readiness to cover the headless entry point; verify `npm run release:readiness` reports the new evidence and fails when it is absent.
 
 ## 7. P6 — Shell becomes a shell, and reconciliation
@@ -83,4 +84,16 @@
   without a build tag, so a whole-repo `go test ./...` was impossible on
   macOS. The link helper is now split across `directory_link_windows_test.go`
   and `directory_link_nonwindows_test.go`.
+- Audit (2026-09-12, after the 0.1.29 release): checkboxes verified against
+  the tree — they are accurate, not documentation lag. Done: P0, P1 (2.1–2.3,
+  2.5; 2.4 blocked as recorded), and the secret providers 3.1/3.2/3.4 —
+  `dshkerd` boots under `CoreSupervisor` and serves `core.version` plus the
+  three `core.secret_*` methods. Not started or incomplete: 1.4 (deferred),
+  3.3 (needs a Linux host), 3.5–3.8 (device/pairing/connection state still
+  lives in `electron/main/p2p`, and `credentials.ts` still uses
+  `safeStorage`), P3 (`electron/main/managed` still owns roots/checkout/
+  `dsh web`), P4 (`electron/main/remote` still exists), P5 (`dshkerd` has no
+  `serve`/`status`/`pair`/`connect` subcommands; 6.3 partial as noted), and
+  P6. The earlier log line "the shell half of P1 (tasks 2.3 to 2.5) is not
+  started" predates 2.3/2.5 landing and is superseded by their entries.
 
