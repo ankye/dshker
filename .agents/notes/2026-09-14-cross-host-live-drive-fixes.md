@@ -13,20 +13,20 @@ plane (`relaycheck`, later deleted) had already proven both directions through
 ## Root causes (two independent bugs)
 
 1. **`Transport.Path()` rejected relayed candidate pairs.** `validateSDP`
-    explicitly allowed relay candidates and `iceServersFor` added the TURN
-    server, but `Path()` returned `p2p.direct_unavailable` for any selected
-    pair with a `relay` local or remote candidate. A session that had just
-    connected through the relay was torn down at the first `Path()` call in
-    `channel.OnOpen`. Fix: only the UDP transport requirement is enforced; a
-    relayed pair is a legal selected path (ICE still prefers direct pairs).
+   explicitly allowed relay candidates and `iceServersFor` added the TURN
+   server, but `Path()` returned `p2p.direct_unavailable` for any selected
+   pair with a `relay` local or remote candidate. A session that had just
+   connected through the relay was torn down at the first `Path()` call in
+   `channel.OnOpen`. Fix: only the UDP transport requirement is enforced; a
+   relayed pair is a legal selected path (ICE still prefers direct pairs).
 
 2. **Signals carried the lease expiry as `ExpiresAt`.** `Signal.Verify`
-    accepts `ExpiresAt` only within `(now, now+60s]`, but `gather()` filled it
-    with `transport.lease.ExpiresAt` (hours ahead), so every offer/answer was
-    rejected by the peer as `p2p.signal_expired` before ICE ever started.
-    Fix: `protocol.SignalExpiry(issuedAt)` issues a signal-scoped expiry
-    (validity minus a 15s clock-skew margin); `gather()` uses it. Regression
-    test `TestSignalExpiry` pins the window arithmetic.
+   accepts `ExpiresAt` only within `(now, now+60s]`, but `gather()` filled it
+   with `transport.lease.ExpiresAt` (hours ahead), so every offer/answer was
+   rejected by the peer as `p2p.signal_expired` before ICE ever started.
+   Fix: `protocol.SignalExpiry(issuedAt)` issues a signal-scoped expiry
+   (validity minus a 15s clock-skew margin); `gather()` uses it. Regression
+   test `TestSignalExpiry` pins the window arithmetic.
 
 ## Verification (live, mac ⇄ Windows over the deployment server)
 

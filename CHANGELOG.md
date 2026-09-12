@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.29 — 2026-09-12
 
 - A remote connection that succeeded through the **relay** no longer tears
   itself down: the selected-path check rejected any pair involving a relay
@@ -11,6 +11,10 @@
   answers carried the lease's expiry as their own validity, which the
   receiving peer always rejected as expired. Each signal now carries a
   short, signal-scoped validity window.
+- The first **two-machine session** is verified: a Mac drove the DSH Web
+  runtime on a Windows host through the P2P stack over the live coordination
+  server — connection, selected path, local gateway URL, and the remote DSH
+  Web page loading through the tunnel.
 
 - P2P connections now fall back to your deployment server as an **opaque relay**
   (TURN, RFC 8656) when no direct UDP path can be established. The server only

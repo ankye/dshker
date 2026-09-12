@@ -71,11 +71,11 @@ Devices bound to the same network pair themselves with no invite code and no
 approval step: joining the network is the authorization. The invite-and-confirm
 flow remains for pairing a device that is not in one of your networks.
 
-**Two-machine acceptance is still outstanding.** The coordination server is
-deployed and a launcher now reports presence from startup, verified against the
-live server. Until two machines have completed a real session this is not
-advertised as an available desktop feature: a successful installer build is not
-a successful release.
+**Two-machine acceptance has completed.** A real session between two
+machines — a Mac driving the DSH Web runtime on a Windows host through the
+P2P stack, over the live coordination server — has been verified end to end:
+the connection reported its selected path, opened the local gateway URL, and
+loaded the remote DSH Web page through the tunnel.
 
 Two limits worth knowing before you plan around it: when no direct UDP path
 can be established, the connection falls back to your own deployment server as

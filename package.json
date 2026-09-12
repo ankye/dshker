@@ -1,6 +1,6 @@
 {
   "name": "@ankye/dshker-launcher",
-  "version": "0.1.28",
+  "version": "0.1.29",
   "description": "Managed desktop shell for DeepSeek Harness.",
   "author": "ankye <shengxiehua@gmail.com>",
   "homepage": "https://github.com/ankye/dshker",

@@ -48,20 +48,20 @@ share a network")重建 server 二进制后,集成套件出现 `p2p.pair_unautho
 
 ## 语义目前的样子(对照旧模型)
 
-| 项 | 旧(客户端) | 新(部署 server + 客户端) |
-|---|---|---|
-| /v1/attempt 的 pairId | pair 记录 ID | 目标设备 ID |
-| 授权条件 | 有效且未撤销的 pair 记录 | 同一网络共同成员 + 双方在线 |
-| lease.PairID | pair 记录 ID | 目标设备 ID |
-| 租约 revision | = pair 记录修订 | 恒 1,Begin 新发 |
-| signal.PairID | pair 记录 ID | 目标设备 ID |
-| revoked 事件 payload | pair 记录 ID | pair 记录 ID(不变) |
-| 远端公钥来源 | pair identity pin | 仍是 pair identity pin(网络设备
-  视图不携带证书/公钥;pin 是唯一信任锚,所以客户端保留 pair 记录门禁) |
+| 项                                                                 | 旧(客户端)               | 新(部署 server + 客户端)        |
+| ------------------------------------------------------------------ | ------------------------ | ------------------------------- |
+| /v1/attempt 的 pairId                                              | pair 记录 ID             | 目标设备 ID                     |
+| 授权条件                                                           | 有效且未撤销的 pair 记录 | 同一网络共同成员 + 双方在线     |
+| lease.PairID                                                       | pair 记录 ID             | 目标设备 ID                     |
+| 租约 revision                                                      | = pair 记录修订          | 恒 1,Begin 新发                 |
+| signal.PairID                                                      | pair 记录 ID             | 目标设备 ID                     |
+| revoked 事件 payload                                               | pair 记录 ID             | pair 记录 ID(不变)              |
+| 远端公钥来源                                                       | pair identity pin        | 仍是 pair identity pin(网络设备 |
+| 视图不携带证书/公钥;pin 是唯一信任锚,所以客户端保留 pair 记录门禁) |
 
 ## 下一步(进行中)
 
-- 双端实跑:macOS 已全绿;Windows 需重建 dshkerd.exe(含 core.secret_*)
+- 双端实跑:macOS 已全绿;Windows 需重建 dshkerd.exe(含 core.secret\_\*)
   与 dshker-peer.exe(新共同成员制代码)再跑集成/管理测试并留证。
 - 实连 my.ffkey.com:mac/win 各注册/登录 → 建网 → 入网 → pair 确认 →
   peer.connect,期望真实 UDP 直连与远端 DSH 执行,再经 ssh -L 反代访问
