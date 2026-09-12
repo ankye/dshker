@@ -153,19 +153,24 @@ The Launcher SHALL 为操作提供保存/取消/编辑等可见控件、键盘�
 - **WHEN** 用户离开远程管理页再返回
 - **THEN** 活跃会话继续由共享状态管理，不因页面卸载断开；页面显示权威结果而非遗留 pending，登记秘密不随草稿恢复
 
-### Requirement: DSH business traffic uses authenticated direct paths only
+### Requirement: DSH business traffic uses authenticated direct paths with an opaque relay fallback
 
-The Launcher SHALL 仅通过两台设备间的非 relay ICE 候选对建立加密业务连接，并验证持久配对身份与 DTLS fingerprint 的绑定。The Launcher SHALL 拒绝 TURN、relay candidates、公共服务替代以及 WSS 业务转发；SHALL NOT 把信令/STUN/端口打开计为连接成功。
+The Launcher SHALL 优先通过两台设备间的直连 ICE 候选对建立加密业务连接，并验证持久配对身份与 DTLS fingerprint 的绑定。当直连路径无法建立时，The Launcher SHALL 回退到操作者自部署协调服务器上的不透明 TURN 中继（RFC 8656）：中继仅转发端到端加密的报文流（DTLS/SCTP 密文），不能读取或注入业务内容；协商出的 relay 候选对是合法的选中路径。The Launcher SHALL 拒绝公共中继服务替代以及 WSS 业务转发；SHALL NOT 把信令/STUN/端口打开计为连接成功，且仅当直连与中继都无法建立时才报 `p2p.direct_unavailable`。
 
 #### Scenario: Establish direct communication
 
-- **WHEN** 获授权设备协商出非 relay 候选对并通过对端签名、DTLS 和协议版本校验
-- **THEN** 两端可开启直连 peer 会话，状态显示实际 candidate 类型与后续 DSH 验证阶段
+- **WHEN** 获授权设备协商出直连候选对并通过对端签名、DTLS 和协议版本校验
+- **THEN** 两端可开启直连 peer 会话，状态显示实际 candidate 类型与后续 DSH 验证阶段；ICE 始终优先直连候选对
 
 #### Scenario: NAT prevents direct communication
 
-- **WHEN** 直连预算耗尽或只有 relay 路径可用
-- **THEN** 连接以 `p2p.direct_unavailable` 失败，停止该 attempt，不建立中继或 SSH 业务流
+- **WHEN** 直连预算耗尽且自部署 TURN 中继可达
+- **THEN** 连接经中继候选对完成，中继仅见密文；状态如实显示 relay 选中路径，会话继续进入 DSH 验证阶段
+
+#### Scenario: Neither direct nor relayed path works
+
+- **WHEN** 直连与自部署中继都无法建立
+- **THEN** 连接以 `p2p.direct_unavailable` 失败，停止该 attempt，不建立 SSH 或其他业务转发
 
 #### Scenario: Signaling is tampered with
 
@@ -323,10 +328,10 @@ The feature SHALL 在 macOS arm64/x64 和 Windows x64/arm64 制品中包含匹�
 - **WHEN** 在包含所有支持架构的真实 Windows↔macOS 测试矩阵上执行双向连接
 - **THEN** 配对、非默认端口、HTTP/WebSocket、固定标签、断开和崩溃清理均有对应平台证据
 
-#### Scenario: Verify direct traffic across NAT
+#### Scenario: Verify direct and relayed traffic across NAT
 
 - **WHEN** 在同 LAN、不同 NAT、IPv6 及禁止 UDP 的受控环境中执行验收
-- **THEN** 成功样本记录非 relay 候选对和直传业务流量，不能直连的样本明确失败，服务器仅出现允许的信令/心跳/STUN 流量
+- **THEN** 可直连样本记录直连候选对和直传业务流量；不同 NAT 样本经自部署中继完成且服务器只见密文；直连与中继皆不可用的样本明确失败，服务器仅出现允许的信令/心跳/STUN/TURN 流量
 
 #### Scenario: Inspect production packages
 
