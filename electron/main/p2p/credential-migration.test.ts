@@ -83,118 +83,124 @@ async function writeLegacyRecord(file: string): Promise<void> {
   await writeFile(file, JSON.stringify(record) + '\n', { encoding: 'utf8', mode: 0o600 })
 }
 
-describe('PeerCredentialStore native-provider migration', () => {
-  let cleanup: (() => Promise<void>) | undefined
-  beforeEach(() => {
-    cleanup = undefined
-  })
-  afterEach(async () => {
-    await cleanup?.()
-    vi.restoreAllMocks()
-  })
-
-  it('migrates a legacy record once: writes, verifies, then removes the file', async () => {
-    const { root, file, dispose } = await legacyRoot()
-    cleanup = dispose
-    await writeLegacyRecord(file)
-    const secrets = fakeSecrets()
-    const store = new PeerCredentialStore(root, secrets)
-    const read = await store.loadRegistration(credential.serviceId)
-    expect(read.kind).toBe('registered')
-    if (read.kind !== 'registered') return
-    expect(read.credential.deviceId).toBe(credential.deviceId)
-    expect(read.credential.privateKey).toBe(credential.privateKey)
-    const stored = secrets.store.get('peer-credential:' + credential.serviceId)
-    expect(stored?.toString('utf8')).toBe(JSON.stringify(credential))
-    expect(read.revision).toBe(createHash('sha256').update(stored!).digest('hex'))
-    await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' })
-  })
-
-  it('serves subsequent loads from the provider without touching disk', async () => {
-    const { root, file, dispose } = await legacyRoot()
-    cleanup = dispose
-    await writeLegacyRecord(file)
-    const secrets = fakeSecrets()
-    const store = new PeerCredentialStore(root, secrets)
-    await store.loadRegistration(credential.serviceId)
-    await rm(file, { force: true })
-    const again = await store.loadRegistration(credential.serviceId)
-    expect(again.kind).toBe('registered')
-  })
-
-  it('reports nothing stored when neither provider nor legacy has the record', async () => {
-    const { root, dispose } = await legacyRoot()
-    cleanup = dispose
-    const store = new PeerCredentialStore(root, fakeSecrets())
-    await expect(store.loadRegistration(credential.serviceId)).rejects.toMatchObject({
-      code: 'p2p.credential_unavailable'
+// The legacy safeStorage record this suite migrates only ever existed on
+// macOS and Windows (requireEncryption refuses linux); there is nothing to
+// migrate from on Linux, so the suite runs where the upgrade path does.
+describe.skipIf(process.platform === 'linux')(
+  'PeerCredentialStore native-provider migration',
+  () => {
+    let cleanup: (() => Promise<void>) | undefined
+    beforeEach(() => {
+      cleanup = undefined
     })
-  })
-
-  it('keeps the legacy record when the provider write fails', async () => {
-    const { root, file, dispose } = await legacyRoot()
-    cleanup = dispose
-    await writeLegacyRecord(file)
-    const secrets = fakeSecrets(() => new PeerHelperError('p2p.secret_provider_unavailable'))
-    const store = new PeerCredentialStore(root, secrets)
-    await expect(store.loadRegistration(credential.serviceId)).rejects.toMatchObject({
-      code: 'p2p.secret_provider_unavailable'
+    afterEach(async () => {
+      await cleanup?.()
+      vi.restoreAllMocks()
     })
-    await expect(readFile(file, 'utf8')).resolves.toContain('dshker.peer-credential')
-    expect(secrets.store.size).toBe(0)
-  })
 
-  it('routes new writes to the provider and clears any legacy file', async () => {
-    const { root, file, dispose } = await legacyRoot()
-    cleanup = dispose
-    await writeLegacyRecord(file)
-    const secrets = fakeSecrets()
-    const store = new PeerCredentialStore(root, secrets)
-    const created = await store.create(credential)
-    expect(created.credential.deviceId).toBe(credential.deviceId)
-    expect(secrets.store.get('peer-credential:' + credential.serviceId)).toBeDefined()
-    await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' })
-  })
+    it('migrates a legacy record once: writes, verifies, then removes the file', async () => {
+      const { root, file, dispose } = await legacyRoot()
+      cleanup = dispose
+      await writeLegacyRecord(file)
+      const secrets = fakeSecrets()
+      const store = new PeerCredentialStore(root, secrets)
+      const read = await store.loadRegistration(credential.serviceId)
+      expect(read.kind).toBe('registered')
+      if (read.kind !== 'registered') return
+      expect(read.credential.deviceId).toBe(credential.deviceId)
+      expect(read.credential.privateKey).toBe(credential.privateKey)
+      const stored = secrets.store.get('peer-credential:' + credential.serviceId)
+      expect(stored?.toString('utf8')).toBe(JSON.stringify(credential))
+      expect(read.revision).toBe(createHash('sha256').update(stored!).digest('hex'))
+      await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' })
+    })
 
-  it('deletes from the provider and disk on remove', async () => {
-    const { root, file, dispose } = await legacyRoot()
-    cleanup = dispose
-    await writeLegacyRecord(file)
-    const secrets = fakeSecrets()
-    const store = new PeerCredentialStore(root, secrets)
-    const read = await store.loadRegistration(credential.serviceId)
-    if (read.kind !== 'registered') throw new Error('expected registered')
-    await store.remove(credential.serviceId, read.revision)
-    expect(secrets.store.has('peer-credential:' + credential.serviceId)).toBe(false)
-    await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' })
-  })
+    it('serves subsequent loads from the provider without touching disk', async () => {
+      const { root, file, dispose } = await legacyRoot()
+      cleanup = dispose
+      await writeLegacyRecord(file)
+      const secrets = fakeSecrets()
+      const store = new PeerCredentialStore(root, secrets)
+      await store.loadRegistration(credential.serviceId)
+      await rm(file, { force: true })
+      const again = await store.loadRegistration(credential.serviceId)
+      expect(again.kind).toBe('registered')
+    })
 
-  it('keeps a pending enrollment on the legacy path with a port present', async () => {
-    const { root, file, dispose } = await legacyRoot()
-    cleanup = dispose
-    const pending = {
-      serviceId: credential.serviceId,
-      requestId: 'e'.repeat(32),
-      networkId: 'f'.repeat(32),
-      userId: credential.userId,
-      name: credential.name,
-      publicKey: credential.publicKey,
-      privateKey: credential.privateKey
-    }
-    const ciphertext = Buffer.from('enc:' + JSON.stringify(pending), 'utf8')
-    await writeFile(
-      file,
-      JSON.stringify({
-        format: 'dshker.peer-enrollment',
-        version: 1,
-        ciphertext: ciphertext.toString('base64')
-      }) + '\n',
-      { encoding: 'utf8', mode: 0o600 }
-    )
-    const secrets = fakeSecrets()
-    const store = new PeerCredentialStore(root, secrets)
-    const read = await store.loadRegistration(credential.serviceId)
-    expect(read.kind).toBe('pending')
-    expect(secrets.store.size).toBe(0)
-  })
-})
+    it('reports nothing stored when neither provider nor legacy has the record', async () => {
+      const { root, dispose } = await legacyRoot()
+      cleanup = dispose
+      const store = new PeerCredentialStore(root, fakeSecrets())
+      await expect(store.loadRegistration(credential.serviceId)).rejects.toMatchObject({
+        code: 'p2p.credential_unavailable'
+      })
+    })
+
+    it('keeps the legacy record when the provider write fails', async () => {
+      const { root, file, dispose } = await legacyRoot()
+      cleanup = dispose
+      await writeLegacyRecord(file)
+      const secrets = fakeSecrets(() => new PeerHelperError('p2p.secret_provider_unavailable'))
+      const store = new PeerCredentialStore(root, secrets)
+      await expect(store.loadRegistration(credential.serviceId)).rejects.toMatchObject({
+        code: 'p2p.secret_provider_unavailable'
+      })
+      await expect(readFile(file, 'utf8')).resolves.toContain('dshker.peer-credential')
+      expect(secrets.store.size).toBe(0)
+    })
+
+    it('routes new writes to the provider and clears any legacy file', async () => {
+      const { root, file, dispose } = await legacyRoot()
+      cleanup = dispose
+      await writeLegacyRecord(file)
+      const secrets = fakeSecrets()
+      const store = new PeerCredentialStore(root, secrets)
+      const created = await store.create(credential)
+      expect(created.credential.deviceId).toBe(credential.deviceId)
+      expect(secrets.store.get('peer-credential:' + credential.serviceId)).toBeDefined()
+      await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+
+    it('deletes from the provider and disk on remove', async () => {
+      const { root, file, dispose } = await legacyRoot()
+      cleanup = dispose
+      await writeLegacyRecord(file)
+      const secrets = fakeSecrets()
+      const store = new PeerCredentialStore(root, secrets)
+      const read = await store.loadRegistration(credential.serviceId)
+      if (read.kind !== 'registered') throw new Error('expected registered')
+      await store.remove(credential.serviceId, read.revision)
+      expect(secrets.store.has('peer-credential:' + credential.serviceId)).toBe(false)
+      await expect(readFile(file)).rejects.toMatchObject({ code: 'ENOENT' })
+    })
+
+    it('keeps a pending enrollment on the legacy path with a port present', async () => {
+      const { root, file, dispose } = await legacyRoot()
+      cleanup = dispose
+      const pending = {
+        serviceId: credential.serviceId,
+        requestId: 'e'.repeat(32),
+        networkId: 'f'.repeat(32),
+        userId: credential.userId,
+        name: credential.name,
+        publicKey: credential.publicKey,
+        privateKey: credential.privateKey
+      }
+      const ciphertext = Buffer.from('enc:' + JSON.stringify(pending), 'utf8')
+      await writeFile(
+        file,
+        JSON.stringify({
+          format: 'dshker.peer-enrollment',
+          version: 1,
+          ciphertext: ciphertext.toString('base64')
+        }) + '\n',
+        { encoding: 'utf8', mode: 0o600 }
+      )
+      const secrets = fakeSecrets()
+      const store = new PeerCredentialStore(root, secrets)
+      const read = await store.loadRegistration(credential.serviceId)
+      expect(read.kind).toBe('pending')
+      expect(secrets.store.size).toBe(0)
+    })
+  }
+)
