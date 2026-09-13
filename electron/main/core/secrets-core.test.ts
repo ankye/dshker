@@ -148,4 +148,73 @@ describe.skipIf(binary === undefined)('core secret migration against a real dshk
     await secrets.delete('peer-credential:' + credential.serviceId)
     await expect(secrets.get('peer-credential:' + credential.serviceId)).resolves.toBeUndefined()
   })
+
+  it('moves the enrollment and the user session into the provider across a restart', async () => {
+    const meta = await harness()
+    const record = join(meta.credentials, credential.serviceId + '.json')
+    const pending = {
+      serviceId: credential.serviceId,
+      requestId: 'e'.repeat(32),
+      networkId: 'f'.repeat(32),
+      userId: credential.userId,
+      name: credential.name,
+      publicKey: credential.publicKey,
+      privateKey: credential.privateKey
+    }
+    const session = { token: 'a'.repeat(64), expiresAt: 1_800_000_000_000 }
+    // The records a previous release left on disk, in its own formats.
+    await writeFile(
+      record,
+      JSON.stringify({
+        format: 'dshker.peer-enrollment',
+        version: 1,
+        ciphertext: Buffer.from('enc:' + JSON.stringify(pending), 'utf8').toString('base64')
+      }) + '\n',
+      { encoding: 'utf8', mode: 0o600 }
+    )
+    await writeFile(
+      record + '.session',
+      JSON.stringify({
+        format: 'dshker.peer-user-session',
+        version: 1,
+        ciphertext: Buffer.from('enc:' + JSON.stringify(session), 'utf8').toString('base64')
+      }) + '\n',
+      { encoding: 'utf8', mode: 0o600 }
+    )
+
+    // Run one: both records migrate, and the enrollment completes in the provider.
+    supervisor = await start(meta)
+    const first = new PeerCredentialStore(
+      () => Promise.resolve(meta.settings),
+      new CoreSecrets(supervisor.rpc)
+    )
+    const migratedPending = await first.loadRegistration(credential.serviceId)
+    expect(migratedPending.kind).toBe('pending')
+    if (migratedPending.kind !== 'pending') return
+    await first.completeEnrollment(credential, migratedPending.revision)
+    await first.saveUserSession(credential.serviceId, session)
+    await expect(readFile(record)).rejects.toMatchObject({ code: 'ENOENT' })
+    await expect(readFile(record + '.session')).rejects.toMatchObject({ code: 'ENOENT' })
+    await supervisor.close()
+    supervisor = undefined
+
+    // Run two: a fresh core process answers from the platform provider alone.
+    supervisor = await start(meta)
+    const second = new PeerCredentialStore(
+      () => Promise.resolve(meta.settings),
+      new CoreSecrets(supervisor.rpc)
+    )
+    const read = await second.loadRegistration(credential.serviceId)
+    expect(read.kind).toBe('registered')
+    if (read.kind !== 'registered') return
+    expect(read.credential.privateKey).toBe(credential.privateKey)
+    await expect(second.loadUserSession(credential.serviceId)).resolves.toEqual(session)
+
+    // Cleanup: the provider keeps nothing for that identity.
+    await second.remove(credential.serviceId, read.revision)
+    await expect(second.loadUserSession(credential.serviceId)).resolves.toBeUndefined()
+    await expect(second.loadRegistration(credential.serviceId)).rejects.toMatchObject({
+      code: 'p2p.credential_unavailable'
+    })
+  })
 })

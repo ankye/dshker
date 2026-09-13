@@ -39,13 +39,14 @@ export type PeerRegistrationReadback =
 
 /** Uses the real OS provider; unavailable encryption never becomes plaintext.
  *
- * When a core secret port is injected, the durable device credential record
- * moves to the native provider behind dshkerd: loads consult the core first,
- * a legacy safeStorage record still on disk is migrated once (read, written
- * into the provider, verified by read-back, then the legacy file removed),
- * and new writes go to the core so the two stores never diverge again.
- * Pending enrollments and user sessions stay on the legacy path until the
- * state machine itself moves into the core. */
+ * When a core secret port is injected, all three records this store owns — the
+ * durable device credential, the pending enrollment and the persisted user
+ * session — live in the native provider behind dshkerd. Loads consult the core
+ * first, a legacy safeStorage record still on disk is migrated once (read,
+ * written into the provider, verified by read-back, then the legacy file
+ * removed), and new writes go to the core so the two stores never diverge
+ * again. Every migration is per record kind, so a half-upgraded machine cannot
+ * end up reading one kind from the core and writing the other to disk. */
 export class PeerCredentialStore {
   #pending: Promise<unknown> = Promise.resolve()
   readonly #secrets: CoreSecretPort | undefined
@@ -70,15 +71,27 @@ export class PeerCredentialStore {
   }
 
   loadPendingEnrollment(serviceId: string): Promise<PeerPendingEnrollmentReadback> {
-    return this.#serialize(async () =>
-      this.#readPending(await this.#path(serviceId, false), serviceId)
-    )
+    return this.#serialize(async () => {
+      const read = await this.#readRouted(serviceId)
+      if (read.kind !== 'pending') throw new PeerHelperError('p2p.enrollment_state_mismatch')
+      return { revision: read.revision, enrollment: read.enrollment }
+    })
   }
 
+  /**
+   * Starts one enrollment. Publication is exclusive: neither a registered
+   * credential nor another pending record may already exist for the service, so
+   * a repeated enrollment cannot overwrite the identity it is enrolling.
+   */
   prepareEnrollment(enrollment: PeerPendingEnrollment): Promise<PeerPendingEnrollmentReadback> {
     assertPendingEnrollment(enrollment)
     const saved = { ...enrollment }
     return this.#serialize(async () => {
+      if (this.#secrets) {
+        if ((await this.#readRegistrationIfAny(saved.serviceId)) !== undefined)
+          throw new PeerHelperError('p2p.credential_write_failed')
+        return this.#writeCoreEnrollment(saved)
+      }
       const path = await this.#path(saved.serviceId, true)
       await publishSecret(path, encryptSecret(saved, 'dshker.peer-enrollment'), false)
       return this.#readPending(path, saved.serviceId)
@@ -93,8 +106,8 @@ export class PeerCredentialStore {
     assertPeerCredential(credential)
     const saved = { ...credential }
     return this.#serialize(async () => {
-      const path = await this.#path(saved.serviceId, false)
-      const previous = await this.#readPending(path, saved.serviceId)
+      const previous = await this.#readRouted(saved.serviceId)
+      if (previous.kind !== 'pending') throw new PeerHelperError('p2p.enrollment_state_mismatch')
       if (
         previous.revision !== expectedRevision ||
         previous.enrollment.userId !== saved.userId ||
@@ -105,9 +118,13 @@ export class PeerCredentialStore {
         throw new PeerHelperError('p2p.credential_conflict')
       if (this.#secrets) {
         const readback = await this.#writeCore(saved, undefined)
+        // The pending record is retired only after the credential is provably
+        // stored, so a provider failure leaves the enrollment resumable.
+        await this.#secrets.delete(this.#enrollmentKey(saved.serviceId))
         await this.#unlinkLegacy(saved.serviceId)
         return readback
       }
+      const path = await this.#path(saved.serviceId, false)
       await publishSecret(path, encryptCredential(saved), true)
       return this.#read(path, saved.serviceId)
     })
@@ -118,6 +135,7 @@ export class PeerCredentialStore {
       assertPeerCredential(credential)
       if (this.#secrets) {
         const readback = await this.#writeCore(credential, undefined)
+        await this.#secrets.delete(this.#enrollmentKey(credential.serviceId))
         await this.#unlinkLegacy(credential.serviceId)
         return readback
       }
@@ -179,61 +197,75 @@ export class PeerCredentialStore {
       if (previous.revision !== expectedRevision)
         throw new PeerHelperError('p2p.credential_conflict')
       if (this.#secrets) {
+        // Every record of that identity goes together: a session token left
+        // behind would outlive the coordinator it was issued for.
         await this.#secrets.delete(this.#coreKey(serviceId))
+        await this.#secrets.delete(this.#enrollmentKey(serviceId))
+        await this.#secrets.delete(this.#sessionKey(serviceId))
         await this.#unlinkLegacy(serviceId)
+        await this.#unlinkLegacySession(serviceId)
         return
       }
       const path = await this.#path(serviceId, false)
       await unlink(path)
+      await this.#unlinkLegacySession(serviceId)
     })
   }
 
   /**
    * Persists the user session token for one service so a restart does not
-   * demand the password again. Encrypted like every other secret; the server
-   * remains authoritative for expiry.
+   * demand the password again. The server remains authoritative for expiry.
+   *
+   * Every successful login or renewal writes here, so this is an upsert on both
+   * paths. The legacy file published exclusively and therefore kept whatever
+   * token it saw first: a renewed session was dropped on the floor, and the next
+   * restart presented the stale one and asked for the password again.
    */
   saveUserSession(serviceId: string, session: PeerUserSessionSecret): Promise<void> {
     return this.#serialize(async () => {
+      // Validated inside the promise on purpose: the caller attaches .catch(),
+      // and a synchronous throw would escape it into the login flow.
+      const saved = assertUserSession(session)
+      if (this.#secrets) {
+        await this.#writeCoreSession(serviceId, saved)
+        await this.#unlinkLegacySession(serviceId)
+        return
+      }
       const path = await this.#path(serviceId, true)
-      await publishSecret(
-        path + '.session',
-        encryptSecret(session, 'dshker.peer-user-session'),
-        false
-      )
+      await publishSecret(path + '.session', encryptSecret(saved, 'dshker.peer-user-session'), true)
     })
   }
 
+  /** Reads the persisted session, migrating a legacy file once. */
   loadUserSession(serviceId: string): Promise<PeerUserSessionSecret | undefined> {
     return this.#serialize(async () => {
-      const path = await this.#path(serviceId, false)
-      const encoded = await readFile(path + '.session', 'utf8').catch(() => undefined)
-      if (encoded === undefined) return undefined
-      const record = exactPeerObject(parsePeerJson(encoded), ['format', 'version', 'ciphertext'])
-      if (record.format !== 'dshker.peer-user-session' || typeof record.ciphertext !== 'string')
-        return undefined
-      const value = parsePeerJson(
-        safeStorage.decryptString(decodeBase64(record.ciphertext as string))
-      )
-      if (typeof value !== 'object' || value === null) return undefined
-      const secret = value as Record<string, unknown>
-      if (
-        typeof secret.token !== 'string' ||
-        !/^[a-f0-9]{64}$/.test(secret.token) ||
-        !Number.isSafeInteger(secret.expiresAt)
-      )
-        return undefined
-      return { token: secret.token, expiresAt: secret.expiresAt as number }
+      const fromCore = await this.#readCoreSession(serviceId)
+      if (fromCore !== undefined) return fromCore
+      const path = await this.#sessionPath(serviceId)
+      if (path === undefined) return undefined
+      const legacy = await readLegacySession(path)
+      if (legacy === undefined || !this.#secrets) return legacy
+      await this.#writeCoreSession(serviceId, legacy)
+      await this.#unlinkLegacySession(serviceId)
+      return legacy
     })
   }
 
   removeUserSession(serviceId: string): Promise<void> {
     return this.#serialize(async () => {
-      const path = await this.#path(serviceId, false)
-      await unlink(path + '.session').catch((error: NodeJS.ErrnoException) => {
-        if (error.code !== 'ENOENT') throw error
-      })
+      if (this.#secrets) await this.#secrets.delete(this.#sessionKey(serviceId))
+      await this.#unlinkLegacySession(serviceId)
     })
+  }
+
+  /** The persisted session file, or undefined when the store has no directory yet. */
+  async #sessionPath(serviceId: string): Promise<string | undefined> {
+    const path = await this.#path(serviceId, false).catch((error: unknown) => {
+      if (error instanceof PeerHelperError && error.code === 'p2p.credential_unavailable')
+        return undefined
+      throw error
+    })
+    return path === undefined ? undefined : path + '.session'
   }
 
   async #path(serviceId: string, create: boolean): Promise<string> {
@@ -307,6 +339,16 @@ export class PeerCredentialStore {
     return 'peer-credential:' + serviceId
   }
 
+  /** The core-store key of one service's pending enrollment. */
+  #enrollmentKey(serviceId: string): string {
+    return 'peer-enrollment:' + serviceId
+  }
+
+  /** The core-store key of one service's persisted user session. */
+  #sessionKey(serviceId: string): string {
+    return 'peer-user-session:' + serviceId
+  }
+
   /** Reads the credential from the native provider; undefined means not stored. */
   async #readCore(serviceId: string): Promise<PeerCredentialReadback | undefined> {
     if (!this.#secrets) return undefined
@@ -353,27 +395,107 @@ export class PeerCredentialStore {
     return readback
   }
 
+  /** Reads the pending enrollment from the native provider. */
+  async #readCoreEnrollment(serviceId: string): Promise<PeerPendingEnrollmentReadback | undefined> {
+    if (!this.#secrets) return undefined
+    const value = await this.#secrets.get(this.#enrollmentKey(serviceId))
+    if (value === undefined || value.length === 0) return undefined
+    const enrollment = parsePeerJson(value.toString('utf8'))
+    assertPendingEnrollment(enrollment)
+    if (enrollment.serviceId !== serviceId) throw new PeerHelperError('p2p.identity_mismatch')
+    return {
+      revision: createHash('sha256').update(value).digest('hex'),
+      enrollment
+    }
+  }
+
+  /** Writes the pending enrollment and proves the write by reading it back. */
+  async #writeCoreEnrollment(
+    enrollment: PeerPendingEnrollment
+  ): Promise<PeerPendingEnrollmentReadback> {
+    if (!this.#secrets) throw new PeerHelperError('p2p.secret_provider_unavailable')
+    await this.#secrets.set(
+      this.#enrollmentKey(enrollment.serviceId),
+      Buffer.from(JSON.stringify(enrollment), 'utf8')
+    )
+    const readback = await this.#readCoreEnrollment(enrollment.serviceId)
+    if (readback === undefined || readback.enrollment.privateKey !== enrollment.privateKey)
+      throw new PeerHelperError('p2p.credential_write_failed')
+    return readback
+  }
+
+  /** Reads the persisted user session from the native provider. */
+  async #readCoreSession(serviceId: string): Promise<PeerUserSessionSecret | undefined> {
+    if (!this.#secrets) return undefined
+    const value = await this.#secrets.get(this.#sessionKey(serviceId))
+    if (value === undefined || value.length === 0) return undefined
+    return parseUserSession(parsePeerJson(value.toString('utf8')))
+  }
+
+  /** Writes the persisted user session and proves the write by reading it back. */
+  async #writeCoreSession(serviceId: string, session: PeerUserSessionSecret): Promise<void> {
+    if (!this.#secrets) throw new PeerHelperError('p2p.secret_provider_unavailable')
+    await this.#secrets.set(
+      this.#sessionKey(serviceId),
+      Buffer.from(JSON.stringify(session), 'utf8')
+    )
+    const readback = await this.#readCoreSession(serviceId)
+    if (
+      readback === undefined ||
+      readback.token !== session.token ||
+      readback.expiresAt !== session.expiresAt
+    )
+      throw new PeerHelperError('p2p.credential_write_failed')
+  }
+
   /**
    * The single load path: the native provider first, then the legacy
-   * safeStorage file, migrating a registered legacy credential once before
-   * returning it. A pending enrollment always comes from the legacy record.
+   * safeStorage file. Whichever record kind the file holds is migrated once to
+   * that kind's own key, so the two stores never hold the same record twice and
+   * a half-upgraded machine cannot read one kind from the core while the other
+   * is still written to disk.
    */
   async #readRouted(serviceId: string): Promise<PeerRegistrationReadback> {
     const fromCore = await this.#readCore(serviceId)
     if (fromCore !== undefined) return { kind: 'registered', ...fromCore }
+    const pending = await this.#readCoreEnrollment(serviceId)
+    if (pending !== undefined) return { kind: 'pending', ...pending }
     const path = await this.#path(serviceId, false)
     const read = await this.#readRegistration(path, serviceId)
-    if (read.kind !== 'registered' || !this.#secrets) return read
+    if (!this.#secrets) return read
     // One-shot migration: the legacy record is removed only after the native
-    // provider provably holds the identical credential.
-    const migrated = await this.#writeCore(read.credential, undefined)
+    // provider provably holds the identical record.
+    const migrated =
+      read.kind === 'registered'
+        ? { kind: 'registered' as const, ...(await this.#writeCore(read.credential, undefined)) }
+        : { kind: 'pending' as const, ...(await this.#writeCoreEnrollment(read.enrollment)) }
     await unlink(path)
-    return { kind: 'registered', ...migrated }
+    return migrated
+  }
+
+  /** The routed read where "nothing is stored at all" is undefined, not a refusal. */
+  async #readRegistrationIfAny(serviceId: string): Promise<PeerRegistrationReadback | undefined> {
+    try {
+      return await this.#readRouted(serviceId)
+    } catch (error) {
+      if (error instanceof PeerHelperError && error.code === 'p2p.credential_unavailable')
+        return undefined
+      throw error
+    }
   }
 
   /** Best-effort removal of a legacy record that may or may not exist. */
   async #unlinkLegacy(serviceId: string): Promise<void> {
     const path = await this.#path(serviceId, false).catch(() => undefined)
+    if (path === undefined) return
+    await unlink(path).catch((error: NodeJS.ErrnoException) => {
+      if (error.code !== 'ENOENT') throw error
+    })
+  }
+
+  /** Best-effort removal of the legacy session file, which may not exist. */
+  async #unlinkLegacySession(serviceId: string): Promise<void> {
+    const path = await this.#sessionPath(serviceId).catch(() => undefined)
     if (path === undefined) return
     await unlink(path).catch((error: NodeJS.ErrnoException) => {
       if (error.code !== 'ENOENT') throw error
@@ -460,6 +582,47 @@ function decodeBase64(value: string): Buffer {
   if (!value || bytes.toString('base64') !== value)
     throw new PeerHelperError('p2p.credential_invalid')
   return bytes
+}
+
+/**
+ * One persisted session, or undefined when the value is not one.
+ *
+ * The same predicate guards writing and reading, so a session can never be
+ * stored in a shape the next load would refuse to hand back.
+ */
+export function parseUserSession(value: unknown): PeerUserSessionSecret | undefined {
+  if (typeof value !== 'object' || value === null) return undefined
+  const session = value as Record<string, unknown>
+  if (
+    typeof session.token !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(session.token) ||
+    !Number.isSafeInteger(session.expiresAt)
+  )
+    return undefined
+  return { token: session.token, expiresAt: session.expiresAt as number }
+}
+
+/** The write-side half of the same rule: refuse a session no load could return. */
+export function assertUserSession(value: unknown): PeerUserSessionSecret {
+  const session = parseUserSession(value)
+  if (session === undefined) throw new PeerHelperError('p2p.credential_invalid')
+  return session
+}
+
+/** Decodes one legacy session file, treating anything unreadable as absent. */
+async function readLegacySession(path: string): Promise<PeerUserSessionSecret | undefined> {
+  const encoded = await readFile(path, 'utf8').catch(() => undefined)
+  if (encoded === undefined) return undefined
+  try {
+    const record = exactPeerObject(parsePeerJson(encoded), ['format', 'version', 'ciphertext'])
+    if (record.format !== 'dshker.peer-user-session' || typeof record.ciphertext !== 'string')
+      return undefined
+    return parseUserSession(
+      parsePeerJson(safeStorage.decryptString(decodeBase64(record.ciphertext)))
+    )
+  } catch {
+    return undefined
+  }
 }
 
 function requireEncryption(): void {
