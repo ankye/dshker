@@ -1,5 +1,5 @@
 import { app, BrowserWindow, powerMonitor, protocol, shell } from 'electron'
-import { realpath } from 'node:fs/promises'
+import { mkdir, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -200,6 +200,11 @@ async function registerLauncherServices(
   // ordering explicit rather than handing the service a port that does not
   // exist yet.
   let coreRoots: CoreRootsPort | undefined
+  // The Launcher's own directory, created here rather than as a side effect of
+  // the first-run root registration: that registration now happens after the
+  // core starts, while the shell's own files below this directory — the remote
+  // peer descriptor, launch preferences, logs — are written independently of it.
+  await mkdir(launcherRoot, { recursive: true })
   const managedWorkspaceService = await createManagedWorkspaceService(
     launcherRoot,
     locatorFilePath,

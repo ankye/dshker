@@ -26,6 +26,26 @@ design decision D5 — one writer per phase, no runtime fallback — and it is t
 point of the phase. The refusal is typed, so the workspace state surfaces as
 `recovery-required` with that code instead of a crash.
 
+## The regression CI caught, and why the reorder needed one more line
+
+Moving `initializeDefaultRoots()` after the core removed an _implicit_ dependency:
+the first-run root registration was what created the Launcher's own directory, so
+the remote peer broker — which writes its descriptor there at startup — found a
+missing parent. Five of six packaged smoke jobs failed with
+`remote.peer_unavailable` and `ENOENT: .remote-peer.json.<uuid>.tmp`.
+
+That is a real defect, not a test artefact: the shell's own directory should never
+have been created as a side effect of registering roots. `registerLauncherServices`
+now creates it explicitly before anything writes below it, and the local smoke
+pass through all seven routes confirms it.
+
+The same run also showed a second, quieter failure: the _development_ core binary
+predated the roots methods, so the shell's first registry read came back
+`p2p.invalid_operation` — an unknown method. Rebuilding `dshkerd` fixed it, but it
+is worth recording: the shell now needs a core that is at least as new as itself,
+which is guaranteed in a package (they ship together) and is a manual step in a
+working copy.
+
 ## A verification gap this round closed
 
 Comparing the two platforms file by file showed Windows running 154 test files
