@@ -1,4 +1,4 @@
-import { app, BrowserWindow, protocol, shell } from 'electron'
+import { app, BrowserWindow, powerMonitor, protocol, shell } from 'electron'
 import { realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -137,6 +137,11 @@ async function start(): Promise<void> {
   // change, or the machine can wake from sleep. The startup pass alone left a
   // launcher offline for the rest of its run once anything interrupted it.
   services.peerManagement.startSessionMaintenance()
+  // Waking from sleep or unlocking is exactly when a paired computer has to come
+  // back on its own. Without this the app waited out whatever backoff was
+  // pending when the machine went to sleep, which reads as a dead tab.
+  powerMonitor.on('resume', () => services.peerManagement.resumeConnectivity())
+  powerMonitor.on('unlock-screen', () => services.peerManagement.resumeConnectivity())
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

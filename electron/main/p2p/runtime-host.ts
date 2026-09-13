@@ -12,6 +12,14 @@ interface Options {
   catalog: PeerCatalog
   runtime: Pick<LauncherHarnessService, 'getRuntimeState' | 'onRuntimeState' | 'start'>
   onUnavailable?(): void
+  /**
+   * Reports every connection stage the helper announces.
+   *
+   * A drop is the moment a reconnect has to start: waiting for the next
+   * periodic sweep would leave a tab dead for up to a minute for what is often
+   * a one second network change.
+   */
+  onPeerStage?(serviceId: string, pairId: string, stage: string): void
 }
 
 /** Main composition owner. No process is started until an explicit P2P operation. */
@@ -109,6 +117,7 @@ export class PeerRuntimeHost {
       const previous = this.#states.get(key)
       if (previous) assertStateProgress(previous.state, state)
       this.#states.set(key, { serviceId: fields.serviceId, state })
+      this.options.onPeerStage?.(fields.serviceId, pairId, state.stage)
       return {}
     }
     const current = this.#states.get(key)?.state

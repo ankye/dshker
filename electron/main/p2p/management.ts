@@ -16,6 +16,7 @@ import type { PeerRpc } from './rpc'
 import { PeerRuntimeHost } from './runtime-host'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
+import { PeerAutoConnect } from './auto-connect'
 import type { CoreSecretPort } from '../core/secrets'
 
 interface Options {
@@ -54,6 +55,7 @@ export class PeerManagement {
   readonly #sessions = new Map<string, { state: 'online' | 'offline'; code: string }>()
   readonly #sessionListeners = new Set<() => void>()
   #sessionSweep: ReturnType<typeof setInterval> | undefined
+  readonly #autoConnect: PeerAutoConnect
   readonly #resolveSettingsRoot: () => Promise<string>
 
   constructor(options: Options) {
@@ -64,13 +66,38 @@ export class PeerManagement {
       resourcesRoot: options.resourcesRoot,
       catalog: this.#catalog,
       runtime: options.runtime,
-      onUnavailable: () => this.#clearSession()
+      onUnavailable: () => this.#clearSession(),
+      // A drop is retried at once rather than at the next sweep: the hole is
+      // usually re-punchable within a second of a network change, and a tab the
+      // user may switch back to at any moment must not sit dead in between.
+      onPeerStage: (_serviceId, _pairId, stage) => {
+        if (stage === 'disconnected' || stage === 'failed') void this.#autoConnect.reconcile()
+      }
+    })
+    // An active pair is meant to be connected. Nothing about which tab the user
+    // is looking at takes part: the connection outlives the view, so switching
+    // back to a tab finds the hole still open instead of re-punching it.
+    this.#autoConnect = new PeerAutoConnect({
+      intents: async () => {
+        const snapshot = await this.#catalog.inspect()
+        if (!snapshot) return []
+        return snapshot.record.computers
+          .filter((computer) => computer.pairState === 'active')
+          .map((computer) => ({ serviceId: computer.serviceId, pairId: computer.pairId }))
+      },
+      stage: (serviceId, pairId) =>
+        this.#host
+          .snapshot()
+          .peers.find((peer) => peer.serviceId === serviceId && peer.state.pairId === pairId)?.state
+          .stage,
+      connect: (serviceId, pairId, signal) => this.connect(serviceId, pairId, signal)
     })
   }
 
   async close(): Promise<void> {
     if (this.#sessionSweep !== undefined) clearInterval(this.#sessionSweep)
     this.#sessionSweep = undefined
+    this.#autoConnect.close()
     this.#lifetime.abort()
     this.#clearSession()
     await this.#host.close()
@@ -115,6 +142,9 @@ export class PeerManagement {
         results.push({ serviceId: service.serviceId, online: false, code })
       }
     }
+    // Once a coordinator session exists, bring the pairs up too: being online is
+    // what the user asked for by having paired at all.
+    void this.#autoConnect.reconcile()
     return results
   }
 
@@ -154,6 +184,21 @@ export class PeerManagement {
     this.#sessionSweep.unref?.()
   }
 
+  /**
+   * Retries every pair at once because the machine itself changed state.
+   *
+   * Waking from sleep or regaining a network invalidates whatever backoff was
+   * pending: the previous delay was chosen for a peer that seemed unreachable,
+   * which is no longer the situation. Sessions are swept in the same pass so a
+   * coordinator that dropped while the machine slept is re-established too.
+   */
+  resumeConnectivity(): void {
+    if (this.#lifetime.signal.aborted) return
+    this.#autoConnect.clearRefusals()
+    this.#autoConnect.retryNow()
+    void this.#sweepSessions()
+  }
+
   async #sweepSessions(): Promise<void> {
     const snapshot = await this.#catalog.inspect().catch(() => undefined)
     if (!snapshot) return
@@ -178,6 +223,9 @@ export class PeerManagement {
         )
       }
     }
+    // The same sweep repairs pair connections: a drop that happened while the
+    // coordinator session stayed up is retried here without any user action.
+    await this.#autoConnect.reconcile()
   }
 
   /** Records one session and notifies only on an actual change. */

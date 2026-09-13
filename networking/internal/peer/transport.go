@@ -78,6 +78,41 @@ type Transport struct {
 	remoteSequence uint64
 	localSequence  uint64
 	negotiated     bool
+	// graceTimer runs while ICE reports disconnected. A recovery cancels it; its
+	// expiry is what finally declares the direct path lost.
+	graceTimer *time.Timer
+}
+
+// GracePeriod is how long a disconnected ICE connection is given to recover
+// before the direct path is declared lost. Long enough to survive a WiFi change
+// or a machine waking up, short enough that a peer that really went away is not
+// reported as connected for minutes.
+const GracePeriod = 20 * time.Second
+
+// beginGrace starts the recovery window. ICE can report disconnected more than
+// once in a row, so an already running window is left alone rather than extended
+// indefinitely by repeated events.
+func (transport *Transport) beginGrace() {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	if transport.graceTimer != nil {
+		return
+	}
+	transport.graceTimer = time.AfterFunc(GracePeriod, func() {
+		transport.fail(errors.New("p2p.direct_unavailable"))
+	})
+}
+
+// endGrace cancels the recovery window after ICE returned to connected, so a
+// hiccup leaves no trace and the session keeps its already punched hole.
+func (transport *Transport) endGrace() {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	if transport.graceTimer == nil {
+		return
+	}
+	transport.graceTimer.Stop()
+	transport.graceTimer = nil
 }
 
 func NewTransport(parent context.Context, options TransportOptions) (*Transport, error) {
@@ -144,8 +179,21 @@ func (transport *Transport) bindEvents() {
 		transport.fail(errors.New("p2p.unexpected_data_channel"))
 	})
 	transport.pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		if state == webrtc.PeerConnectionStateFailed || state == webrtc.PeerConnectionStateDisconnected {
+		switch state {
+		case webrtc.PeerConnectionStateFailed:
+			// Failed is terminal: ICE gave up, so the hole is gone and only a new
+			// negotiation can help.
 			transport.fail(errors.New("p2p.direct_unavailable"))
+		case webrtc.PeerConnectionStateDisconnected:
+			// Disconnected is not terminal. ICE reports it for a few lost packets, a
+			// changed network or a machine waking up, and it usually returns to
+			// connected on its own within seconds. Tearing the session down here is
+			// what made a brief hiccup cost a full re-punch, so the connection is
+			// given a grace period to recover and only then declared lost.
+			transport.beginGrace()
+		case webrtc.PeerConnectionStateConnected:
+			transport.endGrace()
+		default:
 		}
 	})
 	transport.channel.OnOpen(func() {
@@ -288,4 +336,11 @@ func (transport *Transport) fail(err error) {
 	transport.cancel()
 }
 
-func (transport *Transport) Close() error { transport.cancel(); <-transport.closed; return nil }
+// Close ends the transport. The recovery window is dropped with it: a closed
+// connection must not be declared lost later by a timer that outlived it.
+func (transport *Transport) Close() error {
+	transport.endGrace()
+	transport.cancel()
+	<-transport.closed
+	return nil
+}
