@@ -1,0 +1,24 @@
+# Keep one line ending everywhere.
+#
+# A Windows checkout otherwise applies core.autocrlf and rewrites LF to CRLF. That
+# broke two things on the Windows runner: the shebang line of tools/*.mjs (vitest
+# reported `SyntaxError: Invalid or unexpected token` while transforming them) and
+# a test that asserts LF-formatted source content. Normalizing to LF in the
+# repository and on checkout makes the suite behave identically on every platform.
+* text=auto eol=lf
+
+# Binary assets must never be converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.gz binary
+*.dmg binary
+*.exe binary
+*.node binary
