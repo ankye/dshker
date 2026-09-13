@@ -3,12 +3,28 @@ import { assertAccountId } from './account-records'
 import { PeerCatalog } from './catalog'
 import { assertStateProgress, parseHelperState, type PeerHelperState } from './helper-state'
 import { PeerRuntimeOwner } from './runtime-owner'
-import type { PeerMainHandler, PeerRpc } from './rpc'
-import { PeerSupervisor } from './supervisor'
+import type { PeerMainHandler } from './rpc'
 import { exactPeerObject, PeerHelperError } from './wire'
 
+/**
+ * The private channel of the running core, as the peer state machine needs it.
+ *
+ * The core is the only networking process: it answers the peer methods and calls
+ * back for the runtime owner and every connection stage. The channel outlives
+ * this host — the catalog and the secret store share it — so a host that stops
+ * detaches instead of closing it.
+ */
+export interface PeerChannel {
+  call(method: string, payload: unknown, signal: AbortSignal): Promise<unknown>
+  /** Serves the two parent-role callbacks; returns the detach function. */
+  serve(handler: PeerMainHandler): () => void
+  /** Observes the channel's death; returns the detach function. */
+  observe(listener: (error: PeerHelperError) => void): () => void
+}
+
 interface Options {
-  resourcesRoot: string
+  /** The core's channel. A shell that could not start a core has none, and P2P then fails typed. */
+  channel?: PeerChannel
   catalog: PeerCatalog
   runtime: Pick<LauncherHarnessService, 'getRuntimeState' | 'onRuntimeState' | 'start'>
   onUnavailable?(): void
@@ -22,14 +38,14 @@ interface Options {
   onPeerStage?(serviceId: string, pairId: string, stage: string): void
 }
 
-/** Main composition owner. No process is started until an explicit P2P operation. */
+/** Main composition owner. Nothing is started until an explicit P2P operation. */
 export class PeerRuntimeHost {
   readonly #runtime: PeerRuntimeOwner
   readonly #lifetime = new AbortController()
   readonly #runtimeServices = new Set<string>()
   readonly #states = new Map<string, { serviceId: string; state: PeerHelperState }>()
-  #supervisor: PeerSupervisor | undefined
-  #starting: Promise<PeerRpc> | undefined
+  #detach: (() => void) | undefined
+  #pending = false
   #closing: Promise<void> | undefined
   #failure: PeerHelperError | undefined
 
@@ -41,19 +57,42 @@ export class PeerRuntimeHost {
     })
   }
 
-  /** Private main RPC only; never register this method directly as renderer IPC. */
-  async start(signal: AbortSignal): Promise<PeerRpc> {
+  /** Private main channel only; never register this method directly as renderer IPC. */
+  async start(signal: AbortSignal): Promise<PeerChannel> {
     this.#admit(signal)
-    if (!(await this.options.catalog.inspect())) throw new PeerHelperError('p2p.not_enabled')
-    this.#admit(signal)
-    if (this.#supervisor) return this.#supervisor.rpc
-    // One owner starts the helper. Another command must retry explicitly once ready.
-    if (this.#starting) throw new PeerHelperError('p2p.helper_busy')
-    this.#starting = this.#spawn(signal)
+    // The guard is set before the first await: a second caller retries rather
+    // than racing the attach.
+    if (this.#pending) throw new PeerHelperError('p2p.helper_busy')
+    this.#pending = true
     try {
-      return await this.#starting
+      if (!(await this.options.catalog.inspect())) throw new PeerHelperError('p2p.not_enabled')
+      this.#admit(signal)
+      const channel = this.options.channel
+      // A shell that could not start a core has no transport: P2P is unavailable
+      // rather than silently degraded to a second process that no longer exists.
+      if (channel === undefined) throw new PeerHelperError('p2p.helper_unavailable')
+      this.#attach(channel)
+      return channel
     } finally {
-      this.#starting = undefined
+      this.#pending = false
+    }
+  }
+
+  #attach(channel: PeerChannel): void {
+    if (this.#detach !== undefined) return
+    const stopServing = channel.serve(this.#handle)
+    const stopObserving = channel.observe((error) => {
+      // The channel is gone, so no callback can arrive again: release the
+      // handler instead of leaving the core talking to a dead state machine.
+      // A failure that leaves the core alive keeps serving, so the core still
+      // gets the recorded reason rather than a bare not-implemented.
+      this.#detach?.()
+      this.#detach = undefined
+      this.#unavailable(error)
+    })
+    this.#detach = () => {
+      stopServing()
+      stopObserving()
     }
   }
 
@@ -75,29 +114,6 @@ export class PeerRuntimeHost {
   async failClosed(error: PeerHelperError): Promise<void> {
     this.#unavailable(error)
     await this.close()
-  }
-
-  async #spawn(signal: AbortSignal): Promise<PeerRpc> {
-    const budget = AbortSignal.any([signal, this.#lifetime.signal])
-    try {
-      const supervisor = await PeerSupervisor.start(
-        {
-          resourcesRoot: this.options.resourcesRoot,
-          handler: this.#handle,
-          onUnavailable: (error) => this.#unavailable(error)
-        },
-        budget
-      )
-      this.#supervisor = supervisor
-      this.#admit(budget)
-      return supervisor.rpc
-    } catch (error) {
-      this.#unavailable(
-        error instanceof PeerHelperError ? error : new PeerHelperError('p2p.helper_unavailable')
-      )
-      await this.#supervisor?.close()
-      throw error
-    }
   }
 
   readonly #handle: PeerMainHandler = async (method, payload, signal) => {
@@ -151,13 +167,14 @@ export class PeerRuntimeHost {
   }
 
   async #invalidate(generation: number): Promise<void> {
-    if (this.#lifetime.signal.aborted || !this.#supervisor) return
+    const channel = this.options.channel
+    if (this.#lifetime.signal.aborted || channel === undefined) return
     // The set contains only managers that actually requested this local runtime.
     // Outgoing peers on other services never receive a local-runtime invalidation.
     await Promise.all(
       [...this.#runtimeServices].map(async (serviceId) => {
         exactPeerObject(
-          await this.#supervisor!.rpc.call(
+          await channel.call(
             'runtime.invalidate',
             {
               serviceId,
@@ -180,21 +197,13 @@ export class PeerRuntimeHost {
       value.state = { ...value.state, stage: 'failed', error: this.#failure.code }
     }
     this.options.onUnavailable?.()
-    // Close the actual child as well as RPC. This is failure containment, not a retry.
-    void this.#supervisor?.close().catch(() => {
-      this.#failure = new PeerHelperError('p2p.helper_cleanup_failed')
-    })
   }
 
   async #stop(): Promise<void> {
     this.#lifetime.abort()
     this.#runtime.close()
-    try {
-      await this.#starting
-    } catch {
-      // The initiating call reports the startup failure; shutdown still owns cleanup.
-    }
-    await this.#supervisor?.close()
+    this.#detach?.()
+    this.#detach = undefined
     this.#runtimeServices.clear()
     this.#states.clear()
   }

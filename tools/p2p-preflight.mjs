@@ -2,7 +2,7 @@
 // Preflight for two-machine P2P testing.
 //
 // Checks the two things most likely to block a first run: whether this machine
-// has a usable peer helper for its own architecture, and whether the three
+// has a usable core binary for its own architecture, and whether the three
 // coordination-server endpoints are actually reachable. Every check reports what
 // was really observed, so an unreachable server is never reported as "probably
 // fine". This tool performs no pairing, sends no credentials and changes no
@@ -21,7 +21,7 @@ function usage() {
 Usage:
   node tools/p2p-preflight.mjs [--https <url>] [--wss <url>] [--stun <host:port>] [--json]
 
-With no server arguments only the local peer helper is checked. Supplying an
+With no server arguments only the local core binary is checked. Supplying an
 endpoint makes this tool contact it; nothing is sent beyond a plain reachability
 probe.
 `)
@@ -43,19 +43,24 @@ function parseArgs(argv) {
   return args
 }
 
-/** Mirrors the main process resolution so a pass here means the app will accept it. */
-async function checkHelper() {
+/**
+ * Mirrors the main process resolution so a pass here means the app will accept
+ * it. The shell runs one binary now — the core, which answers the whole method
+ * table including the peer operations — so this checks dshkerd rather than the
+ * peer helper it no longer starts.
+ */
+async function checkCore() {
   const platform = process.platform
   const arch = process.arch
   if (!['darwin', 'win32'].includes(platform) || !['arm64', 'x64'].includes(arch))
     return {
-      name: 'peer-helper',
+      name: 'core',
       ok: false,
       detail: `Unsupported platform/arch: ${platform}/${arch}. The app supports macOS and Windows on arm64 or x64.`
     }
   const target = `${platform}-${arch}`
   const directory = path.join(appRoot, 'build', 'p2p', target)
-  const file = platform === 'win32' ? 'dshker-peer.exe' : 'dshker-peer'
+  const file = platform === 'win32' ? 'dshkerd.exe' : 'dshkerd'
   const executable = path.join(directory, file)
   const buildHint = `Run: node tools/build-peer-helper.mjs --platform ${platform} --arch ${arch === 'x64' ? 'x64' : 'arm64'}`
 
@@ -64,26 +69,26 @@ async function checkHelper() {
     info = await lstat(executable)
   } catch {
     return {
-      name: 'peer-helper',
+      name: 'core',
       ok: false,
-      detail: `No helper for this machine at build/p2p/${target}/${file}. A helper built on another machine cannot be copied here. ${buildHint}`
+      detail: `No core for this machine at build/p2p/${target}/${file}. A core built on another machine cannot be copied here. ${buildHint}`
     }
   }
   if (!info.isFile() || info.isSymbolicLink())
     return {
-      name: 'peer-helper',
+      name: 'core',
       ok: false,
       detail: `build/p2p/${target}/${file} is not a regular file. Remove it and rebuild. ${buildHint}`
     }
 
   let manifest
   try {
-    manifest = JSON.parse(await readFile(path.join(directory, 'manifest.json'), 'utf8'))
+    manifest = JSON.parse(await readFile(path.join(directory, 'dshkerd-manifest.json'), 'utf8'))
   } catch {
     return {
-      name: 'peer-helper',
+      name: 'core',
       ok: false,
-      detail: `manifest.json is missing or unreadable in build/p2p/${target}. ${buildHint}`
+      detail: `dshkerd-manifest.json is missing or unreadable in build/p2p/${target}. ${buildHint}`
     }
   }
   const digest = createHash('sha256')
@@ -91,20 +96,20 @@ async function checkHelper() {
     .digest('hex')
   if (manifest.version !== 1 || manifest.target !== target || manifest.file !== file)
     return {
-      name: 'peer-helper',
+      name: 'core',
       ok: false,
       detail: `manifest describes ${manifest.target ?? 'an unknown target'}, but this machine needs ${target}. ${buildHint}`
     }
   if (manifest.sha256 !== digest)
     return {
-      name: 'peer-helper',
+      name: 'core',
       ok: false,
       detail: `Helper checksum does not match its manifest, so the app will refuse it. ${buildHint}`
     }
   return {
-    name: 'peer-helper',
+    name: 'core',
     ok: true,
-    detail: `Verified ${target} helper with matching checksum.`
+    detail: `Verified the ${target} core with matching checksum.`
   }
 }
 
@@ -288,7 +293,7 @@ if (args.help) {
   process.exit(0)
 }
 
-const checks = [await checkHelper()]
+const checks = [await checkCore()]
 if (args.https) checks.push(await checkHttps(args.https))
 if (args.wss) checks.push(await checkWss(args.wss))
 if (args.stun) checks.push(await checkStun(args.stun))
@@ -306,7 +311,7 @@ if (args.json) {
     console.log(`${check.ok ? 'PASS' : 'FAIL'}  ${check.name}\n      ${check.detail}\n`)
   if (!serverChecked)
     console.log(
-      'Only the local helper was checked. Pass --https, --wss and --stun to verify your coordination server.\n'
+      'Only the local core was checked. Pass --https, --wss and --stun to verify your coordination server.\n'
     )
   if (!ok) console.log('Resolve the failures above before starting two-machine testing.\n')
 }

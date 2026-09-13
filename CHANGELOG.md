@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- The Launcher now runs **one background process** instead of two. The headless
+  core that already holds your device credential and your device catalog also
+  serves the whole peer protocol, so the separate peer helper is no longer
+  started. Pairing, connecting and the remote workspace behave exactly as
+  before; what changes is that a machine whose core cannot start reports P2P as
+  unavailable rather than quietly running a second process that no longer
+  exists. The preflight check now verifies the core binary the app actually uses.
+
 ## 0.1.30 — 2026-09-14
 
 - Paired computers are now connected **without being asked**, and stay that way.

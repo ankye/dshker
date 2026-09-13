@@ -265,7 +265,10 @@ async function registerLauncherServices(
     console.error('DSHKer Launcher could not start its headless core.', error)
   }
   const peerManagement = new PeerManagement({
-    resourcesRoot: app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build'),
+    // One process answers the peer table now: the same core the catalog and the
+    // secret store use. A shell that could not start a core has no transport,
+    // and P2P reports that instead of silently spawning a second process.
+    channel: coreSupervisor,
     resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot(),
     secrets: coreSecrets,
     catalog: coreCatalog,

@@ -48,14 +48,14 @@ You need three things:
 ## Before you begin: run the preflight check
 
 Two things block a first run more often than anything else: this machine has no
-usable peer helper, or the coordination server is not actually reachable. Check
+usable core binary, or the coordination server is not actually reachable. Check
 both before you start pairing:
 
 ```
 npm run p2p:preflight
 ```
 
-That verifies only the local helper. To check your server too:
+That verifies only the local core. To check your server too:
 
 ```
 node tools/p2p-preflight.mjs \
@@ -69,9 +69,9 @@ fails, sends no credentials, and changes nothing.
 
 What the failures mean:
 
-- **Helper missing or checksum mismatch.** Each machine must build its own helper
-  for its own architecture; one built elsewhere cannot be copied in. The command
-  to run is printed with the failure.
+- **Core missing or checksum mismatch.** Each machine must build its own core
+  binary for its own architecture; one built elsewhere cannot be copied in. The
+  command to run is printed with the failure.
 - **TLS certificate not trusted.** Fix this on the server. The app deliberately
   refuses a server it cannot verify, so a self-signed certificate that this
   machine does not trust will not work.

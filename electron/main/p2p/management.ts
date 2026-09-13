@@ -12,8 +12,7 @@ import { PeerEnrollment } from './enrollment'
 import { PeerPairing } from './pairing'
 import type { PeerPairMember, PeerPairMemberDevice } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
-import type { PeerRpc } from './rpc'
-import { PeerRuntimeHost } from './runtime-host'
+import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
 import { PeerAutoConnect } from './auto-connect'
@@ -21,7 +20,8 @@ import type { CoreCatalogPort } from '../core/catalog'
 import type { CoreSecretPort } from '../core/secrets'
 
 interface Options {
-  resourcesRoot: string
+  /** The core's private channel. Absent when the shell could not start a core. */
+  channel?: PeerChannel
   resolveSettingsRoot(): Promise<string>
   secrets?: CoreSecretPort
   catalog?: CoreCatalogPort
@@ -29,7 +29,7 @@ interface Options {
 }
 
 interface Session {
-  rpc: PeerRpc
+  rpc: PeerChannel
   services: PeerServices
   accounts: PeerAccounts
   enrollment: PeerEnrollment
@@ -65,7 +65,7 @@ export class PeerManagement {
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot, options.catalog)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot, options.secrets)
     this.#host = new PeerRuntimeHost({
-      resourcesRoot: options.resourcesRoot,
+      channel: options.channel,
       catalog: this.#catalog,
       runtime: options.runtime,
       onUnavailable: () => this.#clearSession(),
@@ -844,7 +844,11 @@ export class PeerManagement {
     return operation(session.accounts, active)
   }
 
-  async #removeNetworkAuthority(rpc: PeerRpc, serviceId: string, networkId: string): Promise<void> {
+  async #removeNetworkAuthority(
+    rpc: PeerChannel,
+    serviceId: string,
+    networkId: string
+  ): Promise<void> {
     // Server deletion has already committed. User cancellation must not cancel cleanup.
     try {
       exactPeerObject(

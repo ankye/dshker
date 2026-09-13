@@ -6,8 +6,8 @@ import { PeerCredentialStore } from './credentials'
 import type { PeerCatalogRecord } from './catalog-schema'
 import { PeerEnrollment } from './enrollment'
 import { PeerManagement } from './management'
+import type { PeerChannel } from './runtime-host'
 import { PeerServices } from './services'
-import { PeerSupervisor, type PeerSupervisorOptions } from './supervisor'
 import { PeerHelperError } from './wire'
 
 // This suite never invokes encryption; its separate two-process diagnostic uses
@@ -98,8 +98,9 @@ function fixture() {
   const activate = vi.spyOn(PeerServices.prototype, 'activate').mockResolvedValue(service)
   const clearAccounts = vi.spyOn(PeerAccounts.prototype, 'close')
   const clearEnrollment = vi.spyOn(PeerEnrollment.prototype, 'close')
-  let unavailable!: PeerSupervisorOptions['onUnavailable']
-  const close = vi.fn(async () => undefined)
+  const attach = vi.fn()
+  const detach = vi.fn()
+  let unavailable: () => void = () => undefined
   const call = vi.fn(
     async (method: string, _payload: unknown, _signal: AbortSignal): Promise<unknown> => {
       if (method === 'user.login')
@@ -118,13 +119,23 @@ function fixture() {
       throw new PeerHelperError('p2p.invalid_operation')
     }
   )
-  const spawn = vi.spyOn(PeerSupervisor, 'start').mockImplementation(async (options) => {
-    unavailable = options.onUnavailable
-    return { rpc: { call }, close } as unknown as PeerSupervisor
-  })
+  // The core's channel, shared with the catalog and the secret store.
+  const channel: PeerChannel = {
+    call,
+    serve: () => {
+      attach()
+      return () => detach()
+    },
+    observe: (observer: (error: PeerHelperError) => void) => {
+      unavailable = () => observer(new PeerHelperError('p2p.helper_unavailable'))
+      return () => {
+        unavailable = () => undefined
+      }
+    }
+  }
   const runtimeStart = vi.fn(async () => ({ launch: { kind: 'stopped' } }) as LauncherHarnessState)
   const owner = new PeerManagement({
-    resourcesRoot: '/test-owned-resources',
+    channel,
     resolveSettingsRoot: async () => '/test-owned-settings',
     runtime: {
       getRuntimeState: () => ({ kind: 'stopped' }),
@@ -136,16 +147,16 @@ function fixture() {
   return {
     owner,
     call,
-    close,
+    attach,
+    detach,
     commit,
     removeService,
-    spawn,
     activate,
     clearAccounts,
     clearEnrollment,
     runtimeStart,
     record: () => record,
-    unavailable: () => unavailable(new PeerHelperError('p2p.helper_unavailable'))
+    unavailable: () => unavailable()
   }
 }
 
@@ -388,7 +399,7 @@ describe('bringing enrolled services online at startup', () => {
     const f = fixture()
     vi.spyOn(PeerCatalog.prototype, 'inspect').mockResolvedValue(undefined)
     expect(await f.owner.goOnline()).toEqual([])
-    expect(f.spawn).not.toHaveBeenCalled()
+    expect(f.attach).not.toHaveBeenCalled()
   })
 
   it('stops once the owner is closing rather than starting new work', async () => {
@@ -401,7 +412,7 @@ describe('bringing enrolled services online at startup', () => {
 describe('formal P2P management composition', () => {
   it('keeps construction idle and activates the saved service before account traffic', async () => {
     const f = fixture()
-    expect(f.spawn).not.toHaveBeenCalled()
+    expect(f.attach).not.toHaveBeenCalled()
     await f.owner.login(serviceId, user.username, 'test-password', new AbortController().signal)
     expect(f.activate.mock.invocationCallOrder[0]).toBeLessThan(f.call.mock.invocationCallOrder[0])
     expect(f.runtimeStart).not.toHaveBeenCalled()
@@ -424,10 +435,10 @@ describe('formal P2P management composition', () => {
       [otherNetworkId, 'active']
     ])
     expect(f.commit).toHaveBeenCalledTimes(1)
-    expect(f.close).not.toHaveBeenCalled()
+    expect(f.detach).not.toHaveBeenCalled()
   })
 
-  it('contains a failed helper revocation without claiming the catalog was updated', async () => {
+  it('contains a failed core revocation without claiming the catalog was updated', async () => {
     const f = await loggedIn()
     const original = f.call.getMockImplementation()!
     f.call.mockImplementation(async (...args) => {
@@ -441,22 +452,22 @@ describe('formal P2P management composition', () => {
     expect(f.owner.status().error).toBe('p2p.authorization_cleanup_failed')
     expect(f.clearAccounts).toHaveBeenCalled()
     expect(f.clearEnrollment).toHaveBeenCalled()
-    expect(f.close).toHaveBeenCalled()
+    expect(f.detach).toHaveBeenCalled()
     expect(f.runtimeStart).not.toHaveBeenCalled()
   })
 
-  it('does not restore helper authority or close unrelated networks on a catalog write failure', async () => {
+  it('does not restore core authority or close unrelated networks on a catalog write failure', async () => {
     const f = await loggedIn()
     f.commit.mockRejectedValueOnce(new PeerHelperError('p2p.catalog_write_failed'))
     await expect(
       f.owner.deleteNetwork(serviceId, networkId, new AbortController().signal)
     ).rejects.toMatchObject({ code: 'p2p.catalog_write_failed' })
     expect(f.call.mock.calls.filter(([method]) => method === 'network.invalidate')).toHaveLength(1)
-    expect(f.close).not.toHaveBeenCalled()
+    expect(f.detach).not.toHaveBeenCalled()
     expect(f.record().computers[1].pairState).toBe('active')
   })
 
-  it('clears both account and enrollment owners on helper failure and does not restart implicitly', async () => {
+  it('clears both account and enrollment owners on channel failure and does not reattach implicitly', async () => {
     const f = await loggedIn()
     f.unavailable()
     expect(f.clearAccounts).toHaveBeenCalledTimes(1)
@@ -464,19 +475,19 @@ describe('formal P2P management composition', () => {
     await expect(
       f.owner.currentUser(serviceId, new AbortController().signal)
     ).rejects.toMatchObject({ code: 'p2p.helper_unavailable' })
-    expect(f.spawn).toHaveBeenCalledTimes(1)
+    expect(f.attach).toHaveBeenCalledTimes(1)
   })
 
   describe('removing a configured service', () => {
-    it('forgets the identity, drops its computers and commits once without starting the helper', async () => {
+    it('forgets the identity, drops its computers and commits once without touching the channel', async () => {
       const f = fixture()
       const result = await f.owner.removeService(serviceId, new AbortController().signal)
       expect(result.record.services).toHaveLength(0)
       expect(result.record.computers).toHaveLength(0)
       expect(result.record.forgottenServiceIds).toEqual([serviceId])
       expect(f.removeService).toHaveBeenCalledTimes(1)
-      // Purely local: no helper process or RPC traffic.
-      expect(f.spawn).not.toHaveBeenCalled()
+      // Purely local: no RPC traffic at all.
+      expect(f.attach).not.toHaveBeenCalled()
       expect(f.call).not.toHaveBeenCalled()
       expect(f.runtimeStart).not.toHaveBeenCalled()
       // The catalog readback is exactly what a later projection would show.

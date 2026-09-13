@@ -6,7 +6,7 @@
 'use strict'
 
 import { createServer } from 'node:net'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 
 const collect = (stream) =>
   new Promise((resolve, reject) => {
@@ -33,6 +33,16 @@ if (process.env.FAKE_CORE_ARGV_OUT) {
   )
   writeFileSync(process.env.FAKE_CORE_ARGV_OUT + '/pid.json', JSON.stringify(process.pid))
 }
+
+// The real core calls back into its parent once a device is restored:
+// runtime.connect for the runtime owner, peer.state for each connection stage.
+// This fixture keeps that contract observable by issuing one runtime.connect
+// after every core.version it answers and appending the shell's reply, so the
+// supervisor's dispatch can be asserted over a real socket.
+// Request ids are per sender and must strictly increase, exactly as
+// localrpc.Peer allocates them; reusing one would be a protocol violation.
+let callbackSequence = 0
+const callbackOut = process.env.FAKE_CORE_CALLBACK_OUT
 
 const server = createServer((socket) => serve(socket, bootstrap.secret, server))
 server.on('error', () => process.exit(1))
@@ -74,7 +84,17 @@ function serve(socket, secret, server) {
         }
         continue
       }
-      if (!frame.method) continue
+      if (!frame.method) {
+        // The only responses this fixture receives answer its own callbacks.
+        if (callbackOut) {
+          mkdirSync(callbackOut, { recursive: true })
+          appendFileSync(
+            callbackOut + '/callbacks.jsonl',
+            JSON.stringify({ error: frame.error, payload: frame.payload }) + '\n'
+          )
+        }
+        continue
+      }
       if (frame.method === 'core.version') {
         socket.write(
           JSON.stringify({
@@ -85,6 +105,17 @@ function serve(socket, secret, server) {
             error: ''
           }) + '\n'
         )
+        if (callbackOut) {
+          socket.write(
+            JSON.stringify({
+              version: 1,
+              id: ++callbackSequence,
+              method: 'runtime.connect',
+              payload: { serviceId: 'a'.repeat(64), pairId: 'b'.repeat(32) },
+              error: ''
+            }) + '\n'
+          )
+        }
       } else {
         socket.write(
           JSON.stringify({

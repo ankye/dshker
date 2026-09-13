@@ -29,9 +29,9 @@ afterEach(async () => {
 })
 
 describe('p2p preflight tool', () => {
-  it('always reports the helper check even with no arguments', async () => {
+  it('always reports the core check even with no arguments', async () => {
     const { report } = await run([])
-    expect(check(report, 'peer-helper')).toBeDefined()
+    expect(check(report, 'core')).toBeDefined()
     expect(report.platform).toBe(process.platform)
   })
 

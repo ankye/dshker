@@ -3,8 +3,7 @@ import type { LauncherHarnessLaunchView, LauncherHarnessState } from '../../../s
 import { PeerCatalog } from './catalog'
 import type { PeerCatalogRecord } from './catalog-schema'
 import type { PeerMainHandler } from './rpc'
-import { PeerRuntimeHost } from './runtime-host'
-import { PeerSupervisor, type PeerSupervisorOptions } from './supervisor'
+import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
 import { PeerHelperError } from './wire'
 
 const serviceId = 'a'.repeat(64)
@@ -53,19 +52,34 @@ function fixture() {
   const inspect = vi
     .spyOn(catalog, 'inspect')
     .mockImplementation(async () => ({ revision: 'e'.repeat(64), record }))
-  let handler: PeerMainHandler
-  let unavailable: PeerSupervisorOptions['onUnavailable']
+  let handler: PeerMainHandler | undefined
+  const observers = new Set<(error: PeerHelperError) => void>()
   const call = vi.fn(
     async (_method: string, _payload: unknown, _signal: AbortSignal): Promise<unknown> => ({})
   )
-  const close = vi.fn(async () => undefined)
-  const spawn = vi.spyOn(PeerSupervisor, 'start').mockImplementation(async (options) => {
-    handler = options.handler
-    unavailable = options.onUnavailable
-    return { rpc: { call }, close } as unknown as PeerSupervisor
-  })
+  // The channel is the running core's, shared with the catalog and the secret
+  // store: this host attaches to it and detaches, and never closes it.
+  const attach = vi.fn()
+  const detach = vi.fn()
+  const channel: PeerChannel = {
+    call,
+    serve: (value) => {
+      attach()
+      handler = value
+      return () => {
+        detach()
+        if (handler === value) handler = undefined
+      }
+    },
+    observe: (observer) => {
+      observers.add(observer)
+      return () => {
+        observers.delete(observer)
+      }
+    }
+  }
   const host = new PeerRuntimeHost({
-    resourcesRoot: '/test-owned-resources',
+    channel,
     catalog,
     runtime: {
       getRuntimeState: () => launch,
@@ -83,28 +97,30 @@ function fixture() {
     host,
     record,
     inspect,
-    spawn,
+    attach,
+    detach,
     call,
-    close,
     start,
     listeners,
     set: (value: LauncherHarnessLaunchView) => {
       launch = value
       for (const listener of listeners) listener(value)
     },
-    emit: (value: unknown) => handler('peer.state', { serviceId, state: value }, signal()),
+    emit: (value: unknown) => handler!('peer.state', { serviceId, state: value }, signal()),
     connect: (payload: unknown = { serviceId, pairId }, requestSignal = signal()) =>
-      handler('runtime.connect', payload, requestSignal),
-    unavailable: (error: PeerHelperError) => unavailable(error)
+      handler!('runtime.connect', payload, requestSignal),
+    unavailable: (error: PeerHelperError) => {
+      for (const observer of [...observers]) observer(error)
+    }
   }
 }
 
 describe('formal main P2P runtime ownership', () => {
-  it('does not start a helper or DSH on construction or idle shutdown', async () => {
+  it('attaches to nothing and starts no DSH on construction or idle shutdown', async () => {
     const f = fixture()
     expect(f.host.snapshot()).toEqual({ error: '', peers: [] })
     await f.host.close()
-    expect(f.spawn).not.toHaveBeenCalled()
+    expect(f.attach).not.toHaveBeenCalled()
     expect(f.start).not.toHaveBeenCalled()
     expect(f.listeners.size).toBe(0)
   })
@@ -116,14 +132,14 @@ describe('formal main P2P runtime ownership', () => {
     await expect(f.host.start(AbortSignal.abort())).rejects.toMatchObject({
       code: 'p2p.request_cancelled'
     })
-    expect(f.spawn).not.toHaveBeenCalled()
+    expect(f.attach).not.toHaveBeenCalled()
   })
 
-  it('uses exactly one helper and forwards only the actual authorized runtime binding', async () => {
+  it('uses exactly one channel and forwards only the actual authorized runtime binding', async () => {
     const f = fixture()
     const rpc = await f.host.start(signal())
     expect(await f.host.start(signal())).toBe(rpc)
-    expect(f.spawn).toHaveBeenCalledTimes(1)
+    expect(f.attach).toHaveBeenCalledTimes(1)
     await f.emit(state('starting-runtime'))
     expect(await f.connect()).toEqual({ generation: 1, url })
     expect(f.start).not.toHaveBeenCalled()
@@ -164,7 +180,7 @@ describe('formal main P2P runtime ownership', () => {
     f.set({ kind: 'running', url: url.replace('31234', '31235') })
     expect(await f.connect()).toEqual({ generation: 2, url: url.replace('31234', '31235') })
     await f.host.close()
-    expect(f.close).toHaveBeenCalledTimes(1)
+    expect(f.detach).toHaveBeenCalledTimes(1)
     expect(f.start).not.toHaveBeenCalled()
   })
 
@@ -204,7 +220,7 @@ describe('formal main P2P runtime ownership', () => {
     expect(f.start).not.toHaveBeenCalled()
   })
 
-  it('contains invalidation failure, marks P2P failed and forbids implicit helper restart', async () => {
+  it('contains invalidation failure, marks P2P failed and forbids implicit reattach', async () => {
     const f = fixture()
     await f.host.start(signal())
     await f.emit(state('starting-runtime'))
@@ -216,11 +232,13 @@ describe('formal main P2P runtime ownership', () => {
     await expect(f.host.start(signal())).rejects.toMatchObject({
       code: 'p2p.runtime_invalidation_failed'
     })
-    expect(f.spawn).toHaveBeenCalledTimes(1)
-    expect(f.close).toHaveBeenCalled()
+    expect(f.attach).toHaveBeenCalledTimes(1)
+    // The core is alive: the handler stays so it still receives the real reason
+    // rather than a bare not-implemented.
+    expect(f.detach).not.toHaveBeenCalled()
   })
 
-  it('contains a helper crash without restarting or retaining a ready projection', async () => {
+  it('contains a channel failure without reattaching or retaining a ready projection', async () => {
     const f = fixture()
     await f.host.start(signal())
     await f.emit(state('ready'))
@@ -229,8 +247,14 @@ describe('formal main P2P runtime ownership', () => {
       stage: 'failed',
       error: 'p2p.helper_unavailable'
     })
-    await expect(f.connect()).rejects.toMatchObject({ code: 'p2p.helper_unavailable' })
+    // A dead channel cannot deliver callbacks again, so the host releases its
+    // handler and the state machine stays fenced.
+    expect(f.detach).toHaveBeenCalled()
+    await expect(f.host.start(signal())).rejects.toMatchObject({
+      code: 'p2p.helper_unavailable'
+    })
     expect(f.listeners.size).toBe(0)
+    expect(f.attach).toHaveBeenCalledTimes(1)
     expect(f.start).not.toHaveBeenCalled()
   })
 

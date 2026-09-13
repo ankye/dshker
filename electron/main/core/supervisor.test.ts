@@ -24,6 +24,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
 
     afterEach(async () => {
       delete process.env.FAKE_CORE_ARGV_OUT
+      delete process.env.FAKE_CORE_CALLBACK_OUT
       await Promise.all(
         supervisors.splice(0).map((supervisor) => supervisor.close().catch(() => undefined))
       )
@@ -61,8 +62,10 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       return { resourcesRoot, dataRoot }
     }
 
-    function launch(meta: Launch, argvOut?: string, catalogRoot?: string) {
+    function launch(meta: Launch, argvOut?: string, catalogRoot?: string, callbackOut?: string) {
       if (argvOut) process.env.FAKE_CORE_ARGV_OUT = argvOut
+      delete process.env.FAKE_CORE_CALLBACK_OUT
+      if (callbackOut) process.env.FAKE_CORE_CALLBACK_OUT = callbackOut
       let capture: (error: PeerHelperError) => void = () => undefined
       const unavailable = new Promise<PeerHelperError>((resolve) => {
         capture = resolve
@@ -145,6 +148,47 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       )
     })
 
+    // The core calls back into the shell once a device is restored. This is the
+    // one place the wiring is exercised over a real socket rather than a fake
+    // channel: the scripted core issues runtime.connect and records the reply.
+    it.skipIf(process.platform === 'win32')(
+      'serves core callbacks only while the peer state machine is attached',
+      async () => {
+        const meta = await harness()
+        const callbackOut = await mkdtemp(join(tmpdir(), 'core-callback-'))
+        const { supervisor: started } = launch(meta, undefined, undefined, callbackOut)
+        const supervisor = await started
+        supervisors.push(supervisor)
+
+        // The startup probe already made the core call back, and nothing has
+        // attached yet: the core gets a typed refusal rather than a silent hang.
+        const first = await waitForCallbacks(callbackOut, 1)
+        expect(first[0]).toEqual({ error: 'p2p.not_implemented', payload: {} })
+
+        // Once the peer state machine attaches, its answer crosses the socket.
+        const handled: { serviceId: string; pairId: string }[] = []
+        const detach = supervisor.serve(async (method, payload) => {
+          if (method !== 'runtime.connect') throw new Error('unexpected callback')
+          const fields = payload as { serviceId: string; pairId: string }
+          handled.push(fields)
+          return { generation: 4, url: 'http://127.0.0.1:1/?token=unit-test-only' }
+        })
+        await supervisor.rpc.call('core.version', {}, AbortSignal.timeout(5_000))
+        const second = await waitForCallbacks(callbackOut, 2)
+        expect(second[1].error).toBe('')
+        expect(handled).toEqual([{ serviceId: 'a'.repeat(64), pairId: 'b'.repeat(32) }])
+        expect(second[1].payload).toMatchObject({ generation: 4 })
+
+        // Detaching puts the refusal back: the core is never left talking to a
+        // state machine that has been released.
+        detach()
+        await supervisor.rpc.call('core.version', {}, AbortSignal.timeout(5_000))
+        const third = await waitForCallbacks(callbackOut, 3)
+        expect(third[2]).toEqual({ error: 'p2p.not_implemented', payload: {} })
+        await supervisor.close()
+      }
+    )
+
     it('terminates the core child on SIGTERM with no survivor', async () => {
       const meta = await harness()
       const { supervisor: started, unavailable } = launch(meta)
@@ -200,6 +244,20 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
     })
   }
 )
+
+/** Reads the fixture's recorded callback replies, waiting for at least `count`. */
+async function waitForCallbacks(
+  directory: string,
+  count: number
+): Promise<{ error: string; payload: unknown }[]> {
+  for (let attempt = 0; attempt < 60; attempt++) {
+    const raw = await readFile(join(directory, 'callbacks.jsonl'), 'utf8').catch(() => '')
+    const lines = raw.split('\n').filter((line) => line !== '')
+    if (lines.length >= count) return lines.map((line) => JSON.parse(line))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+  throw new Error('the fixture core recorded no callback reply')
+}
 
 async function processAlive(pid: number): Promise<boolean> {
   for (let attempt = 0; attempt < 40; attempt++) {

@@ -30,6 +30,17 @@ export interface CoreSupervisorOptions {
   onUnavailable(error: PeerHelperError): void
 }
 
+/**
+ * The dispatch the peer state machine attaches to. The channel exists before its
+ * owner does — the core is started at app ready, the P2P module is composed
+ * after it — so the callbacks are routed through one mutable slot, and a caller
+ * that never attaches gets the same typed refusal the core itself would give.
+ */
+interface Dispatch {
+  handler?: PeerMainHandler
+  readonly listeners: Set<(error: PeerHelperError) => void>
+}
+
 /** Owns exactly one verified dshkerd child and terminates it with the shell. */
 export class CoreSupervisor {
   /** OS pid of the supervised core, for diagnostics and test assertions. */
@@ -37,6 +48,7 @@ export class CoreSupervisor {
   readonly #child: ChildProcessWithoutNullStreams
   readonly #exit: Promise<void>
   readonly #directory: string | undefined
+  readonly #dispatch: Dispatch
   readonly rpc: PeerRpc
   #closing: Promise<void> | undefined
 
@@ -45,18 +57,45 @@ export class CoreSupervisor {
     exit: Promise<void>,
     directory: string | undefined,
     rpc: PeerRpc,
+    dispatch: Dispatch,
     onUnavailable: CoreSupervisorOptions['onUnavailable']
   ) {
     this.pid = child.pid ?? -1
     this.#child = child
     this.#exit = exit
     this.#directory = directory
+    this.#dispatch = dispatch
     this.rpc = rpc
     void exit
       .then(() => this.close())
       .catch(() => {
         onUnavailable(new PeerHelperError('p2p.helper_cleanup_failed'))
       })
+  }
+
+  /** Calls one core method on the shared private channel. */
+  call(method: string, payload: unknown, signal: AbortSignal): Promise<unknown> {
+    return this.rpc.call(method, payload, signal)
+  }
+
+  /**
+   * Serves the two parent-role callbacks the core sends. The channel outlives
+   * the caller, so the returned function detaches the handler rather than
+   * closing anything.
+   */
+  serve(handler: PeerMainHandler): () => void {
+    this.#dispatch.handler = handler
+    return () => {
+      if (this.#dispatch.handler === handler) this.#dispatch.handler = undefined
+    }
+  }
+
+  /** Observes the channel's death; returns the unregister function. */
+  observe(listener: (error: PeerHelperError) => void): () => void {
+    this.#dispatch.listeners.add(listener)
+    return () => {
+      this.#dispatch.listeners.delete(listener)
+    }
   }
 
   static async start(options: CoreSupervisorOptions, signal: AbortSignal): Promise<CoreSupervisor> {
@@ -105,11 +144,22 @@ export class CoreSupervisor {
       if (announcement.version !== 1 || announcement.ready !== true)
         throw new PeerHelperError('p2p.protocol_mismatch')
       const socket = await authenticatePeer(socketPath, secret, budget)
-      // The core never calls back before P2 routes state into it; every
-      // inbound method is a typed not-implemented until then.
-      const handler: PeerMainHandler = () =>
-        Promise.reject(new PeerHelperError('p2p.not_implemented'))
-      rpc = new PeerRpc(socket, handler, options.onUnavailable)
+      // The core calls back once a device is restored: runtime.connect for the
+      // runtime owner and peer.state for every connection stage. Until the peer
+      // state machine attaches, every inbound method is a typed not-implemented
+      // rather than a silent hang.
+      const dispatch: Dispatch = { listeners: new Set() }
+      rpc = new PeerRpc(
+        socket,
+        (method, payload, callSignal) =>
+          dispatch.handler === undefined
+            ? Promise.reject(new PeerHelperError('p2p.not_implemented'))
+            : dispatch.handler(method, payload, callSignal),
+        (error) => {
+          options.onUnavailable(error)
+          for (const listener of dispatch.listeners) listener(error)
+        }
+      )
       if (budget.aborted) throw new PeerHelperError('p2p.request_cancelled')
       // readPeerLine pauses the socket; an explicitly paused stream does not
       // auto-resume when PeerRpc attaches its listener, so restart the flow
@@ -125,7 +175,7 @@ export class CoreSupervisor {
         (version as { version?: unknown }).version !== 1
       )
         throw new PeerHelperError('p2p.protocol_mismatch')
-      return new CoreSupervisor(child, exit, directory, rpc, options.onUnavailable)
+      return new CoreSupervisor(child, exit, directory, rpc, dispatch, options.onUnavailable)
     } catch (error) {
       rpc?.close()
       child.kill()
