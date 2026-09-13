@@ -99,3 +99,26 @@ func newGraceTestTransport() *Transport {
 		errors:   make(chan error, 1),
 	}
 }
+
+// A peer whose process was killed ends the connection explicitly: DTLS sends
+// CloseNotify and the peer connection reports closed. That must stay
+// immediate — the recovery window is only for a disconnect that carries no
+// such signal — or the user keeps driving a tab that cannot answer.
+func TestExplicitCloseIsNotGivenAGraceWindow(t *testing.T) {
+	transport := newGraceTestTransport()
+	defer transport.cancel()
+
+	transport.fail(errors.New("p2p.direct_unavailable"))
+
+	select {
+	case <-transport.ctx.Done():
+	case <-time.After(time.Second):
+		t.Fatal("an explicit close waited for the recovery window")
+	}
+	transport.mu.Lock()
+	timer := transport.graceTimer
+	transport.mu.Unlock()
+	if timer != nil {
+		t.Fatal("an explicit close armed the recovery window")
+	}
+}

@@ -180,16 +180,19 @@ func (transport *Transport) bindEvents() {
 	})
 	transport.pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		switch state {
-		case webrtc.PeerConnectionStateFailed:
-			// Failed is terminal: ICE gave up, so the hole is gone and only a new
-			// negotiation can help.
+		case webrtc.PeerConnectionStateFailed, webrtc.PeerConnectionStateClosed:
+			// Both are terminal and both are explicit: ICE gave up, or the peer
+			// closed the connection (a killed process ends here via DTLS
+			// CloseNotify). A dead peer has to be reported at once, or the user
+			// keeps driving a tab that cannot answer.
 			transport.fail(errors.New("p2p.direct_unavailable"))
 		case webrtc.PeerConnectionStateDisconnected:
-			// Disconnected is not terminal. ICE reports it for a few lost packets, a
-			// changed network or a machine waking up, and it usually returns to
-			// connected on its own within seconds. Tearing the session down here is
-			// what made a brief hiccup cost a full re-punch, so the connection is
-			// given a grace period to recover and only then declared lost.
+			// Disconnected is not terminal and carries no such signal. ICE reports
+			// it for a few lost packets, a changed network or a machine waking up,
+			// and it usually returns to connected on its own within seconds.
+			// Tearing the session down here is what made a brief hiccup cost a
+			// full re-punch, so the connection is given a recovery window and only
+			// declared lost when the window expires.
 			transport.beginGrace()
 		case webrtc.PeerConnectionStateConnected:
 			transport.endGrace()

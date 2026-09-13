@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	"github.com/ankye/dshker/networking/internal/peer"
 )
 
 func TestTwoPeerProcessLoadAndReconnect(t *testing.T) {
@@ -149,9 +151,19 @@ func TestTwoPeerProcessAbruptLossAndRevocation(t *testing.T) {
 	attempt := connect(t, a, b, 1)
 	started := time.Now()
 	b.process.stop(t, true)
-	closed := a.wait(t, func(event result) bool { return event.Event == "closed" && event.Attempt == attempt }, 10*time.Second)
+	// A killed peer cannot send a close: the only signal is ICE reporting the
+	// connection disconnected, which is indistinguishable from a network hiccup
+	// or a machine waking up. Those recover on their own, so the transport waits
+	// out peer.GracePeriod before declaring the path lost rather than making
+	// every brief interruption cost a fresh hole punch. What must hold is that
+	// the loss is eventually reported with a reason and the dead peer stops
+	// accepting payloads — never that the session silently claims to be up.
+	closed := a.wait(t, func(event result) bool { return event.Event == "closed" && event.Attempt == attempt }, peer.GracePeriod+10*time.Second)
 	if closed.Error == "" {
 		t.Fatal("missing disconnection reason")
+	}
+	if elapsed := time.Since(started); elapsed < peer.GracePeriod {
+		t.Fatalf("loss reported in %s, before the recovery window could save a hiccup", elapsed)
 	}
 	t.Logf("peer SIGKILL detected in %s; code=%s", time.Since(started), closed.Error)
 	if a.request(t, command{Op: "send", Data: []byte("after-kill"), Count: 1}).Error == "" {
