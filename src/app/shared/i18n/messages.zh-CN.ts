@@ -83,6 +83,7 @@ export const zhCN = {
   'p2p.connection.read': '读取连接状态',
   'p2p.connection.unknown': '尚未读到连接状态；读取失败不代表未连接。',
   'p2p.connection.none': '这台电脑尚未建立连接。',
+  'p2p.connection.openable': '已配对，点击即可建立连接',
   'p2p.connection.stagePunching': '正在尝试直连…',
   'p2p.connection.stageStarting': '正在启动远端运行时…',
   'p2p.connection.stageReady': '已连接，工作台可用',

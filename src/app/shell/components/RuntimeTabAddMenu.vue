@@ -52,7 +52,9 @@ function remoteStatusLabel(kind: 'disconnected' | 'connecting' | 'ready' | 'fail
 function peerStatusLabel(computer: P2PComputerView): string {
   if (computer.pairState === 'revoked') return t('p2p.pairing.stateRevoked')
   const connection = p2pConnections.find(computer.serviceId, computer.pairId)
-  return connection === undefined ? t('p2p.connection.none') : t(peerStageLabels[connection.stage])
+  // An active pair is openable on its own: creating the tab is what starts the
+  // session, so "no connection yet" is a hint, not a failure.
+  return connection === undefined ? t('p2p.connection.openable') : t(peerStageLabels[connection.stage])
 }
 
 function peerStatusState(computer: P2PComputerView): AddTabOptionState {
@@ -87,9 +89,11 @@ const peerOptions = computed<readonly AddTabOption[]>(() =>
       detail: '',
       statusLabel: peerStatusLabel(computer),
       statusState: peerStatusState(computer),
-      available:
-        computer.pairState === 'active' &&
-        p2pConnections.isReady(computer.serviceId, computer.pairId)
+      // Pairing is the authorization an attempt needs, and opening the tab is
+      // what performs it. Requiring an existing ready session here made the list
+      // unusable: a paired computer could only be opened after connecting
+      // somewhere else.
+      available: computer.pairState === 'active'
     }))
     .sort(sortAvailableFirst)
 )
@@ -183,6 +187,20 @@ function toggle(): void {
 }
 
 function select(id: RuntimeRemoteTabId): void {
+  if (id.startsWith('peer:')) {
+    const connectionId = id.slice('peer:'.length)
+    const computer = (p2pManagement.catalog.value?.computers ?? []).find(
+      (value) => value.connectionId === connectionId
+    )
+    // Opening the tab is the action that establishes the session: the attempt is
+    // authorized by the active pair and mediated by the server. Nothing else
+    // needs to be clicked first.
+    if (computer !== undefined && !p2pConnections.isReady(computer.serviceId, computer.pairId)) {
+      // A refusal is recorded on the connection store and read back by the
+      // surfaces that show it; it must never block opening the tab.
+      void p2pConnections.connect(computer.serviceId, computer.pairId).catch(() => undefined)
+    }
+  }
   if (!browser.openRemoteTab(id)) return
   close()
 }

@@ -100,6 +100,7 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.connection.unknown':
     'The connection state has not been read. A failed read does not mean it is disconnected.',
   'p2p.connection.none': 'This computer has no connection yet.',
+  'p2p.connection.openable': 'Paired — click to establish the connection',
   'p2p.connection.stagePunching': 'Attempting a direct connection...',
   'p2p.connection.stageStarting': 'Starting the remote runtime...',
   'p2p.connection.stageReady': 'Connected, workbench available',

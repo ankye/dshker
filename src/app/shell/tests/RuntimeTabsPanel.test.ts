@@ -264,8 +264,10 @@ describe('RuntimeTabsPanel rendering controls', () => {
     const offlinePeerOption = menu.querySelector<HTMLButtonElement>(
       '[data-testid="runtime-add-peer-dddddddd-dddd-4ddd-8ddd-dddddddddddd"]'
     )
-    expect(offlinePeerOption?.disabled).toBe(true)
-    expect(offlinePeerOption?.classList.contains('runtime-add-tab-option--disabled')).toBe(true)
+    // An active pair is openable on its own: opening the tab is what starts the
+    // session, so a paired computer with no live connection must stay clickable.
+    expect(offlinePeerOption?.disabled).toBe(false)
+    expect(offlinePeerOption?.classList.contains('runtime-add-tab-option--disabled')).toBe(false)
     const offlineSshOption = menu.querySelector<HTMLButtonElement>(
       '[data-testid="runtime-add-ssh-22222222-2222-4222-8222-222222222222"]'
     )
@@ -294,6 +296,23 @@ describe('RuntimeTabsPanel rendering controls', () => {
     expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
       'local',
       'peer:cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    ])
+    expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
+
+    // The paired computer with no live connection opens the same way and starts
+    // its own attempt, so it can never be gated behind a session that does not
+    // exist yet.
+    await wrapper.get('[data-testid="runtime-add-tab"]').trigger('click')
+    getAddMenu()
+      .querySelector<HTMLButtonElement>(
+        '[data-testid="runtime-add-peer-dddddddd-dddd-4ddd-8ddd-dddddddddddd"]'
+      )
+      ?.click()
+    await nextTick()
+    expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
+      'local',
+      'peer:cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      'peer:dddddddd-dddd-4ddd-8ddd-dddddddddddd'
     ])
     expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
 
