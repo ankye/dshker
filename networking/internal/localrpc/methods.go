@@ -38,6 +38,10 @@ var Methods = []Method{
 	{"core.catalog_enable", RoleShell},
 	{"core.catalog_inspect", RoleShell},
 	{"core.catalog_remove_service", RoleShell},
+	// The managed-root registry moved into the core in 4.1. Additive within
+	// version 1, and the refusal codes are the shell's own managed.* ones.
+	{"core.roots_commit", RoleShell},
+	{"core.roots_inspect", RoleShell},
 	{"core.secret_delete", RoleShell},
 	{"core.secret_get", RoleShell},
 	{"core.secret_set", RoleShell},

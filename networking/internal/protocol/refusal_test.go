@@ -21,6 +21,9 @@ func TestRefusal(t *testing.T) {
 		"exactly the longest code":       "p2p." + strings.Repeat("a", MaxRefusalBytes-len("p2p.")),
 		"a code with a missing runtime":  "p2p.direct_unavailable",
 		"a code whose detail has spaces": "p2p.pair_unauthorized: no pin for this pair",
+		"a managed code":                 "managed.missing_registry",
+		"a wrapped managed code":         "managed.root_overlap: two roots share a path",
+		"a launcher code":                "launcher.update_unavailable",
 	}
 	for name, message := range accepted {
 		t.Run("carries "+name, func(t *testing.T) {
@@ -47,6 +50,9 @@ func TestRefusal(t *testing.T) {
 		"a space inside the code": errors.New("p2p.direct unavailable"),
 		"a newline inside":        errors.New("p2p.direct\nunavailable"),
 		"a hyphen inside":         errors.New("p2p.direct-unavailable"),
+		"an undeclared family":    errors.New("unknown.operation_failed"),
+		"a family without a code": errors.New("managed."),
+		"a family alone":          errors.New("managed"),
 	} {
 		t.Run("refuses "+name, func(t *testing.T) {
 			if code, ok := Refusal(err); ok {

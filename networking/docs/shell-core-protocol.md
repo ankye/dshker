@@ -112,10 +112,16 @@ Limits and lifetimes:
 
 ## 5. Refusal codes
 
-Public codes are `p2p.` followed by lowercase letters, `_` and `.`, 5 to 96
-characters. Anything else is collapsed to `p2p.operation_failed` before it
-crosses the boundary, so a shell never has to interpret an internal error
-string.
+A public code is one of the declared families — `p2p.` for the peer vocabulary,
+`managed.` and `launcher.` for the Launcher's own management operations —
+followed by lowercase letters, `_` and `.`, at most 96 characters. Anything else
+is collapsed to `p2p.operation_failed` before it crosses the boundary, so a shell
+never has to interpret an internal error string. The wider set matters because
+the core performs operations whose refusals the renderer already maps:
+`core.roots_inspect` answers `managed.missing_registry`, and collapsing that to a
+`p2p` code would leave the user with an unexplained failure. A family that is not
+declared is still collapsed, which is what keeps a library's error string from
+masquerading as a code.
 
 A code survives the diagnostic wrapped around it. `internal/secret`, for
 instance, reports `fmt.Errorf("%w: value too large", ErrWrite)`, whose message
@@ -179,22 +185,28 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 - **parent** - the core sends the request and the shell answers. These are the
   callbacks the core cannot serve itself.
 
-| group    | methods                                                                                                                                                                         | role   |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
-| device   | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                  | shell  |
-| devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                | shell  |
-| network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                           | shell  |
-| networks | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename`                         | shell  |
-| pairs    | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                                                       | shell  |
-| peer     | `peer.connect`, `peer.disconnect`                                                                                                                                               | shell  |
-| remote   | `remote.directory`, `remote.roots`                                                                                                                                              | shell  |
-| runtime  | `runtime.invalidate`                                                                                                                                                            | shell  |
-| service  | `service.configure`                                                                                                                                                             | shell  |
-| user     | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                    | shell  |
-| callback | `runtime.connect`, `peer.state`                                                                                                                                                 | parent |
+| group    | methods                                                                                                                                                                                                                    | role   |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.roots_commit`, `core.roots_inspect`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
+| device   | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                             | shell  |
+| devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                           | shell  |
+| network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                      | shell  |
+| networks | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename`                                                                    | shell  |
+| pairs    | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                                                                                                  | shell  |
+| peer     | `peer.connect`, `peer.disconnect`                                                                                                                                                                                          | shell  |
+| remote   | `remote.directory`, `remote.roots`                                                                                                                                                                                         | shell  |
+| runtime  | `runtime.invalidate`                                                                                                                                                                                                       | shell  |
+| service  | `service.configure`                                                                                                                                                                                                        | shell  |
+| user     | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                               | shell  |
+| callback | `runtime.connect`, `peer.state`                                                                                                                                                                                            | parent |
 
-The `core.*` group is the local state the core owns outright: its version, the device credential store, and the device catalog. The catalog methods carry the same revision the file has always had — the sha256 of the stored bytes — so the token the shell passes back is the one it computed while it still owned the file. The shell starts the core with `--catalog <settings root>/dsh-launcher`, the exact directory it used to write `p2p-devices.json` itself, so an existing record is adopted in place and the shell stops writing it; on a shell that could not start a core at all, the file path remains the degraded writer. `core.catalog_inspect` answers `{"enabled":false}` for a directory that was never enabled, which is a state the shell renders as an invitation, never as a failure, and a core started without a catalog directory refuses these four methods rather than reporting an empty one.
+The `core.*` group is the local state the core owns outright: its version, the
+device credential store, the device catalog, and — since 4.1 — the managed-root
+registry. `core.roots_inspect` and `core.roots_commit` take the registry file path
+and the machine's Harness home explicitly, because the core is told where things
+are rather than guessing: it owns exactly one file name below the Settings root,
+validates the whole topology before writing, publishes atomically, and proves the
+published bytes by reading them back. The catalog methods carry the same revision the file has always had — the sha256 of the stored bytes — so the token the shell passes back is the one it computed while it still owned the file. The shell starts the core with `--catalog <settings root>/dsh-launcher`, the exact directory it used to write `p2p-devices.json` itself, so an existing record is adopted in place and the shell stops writing it; on a shell that could not start a core at all, the file path remains the degraded writer. `core.catalog_inspect` answers `{"enabled":false}` for a directory that was never enabled, which is a state the shell renders as an invitation, never as a failure, and a core started without a catalog directory refuses these four methods rather than reporting an empty one.
 
 The rest of the table is answered by the installed-peer host composed beside the core's own
 stores: `dshkerd` creates the same `helper.Host` the peer executable runs, binds the private

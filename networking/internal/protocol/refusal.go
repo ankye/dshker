@@ -9,12 +9,22 @@ import (
 // error field carries exactly one such code, never a sentence.
 const MaxRefusalBytes = 96
 
+// RefusalFamilies are the prefixes a public refusal code may use.
+//
+// The peer vocabulary is p2p.*. The Launcher's own management operations use
+// managed.* and launcher.*, and those codes reach the renderer too, so they have
+// to survive this channel once the core performs the operation: the root
+// registry, for instance, refuses with managed.* and the shell maps each one to
+// its own message. A code from outside these families is still collapsed, which
+// is what keeps a library's internal error string from masquerading as one.
+var RefusalFamilies = []string{"p2p", "managed", "launcher"}
+
 // Refusal reports the public refusal code an error carries.
 //
 // A code is either the whole message ("p2p.direct_unavailable") or the prefix of
 // a wrapped one ("p2p.secret_write_failed: value too large"), because the
 // packages keep their diagnostics by wrapping a sentinel with
-// fmt.Errorf("%w: ..."). The detail is deliberately dropped on the way out: the
+// fmt.Errorf("%w: ..."). A code names one of the declared RefusalFamilies. The detail is deliberately dropped on the way out: the
 // shell can act on the classification but not on a Win32 or Keychain sentence,
 // and collapsing the whole message to p2p.operation_failed — which is what a
 // stricter check did — hid which class of failure it was.
@@ -43,13 +53,26 @@ func refusalPrefix(message string) (string, bool) {
 	if index := strings.IndexByte(value, ':'); index >= 0 {
 		value = value[:index]
 	}
-	if len(value) < len("p2p.")+1 || len(value) > MaxRefusalBytes || !strings.HasPrefix(value, "p2p.") {
+	if len(value) > MaxRefusalBytes {
 		return "", false
 	}
-	for _, c := range value[len("p2p."):] {
+	family, suffix, found := strings.Cut(value, ".")
+	if !found || suffix == "" || !isRefusalFamily(family) {
+		return "", false
+	}
+	for _, c := range suffix {
 		if (c < 'a' || c > 'z') && c != '_' && c != '.' {
 			return "", false
 		}
 	}
 	return value, true
+}
+
+func isRefusalFamily(family string) bool {
+	for _, known := range RefusalFamilies {
+		if known == family {
+			return true
+		}
+	}
+	return false
 }

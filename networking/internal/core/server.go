@@ -13,6 +13,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/protocol"
+	"github.com/ankye/dshker/networking/internal/rootregistry"
 	"github.com/ankye/dshker/networking/internal/secret"
 )
 
@@ -31,6 +32,8 @@ var served = map[string]bool{
 	"core.catalog_enable":         true,
 	"core.catalog_inspect":        true,
 	"core.catalog_remove_service": true,
+	"core.roots_commit":           true,
+	"core.roots_inspect":          true,
 	"core.secret_delete":          true,
 	"core.secret_get":             true,
 	"core.secret_set":             true,
@@ -55,6 +58,12 @@ type Serve struct {
 	Store   secret.Store
 	Catalog *catalog.Store
 	Peer    Peer
+}
+
+// rootsResult reuses the registry's own wire shape, so the shell parses it with
+// the validator it used while it owned the file.
+type rootsResult struct {
+	Registry rootregistry.Registry `json:"registry"`
 }
 
 // catalogResult is the shell-facing view of the catalog. It reuses the record's
@@ -236,6 +245,43 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, err
 		}
 		return catalogSnapshot(&snapshot), nil
+	case "core.roots_inspect":
+		var request struct {
+			FilePath      string `json:"filePath"`
+			NativeDshHome string `json:"nativeDshHome"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := rootregistry.Open(request.FilePath, request.NativeDshHome)
+		if err != nil {
+			return nil, err
+		}
+		registry, err := store.Load()
+		if err != nil {
+			return nil, err
+		}
+		return rootsResult{Registry: registry}, nil
+	case "core.roots_commit":
+		var request struct {
+			FilePath      string                `json:"filePath"`
+			NativeDshHome string                `json:"nativeDshHome"`
+			Registry      rootregistry.Registry `json:"registry"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		// The store validates the whole topology, publishes atomically and proves
+		// the published bytes, so a shell bug cannot persist a registry the core
+		// would refuse to load on the next start.
+		store, err := rootregistry.Open(request.FilePath, request.NativeDshHome)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Save(request.Registry); err != nil {
+			return nil, err
+		}
+		return rootsResult{Registry: request.Registry}, nil
 	case "core.catalog_remove_service":
 		var request struct {
 			ServiceID string `json:"serviceId"`
