@@ -110,7 +110,10 @@
   in turn lets an out-of-table name be refused as `p2p.invalid_operation` rather
   than as a payload error. macOS and Windows: `go build`, `go vet` (native and
   `GOOS=windows`), the core, catalog, helper, localrpc and daemon packages all
-  pass, and the real-daemon integration tests pass on both. The headline
+  pass, and the real-daemon integration tests pass on both (macOS runs the full
+  `integration` suite, 262s; Windows runs the three daemon tests plus the 12-test
+  subset, 256s, excluding only the two `RealDSH` diagnostics that machine's
+  harness checkout cannot start). The headline
   verification is blocked on a measured trust gap, recorded under 3.7: a
   coordinator with a self-signed TLS certificate cannot be configured through
   `service.configure` at all, because the host builds its client with system

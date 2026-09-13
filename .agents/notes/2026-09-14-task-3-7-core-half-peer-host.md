@@ -41,8 +41,12 @@ the table is only sound if the table is complete.
   comes back with the host's own `p2p.service_unconfigured`, an inbound
   `runtime.connect` is `p2p.invalid_operation`, and `nope.nope` is
   `p2p.invalid_operation` rather than a payload error.
-- macOS and Windows: `go build`, `go vet` (native and `GOOS=windows`), the core,
-  catalog, helper, localrpc and daemon packages, and the integration suite.
+- macOS: `go build`, `go vet` (native and `GOOS=windows`), every unit package, and
+  the full `integration` suite (262 s) pass.
+- Windows (Go 1.26.4): `go build`, `go vet`, every unit package and the three
+  real-daemon tests pass (5 s), and the 12-test integration subset passes (256 s).
+  The two `RealDSH` diagnostics are excluded there for the environment reason
+  recorded last round: that machine's harness checkout cannot start `dsh web`.
 
 ## Measured, and deliberately not decided here
 
