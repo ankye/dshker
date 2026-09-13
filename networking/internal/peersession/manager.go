@@ -53,10 +53,16 @@ type Manager struct {
 	revokedNetworks map[string]struct{}
 	revokedPairs    map[string]string
 	sessions        map[string]*session
-	closed          bool
-	turnFetched     bool
-	turnCreds       controlplane.TurnCredentials
-	turnErr         error
+	// endpoints outlive any one session: a browser tab or a desktop client left
+	// pointed at a pair's gateway must keep working across a reconnect, so the
+	// gateway is only closed when the pair itself stops being pinned — never
+	// when a session inside it ends. Establish attaches each rebuilt session's
+	// mux to the same Endpoint instead of the run creating a fresh one.
+	endpoints   map[string]*runtimebridge.Endpoint
+	closed      bool
+	turnFetched bool
+	turnCreds   controlplane.TurnCredentials
+	turnErr     error
 }
 type session struct {
 	PairID    string
@@ -70,6 +76,7 @@ type session struct {
 	result    Connected
 	err       error
 	mux       *peer.Mux
+	endpoint  *runtimebridge.Endpoint
 }
 
 func newSession(parent context.Context) *session {
@@ -82,7 +89,7 @@ func New(ctx context.Context, client *controlplane.Client, config Config, pins [
 		return nil, errors.New("p2p.helper_configuration_required")
 	}
 	child, cancel := context.WithCancel(ctx)
-	manager := &Manager{ctx: child, cancel: cancel, client: client, config: config, owner: owner, emit: emit, pins: make(map[string]controlplane.PairIdentity), sessions: make(map[string]*session)}
+	manager := &Manager{ctx: child, cancel: cancel, client: client, config: config, owner: owner, emit: emit, pins: make(map[string]controlplane.PairIdentity), sessions: make(map[string]*session), endpoints: make(map[string]*runtimebridge.Endpoint)}
 	for _, pin := range pins {
 		if err := manager.Pin(pin); err != nil {
 			cancel()
@@ -282,11 +289,22 @@ func (manager *Manager) Close() {
 	for _, connection := range manager.sessions {
 		pending = append(pending, connection.done)
 	}
+	endpoints := make([]*runtimebridge.Endpoint, 0, len(manager.endpoints))
+	for _, endpoint := range manager.endpoints {
+		endpoints = append(endpoints, endpoint)
+	}
+	manager.endpoints = make(map[string]*runtimebridge.Endpoint)
 	manager.mu.Unlock()
 	manager.cancel()
 	manager.signals.Close()
 	for _, done := range pending {
 		<-done
+	}
+	// Every gateway this manager ever opened ends with it: the process losing
+	// its P2P session is not a drop the shell will reconnect from, unlike a
+	// session inside a still-pinned pair dropping.
+	for _, endpoint := range endpoints {
+		endpoint.Close()
 	}
 }
 
@@ -408,6 +426,29 @@ func (manager *Manager) sessionByAttemptLocked(attemptID string) *session {
 	return nil
 }
 
+// revoke drops a pair's authorization and everything that depended on it.
+//
+// Extracted from the signal loop because it is the one place a gateway is
+// deliberately destroyed rather than kept for the next reconnect, and that
+// decision has to be testable on its own.
+func (manager *Manager) revoke(pairID string) {
+	manager.mu.Lock()
+	delete(manager.pins, pairID)
+	endpoint := manager.endpoints[pairID]
+	delete(manager.endpoints, pairID)
+	connection := manager.sessions[pairID]
+	if connection != nil {
+		connection.cancel()
+	}
+	manager.mu.Unlock()
+	// Closed outside the lock: a revoked pair must lose its reachable address at
+	// once, including when no session was live, and Close reaches into the
+	// gateway's own locks.
+	if endpoint != nil {
+		endpoint.Close()
+	}
+}
+
 func (manager *Manager) receive() {
 	for event := range manager.signals.Events() {
 		if event.Type == "attempt" {
@@ -423,16 +464,13 @@ func (manager *Manager) receive() {
 			}
 			continue
 		}
+		if event.Type == "revoked" {
+			manager.revoke(event.PairID)
+		}
 		manager.mu.Lock()
 		connection := manager.sessions[event.PairID]
 		if event.Type == "signal" {
 			connection = manager.sessionByAttemptLocked(event.Signal.AttemptID)
-		}
-		if event.Type == "revoked" {
-			delete(manager.pins, event.PairID)
-			if connection != nil {
-				connection.cancel()
-			}
 		}
 		negotiating := connection != nil && connection.transport != nil
 		manager.mu.Unlock()
@@ -480,12 +518,24 @@ func (manager *Manager) run(connection *session) {
 		}
 		manager.emit(state)
 		manager.end(connection.lease)
+		// The endpoint (and its gateway, its port, its URL) is not torn down here:
+		// this session ending does not mean the pair stopped being pinned. Only
+		// revocation or Manager.Close ever calls endpoint.Close; a plain drop is
+		// left attached to nothing until the next reconnect calls Establish again
+		// and replaces the session inside it.
+		connection.mu.Lock()
+		endpoint := connection.endpoint
+		connection.mu.Unlock()
+		if endpoint != nil {
+			endpoint.Detach()
+		}
 		manager.finish(state.PairID, connection)
 	}()
 	deadline, cancel := context.WithTimeout(connection.ctx, 30*time.Second)
 	err := connection.transport.WaitReady(deadline)
 	cancel()
 	var gateway *runtimebridge.Gateway
+	var endpoint *runtimebridge.Endpoint
 	var mux *peer.Mux
 	var binding runtimebridge.Binding
 	if err == nil {
@@ -494,21 +544,40 @@ func (manager *Manager) run(connection *session) {
 	if err == nil {
 		state.Stage = "starting-runtime"
 		manager.emit(state)
-		gateway, mux, binding, err = runtimebridge.Establish(connection.ctx, connection.transport, connection.lease, connection.lease.FromDeviceID == manager.config.Device.DeviceID, manager.runtimeOwner(connection))
+		manager.mu.Lock()
+		existing := manager.endpoints[connection.PairID]
+		manager.mu.Unlock()
+		// The session context ends with this attempt; the gateway must outlive it,
+		// so its listener is owned by the manager instead. Attaching the gateway to
+		// connection.ctx would close its port the moment this session ended, making
+		// the URL change on every reconnect — the thing a stable URL must not do.
+		gateway, endpoint, mux, binding, err = runtimebridge.Establish(connection.ctx, manager.ctx, connection.transport, connection.lease, connection.lease.FromDeviceID == manager.config.Device.DeviceID, manager.runtimeOwner(connection), existing)
 		if err == nil {
 			connection.mu.Lock()
-			connection.mux = mux
+			connection.mux, connection.endpoint = mux, endpoint
 			connection.mu.Unlock()
+			manager.mu.Lock()
+			manager.endpoints[connection.PairID] = endpoint
+			manager.mu.Unlock()
 		}
-	}
-	if gateway != nil {
-		defer gateway.Close()
 	}
 	if mux != nil {
 		defer mux.Close()
 	}
-	if err == nil && gateway.URL != "" {
-		err = runtimebridge.Probe(connection.ctx, gateway.URL)
+	// The URL is the endpoint's own address, not the binding's: binding.URL is the
+	// peer's loopback address and means nothing on this machine. Only the first
+	// Establish creates the gateway; every later one replaces the session inside
+	// the same one, so the address is already recorded there.
+	var readyURL string
+	if err == nil {
+		if gateway != nil {
+			readyURL = gateway.URL
+		} else if endpoint != nil {
+			readyURL = endpoint.LocalURL()
+		}
+	}
+	if err == nil && readyURL != "" {
+		err = runtimebridge.Probe(connection.ctx, readyURL)
 	}
 	if err == nil && connection.ctx.Err() != nil {
 		err = errors.New("p2p.connection_cancelled")
@@ -518,7 +587,7 @@ func (manager *Manager) run(connection *session) {
 	connection.err = err
 	if err == nil {
 		state.Stage = "ready"
-		connection.result = Connected{State: state, URL: gateway.URL}
+		connection.result = Connected{State: state, URL: readyURL}
 	} else {
 		// The runtime is only attempted once the direct path is ready, so a
 		// failure that never reached that stage is a transport failure. No relay
@@ -537,7 +606,7 @@ func (manager *Manager) run(connection *session) {
 	select {
 	case <-connection.ctx.Done():
 	case <-connection.transport.Done():
-	case <-gateway.Done():
+	case <-endpoint.Done():
 	}
 }
 

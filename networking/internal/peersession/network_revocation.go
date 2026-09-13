@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/ankye/dshker/networking/internal/protocol"
+	"github.com/ankye/dshker/networking/internal/runtimebridge"
 )
 
 // RevokeNetwork is irreversible for this helper lifetime. Deleted network IDs
@@ -23,12 +24,21 @@ func (manager *Manager) RevokeNetwork(networkID string) error {
 	}
 	manager.revokedNetworks[networkID] = struct{}{}
 	pending := make([]*session, 0)
+	endpoints := make([]*runtimebridge.Endpoint, 0)
 	for pairID, pin := range manager.pins {
 		if pin.Pair.NetworkID != networkID {
 			continue
 		}
 		delete(manager.pins, pairID)
 		manager.revokedPairs[pairID] = networkID
+		// A deleted network revokes the pair, so its gateway must stop being a
+		// reachable address at once — the same rule the coordinator's revocation
+		// signal follows. Keeping the port would leave a URL that still answers
+		// for a network the user just removed.
+		if endpoint := manager.endpoints[pairID]; endpoint != nil {
+			endpoints = append(endpoints, endpoint)
+			delete(manager.endpoints, pairID)
+		}
 	}
 	// Concurrent repeated revocations must also wait for sessions whose pins
 	// were removed by the first call, including reservations before Begin.
@@ -43,6 +53,9 @@ func (manager *Manager) RevokeNetwork(networkID string) error {
 	}
 	for _, connection := range pending {
 		<-connection.done
+	}
+	for _, endpoint := range endpoints {
+		endpoint.Close()
 	}
 	return nil
 }

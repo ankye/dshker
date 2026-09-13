@@ -71,16 +71,11 @@ func TestManagerRealDSH(t *testing.T) {
 		previousAttempt = connected.State.AttemptID
 		must(t, runtimebridge.Probe(ctx, connected.URL))
 		must(t, managers[0].Disconnect(pairID))
-		request, err := http.NewRequestWithContext(ctx, "GET", connected.URL, nil)
-		must(t, err)
-		probe := &http.Client{Timeout: time.Second}
-		response, err := probe.Do(request)
-		if response != nil {
-			response.Body.Close()
-		}
-		if err == nil {
-			t.Fatal("old browser gateway remains reachable after Disconnect")
-		}
+		// Option B semantics: the gateway port survives a disconnect so the URL
+		// stays usable across reconnects, but nothing is proxied while no session
+		// is attached. The endpoint must still be listening (which is what keeps
+		// the URL stable), yet it must never serve runtime content.
+		assertGatewayDetached(t, ctx, connected.URL)
 		waitDisconnected(t, ctx, states[1], previousAttempt)
 		must(t, runtimebridge.Probe(ctx, runtimeURL))
 	}
@@ -92,7 +87,9 @@ func TestManagerRealDSH(t *testing.T) {
 	managers[1].InvalidateRuntime(1)
 	waitDisconnected(t, ctx, states[0], connected.State.AttemptID)
 	waitDisconnected(t, ctx, states[1], connected.State.AttemptID)
-	assertGatewayClosed(t, ctx, connected.URL)
+	// The endpoint is detached (nothing proxied) but its port stays up so the
+	// URL is reusable once the runtime comes back.
+	assertGatewayDetached(t, ctx, connected.URL)
 	nextURL, _ := startRealDSH(t)
 	if nextURL == runtimeURL {
 		t.Fatal("restarted DSH reused old runtime credential")
@@ -123,6 +120,25 @@ func assertGatewayClosed(t *testing.T, ctx context.Context, value string) {
 	}
 	if err == nil {
 		t.Fatal("stale gateway remains reachable")
+	}
+}
+
+// assertGatewayDetached asserts the option-B contract: the loopback port is
+// still bound (so the URL survives a reconnect) but no runtime traffic flows
+// while no session is attached. A non-200 response with no runtime content is
+// the proof — the port answers, the runtime never touched.
+func assertGatewayDetached(t *testing.T, ctx context.Context, value string) {
+	t.Helper()
+	request, err := http.NewRequestWithContext(ctx, "GET", value, nil)
+	must(t, err)
+	client := &http.Client{Timeout: time.Second}
+	response, err := client.Do(request)
+	if err != nil {
+		t.Fatalf("a detached gateway must still be listening (URL stability), got %v", err)
+	}
+	response.Body.Close()
+	if response.StatusCode >= 200 && response.StatusCode < 300 {
+		t.Fatalf("a detached gateway served a success (%d), so stale runtime content is reachable", response.StatusCode)
 	}
 }
 

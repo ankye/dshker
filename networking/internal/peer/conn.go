@@ -120,22 +120,105 @@ func (addr streamAddr) String() string  { return string(addr) }
 
 // Listener exposes only streams accepted on one authenticated mux. It never
 // listens on an OS network interface or accepts an arbitrary destination.
+//
+// The mux inside it is replaceable: a session drop must not surface as a
+// listener-ending error, because net/http.Server.Serve treats a non-temporary
+// Accept error as fatal and tears down the whole server, forcing every
+// caller to know how to restart one. Accept instead waits for the next mux
+// while the direct path is being rebuilt, exactly like OpenBrowserEndpoint
+// waits for the next session before dialing again.
 type Listener struct {
-	mux    *Mux
-	ctx    context.Context
-	cancel context.CancelFunc
+	ctx      context.Context
+	cancel   context.CancelFunc
+	mu       sync.Mutex
+	mux      *Mux
+	closed   bool
+	replaced chan struct{}
 }
 
 func NewListener(ctx context.Context, mux *Mux) *Listener {
 	child, cancel := context.WithCancel(ctx)
-	return &Listener{mux: mux, ctx: child, cancel: cancel}
+	return &Listener{ctx: child, cancel: cancel, mux: mux, replaced: make(chan struct{})}
 }
-func (listener *Listener) Accept() (net.Conn, error) {
-	stream, err := listener.mux.Accept(listener.ctx)
-	if err != nil {
-		return nil, err
+
+// Replace attaches a rebuilt session's mux. Any Accept call currently waiting
+// for one picks it up immediately.
+func (listener *Listener) Replace(mux *Mux) {
+	listener.mu.Lock()
+	if listener.closed {
+		listener.mu.Unlock()
+		return
 	}
-	return NewConn(listener.ctx, stream), nil
+	listener.mux = mux
+	signal := listener.replaced
+	listener.replaced = make(chan struct{})
+	listener.mu.Unlock()
+	close(signal)
 }
-func (listener *Listener) Close() error   { listener.cancel(); return nil }
+
+// Detach drops the current session without ending the listener, so Accept
+// waits for the next Replace instead of failing the whole server.
+func (listener *Listener) Detach() {
+	listener.mu.Lock()
+	listener.mux = nil
+	listener.mu.Unlock()
+}
+
+func (listener *Listener) Accept() (net.Conn, error) {
+	for {
+		listener.mu.Lock()
+		if listener.closed {
+			listener.mu.Unlock()
+			return nil, net.ErrClosed
+		}
+		mux := listener.mux
+		waiting := listener.replaced
+		listener.mu.Unlock()
+		if mux == nil {
+			// No session right now: wait for Replace or for the listener itself to
+			// end, rather than returning the fatal error that would kill Serve.
+			select {
+			case <-waiting:
+				continue
+			case <-listener.ctx.Done():
+				return nil, net.ErrClosed
+			}
+		}
+		stream, err := mux.Accept(listener.ctx)
+		if err != nil {
+			if listener.ctx.Err() != nil {
+				return nil, net.ErrClosed
+			}
+			// This mux ended (its transport dropped); wait for the next one
+			// instead of surfacing the error to Serve. A caller that intends to
+			// keep serving detaches or replaces before or as this happens; if
+			// neither occurs, this still blocks on the same mux and returns its
+			// next error rather than busy-looping.
+			listener.mu.Lock()
+			if listener.mux == mux {
+				listener.mux = nil
+			}
+			listener.mu.Unlock()
+			continue
+		}
+		return NewConn(listener.ctx, stream), nil
+	}
+}
+
+// Close ends the listener. It is idempotent: both the endpoint that owns the
+// session lifecycle and the http.Server that owns the listener will close it,
+// and the second call must not panic on an already closed channel.
+func (listener *Listener) Close() error {
+	listener.mu.Lock()
+	if listener.closed {
+		listener.mu.Unlock()
+		return nil
+	}
+	listener.closed = true
+	signal := listener.replaced
+	listener.mu.Unlock()
+	listener.cancel()
+	close(signal)
+	return nil
+}
 func (listener *Listener) Addr() net.Addr { return streamAddr("runtime") }

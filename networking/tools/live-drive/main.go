@@ -62,7 +62,7 @@ type state struct {
 
 func main() {
 	if len(os.Args) != 2 {
-		fatal("usage: live-drive mac fresh|adopt|connect | win enroll|serve")
+		fatal("usage: live-drive mac fresh|adopt|connect|serve | win enroll|serve|listen|connect")
 	}
 	ctx := context.Background()
 	switch os.Args[1] {
@@ -78,6 +78,14 @@ func main() {
 		winListen(ctx)
 	case "mac connect":
 		macConnect(ctx)
+	// Either side can initiate: the session manager is symmetric, so the only
+	// difference is which identity connects and which one owns a runtime. These
+	// run the same exchange the other way, which is what lets a machine reach a
+	// peer's DSH Web from its own browser.
+	case "mac serve":
+		serveAs(ctx, "A", func(s *state) *deviceState { return &s.DeviceA })
+	case "win connect":
+		connectAs(ctx, "B", func(s *state) *deviceState { return &s.DeviceB })
 	default:
 		fatal("unknown step")
 	}
@@ -416,4 +424,77 @@ func getenv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// serveAs answers connections with this machine's own DSH Web. The runtime URL
+// must be a real launch URL with exactly one token query: Binding.Endpoint()
+// rejects anything else, and a tokenless URL would fail the probe with 401
+// even through a healthy tunnel.
+func serveAs(ctx context.Context, label string, pick func(*state) *deviceState) {
+	s := loadState()
+	runtimeURL := s.RuntimeURL
+	if runtimeURL == "" {
+		fatal("state has no runtimeUrl; start DSH Web and record its tokenized URL first")
+	}
+	self := pick(s)
+	device := deviceClient(ctx, self)
+	pin, err := device.PairIdentity(ctx, s.PairID)
+	if err != nil {
+		fatal("pin "+label+":", err)
+	}
+	if pin.Pair.State != "active" {
+		fatal("pair not active yet", pin.Pair.State)
+	}
+	owner := func(ctx context.Context, pairID string) (runtimebridge.Binding, error) {
+		return runtimebridge.Binding{Generation: 1, URL: runtimeURL}, nil
+	}
+	manager, err := peersession.New(ctx, device, peersession.Config{Endpoints: endpoints, Authority: identity(ctx, device), Device: self.Device, PrivateKey: deviceKey(self.PrivateKey)}, []controlplane.PairIdentity{pin}, owner, func(state peersession.State) {
+		fmt.Println(label+"-STATE", state.PairID, state.Stage, state.Error, state.Path)
+	})
+	if err != nil {
+		fatal("manager "+label+":", err)
+	}
+	_ = manager
+	fmt.Println(label+"-SERVING", self.Device.DeviceID, "runtime", runtimeURL)
+	select {}
+}
+
+// connectAs initiates and prints the local gateway the peer's runtime is
+// reachable on. The gateway listens on this machine's loopback, so the printed
+// URL is what a browser here opens to reach the other machine's DSH Web.
+func connectAs(ctx context.Context, label string, pick func(*state) *deviceState) {
+	s := loadState()
+	self := pick(s)
+	device := deviceClient(ctx, self)
+	pin, err := device.PairIdentity(ctx, s.PairID)
+	if err != nil {
+		fatal("pin "+label+":", err)
+	}
+	if pin.Pair.State != "active" {
+		fatal("pair not active", pin.Pair.State)
+	}
+	owner := func(ctx context.Context, pairID string) (runtimebridge.Binding, error) {
+		return runtimebridge.Binding{}, errors.New("initiator does not own a runtime")
+	}
+	manager, err := peersession.New(ctx, device, peersession.Config{Endpoints: endpoints, Authority: identity(ctx, device), Device: self.Device, PrivateKey: deviceKey(self.PrivateKey)}, []controlplane.PairIdentity{pin}, owner, func(state peersession.State) {
+		fmt.Println(label+"-STATE", state.PairID, state.Stage, state.Error, state.Path)
+	})
+	if err != nil {
+		fatal("manager "+label+":", err)
+	}
+	connected, err := manager.Connect(ctx, s.PairID, 1)
+	if err != nil {
+		if le, ok := err.(interface{ Lease() protocol.Lease }); ok {
+			lease := le.Lease()
+			fmt.Println(label+"-LEASE-FAIL now=", time.Now().Unix(), "expiresAt=", lease.ExpiresAt, "ttl=", lease.ExpiresAt-time.Now().Unix())
+		}
+		fatal("connect:", err)
+	}
+	result := connected.State
+	fmt.Println(label+"-CONNECTED pair", s.PairID, "stage", result.Stage, "generation", result.Generation, "attempt", result.AttemptID)
+	fmt.Println(label+"-PATH", result.Path.Protocol, "local", result.Path.LocalType, "remote", result.Path.RemoteType)
+	fmt.Println(label+"-GATEWAY", connected.URL)
+	fmt.Println("open this URL in a browser on this machine to reach the peer's DSH Web")
+	probe(connected.URL)
+	select {}
 }

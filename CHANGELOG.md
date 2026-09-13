@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- A remote workspace keeps **the same address** when the connection drops and comes
+  back. The gateway that serves a paired computer's DSH Web used to be created per
+  connection, so every reconnect moved it to a new port and any browser tab left
+  open on the old address went blank. The gateway now belongs to the pair: the
+  address survives a drop, a network change, a wake from sleep and even a restart of
+  the other computer's DSH, and a tab recovers on its own. Only revoking the pair, or
+  deleting its network, retires the address.
+- A connection is no longer torn down by a brief interruption. WebRTC reports
+  `disconnected` for a few lost packets, a changed network or a machine waking up and
+  normally recovers within seconds; treating that as a failure meant every hiccup cost
+  a fresh hole punch. A lost path is now given 20 seconds to recover, and a peer that
+  stays away is still reported, with its reason, once that window passes.
+- Paired computers are now connected **without being asked**: connecting happens at
+  startup for every active pair, a dropped connection is retried immediately and then
+  with a widening delay, waking the machine retries at once, and only losing
+  authorization stops the attempts (the refusal is kept so the reason stays visible).
+
 - Your paired device credential now lives in the **native secret store behind
   the headless core** (macOS Keychain, Windows DPAPI) instead of an
   Electron-encrypted file. An existing credential from a previous version

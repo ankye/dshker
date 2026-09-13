@@ -30,33 +30,47 @@ type hello struct {
 // caller-provided address or an HTTP endpoint on the coordination server.
 type RuntimeOwner func(context.Context, string) (Binding, error)
 
-func Establish(ctx context.Context, transport *peer.Transport, lease protocol.Lease, initiator bool, owner RuntimeOwner) (*Gateway, *peer.Mux, Binding, error) {
-	budget, cancel := context.WithTimeout(ctx, 70*time.Second)
+// Establish negotiates the runtime binding over the transport and attaches
+// the resulting mux to attachment.
+//
+// attachment is nil on a pair's first connection: Establish then creates the
+// long-lived Endpoint and, for the initiator, the gateway with it. On every
+// later reconnect the caller passes the Endpoint it kept from the first call,
+// and Establish only replaces the session inside it — the loopback port (for
+// a browser tab) or the http.Server (for ServeTarget) survives untouched, so
+// neither the URL nor the listening side needs to change across a rebuild.
+//
+// sessionCtx ends with one session (its transport, its attempt); gatewayCtx is
+// the long-lived context that owns the listener — the manager's lifetime, not
+// the session's. Attaching the gateway to sessionCtx would close its port the
+// moment the session ended, which is exactly what a stable URL must not do.
+func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport *peer.Transport, lease protocol.Lease, initiator bool, owner RuntimeOwner, attachment *Endpoint) (*Gateway, *Endpoint, *peer.Mux, Binding, error) {
+	budget, cancel := context.WithTimeout(sessionCtx, 70*time.Second)
 	defer cancel()
 	request := hello{Version: 1, Type: "runtime.connect", AttemptID: lease.AttemptID, Generation: lease.Generation}
 	var binding Binding
 	if initiator {
 		if err := sendHello(transport, request); err != nil {
-			return nil, nil, binding, err
+			return nil, nil, nil, binding, err
 		}
 		response, err := readHello(budget, transport, request)
 		if err != nil {
-			return nil, nil, binding, err
+			return nil, nil, nil, binding, err
 		}
 		if response.Type != "runtime.result" || response.Error != "" {
-			return nil, nil, binding, errors.New("p2p.runtime_unavailable")
+			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
 		}
 		binding = Binding{Generation: response.RuntimeGeneration, URL: response.URL}
 	} else {
 		incoming, err := readHello(budget, transport, request)
 		if err != nil {
-			return nil, nil, binding, err
+			return nil, nil, nil, binding, err
 		}
 		if incoming.Type != "runtime.connect" || incoming.RuntimeGeneration != 0 || incoming.URL != "" || incoming.Error != "" {
-			return nil, nil, binding, errors.New("p2p.protocol_mismatch")
+			return nil, nil, nil, binding, errors.New("p2p.protocol_mismatch")
 		}
 		if owner == nil {
-			return nil, nil, binding, errors.New("p2p.runtime_unavailable")
+			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
 		}
 		// The runtime owner keys its catalog, its pin map and its state projection
 		// by the *far* device id — never by the coordinator's attempt key. The
@@ -75,34 +89,45 @@ func Establish(ctx context.Context, transport *peer.Transport, lease protocol.Le
 			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v\n", peerDeviceID, err)
 			request.Error = "p2p.runtime_unavailable"
 			sendHello(transport, request)
-			return nil, nil, binding, err
+			return nil, nil, nil, binding, err
 		}
 		if _, err = binding.Endpoint(); err != nil {
-			return nil, nil, binding, err
+			return nil, nil, nil, binding, err
 		}
 		request.RuntimeGeneration, request.URL = binding.Generation, binding.URL
 		if err = sendHello(transport, request); err != nil {
-			return nil, nil, binding, err
+			return nil, nil, nil, binding, err
 		}
 	}
 	if _, err := binding.Endpoint(); err != nil {
-		return nil, nil, binding, err
+		return nil, nil, nil, binding, err
 	}
 	mux, err := peer.NewMux(transport, peer.StreamScope{AttemptID: lease.AttemptID, Generation: lease.Generation, RuntimeGeneration: binding.Generation, Initiator: initiator})
 	if err != nil {
-		return nil, nil, binding, err
+		return nil, nil, nil, binding, err
 	}
 	var gateway *Gateway
-	if initiator {
-		gateway, err = OpenBrowser(ctx, mux, binding)
-	} else {
-		gateway, err = ServeTarget(ctx, mux, binding)
-	}
-	if err != nil {
+	if attachment == nil {
+		attachment, err = NewEndpoint(mux, binding)
+		if err != nil {
+			mux.Close()
+			return nil, nil, nil, binding, err
+		}
+		if initiator {
+			gateway, err = OpenBrowserEndpoint(gatewayCtx, attachment)
+		} else {
+			gateway, err = ServeTargetEndpoint(gatewayCtx, attachment)
+		}
+		if err != nil {
+			attachment.Close()
+			mux.Close()
+			return nil, nil, nil, binding, err
+		}
+	} else if err = attachment.Replace(mux, binding); err != nil {
 		mux.Close()
-		return nil, nil, binding, err
+		return nil, nil, nil, binding, err
 	}
-	return gateway, mux, binding, nil
+	return gateway, attachment, mux, binding, nil
 }
 
 func sendHello(transport *peer.Transport, value hello) error {

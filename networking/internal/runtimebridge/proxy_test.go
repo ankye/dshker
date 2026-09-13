@@ -145,12 +145,22 @@ func TestDirectRuntimeHTTPWebSocketAndIsolation(t *testing.T) {
 	parsed, _ := url.Parse(oracle.URL)
 	authority = parsed.Host
 	binding := Binding{Generation: 7, URL: oracle.URL + "/?token=isolated-test-token"}
-	target, err := ServeTarget(ctx, right, binding)
+	// Both sides go through the endpoint constructors, which are the only ones
+	// production uses: a gateway must outlive the session it was created with.
+	targetAttachment, err := NewEndpoint(right, binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := ServeTargetEndpoint(ctx, targetAttachment)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer target.Close()
-	browser, err := OpenBrowser(ctx, left, binding)
+	browserAttachment, err := NewEndpoint(left, binding)
+	if err != nil {
+		t.Fatal(err)
+	}
+	browser, err := OpenBrowserEndpoint(ctx, browserAttachment)
 	if err != nil {
 		t.Fatal(err)
 	}

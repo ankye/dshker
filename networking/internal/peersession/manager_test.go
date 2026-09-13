@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	"github.com/ankye/dshker/networking/internal/controlplane"
+	"github.com/ankye/dshker/networking/internal/runtimebridge"
 )
 
 func pinFixture() (*Manager, controlplane.PairIdentity) {
 	local := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("a", 32), UserID: strings.Repeat("b", 32), PublicKey: bytes.Repeat([]byte{1}, 32)}
 	remote := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("c", 32), UserID: local.UserID, PublicKey: bytes.Repeat([]byte{2}, 32)}
 	pin := controlplane.PairIdentity{Pair: controlplane.Pair{PairID: strings.Repeat("d", 32), NetworkID: strings.Repeat("e", 32), Initiator: local.DeviceID, Target: remote.DeviceID, State: "active", Revision: 2}, Initiator: local, Target: remote}
-	manager := &Manager{config: Config{Device: controlplane.Device{DeviceID: local.DeviceID, UserID: local.UserID, PublicKey: append([]byte(nil), local.PublicKey...)}}, pins: make(map[string]controlplane.PairIdentity)}
+	manager := &Manager{config: Config{Device: controlplane.Device{DeviceID: local.DeviceID, UserID: local.UserID, PublicKey: append([]byte(nil), local.PublicKey...)}}, pins: make(map[string]controlplane.PairIdentity), endpoints: make(map[string]*runtimebridge.Endpoint)}
 	return manager, pin
 }
 
