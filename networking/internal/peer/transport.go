@@ -209,10 +209,18 @@ func (transport *Transport) bindEvents() {
 	transport.channel.OnClose(func() { transport.fail(errors.New("p2p.direct_closed")) })
 	transport.channel.OnError(transport.fail)
 	transport.channel.OnMessage(func(message webrtc.DataChannelMessage) {
+		// A message can arrive in the window between the channel opening and the
+		// identity check finishing. Failing here killed an otherwise healthy
+		// connection, and the faster the peers are the wider that window looks: on
+		// a warm reconnect the peer's first frame often lands inside it, so both
+		// sides tore down a session that had just come up. Wait for the check
+		// instead. The security property is unchanged — the bytes are still only
+		// delivered after the DTLS fingerprint has been verified — and a failed
+		// check still ends the transport, which drops this message rather than
+		// forwarding it.
 		select {
 		case <-transport.ready:
-		default:
-			transport.fail(errors.New("p2p.identity_not_verified"))
+		case <-transport.ctx.Done():
 			return
 		}
 		if message.IsString || len(message.Data) == 0 || len(message.Data) > protocol.MaxControlBytes {

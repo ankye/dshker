@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- A reconnecting remote workspace no longer fails the moment it comes back. A
+  message that arrived in the instant between the connection opening and its
+  identity being checked used to tear the whole connection down, which made roughly
+  one reconnect in ten die immediately with “no direct path” and then quietly come
+  back on a later attempt. The check now waits for itself, so a re-established
+  connection stays up; bytes are still only accepted once the peer's identity is
+  verified.
+
 - A remote workspace keeps **the same address** when the connection drops and comes
   back. The gateway that serves a paired computer's DSH Web used to be created per
   connection, so every reconnect moved it to a new port and any browser tab left
