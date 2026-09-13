@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/ankye/dshker/networking/internal/peer"
@@ -56,9 +58,21 @@ func Establish(ctx context.Context, transport *peer.Transport, lease protocol.Le
 		if owner == nil {
 			return nil, nil, binding, errors.New("p2p.runtime_unavailable")
 		}
-		binding, err = owner(budget, lease.PairID)
+		// The runtime owner keys its catalog, its pin map and its state projection
+		// by the *far* device id — never by the coordinator's attempt key. The
+		// lease carries the id the initiator supplied, which is the target's own
+		// device id, so on this side lease.PairID names this device and every
+		// lookup by it is a miss. Ask about the initiator instead.
+		peerDeviceID := lease.ToDeviceID
+		if !initiator {
+			peerDeviceID = lease.FromDeviceID
+		}
+		binding, err = owner(budget, peerDeviceID)
 		request.Type = "runtime.result"
 		if err != nil {
+			// Never swallow the reason: a flattened code here is indistinguishable
+			// from a genuinely unavailable runtime and hides the real refusal.
+			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v\n", peerDeviceID, err)
 			request.Error = "p2p.runtime_unavailable"
 			sendHello(transport, request)
 			return nil, nil, binding, err
