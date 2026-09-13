@@ -54,7 +54,9 @@ function peerStatusLabel(computer: P2PComputerView): string {
   const connection = p2pConnections.find(computer.serviceId, computer.pairId)
   // An active pair is openable on its own: creating the tab is what starts the
   // session, so "no connection yet" is a hint, not a failure.
-  return connection === undefined ? t('p2p.connection.openable') : t(peerStageLabels[connection.stage])
+  return connection === undefined
+    ? t('p2p.connection.openable')
+    : t(peerStageLabels[connection.stage])
 }
 
 function peerStatusState(computer: P2PComputerView): AddTabOptionState {
