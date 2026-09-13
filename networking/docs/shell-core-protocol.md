@@ -163,20 +163,22 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 - **parent** - the core sends the request and the shell answers. These are the
   callbacks the core cannot serve itself.
 
-| group    | methods                                                                                                                                                 | role   |
-| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| core     | `core.version`                                                                                                                                          | shell  |
-| device   | `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                  | shell  |
-| devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                        | shell  |
-| network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                   | shell  |
-| networks | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename` | shell  |
-| pairs    | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                               | shell  |
-| peer     | `peer.connect`, `peer.disconnect`                                                                                                                       | shell  |
-| remote   | `remote.directory`, `remote.roots`                                                                                                                      | shell  |
-| runtime  | `runtime.invalidate`                                                                                                                                    | shell  |
-| service  | `service.configure`                                                                                                                                     | shell  |
-| user     | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                            | shell  |
-| callback | `runtime.connect`, `peer.state`                                                                                                                         | parent |
+| group    | methods                                                                                                                                                                         | role   |
+| -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
+| device   | `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                          | shell  |
+| devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                | shell  |
+| network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                           | shell  |
+| networks | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename`                         | shell  |
+| pairs    | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                                                       | shell  |
+| peer     | `peer.connect`, `peer.disconnect`                                                                                                                                               | shell  |
+| remote   | `remote.directory`, `remote.roots`                                                                                                                                              | shell  |
+| runtime  | `runtime.invalidate`                                                                                                                                                            | shell  |
+| service  | `service.configure`                                                                                                                                                             | shell  |
+| user     | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                    | shell  |
+| callback | `runtime.connect`, `peer.state`                                                                                                                                                 | parent |
+
+The `core.*` group is the local state the core owns outright: its version, the device credential store, and the device catalog. The catalog methods carry the same revision the file has always had — the sha256 of the stored bytes — so the token the shell passes back is the one it computed while it still owned the file; the shell no longer reads or writes `p2p-devices.json` itself. `core.catalog_inspect` answers `{"enabled":false}` for a directory that was never enabled, which is a state the shell renders as an invitation, never as a failure, and a core started without a catalog directory refuses these four methods rather than reporting an empty one.
 
 Two findings from writing this table down, both deliberate:
 

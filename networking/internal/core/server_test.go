@@ -20,7 +20,7 @@ func TestHandleAnswersVersion(t *testing.T) {
 	if version.Version != Version || version.MethodTableVersion != localrpc.MethodTableVersion {
 		t.Fatalf("version result %+v", version)
 	}
-	expected := []string{"core.version", "core.secret_delete", "core.secret_get", "core.secret_set"}
+	expected := []string{"core.version", "core.catalog_commit", "core.catalog_enable", "core.catalog_inspect", "core.catalog_remove_service", "core.secret_delete", "core.secret_get", "core.secret_set"}
 	if len(version.Methods) != len(expected) {
 		t.Fatalf("method table %v", version.Methods)
 	}
@@ -33,7 +33,7 @@ func TestHandleAnswersVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "{\"version\":1,\"methodTableVersion\":1,\"methods\":[\"core.version\",\"core.secret_delete\",\"core.secret_get\",\"core.secret_set\"]}"
+	const want = "{\"version\":1,\"methodTableVersion\":1,\"methods\":[\"core.version\",\"core.catalog_commit\",\"core.catalog_enable\",\"core.catalog_inspect\",\"core.catalog_remove_service\",\"core.secret_delete\",\"core.secret_get\",\"core.secret_set\"]}"
 	if string(data) != want {
 		t.Fatalf("version payload %s", data)
 	}

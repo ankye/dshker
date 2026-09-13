@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 
+	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/ankye/dshker/networking/internal/secret"
@@ -23,18 +24,44 @@ const Version = 1
 // p2p.not_implemented so a caller never confuses an older core with a method
 // that does not exist at all.
 var served = map[string]bool{
-	"core.version":       true,
-	"core.secret_delete": true,
-	"core.secret_get":    true,
-	"core.secret_set":    true,
+	"core.version":                true,
+	"core.catalog_commit":         true,
+	"core.catalog_enable":         true,
+	"core.catalog_inspect":        true,
+	"core.catalog_remove_service": true,
+	"core.secret_delete":          true,
+	"core.secret_get":             true,
+	"core.secret_set":             true,
 }
 
-// Serve answers core methods against the platform secret store. A nil store
-// is a legitimate configuration (a core without an explicit data root): every
-// secret method is then refused with p2p.secret_provider_unavailable so a
-// shell never mistakes "no provider" for an empty store.
+// Serve answers core methods against the platform secret store and the device
+// catalog. A nil store is a legitimate configuration (a core without an explicit
+// data root): every secret method is then refused with
+// p2p.secret_provider_unavailable so a shell never mistakes "no provider" for an
+// empty store. The catalog behaves the same way — a core that was not given a
+// catalog directory refuses those methods rather than reporting an empty
+// catalog, which would be a silent state loss.
 type Serve struct {
-	Store secret.Store
+	Store   secret.Store
+	Catalog *catalog.Store
+}
+
+// catalogResult is the shell-facing view of the catalog. It reuses the record's
+// own wire shape on purpose, so the shell parses it with the same validator it
+// used while it still owned the file.
+type catalogResult struct {
+	Enabled  bool            `json:"enabled"`
+	Revision string          `json:"revision,omitempty"`
+	Record   *catalog.Record `json:"record,omitempty"`
+}
+
+// catalogSnapshot renders one store answer for the shell.
+func catalogSnapshot(snapshot *catalog.Snapshot) catalogResult {
+	if snapshot == nil {
+		return catalogResult{Enabled: false}
+	}
+	record := snapshot.Record
+	return catalogResult{Enabled: true, Revision: snapshot.Revision, Record: &record}
 }
 
 const maxSecretKeyBytes = 256
@@ -142,6 +169,67 @@ func (server Serve) Handle(_ context.Context, method string, payload json.RawMes
 			return nil, err
 		}
 		return struct{}{}, nil
+	case "core.catalog_inspect":
+		var request struct{}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.Catalog == nil {
+			return nil, catalog.ErrUnavailable
+		}
+		snapshot, err := server.Catalog.Inspect()
+		if err != nil {
+			return nil, err
+		}
+		// No snapshot is "never enabled", which is a state the shell renders as an
+		// invitation to enable rather than as an error.
+		return catalogSnapshot(snapshot), nil
+	case "core.catalog_enable":
+		var request struct{}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.Catalog == nil {
+			return nil, catalog.ErrUnavailable
+		}
+		snapshot, err := server.Catalog.Enable()
+		if err != nil {
+			return nil, err
+		}
+		return catalogSnapshot(&snapshot), nil
+	case "core.catalog_commit":
+		var request struct {
+			ExpectedRevision string         `json:"expectedRevision"`
+			Record           catalog.Record `json:"record"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.Catalog == nil {
+			return nil, catalog.ErrUnavailable
+		}
+		// The store re-validates the record and enforces identity continuity, so a
+		// shell bug cannot replace a trusted key or drop a pair silently.
+		snapshot, err := server.Catalog.Commit(request.ExpectedRevision, request.Record)
+		if err != nil {
+			return nil, err
+		}
+		return catalogSnapshot(&snapshot), nil
+	case "core.catalog_remove_service":
+		var request struct {
+			ServiceID string `json:"serviceId"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.Catalog == nil {
+			return nil, catalog.ErrUnavailable
+		}
+		snapshot, err := server.Catalog.RemoveService(request.ServiceID)
+		if err != nil {
+			return nil, err
+		}
+		return catalogSnapshot(&snapshot), nil
 	}
 	if _, published := localrpc.Lookup(method); published {
 		return nil, errors.New("p2p.not_implemented")

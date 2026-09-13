@@ -31,6 +31,13 @@ type Method struct {
 // against the shipped dispatch by methods_test.go.
 var Methods = []Method{
 	{"core.version", RoleShell},
+	// The device catalog moved into the core in 3.6b. These are additive to the
+	// version 1 table: the shell answers the same way it did while it owned the
+	// file, and the revision it passes back is the same sha256 of the bytes.
+	{"core.catalog_commit", RoleShell},
+	{"core.catalog_enable", RoleShell},
+	{"core.catalog_inspect", RoleShell},
+	{"core.catalog_remove_service", RoleShell},
 	{"core.secret_delete", RoleShell},
 	{"core.secret_get", RoleShell},
 	{"core.secret_set", RoleShell},

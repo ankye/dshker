@@ -141,7 +141,8 @@ func TestCoreDaemonServesWithADataRoot(t *testing.T) {
 
 	endpoint := coreEndpoint(t)
 	secretValue := strings.Repeat("b", 64)
-	cmd := exec.Command(binary, "--data", t.TempDir())
+	catalogRoot := t.TempDir()
+	cmd := exec.Command(binary, "--data", t.TempDir(), "--catalog", catalogRoot)
 	stdin, err := cmd.StdinPipe()
 	must(t, err)
 	stdout, err := cmd.StdoutPipe()
@@ -182,6 +183,18 @@ func TestCoreDaemonServesWithADataRoot(t *testing.T) {
 	must(t, err)
 	if !strings.Contains(string(payload), "\"methodTableVersion\":1") {
 		t.Fatalf("core.version = %s", payload)
+	}
+	// The catalog directory the shell passes is opened at boot, and before the user
+	// enables anything the core reports it as not enabled rather than as a failure.
+	inspected, err := parent.Call(ctx, "core.catalog_inspect", struct{}{})
+	must(t, err)
+	if !strings.Contains(string(inspected), "\"enabled\":false") {
+		t.Fatalf("core.catalog_inspect = %s", inspected)
+	}
+	enabled, err := parent.Call(ctx, "core.catalog_enable", struct{}{})
+	must(t, err)
+	if !strings.Contains(string(enabled), "\"enabled\":true") || !strings.Contains(string(enabled), "\"catalogId\":") {
+		t.Fatalf("core.catalog_enable = %s", enabled)
 	}
 
 	// The core is a child, not a daemon: it exits when its parent channel ends.
