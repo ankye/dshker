@@ -64,3 +64,33 @@ jobs:
         run: |
           npm run build
           npm run build:electron
+
+  verify-windows:
+    name: Verify launcher (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Check formatting, architecture and types
+        run: |
+          npm run format:check
+          npm run architecture:check
+          npm run type-check
+
+      # The unit suite only ran on Linux, so Windows-only breakage in shared code
+      # went unseen. The managed-Git tests need a real git binary, which the
+      # Windows runner provides.
+      - name: Run unit tests
+        run: npm test -- --run
