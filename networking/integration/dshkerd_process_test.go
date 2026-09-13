@@ -3,6 +3,7 @@ package integration
 import (
 	"bufio"
 	"context"
+	"crypto/ed25519"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -91,11 +93,42 @@ func TestCoreDaemonServesThePrivateChannel(t *testing.T) {
 	})
 	payload, err := parent.Call(ctx, "core.version", struct{}{})
 	must(t, err)
-	if !strings.Contains(string(payload), "\"methodTableVersion\":1") {
+	var reported struct {
+		Version            int      `json:"version"`
+		MethodTableVersion int      `json:"methodTableVersion"`
+		Methods            []string `json:"methods"`
+	}
+	must(t, json.Unmarshal(payload, &reported))
+	if reported.Version != 1 || reported.MethodTableVersion != 1 {
 		t.Fatalf("core.version = %s", payload)
 	}
-	if _, err = parent.Call(ctx, "devices.list", struct{}{}); err == nil || err.Error() != "p2p.not_implemented" {
-		t.Fatalf("unimplemented method = %v", err)
+	// The daemon answers the whole published table: the peer half is composed
+	// beside the core's own stores, so a peer method is no longer reported as
+	// p2p.not_implemented.
+	if !slices.Contains(reported.Methods, "peer.connect") || !slices.Contains(reported.Methods, "remote.roots") {
+		t.Fatalf("core.version methods = %v", reported.Methods)
+	}
+
+	// The peer host really executes inside this process: device.createKey is
+	// served with no coordinator and no configured service at all.
+	created, err := parent.Call(ctx, "device.createKey", struct{}{})
+	must(t, err)
+	var key struct {
+		PrivateKey []byte `json:"privateKey"`
+		CSR        string `json:"csr"`
+	}
+	must(t, json.Unmarshal(created, &key))
+	if len(key.PrivateKey) != ed25519.PrivateKeySize || !strings.Contains(key.CSR, "BEGIN CERTIFICATE REQUEST") {
+		t.Fatalf("device.createKey = %d bytes and %q", len(key.PrivateKey), key.CSR)
+	}
+
+	// A published peer method with no configured service is refused by the host,
+	// with the host's own code rather than the core's not-implemented fallback.
+	if _, err = parent.Call(ctx, "devices.list", map[string]any{"serviceId": strings.Repeat("a", 64), "data": map[string]any{}}); err == nil || err.Error() != "p2p.service_unconfigured" {
+		t.Fatalf("peer method = %v", err)
+	}
+	if _, err = parent.Call(ctx, "runtime.connect", struct{}{}); err == nil || err.Error() != "p2p.invalid_operation" {
+		t.Fatalf("inbound callback = %v", err)
 	}
 	if _, err = parent.Call(ctx, "nope.nope", struct{}{}); err == nil || err.Error() != "p2p.invalid_operation" {
 		t.Fatalf("unknown method = %v", err)

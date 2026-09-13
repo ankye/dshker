@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"strings"
 
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/localrpc"
@@ -19,10 +20,11 @@ import (
 // bootstrap and frame version of the private channel.
 const Version = 1
 
-// served lists the shell methods this core answers today. Every other method of
-// localrpc.Methods is published but not yet implemented, and is refused with
-// p2p.not_implemented so a caller never confuses an older core with a method
-// that does not exist at all.
+// served lists the methods the core answers itself, against its own stores.
+// Every other shell-role method of localrpc.Methods is answered by the
+// installed-peer host composed beside it (see Peer); a composition without that
+// host refuses them with p2p.not_implemented so a caller never confuses an
+// older core with a method that does not exist at all.
 var served = map[string]bool{
 	"core.version":                true,
 	"core.catalog_commit":         true,
@@ -34,16 +36,25 @@ var served = map[string]bool{
 	"core.secret_set":             true,
 }
 
-// Serve answers core methods against the platform secret store and the device
-// catalog. A nil store is a legitimate configuration (a core without an explicit
-// data root): every secret method is then refused with
-// p2p.secret_provider_unavailable so a shell never mistakes "no provider" for an
-// empty store. The catalog behaves the same way — a core that was not given a
-// catalog directory refuses those methods rather than reporting an empty
-// catalog, which would be a silent state loss.
+// Peer is the installed-peer half of the table: the coordinator, pairing,
+// enrollment and runtime operations. The daemon passes the same host the peer
+// executable uses, so one process now answers the whole published table; a
+// composition without it (the helperless unit tests) keeps refusing those
+// methods with p2p.not_implemented.
+type Peer interface {
+	Handle(ctx context.Context, method string, payload json.RawMessage) (any, error)
+}
+
+// Serve answers the shell over the private channel. A nil store is a legitimate
+// configuration (a core without an explicit data root): every secret method is
+// then refused with p2p.secret_provider_unavailable so a shell never mistakes
+// "no provider" for an empty store. The catalog behaves the same way — a core
+// that was not given a catalog directory refuses those methods rather than
+// reporting an empty catalog, which would be a silent state loss.
 type Serve struct {
 	Store   secret.Store
 	Catalog *catalog.Store
+	Peer    Peer
 }
 
 // catalogResult is the shell-facing view of the catalog. It reuses the record's
@@ -66,16 +77,25 @@ func catalogSnapshot(snapshot *catalog.Snapshot) catalogResult {
 
 const maxSecretKeyBytes = 256
 
-// MethodTable reports the methods this core answers, in published table order.
-func MethodTable() []string {
-	table := make([]string, 0, len(served))
+// MethodTable reports the shell-role methods this composition answers, in
+// published table order. With a peer host that is the whole shell table; without
+// one it is only what the core owns itself, which is what the package-level
+// Handle answers.
+func (server Serve) MethodTable() []string {
+	table := make([]string, 0, len(localrpc.Methods))
 	for _, method := range localrpc.Methods {
-		if served[method.Name] {
+		if method.Role != localrpc.RoleShell {
+			continue
+		}
+		if served[method.Name] || server.Peer != nil {
 			table = append(table, method.Name)
 		}
 	}
 	return table
 }
+
+// MethodTable reports what a core with no peer host answers.
+func MethodTable() []string { return Serve{}.MethodTable() }
 
 type versionResult struct {
 	Version            int      `json:"version"`
@@ -97,17 +117,18 @@ func secretKey(raw string) error {
 	return nil
 }
 
-// Handle answers one shell request. It is the core half of the version 1 method
-// table: an unpublished method is a protocol error, a published method this
-// core does not serve yet is p2p.not_implemented, and a payload that does not
+// Handle answers one shell request. It is the version 1 method table: the core's
+// own methods are answered here, every other shell-role method is handed to the
+// composed peer host, an inbound parent-role method is refused as an invalid
+// operation (it is a callback the core sends), and a payload that does not
 // satisfy the method schema is refused by protocol.Decode itself.
-func (server Serve) Handle(_ context.Context, method string, payload json.RawMessage) (any, error) {
+func (server Serve) Handle(ctx context.Context, method string, payload json.RawMessage) (any, error) {
 	if method == "core.version" {
 		var request struct{}
 		if err := protocol.Decode(payload, &request); err != nil {
 			return nil, err
 		}
-		return versionResult{Version: Version, MethodTableVersion: localrpc.MethodTableVersion, Methods: MethodTable()}, nil
+		return versionResult{Version: Version, MethodTableVersion: localrpc.MethodTableVersion, Methods: server.MethodTable()}, nil
 	}
 	switch method {
 	case "core.secret_get":
@@ -231,8 +252,23 @@ func (server Serve) Handle(_ context.Context, method string, payload json.RawMes
 		}
 		return catalogSnapshot(&snapshot), nil
 	}
-	if _, published := localrpc.Lookup(method); published {
-		return nil, errors.New("p2p.not_implemented")
+	entry, published := localrpc.Lookup(method)
+	if !published || entry.Role != localrpc.RoleShell {
+		// Either no such method, or a parent-role callback (runtime.connect,
+		// peer.state) that the core sends rather than answers. The conformance
+		// fixture refuses an inbound callback the same way.
+		return nil, errors.New("p2p.invalid_operation")
 	}
-	return nil, errors.New("p2p.invalid_operation")
+	if server.Peer != nil && !isCoreMethod(method) {
+		return server.Peer.Handle(ctx, method, payload)
+	}
+	// Published, shell-role, and not the peer host's to answer: either no host is
+	// composed at all, or this build has not implemented a core.* method yet.
+	return nil, errors.New("p2p.not_implemented")
 }
+
+// isCoreMethod reports whether a published method belongs to the core's own
+// group. Every one of them is answered by the switch above; one published but
+// absent from it is a build that has not implemented it yet, which is exactly
+// what p2p.not_implemented means and is not something the peer host can answer.
+func isCoreMethod(method string) bool { return strings.HasPrefix(method, "core.") }

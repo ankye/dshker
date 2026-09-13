@@ -119,33 +119,33 @@ string.
 
 Codes owned by the transport itself, which every shell must distinguish:
 
-| code                                | meaning                                                                                                                                                        |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `p2p.invalid_bootstrap`             | the stdin record is malformed, missing a field, or carries a foreign version                                                                                   |
-| `p2p.invalid_socket`                | the endpoint is not the platform's accepted shape                                                                                                              |
-| `p2p.insecure_socket_directory`     | the Unix socket directory is not private (`0700`)                                                                                                              |
-| `p2p.insecure_socket`               | the Unix socket could not be restricted to `0600`                                                                                                              |
-| `p2p.helper_listen_failed`          | the endpoint could not be bound                                                                                                                                |
-| `p2p.helper_user_unavailable`       | the Windows process token has no resolvable user                                                                                                               |
-| `p2p.helper_parent_unavailable`     | readiness could not be published, no parent connected in time, or the channel broke                                                                            |
-| `p2p.helper_authentication_failed`  | the authentication line was malformed, late, or used the wrong secret                                                                                          |
-| `p2p.helper_unavailable`            | the child is gone; the call cannot be delivered                                                                                                                |
-| `p2p.helper_busy`                   | the 16 in-flight slots of that direction are full                                                                                                              |
-| `p2p.helper_failed`                 | the child terminated abnormally                                                                                                                                |
-| `p2p.helper_configuration_required` | the child needs configuration it was not given                                                                                                                 |
-| `p2p.null_field`                    | a field or element of the payload is `null` where a value is required                                                                                          |
-| `p2p.missing_field`                 | a required payload field is absent                                                                                                                             |
-| `p2p.duplicate_field`               | a payload object repeats a key, so the payload has no single interpretation                                                                                    |
-| `p2p.invalid_fields`                | the payload is not an object the method schema accepts                                                                                                         |
-| `p2p.invalid_json`                  | the payload or frame is not well-formed JSON                                                                                                                   |
-| `p2p.not_implemented`               | the method is published in table version 1 but this core does not serve it yet; distinct from an unknown method, so a shell can tell an older core from a typo |
-| `p2p.invalid_operation`             | the method name is unknown to the receiver                                                                                                                     |
-| `p2p.invalid_request`               | the payload does not satisfy the method's schema                                                                                                               |
-| `p2p.invalid_payload`               | the payload could not be marshalled by the caller                                                                                                              |
-| `p2p.invalid_result`                | the result could not be marshalled by the responder                                                                                                            |
-| `p2p.protocol_mismatch`             | a frame violated the header rules and the connection was closed                                                                                                |
-| `p2p.protocol_limit`                | a frame or control payload exceeded 64 KiB                                                                                                                     |
-| `p2p.operation_failed`              | fallback for a non-public error string                                                                                                                         |
+| code                                | meaning                                                                                                                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.invalid_bootstrap`             | the stdin record is malformed, missing a field, or carries a foreign version                                                                                                |
+| `p2p.invalid_socket`                | the endpoint is not the platform's accepted shape                                                                                                                           |
+| `p2p.insecure_socket_directory`     | the Unix socket directory is not private (`0700`)                                                                                                                           |
+| `p2p.insecure_socket`               | the Unix socket could not be restricted to `0600`                                                                                                                           |
+| `p2p.helper_listen_failed`          | the endpoint could not be bound                                                                                                                                             |
+| `p2p.helper_user_unavailable`       | the Windows process token has no resolvable user                                                                                                                            |
+| `p2p.helper_parent_unavailable`     | readiness could not be published, no parent connected in time, or the channel broke                                                                                         |
+| `p2p.helper_authentication_failed`  | the authentication line was malformed, late, or used the wrong secret                                                                                                       |
+| `p2p.helper_unavailable`            | the child is gone; the call cannot be delivered                                                                                                                             |
+| `p2p.helper_busy`                   | the 16 in-flight slots of that direction are full                                                                                                                           |
+| `p2p.helper_failed`                 | the child terminated abnormally                                                                                                                                             |
+| `p2p.helper_configuration_required` | the child needs configuration it was not given                                                                                                                              |
+| `p2p.null_field`                    | a field or element of the payload is `null` where a value is required                                                                                                       |
+| `p2p.missing_field`                 | a required payload field is absent                                                                                                                                          |
+| `p2p.duplicate_field`               | a payload object repeats a key, so the payload has no single interpretation                                                                                                 |
+| `p2p.invalid_fields`                | the payload is not an object the method schema accepts                                                                                                                      |
+| `p2p.invalid_json`                  | the payload or frame is not well-formed JSON                                                                                                                                |
+| `p2p.not_implemented`               | the method is published in table version 1 but this composition does not answer it: a core with no peer host, or a published `core.*` method this build has not implemented |
+| `p2p.invalid_operation`             | the name is not in the published table, or is a parent-role callback arriving the wrong way                                                                                 |
+| `p2p.invalid_request`               | the payload does not satisfy the method's schema                                                                                                                            |
+| `p2p.invalid_payload`               | the payload could not be marshalled by the caller                                                                                                                           |
+| `p2p.invalid_result`                | the result could not be marshalled by the responder                                                                                                                         |
+| `p2p.protocol_mismatch`             | a frame violated the header rules and the connection was closed                                                                                                             |
+| `p2p.protocol_limit`                | a frame or control payload exceeded 64 KiB                                                                                                                                  |
+| `p2p.operation_failed`              | fallback for a non-public error string                                                                                                                                      |
 
 Operation-level codes are owned by the operation, not by the transport. The
 ones the peer already returns and that the shell must keep distinguishable are
@@ -166,7 +166,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | group    | methods                                                                                                                                                                         | role   |
 | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
-| device   | `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                          | shell  |
+| device   | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                  | shell  |
 | devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                | shell  |
 | network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                           | shell  |
 | networks | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename`                         | shell  |
@@ -179,6 +179,18 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | callback | `runtime.connect`, `peer.state`                                                                                                                                                 | parent |
 
 The `core.*` group is the local state the core owns outright: its version, the device credential store, and the device catalog. The catalog methods carry the same revision the file has always had — the sha256 of the stored bytes — so the token the shell passes back is the one it computed while it still owned the file. The shell starts the core with `--catalog <settings root>/dsh-launcher`, the exact directory it used to write `p2p-devices.json` itself, so an existing record is adopted in place and the shell stops writing it; on a shell that could not start a core at all, the file path remains the degraded writer. `core.catalog_inspect` answers `{"enabled":false}` for a directory that was never enabled, which is a state the shell renders as an invitation, never as a failure, and a core started without a catalog directory refuses these four methods rather than reporting an empty one.
+
+The rest of the table is answered by the installed-peer host composed beside the core's own
+stores: `dshkerd` creates the same `helper.Host` the peer executable runs, binds the private
+channel to it for the two parent-role callbacks, and hands it every published shell-role method
+that is not a `core.*` one. That is what lets the shell stop launching a second child, and it is
+why `p2p.not_implemented` now means one of two things only: a core started without a peer host at
+all (the helperless unit tests), or a published `core.*` method this build has not implemented. A
+name that is not in the table is refused as `p2p.invalid_operation` before anything else looks at
+it, and an inbound parent-role method is refused the same way, because the core sends those rather
+than answers them. `device.createCSR` and `device.createKey` were called by the shell all along but
+missing from this table; they are published now, which is additive within version 1 and closes the
+gap between the table and the contract it describes.
 
 Because a whole record now travels in one frame, its own cap is deliberately smaller than the frame cap: `catalog.MaxRecordBytes` is 60 KiB against the 64 KiB of section 4, leaving room for the envelope of both `core.catalog_inspect` and `core.catalog_commit`. `internal/core/catalog_frame_test.go` pins the relationship, since a record at the frame cap would make the frame writer drop the answer and leave the caller waiting for a reply that can never arrive.
 

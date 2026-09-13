@@ -40,12 +40,15 @@ func TestHandleAnswersVersion(t *testing.T) {
 }
 
 // A published method this core does not serve yet must be distinguishable from
-// a method that does not exist, so the port can proceed method by method.
+// a method that does not exist, so the port can proceed method by method. A
+// parent-role method is a callback the core sends, so receiving one is an
+// invalid operation rather than something this core has yet to implement.
 func TestHandleRefusesUnservedAndUnknownMethods(t *testing.T) {
 	cases := map[string]string{
 		"devices.list":    "p2p.not_implemented",
 		"peer.connect":    "p2p.not_implemented",
-		"runtime.connect": "p2p.not_implemented",
+		"runtime.connect": "p2p.invalid_operation",
+		"peer.state":      "p2p.invalid_operation",
 		"nope.nope":       "p2p.invalid_operation",
 		"":                "p2p.invalid_operation",
 	}

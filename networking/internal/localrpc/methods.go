@@ -41,6 +41,11 @@ var Methods = []Method{
 	{"core.secret_delete", RoleShell},
 	{"core.secret_get", RoleShell},
 	{"core.secret_set", RoleShell},
+	// The shell has always called these two while enrolling a device; they were
+	// missing from the table, which made the table an incomplete description of
+	// the contract. Publishing them is additive within version 1.
+	{"device.createCSR", RoleShell},
+	{"device.createKey", RoleShell},
 	{"device.enroll", RoleShell},
 	{"device.enrollmentResult", RoleShell},
 	{"device.enrollmentToken", RoleShell},

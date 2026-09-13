@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/core"
+	"github.com/ankye/dshker/networking/internal/helper"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/secret"
 )
@@ -21,6 +23,12 @@ import (
 // is rooted there), and an optional --catalog argument names the directory
 // holding the device catalog. Both are opened at boot, so a bad root fails
 // before any RPC starts rather than on the first call that needs it.
+//
+// The core answers the whole published table: its own core.* methods against its
+// stores, and the coordinator, pairing, enrollment and runtime operations
+// through the same peer host the peer executable runs. That is what lets the
+// shell stop launching a second child; until it does, a core with no configured
+// service simply holds an idle host.
 func main() {
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println("dshkerd/1")
@@ -100,9 +108,25 @@ func run(parsed options) error {
 	if err != nil {
 		return err
 	}
-	rpc := localrpc.New(ctx, conn, server.Handle)
+	host := helper.New(ctx)
+	server.Peer = host
+	// The host must be bound before any request is answered: device.restore
+	// installs the callback the host uses to ask the shell for a runtime owner
+	// and to report connection state. The gate mirrors cmd/dshker-peer.
+	bound := make(chan struct{})
+	rpc := localrpc.New(ctx, conn, func(callCtx context.Context, method string, payload json.RawMessage) (any, error) {
+		select {
+		case <-bound:
+			return server.Handle(callCtx, method, payload)
+		case <-callCtx.Done():
+			return nil, callCtx.Err()
+		}
+	})
+	host.BindMain(rpc)
+	close(bound)
 	<-rpc.Done()
 	cancel()
 	rpc.Close()
+	host.Close()
 	return nil
 }
