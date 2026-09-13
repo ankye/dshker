@@ -112,10 +112,30 @@ func loadRoots(path string) (*x509.CertPool, error) {
 	return roots, nil
 }
 
+// secretStoreFor reports the store the core serves with.
+//
+// A host with no platform provider — a Linux container without a keyring, say —
+// still runs a core: a nil store is a legitimate configuration, and every secret
+// method refuses per call with p2p.secret_provider_unavailable so a shell never
+// mistakes "no provider" for an empty store. Refusing the boot instead would take
+// the device catalog and the managed roots down with the keyring, which is a
+// much larger failure than the one being reported. Every other failure is still
+// fatal, because it means the store exists and is broken.
+func secretStoreFor(open func(string) (secret.Store, error), dataRoot string) (secret.Store, error) {
+	store, err := open(dataRoot)
+	if errors.Is(err, secret.ErrUnavailable) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return store, nil
+}
+
 func run(parsed options) error {
 	server := core.Serve{}
 	if parsed.dataRoot != "" {
-		store, err := secret.Open(parsed.dataRoot)
+		store, err := secretStoreFor(secret.Open, parsed.dataRoot)
 		if err != nil {
 			return err
 		}

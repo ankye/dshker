@@ -1,8 +1,12 @@
 package main
 
 import (
+	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
+
+	"github.com/ankye/dshker/networking/internal/secret"
 )
 
 // Every argument is optional and, when given, must be an absolute path. The
@@ -57,5 +61,28 @@ func TestParseArgumentsRefusesMalformedCommands(t *testing.T) {
 				t.Fatalf("%v was accepted", args)
 			}
 		})
+	}
+}
+
+// TestSecretStoreForToleratesOnlyAnAbsentProvider pins the rule: a host without a
+// platform provider still runs a core, while a broken provider is fatal.
+func TestSecretStoreForToleratesOnlyAnAbsentProvider(t *testing.T) {
+	store, err := secretStoreFor(func(string) (secret.Store, error) {
+		return nil, secret.ErrUnavailable
+	}, "/data")
+	if err != nil || store != nil {
+		t.Fatalf("an absent provider = %v, %v", store, err)
+	}
+	wrapped, err := secretStoreFor(func(string) (secret.Store, error) {
+		return nil, fmt.Errorf("open %w", secret.ErrUnavailable)
+	}, "/data")
+	if err != nil || wrapped != nil {
+		t.Fatalf("a wrapped absent provider = %v, %v", wrapped, err)
+	}
+	broken := errors.New("p2p.secret_read_failed")
+	if _, err := secretStoreFor(func(string) (secret.Store, error) {
+		return nil, broken
+	}, "/data"); !errors.Is(err, broken) {
+		t.Fatalf("a broken provider = %v", err)
 	}
 }
