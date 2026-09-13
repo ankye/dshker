@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"testing"
@@ -60,6 +61,16 @@ func TestErrorRedactionAndCancelledAdmission(t *testing.T) {
 	_, err := left.Call(left.ctx, "fail", struct{}{})
 	if err == nil || err.Error() != "p2p.operation_failed" {
 		t.Fatalf("unredacted result: %v", err)
+	}
+	// A refusal that carries a diagnostic keeps its code: the detail is dropped
+	// rather than the whole classification. internal/secret wraps its sentinels
+	// this way, and collapsing them hid which store failed.
+	wrapped, _ := rpcPair(t, func(context.Context, string, json.RawMessage) (any, error) {
+		return nil, fmt.Errorf("%w: value too large", errors.New("p2p.secret_write_failed"))
+	})
+	_, err = wrapped.Call(wrapped.ctx, "fail", struct{}{})
+	if err == nil || err.Error() != "p2p.secret_write_failed" {
+		t.Fatalf("wrapped refusal lost its code: %v", err)
 	}
 	ctx, cancel := context.WithCancel(left.ctx)
 	cancel()

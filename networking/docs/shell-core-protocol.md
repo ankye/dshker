@@ -117,6 +117,16 @@ characters. Anything else is collapsed to `p2p.operation_failed` before it
 crosses the boundary, so a shell never has to interpret an internal error
 string.
 
+A code survives the diagnostic wrapped around it. `internal/secret`, for
+instance, reports `fmt.Errorf("%w: value too large", ErrWrite)`, whose message
+is `p2p.secret_write_failed: value too large`; the refusal is the code and the
+sentence is dropped, because a shell can act on the classification but not on a
+Win32 or Keychain message. Treating the whole message as opaque collapsed every
+wrapped refusal to `p2p.operation_failed`, which hid which store failed.
+`protocol.Refusal` is the single rule for this, used by both the private channel
+and the session manager — when each spelled it out they disagreed, and the same
+wrapped sentinel was classified differently depending on which layer reported it.
+
 Codes owned by the transport itself, which every shell must distinguish:
 
 | code                                | meaning                                                                                                                                                                     |
@@ -152,6 +162,12 @@ ones the peer already returns and that the shell must keep distinguishable are
 `p2p.direct_unavailable`, `p2p.runtime_unavailable`, `p2p.pair_unauthorized`,
 `p2p.user_unauthorized`, `p2p.network_revoked`, `p2p.not_connected`,
 `p2p.lease_expired`, `p2p.identity_mismatch`, and `p2p.remote_path_forbidden`.
+`p2p.peer_offline` belongs to that list too: the coordinator answers it when the
+paired computer is not connected, before any path is attempted, and it is a more
+actionable answer than a transport failure because the user's next step is to
+start that computer. `integration/failure_codes_test.go` drives the real daemon
+through authorization, runtime availability and peer presence and asserts three
+different codes arrive, none of them the generic fallback.
 
 ## 6. Method table version 1
 

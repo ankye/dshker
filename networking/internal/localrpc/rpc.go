@@ -165,15 +165,13 @@ func (peer *Peer) handle(frame Frame) {
 	peer.write(response)
 }
 
+// publicError is the refusal the shell receives. A code that carries a
+// diagnostic keeps the code and loses the sentence; anything that is not a code
+// at all becomes the one generic refusal, so a shell never has to interpret an
+// internal error string.
 func publicError(err error) string {
-	value := err.Error()
-	if len(value) < 5 || len(value) > 96 || value[:4] != "p2p." {
-		return "p2p.operation_failed"
+	if code, ok := protocol.Refusal(err); ok {
+		return code
 	}
-	for _, c := range value[4:] {
-		if (c < 'a' || c > 'z') && c != '_' && c != '.' {
-			return "p2p.operation_failed"
-		}
-	}
-	return value
+	return "p2p.operation_failed"
 }

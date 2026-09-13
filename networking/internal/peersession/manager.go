@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 	"time"
 
@@ -75,8 +74,11 @@ type session struct {
 	mu        sync.Mutex
 	result    Connected
 	err       error
-	mux       *peer.Mux
-	endpoint  *runtimebridge.Endpoint
+	// refusal is the named code for a failed attempt, so a caller that returns
+	// the failure to the shell does not hand it the raw transport sentence.
+	refusal  string
+	mux      *peer.Mux
+	endpoint *runtimebridge.Endpoint
 }
 
 func newSession(parent context.Context) *session {
@@ -207,10 +209,17 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		return Connected{}, errors.New("p2p.connection_cancelled")
 	case <-connection.ready:
 		connection.mu.Lock()
-		result, resultErr := connection.result, connection.err
+		result, resultErr, refusal := connection.result, connection.err, connection.refusal
 		connection.mu.Unlock()
 		if resultErr != nil {
 			<-connection.done
+			// The attempt already produced a named refusal for the state the shell
+			// renders. Returning the raw cause instead would hand the shell a
+			// transport sentence that the private channel can only collapse to
+			// p2p.operation_failed, which is the one thing 3.8 exists to prevent.
+			if refusal != "" {
+				return Connected{}, errors.New(refusal)
+			}
 			return Connected{}, resultErr
 		}
 		if connection.ctx.Err() != nil || ctx.Err() != nil {
@@ -229,8 +238,7 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 // with one constant made a transport failure and a missing remote runtime
 // indistinguishable from the UI, which is exactly the question being asked.
 func namedRefusal(err error, transportReady bool) string {
-	code := err.Error()
-	if strings.HasPrefix(code, "p2p.") && !strings.ContainsAny(code, " \r\n\t") {
+	if code, ok := protocol.Refusal(err); ok {
 		return code
 	}
 	if !transportReady {
@@ -596,6 +604,7 @@ func (manager *Manager) run(connection *session) {
 		transportReady := state.Stage == "starting-runtime"
 		state.Stage = "failed"
 		state.Error = namedRefusal(err, transportReady)
+		connection.refusal = state.Error
 	}
 	connection.mu.Unlock()
 	close(connection.ready)
