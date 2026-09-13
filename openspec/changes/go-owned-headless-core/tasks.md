@@ -40,6 +40,8 @@
       - The dependency that makes the rest mechanical, and why this task is smaller than its 4409-line tests suggest: `cmd/dshker-peer` is about fifty lines around `helper.New(ctx)`, `host.Handle` and `host.BindMain`, so folding that dispatch into `cmd/dshkerd`'s handler is all it takes for the shell to stop spawning a second process — which is exactly 3.7. Doing 3.7 first collapses 3.6d's remaining surface to the client, the state map and their tests. `runtime.connect` and `peer.state` stay parent-role methods (the core calls the shell back) because the Run guest and the runtime binding live in the shell until 7.1.
       - Do not move the test directory wholesale. The 22 files split into admission, projection and IPC cases that stay with the shell and state-machine cases that belong in Go; decide each file explicitly and record why, rather than porting by directory.
 - [ ] 3.7 Owner: core. Depends: 3.6. Answer `runtime.connect`, `runtime.invalidate`, `remote.roots`, and `remote.directory` inside the core; verify a peer connection completes with no Electron process running.
+  - Core half landed 2026-09-14: `dshkerd` now composes the same `helper.Host` the peer executable runs, so one process answers the entire published table — its own stores for `core.*` and the composed host for `peer.*`, `runtime.invalidate`, `remote.*`, `service.*`, `device.*`, `devices.*`, `network(s).*`, `pairs.*` and `user.*`. `core.Serve` gained a `Peer` interface; the private channel is bound to the host before the first request is answered, so the two parent-role callbacks work; and `core.version` reports the composed table. Note the task text: `runtime.connect` is a callback the core *sends*, not one it answers (the P0 findings corrected this) — "inside the core" means the core performs that whole path itself. Enabling this exposed a gap in the frozen table: the shell has always called `device.createKey` and `device.createCSR`, but neither was published. Both are now (additive within version 1), which also lets a name that is not in the table be refused as `p2p.invalid_operation` instead of being confused with a malformed payload. Evidence: 6 composition cases in `internal/core`, and the real-daemon test now proves over the private channel that a peer method is *served* (`device.createKey` returns a real key and CSR), that a published peer method with no configured service is refused by the host's own code, that an inbound callback is refused, and that an unknown name is refused.
+  - **Blocked before the headline verification** ("a peer connection completes with no Electron process running") on a trust decision. `helper.Host.configure` builds its coordinator client with `controlplane.New(endpoints, nil)` — system roots only — so a self-hosted coordinator with a self-signed TLS certificate cannot be configured at all. Measured rather than assumed: a probe against the integration fixture's coordinator returned `p2p.server_unavailable`, and that fixture certificate is deliberately not a CA, so it cannot stand in as the catalog's identity `certificate` either. The shell holds no TLS root material to send: its `service.certificate` is the coordinator's *identity* CA, not its TLS chain. Two resolutions, to be chosen deliberately rather than at the end of a long round: (a) accept the coordinator's TLS CA in `service.configure` — coherent, but that is a payload-shape change and therefore a table version bump; (b) give `dshkerd` an explicit trust root, e.g. `--roots <absolute PEM path>`, which the headless `serve` entry point in P5 needs anyway. This is pre-existing — `dshker-peer` behaves identically — so it is a finding, not a regression.
 - [ ] 3.8 Owner: core. Depends: 3.6. Keep the failure codes distinguishable end to end (direct-path versus runtime-availability versus authorization); verify each is observable from the shell and the CLI.
 
 ## 4. P3 — DSH lifecycle moves to the core
@@ -99,6 +101,22 @@
   without a build tag, so a whole-repo `go test ./...` was impossible on
   macOS. The link helper is now split across `directory_link_windows_test.go`
   and `directory_link_nonwindows_test.go`.
+- 3.7 core half (2026-09-14): one process answers the whole published table. The
+  daemon composes the same `helper.Host` the peer executable runs, so a shell no
+  longer needs a second child to reach the coordinator, pairing and runtime
+  operations; `core.Serve` gained a `Peer` interface and `core.version` reports
+  the composed table. The shell-facing gap this exposed — `device.createKey` and
+  `device.createCSR` were called but never published — is fixed additively, which
+  in turn lets an out-of-table name be refused as `p2p.invalid_operation` rather
+  than as a payload error. macOS and Windows: `go build`, `go vet` (native and
+  `GOOS=windows`), the core, catalog, helper, localrpc and daemon packages all
+  pass, and the real-daemon integration tests pass on both. The headline
+  verification is blocked on a measured trust gap, recorded under 3.7: a
+  coordinator with a self-signed TLS certificate cannot be configured through
+  `service.configure` at all, because the host builds its client with system
+  roots only. That predates this change (`dshker-peer` is identical) and needs a
+  deliberate decision between a payload-shape change and an explicit daemon trust
+  root.
 - 3.6c (2026-09-14): the pending enrollment and the persisted user session join the
   credential behind `CoreSecretPort`, each under its own key
   (`peer-enrollment:<serviceId>`, `peer-user-session:<serviceId>`), so the three
