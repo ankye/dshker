@@ -46,6 +46,24 @@ is worth recording: the shell now needs a core that is at least as new as itself
 which is guaranteed in a package (they ship together) and is a manual step in a
 working copy.
 
+## The second thing CI caught: a core that refused to boot over a keyring
+
+With the broker fixed, five of six packaged jobs passed and Linux x64 failed
+differently: `secret.Open` on a host with no DBus keyring returns
+`p2p.secret_provider_unavailable`, and `dshkerd` treated that as fatal. That was
+survivable while the shell owned its own configuration; now the core also owns the
+managed roots, so a missing keyring took the device catalog, the registry and the
+whole first run down with it — the smoke failed on `managed.core_unavailable`
+after logging a DBus error.
+
+A nil store was always a legitimate configuration here: every secret method
+refuses per call with `p2p.secret_provider_unavailable`, so a shell never
+mistakes "no provider" for an empty store, and nothing else the core owns needs
+the provider. `secretStoreFor` now tolerates exactly that — including a wrapped
+sentinel — and stays fatal for every other failure, because those mean the store
+exists and is broken. Its three cases pass on any platform, which the real branch
+could not.
+
 ## A verification gap this round closed
 
 Comparing the two platforms file by file showed Windows running 154 test files
