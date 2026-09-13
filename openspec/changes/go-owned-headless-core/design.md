@@ -70,6 +70,10 @@ The core supervises the DSH child and the peer with the semantics `electron/main
 
 `runtime.connect`, `runtime.invalidate`, `remote.roots`, and `remote.directory` are answered inside the core. `remote.*` already runs in Go; `runtime.connect` becomes a local lookup of the DSH child the core itself started, so the peer no longer needs the shell to be alive.
 
+The core therefore composes the installed-peer host beside its own stores and answers the whole published table from one process; the shell stops launching a second child (`dshker-peer` is retired in P6).
+
+Trust for the coordinator is **not** renegotiated by that move. The launcher's documented rule stands: a machine that does not already trust the server refuses it, and the fix belongs on the server, so no CA travels in `service.configure`. What a host that administers itself needs is the ability to name anchors explicitly, which the headless entry point of P5 requires anyway: `dshkerd --roots <absolute PEM file>` adds CA certificates on top of the system store. It never disables verification and the shell never passes it. The alternative — accepting the coordinator's TLS CA through `service.configure` — was rejected because it contradicts that documented rule and would be a payload-shape change, hence a table version bump.
+
 ### D8. Reconciliation with the in-flight changes
 
 Three active changes still contain requirements that this move contradicts, and none has archived yet:
