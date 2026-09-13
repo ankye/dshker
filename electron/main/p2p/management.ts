@@ -17,12 +17,14 @@ import { PeerRuntimeHost } from './runtime-host'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
 import { PeerAutoConnect } from './auto-connect'
+import type { CoreCatalogPort } from '../core/catalog'
 import type { CoreSecretPort } from '../core/secrets'
 
 interface Options {
   resourcesRoot: string
   resolveSettingsRoot(): Promise<string>
   secrets?: CoreSecretPort
+  catalog?: CoreCatalogPort
   runtime: Pick<LauncherHarnessService, 'getRuntimeState' | 'onRuntimeState' | 'start'>
 }
 
@@ -60,7 +62,7 @@ export class PeerManagement {
 
   constructor(options: Options) {
     this.#resolveSettingsRoot = options.resolveSettingsRoot
-    this.#catalog = new PeerCatalog(options.resolveSettingsRoot)
+    this.#catalog = new PeerCatalog(options.resolveSettingsRoot, options.catalog)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot, options.secrets)
     this.#host = new PeerRuntimeHost({
       resourcesRoot: options.resourcesRoot,

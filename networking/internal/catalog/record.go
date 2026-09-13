@@ -36,7 +36,14 @@ var (
 )
 
 // MaxRecordBytes bounds a catalog file, matching the shell's reader.
-const MaxRecordBytes = 64 * 1024
+//
+// A whole record crosses the private channel in one frame: core.catalog_inspect
+// answers with it and core.catalog_commit carries one back. protocol's frame
+// limit is 64 KiB, so this cap is deliberately smaller by more than the frame
+// envelope ("version", "id", "method", "payload", "error" plus the revision) —
+// otherwise the frame writer would refuse the answer and the shell would wait
+// for a reply that can never arrive.
+const MaxRecordBytes = 60 * 1024
 
 // Service is one registered coordinator.
 type Service struct {

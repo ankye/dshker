@@ -8,11 +8,25 @@ import { PeerRpc, type PeerMainHandler } from '../p2p/rpc'
 import { stopChild, verifyHelperResource } from '../p2p/supervisor'
 import { exactPeerObject, PeerHelperError } from '../p2p/wire'
 
+/** The core's argv: `--data` always, `--catalog` only when the shell owns a settings root. */
+function coreArguments(options: CoreSupervisorOptions): string[] {
+  const args = ['--data', options.dataRoot]
+  if (options.catalogRoot !== undefined) args.push('--catalog', options.catalogRoot)
+  return args
+}
+
 export interface CoreSupervisorOptions {
   /** Main-owned packaged resources directory, never a renderer-selected path. */
   resourcesRoot: string
   /** Absolute, main-owned directory the core persists under (--data). */
   dataRoot: string
+  /**
+   * Absolute directory the core owns the device catalog in (--catalog). This is
+   * the settings root the shell has always written `p2p-devices.json` to, so
+   * the core adopts an existing record in place; a shell that cannot resolve a
+   * settings root omits it and keeps the file itself.
+   */
+  catalogRoot?: string
   onUnavailable(error: PeerHelperError): void
 }
 
@@ -47,18 +61,28 @@ export class CoreSupervisor {
 
   static async start(options: CoreSupervisorOptions, signal: AbortSignal): Promise<CoreSupervisor> {
     if (!isAbsolute(options.dataRoot)) throw new PeerHelperError('p2p.invalid_arguments')
+    if (options.catalogRoot !== undefined && !isAbsolute(options.catalogRoot))
+      throw new PeerHelperError('p2p.invalid_arguments')
     try {
       await mkdir(options.dataRoot, { recursive: true })
+      if (options.catalogRoot !== undefined) await mkdir(options.catalogRoot, { recursive: true })
     } catch {
       throw new PeerHelperError('p2p.invalid_arguments')
     }
     const dataInfo = await lstat(options.dataRoot).catch(() => undefined)
     if (!dataInfo?.isDirectory()) throw new PeerHelperError('p2p.invalid_arguments')
+    // lstat never follows the final component, so a symlinked catalog directory
+    // is refused here exactly as the core's own Open refuses it.
+    if (options.catalogRoot !== undefined) {
+      const catalogInfo = await lstat(options.catalogRoot).catch(() => undefined)
+      if (!catalogInfo?.isDirectory() || catalogInfo.isSymbolicLink())
+        throw new PeerHelperError('p2p.invalid_arguments')
+    }
 
     const executable = await verifyHelperResource(options.resourcesRoot, 'dshkerd')
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
     const { directory, path: socketPath } = await createPeerChannel()
-    const child = spawn(executable, ['--data', options.dataRoot], {
+    const child = spawn(executable, coreArguments(options), {
       stdio: 'pipe',
       windowsHide: true,
       env: { ...process.env }

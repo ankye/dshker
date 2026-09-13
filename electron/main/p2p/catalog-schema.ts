@@ -35,7 +35,25 @@ export interface PeerCatalogRecord {
   forgottenServiceIds: string[]
 }
 
+/** One catalog plus the revision a caller echoes back on commit. */
+export interface PeerCatalogSnapshot {
+  revision: string
+  record: PeerCatalogRecord
+}
+
+/**
+ * The largest catalog record either side accepts.
+ *
+ * The whole record now crosses the private channel: the core answers
+ * `core.catalog_inspect` with one and `core.catalog_commit` carries one back, and
+ * a control frame is capped at `MAX_PEER_CONTROL_BYTES` (64 KiB). This stays
+ * below that cap by more than the frame envelope, so a record the store accepts
+ * is always deliverable instead of being refused by the frame writer.
+ */
+export const MAX_CATALOG_BYTES = 60 * 1024
+
 export function parsePeerCatalog(text: string): PeerCatalogRecord {
+  if (Buffer.byteLength(text) > MAX_CATALOG_BYTES) fail()
   const record = exactPeerObject(parsePeerJson(text), [
     'format',
     'version',

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -61,7 +61,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       return { resourcesRoot, dataRoot }
     }
 
-    function launch(meta: Launch, argvOut?: string) {
+    function launch(meta: Launch, argvOut?: string, catalogRoot?: string) {
       if (argvOut) process.env.FAKE_CORE_ARGV_OUT = argvOut
       let capture: (error: PeerHelperError) => void = () => undefined
       const unavailable = new Promise<PeerHelperError>((resolve) => {
@@ -71,6 +71,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
         {
           resourcesRoot: meta.resourcesRoot,
           dataRoot: meta.dataRoot,
+          catalogRoot,
           onUnavailable: capture
         },
         AbortSignal.timeout(30_000)
@@ -107,6 +108,41 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       }
       await supervisor.close()
       await expect(processAlive(supervisor.pid)).resolves.toBe(false)
+    })
+
+    it('passes --catalog with a directory it creates itself', async () => {
+      const meta = await harness()
+      // Deliberately absent: the settings root's registry directory is created
+      // by startup, and the supervisor must not depend on that ordering.
+      const catalogRoot = join(meta.dataRoot, 'dsh-launcher')
+      const argvOut = await mkdtemp(join(tmpdir(), 'core-argv-'))
+      const { supervisor: started } = launch(meta, argvOut, catalogRoot)
+      const supervisor = await started
+      supervisors.push(supervisor)
+      if (process.platform !== 'win32') {
+        const argv = JSON.parse(
+          String(await readFile(join(argvOut, 'argv.json'), 'utf8'))
+        ) as string[]
+        expect(argv).toEqual(['--data', meta.dataRoot, '--catalog', catalogRoot])
+      }
+      expect((await lstat(catalogRoot)).isDirectory()).toBe(true)
+      await supervisor.close()
+    })
+
+    it('refuses a catalog root that is not a directory', async () => {
+      const meta = await harness()
+      const blocker = join(meta.dataRoot, 'catalog-blocker')
+      await writeFile(blocker, 'x')
+      await expect(launch(meta, undefined, blocker).supervisor).rejects.toThrow(
+        'p2p.invalid_arguments'
+      )
+    })
+
+    it('refuses a relative catalog root', async () => {
+      const meta = await harness()
+      await expect(launch(meta, undefined, 'dsh-launcher').supervisor).rejects.toThrow(
+        'p2p.invalid_arguments'
+      )
     })
 
     it('terminates the core child on SIGTERM with no survivor', async () => {

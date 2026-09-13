@@ -23,6 +23,7 @@ import { SessionUsageReader } from './main/managed/session-usage-reader'
 import { PeerManagement } from './main/p2p/management'
 import { CoreSupervisor } from './main/core/supervisor'
 import { CoreSecrets, type CoreSecretPort } from './main/core/secrets'
+import { CoreCatalog, type CoreCatalogPort } from './main/core/catalog'
 import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
@@ -240,18 +241,26 @@ async function registerLauncherServices(
   // behaved before the core existed.
   let coreSupervisor: CoreSupervisor | undefined
   let coreSecrets: CoreSecretPort | undefined
+  let coreCatalog: CoreCatalogPort | undefined
   try {
+    // The catalog has always lived in the settings root, so the core is pointed
+    // at that exact directory and adopts an existing record in place. A settings
+    // root that cannot be resolved costs the catalog, not the whole core.
+    const settingsRoot = await managedWorkspaceService.resolveSettingsRoot().catch(() => undefined)
     coreSupervisor = await CoreSupervisor.start(
       {
         resourcesRoot: app.isPackaged
           ? process.resourcesPath
           : path.join(app.getAppPath(), 'build'),
         dataRoot: path.join(launcherRoot, 'core-data'),
+        catalogRoot:
+          settingsRoot === undefined ? undefined : path.join(settingsRoot, 'dsh-launcher'),
         onUnavailable: () => undefined
       },
       new AbortController().signal
     )
     coreSecrets = new CoreSecrets(coreSupervisor.rpc)
+    coreCatalog = new CoreCatalog(coreSupervisor.rpc)
   } catch (error) {
     console.error('DSHKer Launcher could not start its headless core.', error)
   }
@@ -259,6 +268,7 @@ async function registerLauncherServices(
     resourcesRoot: app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), 'build'),
     resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot(),
     secrets: coreSecrets,
+    catalog: coreCatalog,
     runtime: launcherHarnessService
   })
   registerIpc({
