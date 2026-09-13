@@ -86,7 +86,29 @@ func describe(channel chan peersession.State) string {
 // address, and the cycles must not accumulate listeners or goroutines — a
 // leaked gateway per reconnect would exhaust ports long before the user
 // noticed anything else.
+//
+// Both role assignments run, because the two sides are not the same code: the
+// initiator owns the loopback gateway (the address a browser holds) while the
+// responder serves over a replaceable listener. Testing only one assignment
+// would leave the other side's reconnect path unproven.
 func TestManagerRepeatedReconnectKeepsOneAddress(t *testing.T) {
+	for _, roles := range []struct {
+		name               string
+		initiator, runtime int
+	}{
+		{"initiator is the first device", 0, 1},
+		{"initiator is the second device", 1, 0},
+	} {
+		t.Run(roles.name, func(t *testing.T) {
+			reconnectCycles(t, roles.initiator, roles.runtime)
+		})
+	}
+}
+
+// reconnectCycles drives `cycles` connect/disconnect rounds with the given role
+// assignment and asserts the address and the resources survive all of them.
+func reconnectCycles(t *testing.T, initiator, runtimeOwner int) {
+	t.Helper()
 	runtimeURL, stopRuntime := startStubDSH(t)
 	defer stopRuntime()
 	var bindingMu sync.Mutex
@@ -100,7 +122,7 @@ func TestManagerRepeatedReconnectKeepsOneAddress(t *testing.T) {
 		config := f.config[i]
 		states[i] = make(chan peersession.State, 4096)
 		owner := func(context.Context, string) (runtimebridge.Binding, error) {
-			if i != 1 {
+			if i != runtimeOwner {
 				return runtimebridge.Binding{}, errors.New("p2p.unexpected_runtime_owner")
 			}
 			bindingMu.Lock()
@@ -112,7 +134,8 @@ func TestManagerRepeatedReconnectKeepsOneAddress(t *testing.T) {
 		managers[i] = manager
 		defer manager.Close()
 	}
-	pairID := f.config[0].Pin.Pair.PairID
+	pairID := f.config[initiator].Pin.Pair.PairID
+	state := managers[initiator]
 
 	const cycles = 20
 	var first string
@@ -126,7 +149,7 @@ func TestManagerRepeatedReconnectKeepsOneAddress(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
-		connected, err := managers[0].Connect(ctx, pairID, uint64(cycle))
+		connected, err := state.Connect(ctx, pairID, uint64(cycle))
 		if err != nil {
 			t.Fatalf("cycle %d connect: %v\n  A: %s\n  B: %s", cycle, err, describe(states[0]), describe(states[1]))
 		}
@@ -150,7 +173,7 @@ func TestManagerRepeatedReconnectKeepsOneAddress(t *testing.T) {
 		if err := runtimebridge.Probe(ctx, connected.URL); err != nil {
 			t.Fatalf("cycle %d probe: %v", cycle, err)
 		}
-		if err := managers[0].Disconnect(pairID); err != nil {
+		if err := state.Disconnect(pairID); err != nil {
 			t.Fatalf("cycle %d disconnect: %v", cycle, err)
 		}
 		drain(states[0])
