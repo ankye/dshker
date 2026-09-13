@@ -1,6 +1,4 @@
-import { lstat, open, readFile, rename, rm } from 'node:fs/promises'
-import nodePath from 'node:path'
-import { randomUUID } from 'node:crypto'
+import type { CoreRootsLocation, CoreRootsPort } from '../core/roots'
 import { ManagedRootError } from './errors'
 import {
   MANAGED_ROOT_REGISTRY_FORMAT,
@@ -29,68 +27,63 @@ export interface ManagedRootRegistryLocation {
   readonly nativeDshHomePath: string
 }
 
-/** Owns strict parsing and atomic persistence of the Launcher root registry. */
+/**
+ * The Launcher root registry, persisted by the core.
+ *
+ * The shell used to write this file itself. The core owns it now — the format,
+ * the version and the file name are unchanged, so an existing registry is read
+ * as it always was — and this store is the only way the shell reaches it. That
+ * makes the core load-bearing for the Launcher's own configuration, which is the
+ * point of the phase: exactly one writer, and no second implementation that can
+ * drift from the rules the core enforces.
+ */
 export class ManagedRootRegistryStore {
   readonly #location: ManagedRootRegistryLocation
+  readonly #roots: CoreRootsPort | undefined
 
-  constructor(location: ManagedRootRegistryLocation) {
+  constructor(location: ManagedRootRegistryLocation, roots?: CoreRootsPort) {
     this.#location = location
+    this.#roots = roots
   }
 
   /** Reads and validates the exact persisted registry. A missing document never becomes a default. */
   async load(): Promise<ManagedRootRegistry> {
-    let text: string
-    try {
-      text = await readFile(this.#location.filePath, 'utf8')
-    } catch (error) {
-      if (isNodeCode(error, 'ENOENT')) {
-        throw new ManagedRootError('managed.missing_registry', 'Managed root registry is missing.')
-      }
-      throw persistenceError('Unable to read the managed root registry.', error)
-    }
-    return parseManagedRootRegistry(
-      text,
-      this.#location.pathStyle,
-      this.#location.nativeDshHomePath
-    )
+    return (await this.#port()).inspect(this.#coreLocation())
   }
 
-  /** Writes one fully validated registry through an atomic replacement and readback. */
+  /**
+   * Commits one fully validated registry.
+   *
+   * The core validates the whole document again, publishes it atomically and
+   * proves the published bytes by reading them back, so this side only has to
+   * check that what came back is what it asked for.
+   */
   async save(registry: ManagedRootRegistry): Promise<void> {
-    validateManagedRootRegistry(
-      registry,
-      this.#location.pathStyle,
-      this.#location.nativeDshHomePath
-    )
-    await assertNotSymlink(this.#location.filePath)
-    const parent = nodePath.dirname(this.#location.filePath)
-    const temporaryPath = nodePath.join(
-      parent,
-      `.${nodePath.basename(this.#location.filePath)}.${randomUUID()}.tmp`
-    )
-    const serialized = `${JSON.stringify(registry, null, 2)}\n`
-
-    try {
-      const handle = await open(temporaryPath, 'wx', 0o600)
-      try {
-        await handle.writeFile(serialized, 'utf8')
-        await handle.sync()
-      } finally {
-        await handle.close()
-      }
-      await rename(temporaryPath, this.#location.filePath)
-      await syncParentDirectory(parent)
-    } catch (error) {
-      await rm(temporaryPath, { force: true }).catch(() => undefined)
-      throw persistenceError('Unable to persist the managed root registry.', error)
-    }
-
-    const reloaded = await this.load()
-    if (JSON.stringify(reloaded) !== JSON.stringify(registry)) {
+    const committed = await (await this.#port()).commit(this.#coreLocation(), registry)
+    if (JSON.stringify(committed) !== JSON.stringify(registry)) {
       throw new ManagedRootError(
         'managed.persistence_failed',
         'Managed root registry readback differs from the committed record.'
       )
+    }
+  }
+
+  /** The core is the only writer, so a shell without one has no registry at all. */
+  async #port(): Promise<CoreRootsPort> {
+    if (this.#roots === undefined) {
+      throw new ManagedRootError(
+        'managed.core_unavailable',
+        'The headless core is required to read or write the managed root registry.'
+      )
+    }
+    return this.#roots
+  }
+
+  #coreLocation(): CoreRootsLocation {
+    return {
+      filePath: this.#location.filePath,
+      nativeDshHome: this.#location.nativeDshHomePath,
+      pathStyle: this.#location.pathStyle
     }
   }
 }
@@ -107,7 +100,19 @@ export function parseManagedRootRegistry(
   } catch (error) {
     throw persistenceError('Managed root registry is not valid JSON.', error)
   }
+  return parseManagedRootRegistryValue(value, style, nativeDshHomePath)
+}
 
+/**
+ * The same validation for a document that is already decoded, which is how the
+ * core's answer is checked: a value off the private channel goes through exactly
+ * the rules the shell applied while it owned the file.
+ */
+export function parseManagedRootRegistryValue(
+  value: unknown,
+  style: ManagedPathStyle,
+  nativeDshHomePath: string
+): ManagedRootRegistry {
   const record = requireRecord(value, 'Managed root registry')
   requireExactKeys(record, ['format', 'version', 'roots', 'workspaces'], 'Managed root registry')
   if (record.format !== MANAGED_ROOT_REGISTRY_FORMAT) {
@@ -223,37 +228,8 @@ function requireExactKeys(record: JsonRecord, expected: readonly string[], subje
   }
 }
 
-async function assertNotSymlink(filePath: string): Promise<void> {
-  try {
-    if ((await lstat(filePath)).isSymbolicLink()) {
-      throw new ManagedRootError(
-        'managed.persistence_failed',
-        'Managed root registry path must not be a symbolic link.'
-      )
-    }
-  } catch (error) {
-    if (isNodeCode(error, 'ENOENT')) return
-    if (error instanceof ManagedRootError) throw error
-    throw persistenceError('Unable to inspect the managed root registry path.', error)
-  }
-}
-
-async function syncParentDirectory(parent: string): Promise<void> {
-  if (process.platform === 'win32') return
-  const handle = await open(parent, 'r')
-  try {
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-}
-
 function persistenceError(message: string, cause: unknown): ManagedRootError {
   return new ManagedRootError('managed.persistence_failed', message, {
     cause: cause instanceof Error ? cause.name : 'unknown'
   })
-}
-
-function isNodeCode(value: unknown, expected: string): boolean {
-  return Boolean(value && typeof value === 'object' && 'code' in value && value.code === expected)
 }

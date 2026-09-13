@@ -24,6 +24,7 @@ import { PeerManagement } from './main/p2p/management'
 import { CoreSupervisor } from './main/core/supervisor'
 import { CoreSecrets, type CoreSecretPort } from './main/core/secrets'
 import { CoreCatalog, type CoreCatalogPort } from './main/core/catalog'
+import { CoreRoots, type CoreRootsPort } from './main/core/roots'
 import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
@@ -194,8 +195,16 @@ async function registerLauncherServices(
   readonly peerManagement: PeerManagement
   readonly coreSupervisor: CoreSupervisor | undefined
 }> {
-  const managedWorkspaceService = await createManagedWorkspaceService(launcherRoot, locatorFilePath)
-  await managedWorkspaceService.initializeDefaultRoots()
+  // The core is started before the roots are initialized, because the core owns
+  // the registry: first run registers its roots through it. The getter keeps the
+  // ordering explicit rather than handing the service a port that does not
+  // exist yet.
+  let coreRoots: CoreRootsPort | undefined
+  const managedWorkspaceService = await createManagedWorkspaceService(
+    launcherRoot,
+    locatorFilePath,
+    () => coreRoots
+  )
   const runtimeBrowserController = new RuntimeBrowserController(
     new RuntimeBrowserPreferencesStore({
       resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot()
@@ -243,10 +252,13 @@ async function registerLauncherServices(
   let coreSecrets: CoreSecretPort | undefined
   let coreCatalog: CoreCatalogPort | undefined
   try {
-    // The catalog has always lived in the settings root, so the core is pointed
-    // at that exact directory and adopts an existing record in place. A settings
-    // root that cannot be resolved costs the catalog, not the whole core.
-    const settingsRoot = await managedWorkspaceService.resolveSettingsRoot().catch(() => undefined)
+    // The registry is read through the core, so the core cannot be started from
+    // it. The bootstrap locator is the shell's own file and names the Settings
+    // root; before any setup it is the default the first run would register. The
+    // catalog has always lived in that same directory, so pointing the core at
+    // it adopts an existing record in place, and a settings root that cannot be
+    // resolved costs the catalog, not the whole core.
+    const settingsRoot = await managedWorkspaceService.locatorSettingsRoot().catch(() => undefined)
     coreSupervisor = await CoreSupervisor.start(
       {
         resourcesRoot: app.isPackaged
@@ -261,9 +273,14 @@ async function registerLauncherServices(
     )
     coreSecrets = new CoreSecrets(coreSupervisor.rpc)
     coreCatalog = new CoreCatalog(coreSupervisor.rpc)
+    coreRoots = new CoreRoots(coreSupervisor.rpc)
   } catch (error) {
     console.error('DSHKer Launcher could not start its headless core.', error)
   }
+  // First run creates the product's default roots and registers them through the
+  // core. An existing install is re-read the same way, so there is exactly one
+  // writer and one validator for this document.
+  await managedWorkspaceService.initializeDefaultRoots()
   const peerManagement = new PeerManagement({
     // One process answers the peer table now: the same core the catalog and the
     // secret store use. A shell that could not start a core has no transport,
@@ -375,7 +392,8 @@ async function createBundledRepository(service: LauncherHarnessService): Promise
 
 async function createManagedWorkspaceService(
   launcherRoot: string,
-  locatorFilePath: string
+  locatorFilePath: string,
+  roots: () => CoreRootsPort | undefined
 ): Promise<ManagedWorkspaceService> {
   const pathStyle: ManagedPathStyle = process.platform === 'win32' ? 'win32' : 'posix'
   const nativeDshHomePath = await resolveNativeDshHomePath()
@@ -396,7 +414,8 @@ async function createManagedWorkspaceService(
       plugins: path.join(launcherRoot, 'plugins'),
       presets: path.join(launcherRoot, 'presets'),
       settings: path.join(launcherRoot, 'settings')
-    }
+    },
+    roots
   })
 }
 

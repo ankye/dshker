@@ -9,6 +9,11 @@
   before; what changes is that a machine whose core cannot start reports P2P as
   unavailable rather than quietly running a second process that no longer
   exists. The preflight check now verifies the core binary the app actually uses.
+- The core also owns the Launcher's **own root registry** now, so there is one
+  writer for the file that says where your Harness, plugins, presets and settings
+  live. The file keeps its format and location, an existing install is read
+  exactly as before, and a machine whose core cannot start reports its
+  configuration as unavailable instead of writing it a second way.
 
 ## 0.1.30 — 2026-09-14
 

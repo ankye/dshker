@@ -39,6 +39,7 @@ import {
   type ManagedRootRegistry,
   type ManagedWorkspaceBinding
 } from './model'
+import type { CoreRootsPort } from '../core/roots'
 import { ManagedRootRegistryStore } from './registry'
 import type { ManagedPathStyle } from './validation'
 import {
@@ -64,6 +65,16 @@ export interface ManagedWorkspaceServiceOptions {
   readonly nativeDshHomePath: string
   /** Launcher-owned roots created on first launch without asking the user to configure storage. */
   readonly defaultRootPaths: Readonly<Record<ManagedRootKind, string>>
+  /**
+   * The core's registry port.
+   *
+   * Resolved lazily rather than injected, because the core is started from the
+   * bootstrap locator before the registry can be read: the locator is the
+   * shell's own file, and everything below the Settings root belongs to the
+   * core. A shell without a core has no registry at all, which surfaces as
+   * `managed.core_unavailable` rather than as a second implementation.
+   */
+  readonly roots?: () => CoreRootsPort | undefined
 }
 
 /** One registered workspace together with its resolved Launcher-owned namespace directories. */
@@ -81,6 +92,7 @@ export class ManagedWorkspaceService {
   readonly #pathStyle: ManagedPathStyle
   readonly #nativeDshHomePath: string
   readonly #defaultRootPaths: Readonly<Record<ManagedRootKind, string>>
+  readonly #roots: () => CoreRootsPort | undefined
   #mutationActive = false
 
   constructor(options: ManagedWorkspaceServiceOptions) {
@@ -90,6 +102,24 @@ export class ManagedWorkspaceService {
     this.#pathStyle = options.pathStyle
     this.#nativeDshHomePath = options.nativeDshHomePath
     this.#defaultRootPaths = options.defaultRootPaths
+    this.#roots = options.roots ?? (() => undefined)
+  }
+
+  /**
+   * The Settings root the core must be pointed at before the registry exists.
+   *
+   * The registry is read through the core, so the core cannot be started from
+   * it. The bootstrap locator is the shell's own file and names the Settings
+   * root it registered; before any setup this is the default the first run would
+   * register, never a substitute for a registered root.
+   */
+  async locatorSettingsRoot(): Promise<string> {
+    const locator = await this.#locator.load().catch((error: unknown) => {
+      if (error instanceof ManagedRootError && error.code === 'managed.missing_bootstrap_locator')
+        return undefined
+      throw error
+    })
+    return locator?.settingsRootCanonicalPath ?? this.#defaultRootPaths.settings
   }
 
   /** Projects current persistence health without creating a root or guessing a path. */
@@ -174,11 +204,14 @@ export class ManagedWorkspaceService {
         settingsRoot.canonicalPath,
         this.#pathStyle
       )
-      const registryStore = new ManagedRootRegistryStore({
-        filePath: managedRootRegistryFilePath(settingsRoot.canonicalPath, this.#pathStyle),
-        pathStyle: this.#pathStyle,
-        nativeDshHomePath: this.#nativeDshHomePath
-      })
+      const registryStore = new ManagedRootRegistryStore(
+        {
+          filePath: managedRootRegistryFilePath(settingsRoot.canonicalPath, this.#pathStyle),
+          pathStyle: this.#pathStyle,
+          nativeDshHomePath: this.#nativeDshHomePath
+        },
+        this.#roots()
+      )
       const catalogStore = new ManagedInstallationCatalogStore({
         filePath: managedInstallationCatalogFilePath(settingsRoot.canonicalPath, this.#pathStyle),
         pathStyle: this.#pathStyle
@@ -373,11 +406,14 @@ export class ManagedWorkspaceService {
         roots,
         workspaces: []
       }
-      const registryStore = new ManagedRootRegistryStore({
-        filePath: managedRootRegistryFilePath(settingsRoot.canonicalPath, this.#pathStyle),
-        pathStyle: this.#pathStyle,
-        nativeDshHomePath: this.#nativeDshHomePath
-      })
+      const registryStore = new ManagedRootRegistryStore(
+        {
+          filePath: managedRootRegistryFilePath(settingsRoot.canonicalPath, this.#pathStyle),
+          pathStyle: this.#pathStyle,
+          nativeDshHomePath: this.#nativeDshHomePath
+        },
+        this.#roots()
+      )
       const catalogStore = new ManagedInstallationCatalogStore({
         filePath: managedInstallationCatalogFilePath(settingsRoot.canonicalPath, this.#pathStyle),
         pathStyle: this.#pathStyle
@@ -402,11 +438,14 @@ export class ManagedWorkspaceService {
   }> {
     const locator = await this.#locator.load()
     await assertRegisteredDirectory(locator.settingsRootCanonicalPath, this.#pathStyle)
-    const store = new ManagedRootRegistryStore({
-      filePath: managedRootRegistryFilePath(locator.settingsRootCanonicalPath, this.#pathStyle),
-      pathStyle: this.#pathStyle,
-      nativeDshHomePath: this.#nativeDshHomePath
-    })
+    const store = new ManagedRootRegistryStore(
+      {
+        filePath: managedRootRegistryFilePath(locator.settingsRootCanonicalPath, this.#pathStyle),
+        pathStyle: this.#pathStyle,
+        nativeDshHomePath: this.#nativeDshHomePath
+      },
+      this.#roots()
+    )
     const registry = await store.load()
     const catalogStore = new ManagedInstallationCatalogStore({
       filePath: managedInstallationCatalogFilePath(

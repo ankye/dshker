@@ -2,7 +2,10 @@ import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promi
 import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { CoreRootsLocation, CoreRootsPort } from '../core/roots'
 import { ManagedBootstrapLocatorStore } from './bootstrap-locator'
+import type { ManagedRootRegistry } from './model'
+import { parseManagedRootRegistry } from './registry'
 import {
   DirectorySelectionCapabilities,
   type DirectoryPicker,
@@ -12,6 +15,32 @@ import { ManagedRootError } from './errors'
 import { ManagedWorkspaceService } from './service'
 
 const temporaryDirectories: string[] = []
+
+/**
+ * Stands in for the core's registry: the same file, the same bytes and the same
+ * refusals, without an RPC. The real owner is covered by the Go package and by
+ * integration/roots_registry_test.go; what this suite has to show is that the
+ * shell routes persistence through it and keeps its own validation.
+ */
+function fixtureRoots(): CoreRootsPort {
+  return {
+    async inspect(location: CoreRootsLocation): Promise<ManagedRootRegistry> {
+      const text = await readFile(location.filePath, 'utf8').catch(() => undefined)
+      if (text === undefined) {
+        throw new ManagedRootError('managed.missing_registry', 'Managed root registry is missing.')
+      }
+      return parseManagedRootRegistry(text, location.pathStyle, location.nativeDshHome)
+    },
+    async commit(
+      location: CoreRootsLocation,
+      registry: ManagedRootRegistry
+    ): Promise<ManagedRootRegistry> {
+      await mkdir(nodePath.dirname(location.filePath), { recursive: true })
+      await writeFile(location.filePath, `${JSON.stringify(registry, null, 2)}\n`, 'utf8')
+      return registry
+    }
+  }
+}
 
 afterEach(async () => {
   await Promise.all(
@@ -62,7 +91,9 @@ async function fixture(): Promise<{
   )
   // Native temp paths must be validated by the matching platform spelling.
   const pathStyle = process.platform === 'win32' ? ('win32' as const) : ('posix' as const)
+  const coreRoots = fixtureRoots()
   const service = new ManagedWorkspaceService({
+    roots: () => coreRoots,
     locator: new ManagedBootstrapLocatorStore({
       filePath: nodePath.join(base, 'platform-state', 'bootstrap.json'),
       pathStyle,

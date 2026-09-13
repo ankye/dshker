@@ -91,6 +91,7 @@ export type ManagedOperationErrorCode =
   | 'managed.invalid_record'
   | 'managed.unsupported_version'
   | 'managed.missing_registry'
+  | 'managed.core_unavailable'
   | 'managed.missing_bootstrap_locator'
   | 'managed.invalid_bootstrap_locator'
   | 'managed.root_path_invalid'

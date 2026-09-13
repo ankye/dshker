@@ -1,7 +1,6 @@
-import { mkdtemp, mkdir, readFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { describe, expect, it } from 'vitest'
+import type { CoreRootsLocation, CoreRootsPort } from '../core/roots'
 import { ManagedRootError } from './errors'
 import {
   MANAGED_ROOT_REGISTRY_FORMAT,
@@ -42,26 +41,61 @@ function registryAt(base: string): ManagedRootRegistry {
   }
 }
 
-describe('managed root registry', () => {
-  it('writes a complete registry atomically and reads back the exact record', async () => {
-    const base = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-roots-'))
-    const settings = nodePath.join(base, 'settings')
-    await mkdir(settings)
-    const registry = registryAt(base)
-    const store = new ManagedRootRegistryStore({
-      filePath: nodePath.join(settings, 'registry.json'),
-      // The fixture uses native temp paths, so the platform's own spelling
-      // must validate them.
-      pathStyle: process.platform === 'win32' ? ('win32' as const) : ('posix' as const),
-      nativeDshHomePath: nodePath.join(base, 'native-dsh-home')
-    })
+const location = {
+  filePath: '/managed/settings/dsh-launcher/managed-root-registry.json',
+  nativeDshHomePath: '/native/.dsh',
+  pathStyle: 'posix' as const
+}
 
-    await store.save(registry)
+/** What the store hands the core: the same place, named the core's way. */
+const expected: CoreRootsLocation = {
+  filePath: location.filePath,
+  nativeDshHome: location.nativeDshHomePath,
+  pathStyle: location.pathStyle
+}
+
+describe('managed root registry', () => {
+  it('routes every read and write to the core, which owns the file', async () => {
+    const registry = registryAt('/managed')
+    const calls: string[] = []
+    const port: CoreRootsPort = {
+      async inspect(received) {
+        calls.push(`inspect ${received.filePath}`)
+        expect(received).toEqual(expected)
+        return registry
+      },
+      async commit(received, value) {
+        calls.push(`commit ${received.filePath}`)
+        expect(value).toEqual(registry)
+        return value
+      }
+    }
+    const store = new ManagedRootRegistryStore(location, port)
 
     await expect(store.load()).resolves.toEqual(registry)
-    await expect(readFile(nodePath.join(settings, 'registry.json'), 'utf8')).resolves.toContain(
-      MANAGED_ROOT_REGISTRY_FORMAT
-    )
+    await expect(store.save(registry)).resolves.toBeUndefined()
+    expect(calls).toEqual([`inspect ${expected.filePath}`, `commit ${expected.filePath}`])
+  })
+
+  it('refuses to read or write without a core instead of falling back to a second writer', async () => {
+    const store = new ManagedRootRegistryStore(location)
+    await expect(store.load()).rejects.toMatchObject({ code: 'managed.core_unavailable' })
+    await expect(store.save(registryAt('/managed'))).rejects.toMatchObject({
+      code: 'managed.core_unavailable'
+    })
+  })
+
+  it('reports a core that answered with a different document rather than claiming success', async () => {
+    const registry = registryAt('/managed')
+    const store = new ManagedRootRegistryStore(location, {
+      async inspect() {
+        return registry
+      },
+      async commit() {
+        return { ...registry, roots: registry.roots.slice(0, 3) }
+      }
+    })
+    await expect(store.save(registry)).rejects.toMatchObject({ code: 'managed.persistence_failed' })
   })
 
   it('rejects an unknown persisted field instead of discarding it', () => {

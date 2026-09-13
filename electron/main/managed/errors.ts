@@ -3,6 +3,8 @@ export type ManagedRootErrorCode =
   | 'managed.invalid_record'
   | 'managed.unsupported_version'
   | 'managed.missing_registry'
+  /** The headless core is required to read or write the Launcher's own state. */
+  | 'managed.core_unavailable'
   | 'managed.missing_bootstrap_locator'
   | 'managed.invalid_bootstrap_locator'
   | 'managed.root_path_invalid'
