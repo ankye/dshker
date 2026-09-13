@@ -4,6 +4,7 @@ package helper
 import (
 	"context"
 	"crypto/ed25519"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -23,6 +24,7 @@ type Host struct {
 	mu       sync.Mutex
 	main     Main
 	accounts map[string]*account
+	roots    *x509.CertPool
 	closed   bool
 }
 type account struct {
@@ -41,6 +43,17 @@ type scopedRequest struct {
 
 func New(ctx context.Context) *Host   { return &Host{ctx: ctx, accounts: make(map[string]*account)} }
 func (host *Host) BindMain(main Main) { host.mu.Lock(); host.main = main; host.mu.Unlock() }
+
+// SetRoots replaces the trust anchors for the coordinator HTTPS connection. A
+// nil pool keeps system roots, which is what the shell relies on: it passes no
+// anchors, so a machine that does not already trust the server refuses it
+// exactly as documented. The pool is however the caller built it, and it never
+// disables verification.
+func (host *Host) SetRoots(roots *x509.CertPool) {
+	host.mu.Lock()
+	host.roots = roots
+	host.mu.Unlock()
+}
 func (host *Host) Close() {
 	host.mu.Lock()
 	host.closed = true
@@ -132,7 +145,10 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 	if protocol.Decode(payload, &request) != nil || (len(request.PinnedKey) != 0 && len(request.PinnedKey) != 32) {
 		return nil, errors.New("p2p.invalid_request")
 	}
-	base, err := controlplane.New(request.Endpoints, nil)
+	host.mu.Lock()
+	roots := host.roots
+	host.mu.Unlock()
+	base, err := controlplane.New(request.Endpoints, roots)
 	if err != nil {
 		return nil, err
 	}

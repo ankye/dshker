@@ -5,12 +5,13 @@ import (
 	"testing"
 )
 
-// Both roots are optional and, when given, must be absolute directories. The
-// shell passes them; a typo must fail the boot rather than start a core with
-// the wrong state.
+// Every argument is optional and, when given, must be an absolute path. The
+// shell passes the two roots; a typo must fail the boot rather than start a core
+// with the wrong state.
 func TestParseArgumentsAcceptsAbsoluteRoots(t *testing.T) {
 	data := filepath.Join(t.TempDir(), "data")
 	catalogRoot := filepath.Join(t.TempDir(), "catalog")
+	roots := filepath.Join(t.TempDir(), "ca.pem")
 	cases := []struct {
 		name string
 		args []string
@@ -21,6 +22,7 @@ func TestParseArgumentsAcceptsAbsoluteRoots(t *testing.T) {
 		{"catalog only", []string{"--catalog", catalogRoot}, options{catalogRoot: catalogRoot}},
 		{"both", []string{"--data", data, "--catalog", catalogRoot}, options{dataRoot: data, catalogRoot: catalogRoot}},
 		{"both in the other order", []string{"--catalog", catalogRoot, "--data", data}, options{dataRoot: data, catalogRoot: catalogRoot}},
+		{"all three", []string{"--roots", roots, "--catalog", catalogRoot, "--data", data}, options{dataRoot: data, catalogRoot: catalogRoot, rootsPath: roots}},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -44,6 +46,8 @@ func TestParseArgumentsRefusesMalformedCommands(t *testing.T) {
 		"an unknown flag":         {"--other", absolute},
 		"a repeated --data":       {"--data", absolute, "--data", absolute},
 		"a repeated --catalog":    {"--catalog", absolute, "--catalog", absolute},
+		"a repeated --roots":      {"--roots", absolute, "--roots", absolute},
+		"a relative --roots":      {"--roots", "ca.pem"},
 		"a trailing flag":         {"--data", absolute, "--catalog"},
 		"a bare positional value": {absolute, absolute},
 		"a value before its flag": {absolute, "--data"},

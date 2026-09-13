@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,10 +52,11 @@ func main() {
 type options struct {
 	dataRoot    string
 	catalogRoot string
+	rootsPath   string
 }
 
-// parseArguments accepts --data <absolute directory> and --catalog <absolute
-// directory>, in any order, each at most once.
+// parseArguments accepts --data <absolute directory>, --catalog <absolute
+// directory> and --roots <absolute PEM file>, in any order, each at most once.
 func parseArguments(args []string) (options, error) {
 	var parsed options
 	for index := 0; index < len(args); index += 2 {
@@ -76,11 +78,38 @@ func parseArguments(args []string) (options, error) {
 				return options{}, errors.New("p2p.invalid_arguments")
 			}
 			parsed.catalogRoot = value
+		case "--roots":
+			if parsed.rootsPath != "" {
+				return options{}, errors.New("p2p.invalid_arguments")
+			}
+			parsed.rootsPath = value
 		default:
 			return options{}, errors.New("p2p.invalid_arguments")
 		}
 	}
 	return parsed, nil
+}
+
+// loadRoots reads one PEM bundle of CA certificates and returns the machine's
+// store with those anchors added, so naming a private CA never removes the
+// public ones. An unreadable bundle, or one holding no certificate at all, is
+// refused rather than silently falling back to the store alone: the caller asked
+// for these anchors specifically.
+func loadRoots(path string) (*x509.CertPool, error) {
+	pem, err := os.ReadFile(path)
+	if err != nil {
+		return nil, errors.New("p2p.invalid_arguments")
+	}
+	roots, err := x509.SystemCertPool()
+	if err != nil || roots == nil {
+		// A store that cannot be read is not a reason to refuse the anchors the
+		// caller did name; they are still verified against.
+		roots = x509.NewCertPool()
+	}
+	if !roots.AppendCertsFromPEM(pem) {
+		return nil, errors.New("p2p.invalid_arguments")
+	}
+	return roots, nil
 }
 
 func run(parsed options) error {
@@ -109,6 +138,17 @@ func run(parsed options) error {
 		return err
 	}
 	host := helper.New(ctx)
+	// Explicit trust anchors for the coordinator, added to the machine's store.
+	// The shell passes none, so the app keeps refusing a server this machine does
+	// not already trust; a headless host that must reach a coordinator with a
+	// private CA names it here instead of modifying the OS trust store.
+	if parsed.rootsPath != "" {
+		roots, err := loadRoots(parsed.rootsPath)
+		if err != nil {
+			return err
+		}
+		host.SetRoots(roots)
+	}
 	server.Peer = host
 	// The host must be bound before any request is answered: device.restore
 	// installs the callback the host uses to ask the shell for a runtime owner

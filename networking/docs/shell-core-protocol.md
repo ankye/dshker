@@ -226,7 +226,26 @@ crashed shell, the core and any `dshker-peer` it started must exit with it
 detaches, never writes to the shell's terminal, and never listens on anything
 other than the private endpoint above.
 
-## 9. Conformance
+## 9. Core arguments
+
+The core takes its state as explicit absolute paths and nothing else. The shell
+passes the two roots; a typo fails the boot rather than starting a core with the
+wrong state, and every argument is accepted at most once in any order.
+
+| argument          | meaning                                                                                                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--data <dir>`    | main-owned directory the core persists under; the platform secret store is rooted there                                                     |
+| `--catalog <dir>` | directory the core owns the device catalog in. It must already exist, and a core without it refuses the catalog methods instead of guessing |
+| `--roots <PEM>`   | extra CA certificates for the coordinator HTTPS connection, on top of the system store                                                      |
+
+`--roots` never disables verification and never weakens it: it names anchors
+the operator chose, the same act as installing them in the OS store, and it is
+**not** passed by the shell. The product rule stays as documented in the
+launcher: a machine that does not already trust the server refuses it, and the
+fix is on the server. The flag exists for the headless host of P5 and for the
+test suite, which runs a coordinator on a private CA.
+
+## 10. Conformance
 
 `internal/localrpc/conformance_test.go` drives a fake parent and a fake core
 through bootstrap, one successful call, one refusal, a foreign bootstrap version,
