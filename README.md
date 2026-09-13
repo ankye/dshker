@@ -32,7 +32,7 @@ Keep your DSH machines together without exposing DSH Web to the network. The cur
 
 - **Computer management:** add a display name, host, SSH port and user; edit saved connections or remove computers you no longer need. Disconnect before changing connection details.
 - **Test before connecting:** verify SSH authentication, the remote DSHKer handshake and DSH access. A successful test is separate from an active connection.
-- **Visible status:** green indicates readiness or a passed test; red indicates failure, with text describing the state. Connect and disconnect explicitly.
+- **Visible status:** green indicates readiness or a passed test; red indicates failure, with text describing the state. Paired computers connect and reconnect on their own; an explicit disconnect is available when you want one.
 - **On-demand tabs:** one Local tab is always available; click **+** in Run, then choose a computer from the floating **LAN computers** or **SSH connections** list to create its non-closable tab. Ready workspaces are listed first; unavailable ones remain visible but disabled at the bottom. Disconnecting does not remove an opened computer tab.
 - **No manual DSH token copying:** the authenticated connection obtains the DSH Web credential. SSH authentication is still required; the app neither asks for SSH passwords nor transfers private keys.
 
@@ -75,7 +75,23 @@ flow remains for pairing a device that is not in one of your networks.
 machines — a Mac driving the DSH Web runtime on a Windows host through the
 P2P stack, over the live coordination server — has been verified end to end:
 the connection reported its selected path, opened the local gateway URL, and
-loaded the remote DSH Web page through the tunnel.
+loaded the remote DSH Web page through the tunnel. Repeated reconnects have been
+stress-tested in both directions (each machine as the initiator and as the
+runtime host) with the address proven stable across every cycle.
+
+Paired computers are connected **without being asked**. Connecting happens at
+startup for every active pair, a dropped connection is retried on its own —
+immediately at first, then with a widening delay — and waking the machine or
+regaining a network retries at once. Only losing authorization (revoking the
+pair, or deleting its network) stops the attempts. Switching between tabs never
+interrupts a connection: it belongs to the pair, not to the view.
+
+A remote workspace keeps the **same address** across all of that. The gateway
+that serves a paired computer's DSH Web belongs to the pair rather than to one
+connection, so a browser tab left open on it survives a drop, a network change,
+a wake from sleep and even a restart of the other computer's DSH, and recovers by
+itself. While no session is attached the address still answers but proxies
+nothing, so nothing stale is reachable.
 
 Two limits worth knowing before you plan around it: when no direct UDP path
 can be established, the connection falls back to your own deployment server as

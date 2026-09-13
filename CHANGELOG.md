@@ -1,41 +1,39 @@
 # Changelog
 
-## Unreleased
+## 0.1.30 — 2026-09-14
 
-- A reconnecting remote workspace no longer fails the moment it comes back. A
-  message that arrived in the instant between the connection opening and its
-  identity being checked used to tear the whole connection down, which made roughly
-  one reconnect in ten die immediately with “no direct path” and then quietly come
-  back on a later attempt. The check now waits for itself, so a re-established
-  connection stays up; bytes are still only accepted once the peer's identity is
-  verified.
-
+- Paired computers are now connected **without being asked**, and stay that way.
+  Connecting happens at startup for every active pair, a dropped connection is
+  retried on its own (immediately at first, then with a widening delay), and waking
+  the machine or regaining a network retries at once. Only losing authorization
+  stops the attempts, and the refusal is kept so the reason stays visible. Switching
+  between tabs never interrupts a connection: it belongs to the pair, not the view.
 - A remote workspace keeps **the same address** when the connection drops and comes
-  back. The gateway that serves a paired computer's DSH Web used to be created per
-  connection, so every reconnect moved it to a new port and any browser tab left
-  open on the old address went blank. The gateway now belongs to the pair: the
-  address survives a drop, a network change, a wake from sleep and even a restart of
-  the other computer's DSH, and a tab recovers on its own. Only revoking the pair, or
-  deleting its network, retires the address.
+  back. The gateway used to be created per connection, so every reconnect moved it to
+  a new port and any browser tab left open on the old address went blank. It now
+  belongs to the pair: the address survives a drop, a network change, a wake from
+  sleep and even a restart of the other computer's DSH, and a tab recovers on its
+  own. While no session is attached it still answers but proxies nothing. Only
+  revoking the pair, or deleting its network, retires the address.
 - A connection is no longer torn down by a brief interruption. WebRTC reports
   `disconnected` for a few lost packets, a changed network or a machine waking up and
   normally recovers within seconds; treating that as a failure meant every hiccup cost
   a fresh hole punch. A lost path is now given 20 seconds to recover, and a peer that
   stays away is still reported, with its reason, once that window passes.
-- Paired computers are now connected **without being asked**: connecting happens at
-  startup for every active pair, a dropped connection is retried immediately and then
-  with a widening delay, waking the machine retries at once, and only losing
-  authorization stops the attempts (the refusal is kept so the reason stays visible).
-
-- Your paired device credential now lives in the **native secret store behind
-  the headless core** (macOS Keychain, Windows DPAPI) instead of an
-  Electron-encrypted file. An existing credential from a previous version
-  migrates itself once on first launch and keeps working; a core that cannot
-  start falls back to the previous behavior instead of failing the app.
-- Fixed a data-loss defect found during that migration: the macOS Keychain
-  writer silently truncated any secret longer than 128 bytes and corrupted
-  binary values. Secrets are now encoded and stored in chunks; no released
-  version was affected (the previous releases never used this path).
+- A reconnecting remote workspace no longer fails the moment it comes back. A message
+  arriving in the instant between the connection opening and its identity being
+  checked used to tear the whole connection down, which made roughly one reconnect in
+  ten die immediately with “no direct path” and then quietly come back on a later
+  attempt. The check now waits for itself; bytes are still only accepted once the
+  peer's identity is verified.
+- Your paired device credential now lives in the **native secret store behind the
+  headless core** (macOS Keychain, Windows DPAPI) instead of an Electron-encrypted
+  file. An existing credential from a previous version migrates itself once on first
+  launch and keeps working; a core that cannot start falls back to the previous
+  behavior instead of failing the app.
+- Fixed a data-loss defect found during that migration: the macOS Keychain writer
+  silently truncated any secret longer than 128 bytes and corrupted binary values.
+  Secrets are now encoded and stored in chunks; no released version was affected.
 
 ## 0.1.29 — 2026-09-12
 
