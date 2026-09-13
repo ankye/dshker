@@ -28,9 +28,10 @@
   - Scoped 2026-09-12 from an inventory of the tree, so the phase runs in increments instead of one sweep. What the shell still owns is narrower than the task assumed: every coordinator call already runs in Go (`internal/helper` serves the whole `device.*`, `networks.*`, `pairs.*`, `user.*` table, and `accounts.ts`, `pairing.ts` and `enrollment.ts` only forward over the helper RPC). The genuinely Electron-owned state is the on-disk device catalog (`catalog.ts`, the module's single `writeFile`, with `catalog-schema.ts` and `catalog-transition.ts`) plus the pending-enrollment and user-session records 3.5 deliberately left on the legacy path.
     - [x] 3.6a Add a Go catalog package owning `p2p-devices.json` and `p2p-enabled.json`: unchanged on-disk format and version, sha256-of-bytes revision, explicit first-enable marker, no missing-file reset, atomic publish, and the rules of `catalog-transition.ts`. Only `internal/secret/store_windows.go` persists files in Go today, so the atomic-write helper is new.
       - Landed 2026-09-14: `internal/catalog` with `record.go` (strict parse, certificate and endpoint validation), `store.go` (Open/Inspect/Enable/Commit/RemoveService, atomic publish with a Windows replace fallback, sha256-of-bytes revision, explicit first-enable marker) and `transition.go` (`AssertTransition`). 53 test cases cover the wire format against the field names `catalog.ts` writes, every rejected mutation, the enable/inspect lifecycle, revision identity, conflict detection, the two-step forget-then-remove ordering the transition rules require, and the tolerant removal path for a record that no longer passes strict validation. Green on macOS and Windows, including `-race`.
-      - Note for 3.6b: the shell side is not switched over yet, so nothing reads this package in production. It is committed on its own so the next increment starts from a tested baseline.
-    - [ ] 3.6b Serve the catalog behind the published methods and route `PeerCatalog` through the core the way 3.5 routed the credential: core first, one-shot migration of an existing file, no divergent writers.
-      - Core half landed 2026-09-14: `core.catalog_inspect`, `core.catalog_enable`, `core.catalog_commit` and `core.catalog_remove_service` are published and answered, and `dshkerd --catalog <absolute directory>` opens the store at boot beside `--data`. The answer reuses the record's wire shape and the same sha256-of-bytes revision, a never-enabled directory answers `enabled:false`, and a core without a catalog directory refuses these methods instead of reporting an empty catalog. 7 adapter tests, 16 argument-parser cases and a real-daemon round trip in `integration` cover it; the protocol document's `core` row was stale and now lists every core method. **Shell half outstanding**: `PeerCatalog` still reads and writes the file itself, so the routing, the one-shot migration and the removal of the shell's writers remain.
+      - Note for 3.6b: committed on its own so the next increment starts from a tested baseline. The shell half below now routes `PeerCatalog` here, so this package is what reads and writes `p2p-devices.json` in production; the shell's own copy of the same format survives only as the degraded path.
+    - [x] 3.6b Serve the catalog behind the published methods and route `PeerCatalog` through the core the way 3.5 routed the credential: core first, one-shot migration of an existing file, no divergent writers.
+      - Core half landed 2026-09-14: `core.catalog_inspect`, `core.catalog_enable`, `core.catalog_commit` and `core.catalog_remove_service` are published and answered, and `dshkerd --catalog <absolute directory>` opens the store at boot beside `--data`. The answer reuses the record's wire shape and the same sha256-of-bytes revision, a never-enabled directory answers `enabled:false`, and a core without a catalog directory refuses these methods instead of reporting an empty catalog. 7 adapter tests, 16 argument-parser cases and a real-daemon round trip in `integration` cover it; the protocol document's `core` row was stale and now lists every core method.
+      - Shell half landed 2026-09-14: `CoreSupervisor` starts `dshkerd` with `--catalog <settings root>/dsh-launcher` beside `--data`, `electron/main/core/catalog.ts` is the main-only client for the four methods, and `PeerCatalog` consults it first for `inspect`, `enable`, `commit` and `removeService`. Because the core opens the exact directory the shell wrote, the migration is the handoff itself: an existing `p2p-devices.json` is adopted in place with its catalog id and its sha256-of-bytes revision unchanged, and no copy step exists that could diverge or fail halfway. A shell that starts no core, or a core built before these methods, latches back onto its own file for the rest of the process; a core that is merely unreachable does not, so there is never a second writer while one is alive. Found and fixed while verifying: a whole record now travels in one frame, so `catalog.MaxRecordBytes` and `MAX_CATALOG_BYTES` moved to 60 KiB under the 64 KiB frame cap and `internal/core/catalog_frame_test.go` pins the relationship — at the old 64 KiB cap the frame writer drops the answer and the shell waits out a 90 s timeout. 10 client cases, 9 routing cases, 2 cases against the real `dshkerd` and the new supervisor argv cases cover adoption, the revoke/remove round trip, a core restart and every fallback. The shell's own writer stays only as the degraded path and goes with the rest of the Electron writers in 7.1.
     - 3.6c Move the pending-enrollment and user-session records onto the same port, retiring the legacy-only paths left by 3.5.
     - 3.6d Move the connection state machine (`connections.ts`, `runtime-host.ts` admission), delete the Electron writers, and port or replace the affected cases across the 22 `electron/main/p2p/*.test.ts` files (4409 lines).
 - [ ] 3.7 Owner: core. Depends: 3.6. Answer `runtime.connect`, `runtime.invalidate`, `remote.roots`, and `remote.directory` inside the core; verify a peer connection completes with no Electron process running.
@@ -93,6 +94,29 @@
   without a build tag, so a whole-repo `go test ./...` was impossible on
   macOS. The link helper is now split across `directory_link_windows_test.go`
   and `directory_link_nonwindows_test.go`.
+- 3.6b shell half (2026-09-14): the catalog is routed through the core.
+  `CoreSupervisor` passes `--catalog <settings root>/dsh-launcher` — the exact
+  directory the shell wrote — so an existing record is adopted in place with its
+  catalog id and revision unchanged, and `PeerCatalog` stops writing the file
+  whenever a core serves. A core that cannot serve (absent, or built before the
+  methods) latches the shell back onto the file; a core that is merely
+  unreachable does not, which is what keeps a single writer. macOS: type-check,
+  format, architecture and the full unit suite (153 files, 1263 tests) pass, and
+  so does the Go suite including `integration` (262s). Windows, against a
+  cross-built real `dshkerd.exe`: the full unit suite passes (152 files, 1251
+  tests) as does `supervisor.test.ts` with `DSHKER_CORE_BINARY`, the catalog
+  adoption and restart cases included; every Go unit package, `cmd/dshkerd` and
+  12 of the 14 `integration` tests pass (262s). The remaining two,
+  `TestManagerRealDSH` and `TestManagerNetworkRevocationRealDSH`, fail inside
+  `startRealDSH` before touching the catalog: the harness checkout on that
+  machine cannot start `dsh web` (`ERR_MODULE_NOT_FOUND:
+  @deepseek-ai/dsh-http-proxy`, an incomplete `node_modules` there), so they are
+  an environment gap on the test box rather than a regression.
+  Found and fixed in the same increment: the record now crosses the private
+  channel in one frame, so `catalog.MaxRecordBytes`/`MAX_CATALOG_BYTES` were
+  reduced to 60 KiB under the 64 KiB frame cap, with
+  `internal/core/catalog_frame_test.go` failing if a record at the cap would no
+  longer fit (it does fail at 64 KiB: 65709 bytes needed of 65536).
 - Audit (2026-09-12, after the 0.1.29 release): checkboxes verified against
   the tree — they are accurate, not documentation lag. Done: P0, P1 (2.1–2.3,
   2.5; 2.4 blocked as recorded), and the secret providers 3.1/3.2/3.4 —
