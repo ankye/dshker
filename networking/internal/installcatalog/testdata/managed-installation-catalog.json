@@ -1,0 +1,92 @@
+{
+  "format": "dsh-launcher.managed-installation-catalog",
+  "version": 3,
+  "toolchains": [
+    {
+      "toolchainId": "toolchain_main",
+      "git": {
+        "requestedPath": "/usr/bin/git",
+        "canonicalPath": "/usr/bin/git",
+        "fingerprint": {
+          "device": 1,
+          "inode": 2,
+          "size": 3,
+          "modifiedAtMilliseconds": 4
+        },
+        "version": {
+          "major": 2,
+          "minor": 43,
+          "patch": 0,
+          "text": "2.43.0"
+        }
+      },
+      "node": {
+        "requestedPath": "/usr/local/bin/node",
+        "canonicalPath": "/usr/local/bin/node",
+        "fingerprint": {
+          "device": 5,
+          "inode": 6,
+          "mode": 7,
+          "size": 8,
+          "modifiedAtMilliseconds": 9,
+          "changedAtMilliseconds": 10
+        },
+        "version": {
+          "major": 22,
+          "minor": 22,
+          "patch": 2,
+          "text": "22.22.2"
+        }
+      },
+      "pnpm": {
+        "requestedPath": "/usr/local/bin/pnpm",
+        "canonicalPath": "/usr/local/bin/pnpm",
+        "fingerprint": {
+          "device": 11,
+          "inode": 12,
+          "mode": 13,
+          "size": 14,
+          "modifiedAtMilliseconds": 15,
+          "changedAtMilliseconds": 16
+        },
+        "launcher": {
+          "kind": "native"
+        },
+        "version": {
+          "major": 9,
+          "minor": 15,
+          "patch": 0,
+          "text": "9.15.0"
+        }
+      }
+    }
+  ],
+  "installations": [
+    {
+      "installationId": "installation_main",
+      "workspaceId": "workspace_main",
+      "toolchainId": "toolchain_main",
+      "remote": {
+        "name": "origin",
+        "source": {
+          "declaredUrl": "https://github.com/ankye/dshker.git",
+          "identity": {
+            "transport": "https",
+            "host": "github.com",
+            "effectivePort": 443,
+            "repositoryPathKind": "absolute",
+            "repositoryPath": "ankye/dshker.git",
+            "display": "https://github.com:443/ankye/dshker.git"
+          }
+        }
+      },
+      "selection": {
+        "kind": "branch",
+        "branch": "main"
+      },
+      "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "observedReference": "refs/remotes/origin/main",
+      "observedObject": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+    }
+  ]
+}

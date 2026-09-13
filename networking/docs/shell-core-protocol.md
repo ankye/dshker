@@ -118,8 +118,9 @@ followed by lowercase letters, `_` and `.`, at most 96 characters. Anything else
 is collapsed to `p2p.operation_failed` before it crosses the boundary, so a shell
 never has to interpret an internal error string. The wider set matters because
 the core performs operations whose refusals the renderer already maps:
-`core.roots_inspect` answers `managed.missing_registry`, and collapsing that to a
-`p2p` code would leave the user with an unexplained failure. A family that is not
+`core.roots_inspect` answers `managed.missing_registry`, `core.install_catalog_inspect`
+answers the same code for its own missing file, and collapsing either to a `p2p`
+code would leave the user with an unexplained failure. A family that is not
 declared is still collapsed, which is what keeps a library's error string from
 masquerading as a code.
 
@@ -187,7 +188,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 
 | group    | methods                                                                                                                                                                                                                    | role   |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.roots_commit`, `core.roots_inspect`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
+| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
 | device   | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                             | shell  |
 | devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                           | shell  |
 | network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                      | shell  |
@@ -201,12 +202,29 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | callback | `runtime.connect`, `peer.state`                                                                                                                                                                                            | parent |
 
 The `core.*` group is the local state the core owns outright: its version, the
-device credential store, the device catalog, and — since 4.1 — the managed-root
-registry. `core.roots_inspect` and `core.roots_commit` take the registry file path
+device credential store, the device catalog, the managed-root registry (4.1) and
+the managed installation catalog (4.2). `core.roots_inspect` and `core.roots_commit` take the registry file path
 and the machine's Harness home explicitly, because the core is told where things
 are rather than guessing: it owns exactly one file name below the Settings root,
 validates the whole topology before writing, publishes atomically, and proves the
 published bytes by reading them back. The catalog methods carry the same revision the file has always had — the sha256 of the stored bytes — so the token the shell passes back is the one it computed while it still owned the file. The shell starts the core with `--catalog <settings root>/dsh-launcher`, the exact directory it used to write `p2p-devices.json` itself, so an existing record is adopted in place and the shell stops writing it; on a shell that could not start a core at all, the file path remains the degraded writer. `core.catalog_inspect` answers `{"enabled":false}` for a directory that was never enabled, which is a state the shell renders as an invitation, never as a failure, and a core started without a catalog directory refuses these four methods rather than reporting an empty one.
+
+`core.install_catalog_inspect` and `core.install_catalog_commit` own the other
+document below that same `dsh-launcher` directory,
+`managed-installation-catalog.json`. They take its absolute path per call, exactly
+as the roots methods do, and `internal/installcatalog` accepts only that one file
+name. The answer carries the document's own shape under `catalog`, so the shell
+parses it with the validator it used while it owned the file, and a commit
+re-validates every toolchain identity, remote identity and revision rule before it
+publishes atomically and proves the bytes by reading them back. A missing file is
+`managed.missing_registry`, an identity mismatch is `managed.invalid_record` — the
+same classifications the shell's own writer and reader produced, which is what
+lets the two implementations share one file. Two rules are deliberately
+asymmetric on the two paths, and each matches the shell it replaces: a commit whose
+`version` or `format` is not this build's is `managed.invalid_record` (the shell's
+writer validator said so too), while reading a file another Launcher version wrote
+is `managed.unsupported_version`, so the launch can explain the cause instead of
+reporting corruption.
 
 The rest of the table is answered by the installed-peer host composed beside the core's own
 stores: `dshkerd` creates the same `helper.Host` the peer executable runs, binds the private

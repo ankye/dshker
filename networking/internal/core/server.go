@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ankye/dshker/networking/internal/catalog"
+	"github.com/ankye/dshker/networking/internal/installcatalog"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/ankye/dshker/networking/internal/rootregistry"
@@ -27,16 +28,18 @@ const Version = 1
 // host refuses them with p2p.not_implemented so a caller never confuses an
 // older core with a method that does not exist at all.
 var served = map[string]bool{
-	"core.version":                true,
-	"core.catalog_commit":         true,
-	"core.catalog_enable":         true,
-	"core.catalog_inspect":        true,
-	"core.catalog_remove_service": true,
-	"core.roots_commit":           true,
-	"core.roots_inspect":          true,
-	"core.secret_delete":          true,
-	"core.secret_get":             true,
-	"core.secret_set":             true,
+	"core.version":                 true,
+	"core.catalog_commit":          true,
+	"core.catalog_enable":          true,
+	"core.catalog_inspect":         true,
+	"core.catalog_remove_service":  true,
+	"core.install_catalog_commit":  true,
+	"core.install_catalog_inspect": true,
+	"core.roots_commit":            true,
+	"core.roots_inspect":           true,
+	"core.secret_delete":           true,
+	"core.secret_get":              true,
+	"core.secret_set":              true,
 }
 
 // Peer is the installed-peer half of the table: the coordinator, pairing,
@@ -58,6 +61,12 @@ type Serve struct {
 	Store   secret.Store
 	Catalog *catalog.Store
 	Peer    Peer
+}
+
+// installCatalogResult reuses the installation catalog's own wire shape, so the
+// shell parses it with the validator it used while it owned the file.
+type installCatalogResult struct {
+	Catalog installcatalog.Catalog `json:"catalog"`
 }
 
 // rootsResult reuses the registry's own wire shape, so the shell parses it with
@@ -245,6 +254,41 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, err
 		}
 		return catalogSnapshot(&snapshot), nil
+	case "core.install_catalog_inspect":
+		var request struct {
+			FilePath string `json:"filePath"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := installcatalog.Open(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		catalogRecord, err := store.Load()
+		if err != nil {
+			return nil, err
+		}
+		return installCatalogResult{Catalog: catalogRecord}, nil
+	case "core.install_catalog_commit":
+		var request struct {
+			FilePath string                 `json:"filePath"`
+			Catalog  installcatalog.Catalog `json:"catalog"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		// The store re-validates every field, publishes atomically and proves the
+		// published bytes, so a shell bug cannot persist a catalog the core would
+		// refuse to load on the next start.
+		store, err := installcatalog.Open(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Save(request.Catalog); err != nil {
+			return nil, err
+		}
+		return installCatalogResult{Catalog: request.Catalog}, nil
 	case "core.roots_inspect":
 		var request struct {
 			FilePath      string `json:"filePath"`
