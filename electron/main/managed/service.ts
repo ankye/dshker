@@ -39,6 +39,7 @@ import {
   type ManagedRootRegistry,
   type ManagedWorkspaceBinding
 } from './model'
+import type { CoreInstallCatalogPort } from '../core/install-catalog'
 import type { CoreRootsPort } from '../core/roots'
 import { ManagedRootRegistryStore } from './registry'
 import type { ManagedPathStyle } from './validation'
@@ -75,6 +76,7 @@ export interface ManagedWorkspaceServiceOptions {
    * `managed.core_unavailable` rather than as a second implementation.
    */
   readonly roots?: () => CoreRootsPort | undefined
+  readonly installCatalog?: () => CoreInstallCatalogPort | undefined
 }
 
 /** One registered workspace together with its resolved Launcher-owned namespace directories. */
@@ -93,6 +95,7 @@ export class ManagedWorkspaceService {
   readonly #nativeDshHomePath: string
   readonly #defaultRootPaths: Readonly<Record<ManagedRootKind, string>>
   readonly #roots: () => CoreRootsPort | undefined
+  readonly #installCatalog: () => CoreInstallCatalogPort | undefined
   #mutationActive = false
 
   constructor(options: ManagedWorkspaceServiceOptions) {
@@ -103,6 +106,7 @@ export class ManagedWorkspaceService {
     this.#nativeDshHomePath = options.nativeDshHomePath
     this.#defaultRootPaths = options.defaultRootPaths
     this.#roots = options.roots ?? (() => undefined)
+    this.#installCatalog = options.installCatalog ?? (() => undefined)
   }
 
   /**
@@ -212,10 +216,12 @@ export class ManagedWorkspaceService {
         },
         this.#roots()
       )
-      const catalogStore = new ManagedInstallationCatalogStore({
-        filePath: managedInstallationCatalogFilePath(settingsRoot.canonicalPath, this.#pathStyle),
-        pathStyle: this.#pathStyle
-      })
+      const catalogStore = new ManagedInstallationCatalogStore(
+        {
+          filePath: managedInstallationCatalogFilePath(settingsRoot.canonicalPath, this.#pathStyle)
+        },
+        this.#installCatalog()
+      )
       const registry: ManagedRootRegistry = {
         format: MANAGED_ROOT_REGISTRY_FORMAT,
         version: MANAGED_ROOT_REGISTRY_VERSION,
@@ -414,10 +420,12 @@ export class ManagedWorkspaceService {
         },
         this.#roots()
       )
-      const catalogStore = new ManagedInstallationCatalogStore({
-        filePath: managedInstallationCatalogFilePath(settingsRoot.canonicalPath, this.#pathStyle),
-        pathStyle: this.#pathStyle
-      })
+      const catalogStore = new ManagedInstallationCatalogStore(
+        {
+          filePath: managedInstallationCatalogFilePath(settingsRoot.canonicalPath, this.#pathStyle)
+        },
+        this.#installCatalog()
+      )
       await this.#locator.save(createManagedBootstrapLocator(settingsRoot.canonicalPath))
       await registryStore.save(registry)
       await catalogStore.save(createEmptyManagedInstallationCatalog())
@@ -447,13 +455,15 @@ export class ManagedWorkspaceService {
       this.#roots()
     )
     const registry = await store.load()
-    const catalogStore = new ManagedInstallationCatalogStore({
-      filePath: managedInstallationCatalogFilePath(
-        locator.settingsRootCanonicalPath,
-        this.#pathStyle
-      ),
-      pathStyle: this.#pathStyle
-    })
+    const catalogStore = new ManagedInstallationCatalogStore(
+      {
+        filePath: managedInstallationCatalogFilePath(
+          locator.settingsRootCanonicalPath,
+          this.#pathStyle
+        )
+      },
+      this.#installCatalog()
+    )
     await catalogStore.load()
     const settingsRoot = rootByKind(registry, 'settings')
     if (settingsRoot.canonicalPath !== locator.settingsRootCanonicalPath) {

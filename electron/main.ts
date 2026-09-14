@@ -24,6 +24,7 @@ import { PeerManagement } from './main/p2p/management'
 import { CoreSupervisor } from './main/core/supervisor'
 import { CoreSecrets, type CoreSecretPort } from './main/core/secrets'
 import { CoreCatalog, type CoreCatalogPort } from './main/core/catalog'
+import { CoreInstallCatalog, type CoreInstallCatalogPort } from './main/core/install-catalog'
 import { CoreRoots, type CoreRootsPort } from './main/core/roots'
 import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
@@ -200,6 +201,9 @@ async function registerLauncherServices(
   // ordering explicit rather than handing the service a port that does not
   // exist yet.
   let coreRoots: CoreRootsPort | undefined
+  // The installation catalog moves the same way the registry did: the core owns
+  // the file, and the shell only reaches it through the port below.
+  let coreInstallCatalog: CoreInstallCatalogPort | undefined
   // The Launcher's own directory, created here rather than as a side effect of
   // the first-run root registration: that registration now happens after the
   // core starts, while the shell's own files below this directory — the remote
@@ -208,7 +212,8 @@ async function registerLauncherServices(
   const managedWorkspaceService = await createManagedWorkspaceService(
     launcherRoot,
     locatorFilePath,
-    () => coreRoots
+    () => coreRoots,
+    () => coreInstallCatalog
   )
   const runtimeBrowserController = new RuntimeBrowserController(
     new RuntimeBrowserPreferencesStore({
@@ -279,6 +284,7 @@ async function registerLauncherServices(
     coreSecrets = new CoreSecrets(coreSupervisor.rpc)
     coreCatalog = new CoreCatalog(coreSupervisor.rpc)
     coreRoots = new CoreRoots(coreSupervisor.rpc)
+    coreInstallCatalog = new CoreInstallCatalog(coreSupervisor.rpc)
   } catch (error) {
     console.error('DSHKer Launcher could not start its headless core.', error)
   }
@@ -398,7 +404,8 @@ async function createBundledRepository(service: LauncherHarnessService): Promise
 async function createManagedWorkspaceService(
   launcherRoot: string,
   locatorFilePath: string,
-  roots: () => CoreRootsPort | undefined
+  roots: () => CoreRootsPort | undefined,
+  installCatalog: () => CoreInstallCatalogPort | undefined
 ): Promise<ManagedWorkspaceService> {
   const pathStyle: ManagedPathStyle = process.platform === 'win32' ? 'win32' : 'posix'
   const nativeDshHomePath = await resolveNativeDshHomePath()
@@ -420,7 +427,8 @@ async function createManagedWorkspaceService(
       presets: path.join(launcherRoot, 'presets'),
       settings: path.join(launcherRoot, 'settings')
     },
-    roots
+    roots,
+    installCatalog
   })
 }
 

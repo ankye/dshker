@@ -1,6 +1,5 @@
-import { randomUUID } from 'node:crypto'
-import { lstat, open, readFile, rename, rm } from 'node:fs/promises'
 import nodePath from 'node:path'
+import type { CoreInstallCatalogLocation, CoreInstallCatalogPort } from '../core/install-catalog'
 import { ManagedRootError } from './errors'
 import { GitRuntimeError } from './git'
 import type { GitExecutableRegistration, GitNamedRemote, GitRevisionSelection } from './git'
@@ -48,65 +47,62 @@ export interface ManagedInstallationCatalog {
 /** Explicit location of the catalog below an already selected Settings root. */
 export interface ManagedInstallationCatalogLocation {
   readonly filePath: string
-  readonly pathStyle: ManagedPathStyle
 }
 
-/** Strict parser and atomic persistence for managed Harness installation records. */
+/**
+ * The managed Harness installation catalog, persisted by the core.
+ *
+ * The shell used to write this file itself. The core owns it now — the format,
+ * the version and the file name are unchanged, so an existing catalog is read as
+ * it always was — and this store is the only way the shell reaches it. That
+ * makes the core load-bearing for the installation records too, which is the
+ * point of the phase: exactly one writer, and no second implementation that can
+ * drift from the rules the core enforces.
+ */
 export class ManagedInstallationCatalogStore {
   readonly #location: ManagedInstallationCatalogLocation
+  readonly #catalog: CoreInstallCatalogPort | undefined
 
-  constructor(location: ManagedInstallationCatalogLocation) {
+  constructor(location: ManagedInstallationCatalogLocation, catalog?: CoreInstallCatalogPort) {
     this.#location = location
+    this.#catalog = catalog
   }
 
   /** Reads one authoritative catalog; missing state is a recovery error, not an empty default. */
   async load(): Promise<ManagedInstallationCatalog> {
-    let text: string
-    try {
-      text = await readFile(this.#location.filePath, 'utf8')
-    } catch (error) {
-      if (isNodeCode(error, 'ENOENT')) {
-        throw new ManagedRootError(
-          'managed.missing_registry',
-          'Managed installation catalog is missing.'
-        )
-      }
-      throw persistenceError('Unable to read the managed installation catalog.', error)
-    }
-    return parseManagedInstallationCatalog(text)
+    return (await this.#port()).inspect(this.#coreLocation())
   }
 
-  /** Atomically replaces a fully validated catalog and proves exact readback. */
+  /**
+   * Commits one fully validated catalog.
+   *
+   * The core validates the whole document again, publishes it atomically and
+   * proves the published bytes by reading them back, so this side only has to
+   * check that what came back is what it asked for.
+   */
   async save(catalog: ManagedInstallationCatalog): Promise<void> {
-    validateManagedInstallationCatalog(catalog)
-    await assertNotSymlink(this.#location.filePath)
-    const parent = nodePath.dirname(this.#location.filePath)
-    const temporaryPath = nodePath.join(
-      parent,
-      `.${nodePath.basename(this.#location.filePath)}.${randomUUID()}.tmp`
-    )
-    const serialized = `${JSON.stringify(catalog, null, 2)}\n`
-    try {
-      const handle = await open(temporaryPath, 'wx', 0o600)
-      try {
-        await handle.writeFile(serialized, 'utf8')
-        await handle.sync()
-      } finally {
-        await handle.close()
-      }
-      await rename(temporaryPath, this.#location.filePath)
-      await syncParentDirectory(parent)
-    } catch (error) {
-      await rm(temporaryPath, { force: true }).catch(() => undefined)
-      throw persistenceError('Unable to persist the managed installation catalog.', error)
-    }
-    const reloaded = await this.load()
-    if (JSON.stringify(reloaded) !== JSON.stringify(catalog)) {
+    const committed = await (await this.#port()).commit(this.#coreLocation(), catalog)
+    if (JSON.stringify(committed) !== JSON.stringify(catalog)) {
       throw new ManagedRootError(
         'managed.persistence_failed',
         'Managed installation catalog readback differs from the committed record.'
       )
     }
+  }
+
+  /** The core is the only writer, so a shell without one has no catalog at all. */
+  async #port(): Promise<CoreInstallCatalogPort> {
+    if (this.#catalog === undefined) {
+      throw new ManagedRootError(
+        'managed.core_unavailable',
+        'The headless core is required to read or write the managed installation catalog.'
+      )
+    }
+    return this.#catalog
+  }
+
+  #coreLocation(): CoreInstallCatalogLocation {
+    return { filePath: this.#location.filePath }
   }
 }
 
@@ -137,6 +133,15 @@ export function parseManagedInstallationCatalog(text: string): ManagedInstallati
   } catch (error) {
     throw persistenceError('Managed installation catalog is not valid JSON.', error)
   }
+  return parseManagedInstallationCatalogValue(value)
+}
+
+/**
+ * The same validation for a document that is already decoded, which is how the
+ * core's answer is checked: a value off the private channel goes through exactly
+ * the rules the shell applied while it owned the file.
+ */
+export function parseManagedInstallationCatalogValue(value: unknown): ManagedInstallationCatalog {
   const record = exactRecord(
     value,
     ['format', 'version', 'toolchains', 'installations'],
@@ -678,37 +683,8 @@ function asInvalidManagedGitRecord(error: unknown): ManagedRootError {
   )
 }
 
-async function assertNotSymlink(filePath: string): Promise<void> {
-  try {
-    if ((await lstat(filePath)).isSymbolicLink()) {
-      throw new ManagedRootError(
-        'managed.persistence_failed',
-        'Managed installation catalog path must not be a symbolic link.'
-      )
-    }
-  } catch (error) {
-    if (isNodeCode(error, 'ENOENT')) return
-    if (error instanceof ManagedRootError) throw error
-    throw persistenceError('Unable to inspect the managed installation catalog path.', error)
-  }
-}
-
-async function syncParentDirectory(parent: string): Promise<void> {
-  if (process.platform === 'win32') return
-  const handle = await open(parent, 'r')
-  try {
-    await handle.sync()
-  } finally {
-    await handle.close()
-  }
-}
-
 function persistenceError(message: string, cause: unknown): ManagedRootError {
   return new ManagedRootError('managed.persistence_failed', message, {
     cause: cause instanceof Error ? cause.name : 'unknown'
   })
-}
-
-function isNodeCode(value: unknown, expected: string): boolean {
-  return Boolean(value && typeof value === 'object' && 'code' in value && value.code === expected)
 }

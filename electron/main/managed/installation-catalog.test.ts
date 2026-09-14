@@ -1,7 +1,6 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import type { CoreInstallCatalogLocation, CoreInstallCatalogPort } from '../core/install-catalog'
 import { ManagedRootError } from './errors'
 import {
   createEmptyManagedInstallationCatalog,
@@ -11,16 +10,6 @@ import {
   type ManagedInstallationCatalog
 } from './installation-catalog'
 import { createGitNamedRemote, parseGitCommitSha, selectGitTag } from './git'
-
-const temporaryDirectories: string[] = []
-
-afterEach(async () => {
-  await Promise.all(
-    temporaryDirectories
-      .splice(0)
-      .map((directory) => rm(directory, { force: true, recursive: true }))
-  )
-})
 
 function tagInstallationCatalog(): ManagedInstallationCatalog {
   const commit = parseGitCommitSha('a'.repeat(40))
@@ -107,23 +96,51 @@ function tagInstallationCatalog(): ManagedInstallationCatalog {
   }
 }
 
-describe('managed installation catalog', () => {
-  it('writes and reads a tag record without manufacturing optional union fields', async () => {
-    const base = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-catalog-'))
-    temporaryDirectories.push(base)
-    const settingsRoot = nodePath.join(base, 'settings')
-    await mkdir(nodePath.join(settingsRoot, 'dsh-launcher'), { recursive: true })
-    // Native temp paths require the platform's own path spelling.
-    const pathStyle = process.platform === 'win32' ? ('win32' as const) : ('posix' as const)
-    const store = new ManagedInstallationCatalogStore({
-      filePath: managedInstallationCatalogFilePath(settingsRoot, pathStyle),
-      pathStyle
-    })
-    const catalog = tagInstallationCatalog()
+const location: CoreInstallCatalogLocation = {
+  filePath: managedInstallationCatalogFilePath('/managed/settings', 'posix')
+}
 
-    await store.save(catalog)
+describe('managed installation catalog', () => {
+  it('routes every read and write to the core, which owns the file', async () => {
+    const catalog = tagInstallationCatalog()
+    const calls: string[] = []
+    const port: CoreInstallCatalogPort = {
+      async inspect(received) {
+        calls.push(`inspect ${received.filePath}`)
+        return catalog
+      },
+      async commit(received, value) {
+        calls.push(`commit ${received.filePath}`)
+        expect(value).toEqual(catalog)
+        return value
+      }
+    }
+    const store = new ManagedInstallationCatalogStore(location, port)
 
     await expect(store.load()).resolves.toEqual(catalog)
+    await expect(store.save(catalog)).resolves.toBeUndefined()
+    expect(calls).toEqual([`inspect ${location.filePath}`, `commit ${location.filePath}`])
+  })
+
+  it('refuses to read or write without a core instead of falling back to a second writer', async () => {
+    const store = new ManagedInstallationCatalogStore(location)
+    await expect(store.load()).rejects.toMatchObject({ code: 'managed.core_unavailable' })
+    await expect(store.save(tagInstallationCatalog())).rejects.toMatchObject({
+      code: 'managed.core_unavailable'
+    })
+  })
+
+  it('reports a core that answered with a different catalog rather than claiming success', async () => {
+    const catalog = tagInstallationCatalog()
+    const store = new ManagedInstallationCatalogStore(location, {
+      async inspect() {
+        return catalog
+      },
+      async commit() {
+        return { ...catalog, installations: [] }
+      }
+    })
+    await expect(store.save(catalog)).rejects.toMatchObject({ code: 'managed.persistence_failed' })
   })
 
   it('rejects legacy fields on a discriminated revision record', () => {

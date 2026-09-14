@@ -38,10 +38,10 @@ the rules ported rather than reinterpreted, and `core.install_catalog_inspect` /
 ## Two deliberate findings
 
 1. **The two version refusals are asymmetric on purpose, and each matches the
-   shell it replaces.** A *commit* whose `format` or `version` is not this build's
+   shell it replaces.** A _commit_ whose `format` or `version` is not this build's
    is `managed.invalid_record`, because that is exactly what the shell's own
    `validateManagedInstallationCatalog` — the function its `save` called — threw.
-   *Reading* a file another Launcher version wrote is `managed.unsupported_version`,
+   _Reading_ a file another Launcher version wrote is `managed.unsupported_version`,
    because that is what its `parseManagedInstallationCatalog` threw on `load`.
    Collapsing the two would either make the writer accept a document it cannot
    read back or report a recoverable version difference as corruption.
