@@ -63,12 +63,14 @@ export interface PeerInvite {
 /**
  * Derives the user-facing fingerprint from the actual device public key.
  *
- * Grouped hex of a SHA-256 digest: short enough to read aloud when confirming a
- * pair out of band, and never the key material itself.
+ * It is the coordinator's own key id — the first six bytes of the SHA-256 digest,
+ * grouped for reading — because the value the user confirms out of band has to be
+ * the value the coordinator compares. That also makes it twelve characters, the
+ * same shape as a device id, so both can be read and typed by a person.
  */
 export function peerFingerprint(publicKey: Buffer): string {
   const digest = createHash('sha256').update(publicKey).digest('hex')
-  return (digest.slice(0, 32).match(/.{4}/g) ?? []).join(' ')
+  return (digest.slice(0, 12).match(/.{4}/g) ?? []).join(' ')
 }
 
 function peerPublicKey(value: unknown): Buffer {
@@ -264,6 +266,8 @@ export function peerInvite(value: unknown, networkId: string): PeerInvite {
 
 /** Fingerprint the user confirmed; format must match what the UI displayed. */
 export function assertConfirmedFingerprint(value: unknown): asserts value is string {
-  if (typeof value !== 'string' || !/^([a-f0-9]{4} ){7}[a-f0-9]{4}$/.test(value))
+  // Three groups of four: the coordinator's key id is twelve hex characters, and
+  // the same value is what the UI shows and what this compares.
+  if (typeof value !== 'string' || !/^([a-f0-9]{4} ){2}[a-f0-9]{4}$/.test(value))
     throw new PeerHelperError('p2p.pair_fingerprint_mismatch')
 }

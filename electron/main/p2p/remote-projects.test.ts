@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PeerRemoteProjects, MAX_REMOTE_ENTRIES } from './remote-projects'
 
-const serviceId = 'a'.repeat(64)
-const pairId = '1'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const pairId = '1'.repeat(12)
 const rootId = 'root-a'
 const signal = () => AbortSignal.timeout(5000)
 

@@ -22,7 +22,7 @@ func newService(t *testing.T, name string) Service {
 		t.Fatalf("key: %v", err)
 	}
 	digest := sha256.Sum256(public)
-	serviceID := hex.EncodeToString(digest[:])
+	serviceID := hex.EncodeToString(digest[:6])
 	template := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
 		Subject:               pkix.Name{CommonName: name},
@@ -75,7 +75,7 @@ func newComputer(t *testing.T, service Service) Computer {
 
 func randomID(t *testing.T) string {
 	t.Helper()
-	buf := make([]byte, 16)
+	buf := make([]byte, 6)
 	if _, err := rand.Read(buf); err != nil {
 		t.Fatalf("rand: %v", err)
 	}

@@ -7,10 +7,10 @@ function pending() {
   const publicKey = keys.publicKey.export({ type: 'spki', format: 'der' }).subarray(-32)
   const seed = keys.privateKey.export({ type: 'pkcs8', format: 'der' }).subarray(-32)
   return {
-    serviceId: 'a'.repeat(64),
-    requestId: 'b'.repeat(32),
-    networkId: 'c'.repeat(32),
-    userId: 'd'.repeat(32),
+    serviceId: 'a'.repeat(12),
+    requestId: 'b'.repeat(12),
+    networkId: 'c'.repeat(12),
+    userId: 'd'.repeat(12),
     name: '远程电脑',
     publicKey: publicKey.toString('base64'),
     privateKey: Buffer.concat([seed, publicKey]).toString('base64')

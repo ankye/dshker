@@ -50,8 +50,8 @@ func transitionComputer(connectionID, serviceID, state string, revision int64) C
 }
 
 const (
-	firstService  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	secondService = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+	firstService  = "aaaaaaaaaaaa"
+	secondService = "bbbbbbbbbbbb"
 	firstConn     = "cccccccccccc"
 )
 

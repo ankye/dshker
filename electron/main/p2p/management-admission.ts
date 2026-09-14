@@ -77,7 +77,10 @@ export function parseManagementRequest<K extends P2PManagementOperation>(
 
 function validateField(field: string, value: unknown): void {
   if (field === 'targetRequestId') return assertRequestId(value)
-  if (field === 'serviceId' || field === 'revision') return assertAccountId(value, 64)
+  // A service id is a key id like a device id (twelve characters); a revision is
+  // the store's own SHA-256 revision and stays sixty-four.
+  if (field === 'serviceId') return assertAccountId(value)
+  if (field === 'revision') return assertAccountId(value, 64)
   if (field === 'networkId' || field === 'pairId' || field === 'deviceId')
     return assertAccountId(value)
   if (field === 'name' || field === 'displayName') return assertAccountText(value)

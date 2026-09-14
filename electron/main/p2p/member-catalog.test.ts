@@ -3,18 +3,18 @@ import type { PeerCatalog } from './catalog'
 import type { PeerPairMember } from './pair-records'
 import { recordMembers } from './member-catalog'
 
-const serviceId = 'a'.repeat(64)
-const otherService = 'b'.repeat(64)
+const serviceId = 'a'.repeat(12)
+const otherService = 'b'.repeat(12)
 const credential = {
-  deviceId: '3'.repeat(32),
-  userId: '4'.repeat(32),
+  deviceId: '3'.repeat(12),
+  userId: '4'.repeat(12),
   publicKey: Buffer.alloc(32, 7).toString('base64')
 }
 const remotePublicKey = Buffer.alloc(32, 9).toString('base64')
 
 function member(overrides: Partial<PeerPairMember> = {}): PeerPairMember {
   return {
-    networkId: 'c'.repeat(32),
+    networkId: 'c'.repeat(12),
     state: 'active',
     revision: 3,
     initiator: {
@@ -24,7 +24,7 @@ function member(overrides: Partial<PeerPairMember> = {}): PeerPairMember {
       name: 'this'
     },
     target: {
-      deviceId: '5'.repeat(32),
+      deviceId: '5'.repeat(12),
       userId: credential.userId,
       publicKey: remotePublicKey,
       name: 'peer'
@@ -35,13 +35,13 @@ function member(overrides: Partial<PeerPairMember> = {}): PeerPairMember {
 
 function computer(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
-    connectionId: '5'.repeat(32),
+    connectionId: '5'.repeat(12),
     serviceId,
     displayName: 'peer',
-    pairId: '5'.repeat(32),
-    networkId: 'c'.repeat(32),
+    pairId: '5'.repeat(12),
+    networkId: 'c'.repeat(12),
     localDeviceId: credential.deviceId,
-    remoteDeviceId: '5'.repeat(32),
+    remoteDeviceId: '5'.repeat(12),
     userId: credential.userId,
     localPublicKey: credential.publicKey,
     remotePublicKey,
@@ -57,7 +57,7 @@ function fixture(computers: readonly Record<string, unknown>[]) {
   const record = {
     format: 'dshker.p2p-devices',
     version: 1,
-    catalogId: 'd'.repeat(32),
+    catalogId: 'd'.repeat(12),
     services: [
       {
         serviceId,
@@ -88,7 +88,7 @@ describe('member catalog rewrite', () => {
     const f = fixture([])
     await recordMembers(f.catalog, serviceId, credential, [member()])
     expect(f.committed()?.computers.map((value) => String(value.remoteDeviceId))).toEqual([
-      '5'.repeat(32)
+      '5'.repeat(12)
     ])
   })
 
@@ -103,46 +103,46 @@ describe('member catalog rewrite', () => {
 
   it('marks this service rows the coordinator no longer reports as revoked, and keeps other services', async () => {
     const stale = computer({
-      remoteDeviceId: '6'.repeat(32),
-      connectionId: '6'.repeat(32),
-      pairId: '6'.repeat(32)
+      remoteDeviceId: '6'.repeat(12),
+      connectionId: '6'.repeat(12),
+      pairId: '6'.repeat(12)
     })
     const other = computer({
       serviceId: otherService,
-      remoteDeviceId: '7'.repeat(32),
-      connectionId: '7'.repeat(32),
-      pairId: '7'.repeat(32)
+      remoteDeviceId: '7'.repeat(12),
+      connectionId: '7'.repeat(12),
+      pairId: '7'.repeat(12)
     })
     const f = fixture([stale, other])
     await recordMembers(f.catalog, serviceId, credential, [member()])
     const committed = f.committed()?.computers ?? []
     expect(committed.map((value) => String(value.remoteDeviceId)).sort()).toEqual([
-      '5'.repeat(32),
-      '6'.repeat(32),
-      '7'.repeat(32)
+      '5'.repeat(12),
+      '6'.repeat(12),
+      '7'.repeat(12)
     ])
     // The omitted row is recorded as revoked, not dropped: dropping an active
     // pair is the transition the catalog's guard refuses, which wedged every
     // sync once both devices had re-enrolled under new identities.
     expect(
-      committed.find((value) => String(value.remoteDeviceId) === '6'.repeat(32))?.pairState
+      committed.find((value) => String(value.remoteDeviceId) === '6'.repeat(12))?.pairState
     ).toBe('revoked')
     expect(
-      committed.find((value) => String(value.remoteDeviceId) === '5'.repeat(32))?.pairState
+      committed.find((value) => String(value.remoteDeviceId) === '5'.repeat(12))?.pairState
     ).toBe('active')
   })
 
   it('does not carry a revoked row into the next rewrite', async () => {
     const alreadyRevoked = computer({
-      remoteDeviceId: '6'.repeat(32),
-      connectionId: '6'.repeat(32),
-      pairId: '6'.repeat(32),
+      remoteDeviceId: '6'.repeat(12),
+      connectionId: '6'.repeat(12),
+      pairId: '6'.repeat(12),
       pairState: 'revoked'
     })
     const f = fixture([alreadyRevoked])
     await recordMembers(f.catalog, serviceId, credential, [member()])
     expect(f.committed()?.computers.map((value) => String(value.remoteDeviceId))).toEqual([
-      '5'.repeat(32)
+      '5'.repeat(12)
     ])
   })
 
@@ -153,19 +153,19 @@ describe('member catalog rewrite', () => {
     // computer stayed revoked on screen. Retirement is the legal step, and it
     // has to be committed before the new authorization.
     const revokedRow = computer({
-      remoteDeviceId: '6'.repeat(32),
-      connectionId: '6'.repeat(32),
-      pairId: '6'.repeat(32),
+      remoteDeviceId: '6'.repeat(12),
+      connectionId: '6'.repeat(12),
+      pairId: '6'.repeat(12),
       pairState: 'revoked'
     })
     const f = fixture([revokedRow])
-    const repaired = member({ target: { ...member().target, deviceId: '6'.repeat(32) } })
+    const repaired = member({ target: { ...member().target, deviceId: '6'.repeat(12) } })
     await recordMembers(f.catalog, serviceId, credential, [repaired])
     const commits = f.commits()
     expect(commits.map((entry) => entry.computers.length)).toEqual([0, 1])
     expect(
       commits[1]?.computers.map((value) => [String(value.remoteDeviceId), String(value.pairState)])
-    ).toEqual([['6'.repeat(32), 'active']])
+    ).toEqual([['6'.repeat(12), 'active']])
   })
 
   it('admits only an active pair with a positive revision', async () => {

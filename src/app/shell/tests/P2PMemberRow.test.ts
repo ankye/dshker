@@ -10,24 +10,24 @@ import {
 import P2PPairingPanel from '../components/P2PPairingPanel.vue'
 import { resetRuntimeBrowserForTests, runtimeBrowser } from '../runtimeBrowserState'
 
-const serviceId = 'a'.repeat(64)
-const networkId = '2'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const networkId = '2'.repeat(12)
 const windowsMember: P2PPairView = {
-  pairId: '1'.repeat(32),
+  pairId: '1'.repeat(12),
   networkId,
   state: 'active',
   revision: 1,
   expiresAt: 0,
   initiator: {
-    deviceId: '3'.repeat(32),
-    userId: '5'.repeat(32),
+    deviceId: '3'.repeat(12),
+    userId: '5'.repeat(12),
     name: 'MacBook-Pro',
     fingerprint: '1111 2222 3333 4444 5555 6666 7777 8888',
     presence: 'offline'
   },
   target: {
-    deviceId: '4'.repeat(32),
-    userId: '5'.repeat(32),
+    deviceId: '4'.repeat(12),
+    userId: '5'.repeat(12),
     name: 'Windows-PC',
     fingerprint: 'aaaa bbbb cccc dddd eeee ffff 1111 2222',
     presence: 'offline'
@@ -35,7 +35,7 @@ const windowsMember: P2PPairView = {
   localIsInitiator: true
 }
 const windowsComputer: P2PComputerView = {
-  connectionId: 'c'.repeat(32),
+  connectionId: 'c'.repeat(12),
   serviceId,
   displayName: 'Windows-PC',
   pairId: windowsMember.pairId,
@@ -54,7 +54,7 @@ beforeEach(() => {
   state.pairs = [windowsMember]
   p2pManagement.catalog.value = {
     revision: 'b'.repeat(64),
-    catalogId: 'd'.repeat(32),
+    catalogId: 'd'.repeat(12),
     services: [],
     computers: [windowsComputer],
     forgottenServiceIds: []
@@ -87,13 +87,13 @@ describe('P2P member row', () => {
     }
     p2pPairing.state(serviceId).pairs = [unnamed]
     const wrapper = mount(P2PPairingPanel, { props: { serviceId, networkId } })
-    expect(wrapper.get('[data-testid="p2p-member-name"]').text()).toBe('4'.repeat(32))
+    expect(wrapper.get('[data-testid="p2p-member-name"]').text()).toBe('4'.repeat(12))
   })
 
   it('shows the remote device id, never the local one', () => {
     const wrapper = mount(P2PPairingPanel, { props: { serviceId, networkId } })
     const id = wrapper.get('.p2p-member-id code').text()
-    expect(id).toBe('4'.repeat(32))
+    expect(id).toBe('4'.repeat(12))
   })
 
   it('describes membership rather than a pairing ceremony', () => {

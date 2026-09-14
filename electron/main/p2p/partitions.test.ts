@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { LOCAL_PARTITION, assertPeerPartition, isPeerPartition, peerPartition } from './partitions'
 
-const serviceA = 'a'.repeat(64)
-const serviceB = 'b'.repeat(64)
-const pairA = '1'.repeat(32)
-const pairB = '2'.repeat(32)
+const serviceA = 'a'.repeat(12)
+const serviceB = 'b'.repeat(12)
+const pairA = '1'.repeat(12)
+const pairB = '2'.repeat(12)
 
 describe('remote workbench session partitions', () => {
   it('gives every paired computer a distinct partition', () => {

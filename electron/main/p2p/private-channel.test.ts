@@ -21,7 +21,7 @@ describe('private helper channel ownership', () => {
       92, 92, 46, 92, 112, 105, 112, 101, 92
     ])
     expect(actual.slice(9)).toBe('dshker-peer-' + nonce)
-    for (const value of ['', 'a'.repeat(31), 'a'.repeat(33), '../other', 'A'.repeat(32)])
+    for (const value of ['', 'a'.repeat(31), 'a'.repeat(33), '../other', 'A'.repeat(12)])
       expect(() => peerPipeName(value)).toThrow('p2p.invalid_socket')
   })
 

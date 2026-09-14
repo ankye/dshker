@@ -14,10 +14,10 @@ import { PeerHelperError } from './wire'
 // the actual OS provider. Only the Electron module import is isolated here.
 vi.mock('electron', () => ({ safeStorage: {} }))
 
-const serviceId = 'a'.repeat(64)
-const networkId = 'b'.repeat(32)
-const otherNetworkId = 'c'.repeat(32)
-const user = { userId: 'd'.repeat(32), username: 'owner' }
+const serviceId = 'a'.repeat(12)
+const networkId = 'b'.repeat(12)
+const otherNetworkId = 'c'.repeat(12)
+const user = { userId: 'd'.repeat(12), username: 'owner' }
 const owners: PeerManagement[] = []
 afterEach(async () => {
   await Promise.all(owners.splice(0).map((owner) => owner.close()))
@@ -36,13 +36,13 @@ function fixture() {
     certificate: 'test-only-catalog-boundary'
   }
   const computer = {
-    connectionId: '1'.repeat(32),
+    connectionId: '1'.repeat(12),
     serviceId,
     displayName: 'Remote',
-    pairId: '2'.repeat(32),
+    pairId: '2'.repeat(12),
     networkId,
-    localDeviceId: '3'.repeat(32),
-    remoteDeviceId: '4'.repeat(32),
+    localDeviceId: '3'.repeat(12),
+    remoteDeviceId: '4'.repeat(12),
     userId: user.userId,
     localPublicKey: publicKey,
     remotePublicKey: Buffer.alloc(32, 2).toString('base64'),
@@ -52,14 +52,14 @@ function fixture() {
   let record: PeerCatalogRecord = {
     format: 'dshker.p2p-devices',
     version: 1,
-    catalogId: 'e'.repeat(32),
+    catalogId: 'e'.repeat(12),
     services: [service],
     computers: [
       computer,
       {
         ...computer,
-        connectionId: '5'.repeat(32),
-        pairId: '6'.repeat(32),
+        connectionId: '5'.repeat(12),
+        pairId: '6'.repeat(12),
         networkId: otherNetworkId
       }
     ],
@@ -114,7 +114,7 @@ function fixture() {
       if (method === 'network.invalidate') return {}
       // Restoring the enrolled device is what holds the signal connection the
       // coordinator heartbeat rides on.
-      if (method === 'device.restore') return { deviceId: '3'.repeat(32) }
+      if (method === 'device.restore') return { deviceId: '3'.repeat(12) }
       if (method === 'pairs.list') return []
       throw new PeerHelperError('p2p.invalid_operation')
     }
@@ -169,7 +169,7 @@ async function loggedIn() {
 }
 
 describe('bringing enrolled services online at startup', () => {
-  const deviceId = '3'.repeat(32)
+  const deviceId = '3'.repeat(12)
   const publicKey = Buffer.alloc(32, 1).toString('base64')
   /** Makes this machine look like it completed enrollment for the saved service. */
   function enrolled() {
@@ -308,9 +308,9 @@ describe('bringing enrolled services online at startup', () => {
     const f = fixture()
     enrolled()
     await f.owner.login(serviceId, user.username, 'test-password', new AbortController().signal)
-    const remoteDeviceId = '4'.repeat(32)
+    const remoteDeviceId = '4'.repeat(12)
     const remoteKey = Buffer.alloc(32, 2).toString('base64')
-    const pairId = '7'.repeat(32)
+    const pairId = '7'.repeat(12)
     const pairRecord = {
       pairId,
       networkId,
@@ -377,7 +377,7 @@ describe('bringing enrolled services online at startup', () => {
     enrolled()
     f.call.mockImplementation(async (method: string) => {
       if (method === 'pairs.adopt') throw new PeerHelperError('p2p.binding_unauthorized')
-      if (method === 'device.restore') return { deviceId: '3'.repeat(32) }
+      if (method === 'device.restore') return { deviceId: '3'.repeat(12) }
       if (method === 'user.current') return user
       return {}
     })
@@ -509,7 +509,7 @@ describe('formal P2P management composition', () => {
     it('refuses to remove an unknown service without touching the catalog', async () => {
       const f = fixture()
       await expect(
-        f.owner.removeService('b'.repeat(64), new AbortController().signal)
+        f.owner.removeService('b'.repeat(12), new AbortController().signal)
       ).rejects.toMatchObject({ code: 'p2p.service_not_found' })
       expect(f.removeService).toHaveBeenCalledTimes(1)
       expect(f.record().services).toHaveLength(1)

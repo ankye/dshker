@@ -108,7 +108,7 @@ export class PeerServices {
     signal: AbortSignal
   ): Promise<PeerCatalogSnapshot> {
     assertAccountId(expectedRevision, 64)
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     // Snapshot before the first await: renderer drafts cannot mutate this request.
     const fields = parseInput(input)
     this.#admit(signal)
@@ -171,7 +171,7 @@ export class PeerServices {
   }
 
   async activate(serviceId: string, signal: AbortSignal): Promise<PeerServiceRecord> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     this.#admit(signal)
     if (this.#activating.has(serviceId)) throw new PeerHelperError('p2p.service_busy')
     this.#activating.add(serviceId)
@@ -204,7 +204,7 @@ export class PeerServices {
   }
 
   async requireSaved(serviceId: string): Promise<PeerServiceRecord> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     const { record } = await this.#snapshot()
     if (record.forgottenServiceIds.includes(serviceId))
       throw new PeerHelperError('p2p.trust_restore_rejected')
@@ -271,7 +271,10 @@ function verifiedService(value: unknown, input: PeerServiceInput): PeerServiceRe
     record.stunAddress !== input.stunAddress
   )
     throw new PeerHelperError('p2p.identity_mismatch')
-  assertAccountId(record.nonce)
+  // The nonce is the coordinator's own challenge value, not an identifier: it is
+  // thirty-two hex characters and has nothing to do with the twelve-character id
+  // shape every other value here follows.
+  assertAccountId(record.nonce, 32)
   if (
     typeof record.signature !== 'string' ||
     Buffer.from(record.signature, 'base64url').length !== 64 ||

@@ -27,10 +27,10 @@ vi.mock('electron', () => ({
   Menu: {}
 }))
 
-const serviceId = 'a'.repeat(64)
-const networkId = 'b'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const networkId = 'b'.repeat(12)
 const revision = 'c'.repeat(64)
-const pairId = '9'.repeat(32)
+const pairId = '9'.repeat(12)
 /** Grouped-hex form the UI displays and the user confirms. */
 const fingerprint = ['1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888'].join(' ')
 const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
@@ -56,9 +56,9 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   registration: { serviceId },
   registerDevice: { serviceId, networkId, name: 'Mac' },
   joinNetwork: { serviceId, networkId, name: 'Mac' },
-  leaveNetwork: { serviceId, networkId, deviceId: 'e'.repeat(32) },
-  accountSelection: { serviceId, userId: 'd'.repeat(32) },
-  rememberAccountSelection: { serviceId, userId: 'd'.repeat(32), networkId },
+  leaveNetwork: { serviceId, networkId, deviceId: 'e'.repeat(12) },
+  accountSelection: { serviceId, userId: 'd'.repeat(12) },
+  rememberAccountSelection: { serviceId, userId: 'd'.repeat(12), networkId },
   submitEnrollment: { serviceId, revision },
   recoverEnrollment: { serviceId, revision },
   pairs: { serviceId },
@@ -101,12 +101,12 @@ function page() {
   }
 }
 function fixture() {
-  const user = { userId: 'd'.repeat(32), username: 'alice' }
+  const user = { userId: 'd'.repeat(12), username: 'alice' }
   const network = { userId: user.userId, networkId, name: 'Office', maxDevices: 10 }
   const registration = {
     kind: 'registered' as const,
     serviceId,
-    deviceId: 'e'.repeat(32),
+    deviceId: 'e'.repeat(12),
     userId: user.userId,
     name: 'Mac',
     publicKey: 'public-key',
@@ -117,7 +117,7 @@ function fixture() {
     record: {
       format: 'dshker.p2p-devices' as const,
       version: 1 as const,
-      catalogId: 'f'.repeat(32),
+      catalogId: 'f'.repeat(12),
       services: [
         { ...inputs.addService, serviceId, publicKey: 'public-key', certificate: 'must-not-leak' }
       ],
@@ -138,14 +138,14 @@ function fixture() {
     state: 'active' as const,
     revision: 4,
     expiresAt: 1_800_000_000,
-    initiator: pairDevice('1'.repeat(32), 'online'),
-    target: pairDevice('2'.repeat(32), 'offline'),
+    initiator: pairDevice('1'.repeat(12), 'online'),
+    target: pairDevice('2'.repeat(12), 'offline'),
     localIsInitiator: true
   }
   const invite = { code: 'ABCDEFGHIJKLMNOP', networkId, expiresAt: 1_800_000_000 }
   const helperState = {
     pairId,
-    attemptId: '7'.repeat(32),
+    attemptId: '7'.repeat(12),
     generation: 5,
     stage: 'ready' as const,
     error: '',
@@ -181,7 +181,7 @@ function fixture() {
     connections: vi.fn(() => ({ error: '', peers: [{ serviceId, state: helperState }] })),
     connect: vi.fn(async () => helperState),
     disconnect: vi.fn(async () => undefined),
-    localDevice: vi.fn(async () => ({ deviceId: 'a'.repeat(32), name: 'host' })),
+    localDevice: vi.fn(async () => ({ deviceId: 'a'.repeat(12), name: 'host' })),
     serviceSessions: vi.fn(async () => []),
     updateServiceConfig: vi.fn(async () => snapshot),
     remoteRoots: vi.fn(async () => [{ rootId: 'root-a', name: 'Work', path: '/remote/work' }]),

@@ -4,7 +4,7 @@ import type { P2PServiceView } from '@/shared/p2p-management'
 import { p2pManagement, p2pServiceEditor as editor } from '@/app/domains/remote-connections'
 import P2PServiceEditorPanel from '../components/P2PServiceEditorPanel.vue'
 
-const serviceId = 'a'.repeat(64)
+const serviceId = 'a'.repeat(12)
 const revision = 'b'.repeat(64)
 const service: P2PServiceView = {
   serviceId,

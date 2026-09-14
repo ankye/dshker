@@ -42,7 +42,10 @@ async function createRecordLink(target: string, link: string): Promise<void> {
 
 function paired(record: PeerCatalogRecord): PeerCatalogRecord {
   const publicKey = 'dkqr/6uPC3xduT+vo12XY5kmreQ7So8jibpB2bIEeHw='
-  const serviceId = createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('hex')
+  const serviceId = createHash('sha256')
+    .update(Buffer.from(publicKey, 'base64'))
+    .digest('hex')
+    .slice(0, 12)
   return {
     ...record,
     services: [
@@ -58,14 +61,14 @@ function paired(record: PeerCatalogRecord): PeerCatalogRecord {
     ],
     computers: [
       {
-        connectionId: '1'.repeat(32),
+        connectionId: '1'.repeat(12),
         serviceId,
         displayName: 'Remote Mac',
-        pairId: '2'.repeat(32),
-        networkId: '3'.repeat(32),
-        localDeviceId: '4'.repeat(32),
-        remoteDeviceId: '5'.repeat(32),
-        userId: '6'.repeat(32),
+        pairId: '2'.repeat(12),
+        networkId: '3'.repeat(12),
+        localDeviceId: '4'.repeat(12),
+        remoteDeviceId: '5'.repeat(12),
+        userId: '6'.repeat(12),
         localPublicKey: publicKey,
         remotePublicKey: Buffer.alloc(32, 2).toString('base64'),
         pairRevision: 1,
@@ -95,7 +98,7 @@ describe('registered P2P catalog', () => {
     const next = paired(enabled.record)
     const bytes = Buffer.alloc(32, 9)
     next.services[0].publicKey = bytes.toString('base64')
-    next.services[0].serviceId = createHash('sha256').update(bytes).digest('hex')
+    next.services[0].serviceId = createHash('sha256').update(bytes).digest('hex').slice(0, 12)
     next.computers[0].serviceId = next.services[0].serviceId
     expect(() => catalog.commit(enabled.revision, next)).toThrow()
     expect(await catalog.inspect()).toEqual(enabled)
@@ -131,7 +134,7 @@ describe('registered P2P catalog', () => {
   it('rejects a substituted marker without changing either record', async () => {
     const { parent, catalog } = await fixture()
     const enabled = await catalog.enable()
-    const marker = JSON.stringify({ version: 1, catalogId: 'f'.repeat(32) })
+    const marker = JSON.stringify({ version: 1, catalogId: 'f'.repeat(12) })
     await writeFile(join(parent, 'p2p-enabled.json'), marker)
     await expect(catalog.inspect()).rejects.toMatchObject({ code: 'p2p.catalog_invalid' })
     expect(await readFile(join(parent, 'p2p-enabled.json'), 'utf8')).toBe(marker)
@@ -175,7 +178,7 @@ describe('registered P2P catalog', () => {
       const enabled = await catalog.enable()
       const saved = await catalog.commit(enabled.revision, paired(enabled.record))
       const next = structuredClone(saved.record)
-      next.computers[0][field] = 'a'.repeat(32)
+      next.computers[0][field] = 'a'.repeat(12)
       next.computers[0].displayName = 'must not persist'
       await expect(catalog.commit(saved.revision, next)).rejects.toMatchObject({
         code: 'p2p.identity_mismatch'

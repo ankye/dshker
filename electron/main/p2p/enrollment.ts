@@ -95,7 +95,7 @@ export class PeerEnrollment {
         networkId,
         name,
         userId: user.userId,
-        requestId: randomBytes(16).toString('hex'),
+        requestId: randomBytes(6).toString('hex'),
         publicKey,
         privateKey
       }
@@ -136,7 +136,7 @@ export class PeerEnrollment {
       const bytes = Buffer.from(privateKey, 'base64')
       const publicKey = bytes.subarray(32).toString('base64')
       bytes.fill(0)
-      const requestId = randomBytes(16).toString('hex')
+      const requestId = randomBytes(6).toString('hex')
       const csr = created.csr
       if (
         typeof csr !== 'string' ||
@@ -348,7 +348,7 @@ export class PeerEnrollment {
     signal: AbortSignal,
     operation: (signal: AbortSignal) => Promise<T>
   ): Promise<T> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     this.#admit(signal)
     if (this.#busy.has(serviceId)) throw new PeerHelperError('p2p.service_busy')
     this.#busy.add(serviceId)

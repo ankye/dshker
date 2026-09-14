@@ -269,7 +269,7 @@ export class PeerCredentialStore {
   }
 
   async #path(serviceId: string, create: boolean): Promise<string> {
-    if (!/^[0-9a-f]{64}$/.test(serviceId)) throw new PeerHelperError('p2p.invalid_service_identity')
+    if (!/^[0-9a-f]{12}$/.test(serviceId)) throw new PeerHelperError('p2p.invalid_service_identity')
     const root = await this.resolveSettingsRoot()
     if (!isAbsolute(root)) throw new PeerHelperError('p2p.settings_root_required')
     const parent = join(root, 'dsh-launcher')
@@ -534,9 +534,9 @@ export function assertPeerCredential(value: unknown): asserts value is PeerCrede
     if (typeof record[field] !== 'string') throw new PeerHelperError('p2p.credential_invalid')
   }
   if (
-    !/^[0-9a-f]{64}$/.test(record.serviceId as string) ||
-    !/^[0-9a-f]{32}$/.test(record.deviceId as string) ||
-    !/^[0-9a-f]{32}$/.test(record.userId as string) ||
+    !/^[0-9a-f]{12}$/.test(record.serviceId as string) ||
+    !/^[0-9a-f]{12}$/.test(record.deviceId as string) ||
+    !/^[0-9a-f]{12}$/.test(record.userId as string) ||
     !(record.name as string).trim() ||
     (record.name as string).trim() !== record.name ||
     Buffer.byteLength(record.name as string) > 256 ||

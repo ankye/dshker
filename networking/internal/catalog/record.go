@@ -101,7 +101,7 @@ func Parse(raw []byte) (Record, error) {
 	if err := strictJSON(raw, &record); err != nil {
 		return Record{}, ErrInvalid
 	}
-	if record.Format != recordFormat || record.Version != 1 || !isID(record.CatalogID, 32) {
+	if record.Format != recordFormat || record.Version != 1 || !isID(record.CatalogID, 12) {
 		return Record{}, ErrInvalid
 	}
 	if record.Services == nil || record.Computers == nil || record.ForgottenServiceIDs == nil {
@@ -118,7 +118,7 @@ func Parse(raw []byte) (Record, error) {
 		}
 	}
 	for _, forgotten := range record.ForgottenServiceIDs {
-		if !isID(forgotten, 64) {
+		if !isID(forgotten, 12) {
 			return Record{}, ErrInvalid
 		}
 	}
@@ -148,7 +148,7 @@ func Parse(raw []byte) (Record, error) {
 // ValidateService checks one service entry, including that the certificate is
 // a self-signed ed25519 CA whose key is the service identity.
 func ValidateService(service Service) error {
-	if !isID(service.ServiceID, 64) || !isName(service.DisplayName) {
+	if !isID(service.ServiceID, 12) || !isName(service.DisplayName) {
 		return ErrInvalid
 	}
 	key, err := decodeKey(service.PublicKey)
@@ -156,7 +156,9 @@ func ValidateService(service Service) error {
 		return err
 	}
 	digest := sha256.Sum256(key)
-	if hex.EncodeToString(digest[:]) != service.ServiceID {
+	// A service id is the coordinator's key id: the first six bytes of the digest,
+	// the same twelve characters as every other id this record carries.
+	if hex.EncodeToString(digest[:6]) != service.ServiceID {
 		return ErrInvalid
 	}
 	if err := validateCertificate(service.Certificate, key); err != nil {
@@ -217,11 +219,11 @@ func validateCertificate(encoded string, publicKey []byte) error {
 }
 
 func validateComputer(computer Computer) error {
-	if !isID(computer.ConnectionID, 32) || !isID(computer.ServiceID, 64) || !isName(computer.DisplayName) {
+	if !isID(computer.ConnectionID, 12) || !isID(computer.ServiceID, 12) || !isName(computer.DisplayName) {
 		return ErrInvalid
 	}
 	for _, value := range []string{computer.PairID, computer.NetworkID, computer.LocalDeviceID, computer.RemoteDeviceID, computer.UserID} {
-		if !isID(value, 32) {
+		if !isID(value, 12) {
 			return ErrInvalid
 		}
 	}

@@ -35,7 +35,7 @@ export class PeerConnections {
    * `peer.state`, so a caller cannot treat dispatch as success.
    */
   async connect(serviceId: string, pairId: string, signal: AbortSignal): Promise<PeerHelperState> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     return this.#operation(serviceId, pairId, async () => {
       const generation = ++this.#generation
@@ -58,7 +58,7 @@ export class PeerConnections {
 
   /** Tears down a connection and drops its local entry point. */
   async disconnect(serviceId: string, pairId: string, signal: AbortSignal): Promise<void> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     await this.#operation(serviceId, pairId, async () => {
       // Drop the entry first: a failed teardown must not leave a usable URL.

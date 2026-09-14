@@ -11,11 +11,11 @@ import {
   p2pSelectionFilePath
 } from './selection-preferences'
 
-const serviceId = 'c'.repeat(64)
-const otherService = 'd'.repeat(64)
-const userId = 'a'.repeat(32)
-const otherUser = 'b'.repeat(32)
-const networkId = '1'.repeat(32)
+const serviceId = 'c'.repeat(12)
+const otherService = 'd'.repeat(12)
+const userId = 'a'.repeat(12)
+const otherUser = 'b'.repeat(12)
+const networkId = '1'.repeat(12)
 const roots: string[] = []
 
 afterEach(async () => {

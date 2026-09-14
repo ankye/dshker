@@ -312,7 +312,7 @@ export class PeerPairing {
     signal: AbortSignal,
     operation: () => Promise<T>
   ): Promise<T> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     this.#admit()
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
     if (this.#busy.has(serviceId)) throw new PeerHelperError('p2p.service_busy')

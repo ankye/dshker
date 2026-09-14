@@ -2,9 +2,9 @@ import { describe, expect, it, vi } from 'vitest'
 import { PeerAutoConnect } from './auto-connect'
 import { PeerHelperError } from './wire'
 
-const serviceId = 'a'.repeat(64)
-const pairId = '1'.repeat(32)
-const other = '2'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const pairId = '1'.repeat(12)
+const other = '2'.repeat(12)
 
 /** A controllable clock so backoff is asserted without waiting. */
 function clock() {

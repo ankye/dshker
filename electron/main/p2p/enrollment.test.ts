@@ -5,9 +5,9 @@ import type { PeerPendingEnrollment } from './enrollment-record'
 import { PeerEnrollment } from './enrollment'
 import { PeerHelperError } from './wire'
 
-const serviceId = 'a'.repeat(64)
-const networkId = 'b'.repeat(32)
-const user = { userId: 'c'.repeat(32), username: 'owner' }
+const serviceId = 'a'.repeat(12)
+const networkId = 'b'.repeat(12)
+const user = { userId: 'c'.repeat(12), username: 'owner' }
 const signal = () => new AbortController().signal
 
 function fixture() {
@@ -21,7 +21,7 @@ function fixture() {
     Buffer.from(publicKey, 'base64')
   ]).toString('base64')
   const device = {
-    deviceId: 'd'.repeat(32),
+    deviceId: 'd'.repeat(12),
     userId: user.userId,
     name: 'Work computer',
     publicKey,
@@ -94,7 +94,7 @@ function fixture() {
       serviceId,
       networkId,
       userId: user.userId,
-      requestId: 'f'.repeat(32),
+      requestId: 'f'.repeat(12),
       name: device.name,
       publicKey,
       privateKey
@@ -198,7 +198,7 @@ describe('main enrollment orchestration (test-only dependency doubles)', () => {
     await f.enrollment.join(serviceId, networkId, f.device.name, signal())
     f.order.length = 0
     await expect(
-      f.enrollment.leave(serviceId, networkId, 'a'.repeat(32), signal())
+      f.enrollment.leave(serviceId, networkId, 'a'.repeat(12), signal())
     ).rejects.toMatchObject({ code: 'p2p.device_unregistered' })
     expect(f.order).toEqual([])
   })
@@ -223,7 +223,7 @@ describe('main enrollment orchestration (test-only dependency doubles)', () => {
       publicKey: f.device.publicKey,
       privateKey: f.privateKey
     })
-    expect(pending.requestId).toMatch(/^[a-f0-9]{32}$/)
+    expect(pending.requestId).toMatch(/^[a-f0-9]{12}$/)
     expect(f.accounts.enrollmentGrant).toHaveBeenCalledWith(
       serviceId,
       networkId,
@@ -302,7 +302,7 @@ describe('main enrollment orchestration (test-only dependency doubles)', () => {
     expect(f.call.mock.calls[0][1]).toEqual({ privateKey: f.privateKey })
     expect(f.call.mock.calls[1][1]).toMatchObject({
       serviceId,
-      data: { requestId: 'f'.repeat(32), name: f.device.name }
+      data: { requestId: 'f'.repeat(12), name: f.device.name }
     })
   })
 
@@ -312,7 +312,7 @@ describe('main enrollment orchestration (test-only dependency doubles)', () => {
     await expect(
       f.enrollment.submitPending(serviceId, '0'.repeat(64), signal())
     ).rejects.toMatchObject({ code: 'p2p.credential_conflict' })
-    f.accounts.currentUser.mockResolvedValueOnce({ ...user, userId: '9'.repeat(32) })
+    f.accounts.currentUser.mockResolvedValueOnce({ ...user, userId: '9'.repeat(12) })
     await expect(f.enrollment.recover(serviceId, '1'.repeat(64), signal())).rejects.toMatchObject({
       code: 'p2p.user_scope_mismatch'
     })
@@ -336,7 +336,7 @@ describe('main enrollment orchestration (test-only dependency doubles)', () => {
     const original = f.call.getMockImplementation()!
     f.call.mockImplementation(async (...args) =>
       args[0] === 'device.enrollmentResult'
-        ? { ...f.device, deviceId: '9'.repeat(32) }
+        ? { ...f.device, deviceId: '9'.repeat(12) }
         : original(...args)
     )
     await expect(
@@ -404,7 +404,7 @@ describe('main enrollment orchestration (test-only dependency doubles)', () => {
     await f.prepare()
     f.completeEnrollment.mockImplementationOnce(async (credential) => ({
       revision: '2'.repeat(64),
-      credential: { ...credential, deviceId: '9'.repeat(32) }
+      credential: { ...credential, deviceId: '9'.repeat(12) }
     }))
     await expect(f.enrollment.recover(serviceId, '1'.repeat(64), signal())).rejects.toMatchObject({
       code: 'p2p.enrollment_result_unconfirmed'

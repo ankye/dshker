@@ -231,7 +231,7 @@ describe('P2P management renderer owner', () => {
 
 describe('built-in official server provisioning', () => {
   const builtin = {
-    serviceId: 'b'.repeat(32),
+    serviceId: 'b'.repeat(12),
     publicKey: 'pinned-key',
     displayName: P2P_BUILTIN_SERVICE.displayName,
     httpsOrigin: P2P_BUILTIN_SERVICE.httpsOrigin,

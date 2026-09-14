@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopApi } from '@/shared/contracts'
 import type { P2PCatalogView, P2PManagementApi, P2PRegistrationView } from '@/shared/p2p-management'
 
-const serviceId = 'a'.repeat(64)
+const serviceId = 'a'.repeat(12)
 const service = {
   serviceId,
   publicKey: 'pinned-key',

@@ -3,12 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PeerPairing } from './pairing'
 import { peerFingerprint } from './pair-records'
 
-const serviceId = 'a'.repeat(64)
-const localDevice = '1'.repeat(32)
-const remoteDevice = '2'.repeat(32)
-const networkId = '3'.repeat(32)
-const pairId = '4'.repeat(32)
-const userId = '5'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const localDevice = '1'.repeat(12)
+const remoteDevice = '2'.repeat(12)
+const networkId = '3'.repeat(12)
+const pairId = '4'.repeat(12)
+const userId = '5'.repeat(12)
 const signal = () => AbortSignal.timeout(5000)
 
 /** Distinct 32-byte Ed25519-sized keys, so fingerprints differ. */
@@ -58,7 +58,7 @@ describe('main-owned P2P pairing', () => {
   it('derives the confirmation fingerprint from the real key rather than trusting the reply', async () => {
     // A reply cannot smuggle its own fingerprint: the value the user confirms is
     // computed locally from the actual public key.
-    const expected = createHash('sha256').update(remoteKey).digest('hex').slice(0, 32)
+    const expected = createHash('sha256').update(remoteKey).digest('hex').slice(0, 12)
     expect(remoteFingerprint.replace(/ /g, '')).toBe(expected)
   })
 
@@ -195,8 +195,8 @@ describe('main-owned P2P pairing', () => {
   it('rejects a pair that names neither local nor a known remote device', async () => {
     const f = fixture()
     const foreign = identity('active')
-    foreign.pair.initiator = '9'.repeat(32)
-    foreign.initiator = device('9'.repeat(32), localKey)
+    foreign.pair.initiator = '9'.repeat(12)
+    foreign.initiator = device('9'.repeat(12), localKey)
     await expect(
       (async () => {
         f.call.mockResolvedValueOnce(foreign)
@@ -208,7 +208,7 @@ describe('main-owned P2P pairing', () => {
   it('rejects a reply whose pairId does not match the request', async () => {
     const f = fixture()
     const other = identity('active')
-    other.pair.pairId = '8'.repeat(32)
+    other.pair.pairId = '8'.repeat(12)
     f.call.mockResolvedValueOnce(other)
     await expect(f.pairing.identity(serviceId, pairId, signal())).rejects.toMatchObject({
       code: 'p2p.identity_mismatch'
@@ -230,10 +230,10 @@ describe('main-owned P2P pairing', () => {
     // itself and answered no offers.
     const f = fixture()
     const foreign = {
-      pairId: '6'.repeat(32),
+      pairId: '6'.repeat(12),
       networkId,
-      initiator: '7'.repeat(32),
-      target: '8'.repeat(32),
+      initiator: '7'.repeat(12),
+      target: '8'.repeat(12),
       state: 'active',
       expiresAt: 1_800_000_000,
       revision: 2
@@ -258,7 +258,7 @@ describe('main-owned P2P pairing', () => {
 
   it('skips one pair whose identity names neither side while reading the rest', async () => {
     const f = fixture()
-    const foreignPair = '6'.repeat(32)
+    const foreignPair = '6'.repeat(12)
     const listed = [
       {
         pairId,
@@ -273,15 +273,15 @@ describe('main-owned P2P pairing', () => {
         pairId: foreignPair,
         networkId,
         initiator: localDevice,
-        target: '8'.repeat(32),
+        target: '8'.repeat(12),
         state: 'active',
         expiresAt: 1_800_000_000,
         revision: 1
       }
     ]
     const foreign = identity('active')
-    foreign.pair.initiator = '9'.repeat(32)
-    foreign.initiator = device('9'.repeat(32), localKey)
+    foreign.pair.initiator = '9'.repeat(12)
+    foreign.initiator = device('9'.repeat(12), localKey)
     f.call.mockImplementation(async (method: string, payload: unknown) => {
       if (method === 'pairs.list') return listed
       if (method === 'pairs.identity') {

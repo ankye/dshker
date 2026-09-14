@@ -9,7 +9,7 @@ import {
   type P2PServiceSessionView
 } from '@/shared/p2p-management'
 
-const serviceId = 'a'.repeat(64)
+const serviceId = 'a'.repeat(12)
 const service = {
   serviceId,
   publicKey: 'pinned-key',
@@ -244,7 +244,7 @@ describe('P2P 「我的网络」 card', () => {
     })
     const ui = await render({ leaveNetwork })
     const domain = await import('@/app/domains/remote-connections')
-    domain.p2pAccounts.state(serviceId).user = { userId: 'u'.repeat(32), username: 'owner' }
+    domain.p2pAccounts.state(serviceId).user = { userId: 'u'.repeat(12), username: 'owner' }
     domain.p2pEnrollment.state(serviceId).registration = registered
     domain.p2pEnrollment.state(serviceId).joinNetworkIdDraft = 'network-a'
     await flushPromises()

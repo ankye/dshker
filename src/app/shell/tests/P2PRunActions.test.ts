@@ -8,9 +8,9 @@ import {
 } from '@/app/domains/remote-connections'
 import P2PRunActions from '../components/P2PRunActions.vue'
 
-const serviceId = 'a'.repeat(64)
-const connectionId = 'c'.repeat(32)
-const pairId = '1'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const connectionId = 'c'.repeat(12)
+const pairId = '1'.repeat(12)
 
 function computer(overrides: Partial<P2PComputerView> = {}): P2PComputerView {
   return {
@@ -18,10 +18,10 @@ function computer(overrides: Partial<P2PComputerView> = {}): P2PComputerView {
     serviceId,
     displayName: 'Studio',
     pairId,
-    networkId: '2'.repeat(32),
-    localDeviceId: '3'.repeat(32),
-    remoteDeviceId: '4'.repeat(32),
-    userId: '5'.repeat(32),
+    networkId: '2'.repeat(12),
+    localDeviceId: '3'.repeat(12),
+    remoteDeviceId: '4'.repeat(12),
+    userId: '5'.repeat(12),
     localPublicKey: 'local-key',
     remotePublicKey: 'remote-key',
     pairRevision: 1,
@@ -33,7 +33,7 @@ function computer(overrides: Partial<P2PComputerView> = {}): P2PComputerView {
 function catalog(entry: P2PComputerView): P2PCatalogView {
   return {
     revision: 'b'.repeat(64),
-    catalogId: 'd'.repeat(32),
+    catalogId: 'd'.repeat(12),
     services: [],
     computers: [entry],
     forgottenServiceIds: []
@@ -70,7 +70,7 @@ describe('P2P Run disconnected actions', () => {
     vi.spyOn(p2pConnections, 'find').mockReturnValue({
       serviceId,
       pairId,
-      attemptId: '7'.repeat(32),
+      attemptId: '7'.repeat(12),
       generation: 2,
       stage: 'failed',
       error: 'p2p.direct_closed',
@@ -118,7 +118,7 @@ describe('P2P Run disconnected actions', () => {
   })
 
   it('renders nothing for a computer that is not in the catalog', () => {
-    const wrapper = mount(P2PRunActions, { props: { connectionId: '9'.repeat(32) } })
+    const wrapper = mount(P2PRunActions, { props: { connectionId: '9'.repeat(12) } })
     expect(wrapper.find('[data-testid="p2p-run-connect"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="p2p-run-edit"]').exists()).toBe(false)
   })

@@ -65,7 +65,7 @@ export function parsePeerCatalog(text: string): PeerCatalogRecord {
   if (
     record.format !== 'dshker.p2p-devices' ||
     record.version !== 1 ||
-    !id(record.catalogId, 32) ||
+    !id(record.catalogId, 12) ||
     !Array.isArray(record.services) ||
     !Array.isArray(record.computers) ||
     !Array.isArray(record.forgottenServiceIds)
@@ -74,7 +74,7 @@ export function parsePeerCatalog(text: string): PeerCatalogRecord {
   const services = record.services.map(parsePeerService)
   const computers = record.computers.map(computer)
   const forgotten = record.forgottenServiceIds
-  if (forgotten.some((value) => !id(value, 64))) fail()
+  if (forgotten.some((value) => !id(value, 12))) fail()
   unique(services.map((value) => value.serviceId))
   unique(computers.map((value) => value.connectionId))
   unique(computers.map((value) => value.serviceId + ':' + value.pairId))
@@ -102,7 +102,7 @@ export function parsePeerService(value: unknown): PeerServiceRecord {
     'certificate'
   ])
   if (
-    !id(record.serviceId, 64) ||
+    !id(record.serviceId, 12) ||
     !name(record.displayName) ||
     !key(record.publicKey) ||
     typeof record.certificate !== 'string' ||
@@ -110,9 +110,13 @@ export function parsePeerService(value: unknown): PeerServiceRecord {
   )
     fail()
   assertServiceCertificate(record.certificate, record.publicKey)
+  // The service id is the coordinator's key id for its CA key: the first six bytes
+  // of the digest, twelve hex characters — the same shape as every other id here.
   if (
-    createHash('sha256').update(Buffer.from(record.publicKey, 'base64')).digest('hex') !==
-    record.serviceId
+    createHash('sha256')
+      .update(Buffer.from(record.publicKey, 'base64'))
+      .digest('hex')
+      .slice(0, 12) !== record.serviceId
   )
     fail()
   if (
@@ -201,14 +205,17 @@ function computer(value: unknown): PeerComputerRecord {
     'pairState'
   ])
   if (
-    !id(record.connectionId, 32) ||
-    !id(record.serviceId, 64) ||
+    // Every id the coordinator issues is twelve lowercase hex characters; a device
+    // id is derived from the machine's key, so it is the same for the life of the
+    // machine. `key` below still checks real 32-byte material.
+    !id(record.connectionId, 12) ||
+    !id(record.serviceId, 12) ||
     !name(record.displayName) ||
-    !id(record.pairId, 32) ||
-    !id(record.networkId, 32) ||
-    !id(record.localDeviceId, 32) ||
-    !id(record.remoteDeviceId, 32) ||
-    !id(record.userId, 32) ||
+    !id(record.pairId, 12) ||
+    !id(record.networkId, 12) ||
+    !id(record.localDeviceId, 12) ||
+    !id(record.remoteDeviceId, 12) ||
+    !id(record.userId, 12) ||
     record.localDeviceId === record.remoteDeviceId ||
     !key(record.localPublicKey) ||
     !key(record.remotePublicKey) ||

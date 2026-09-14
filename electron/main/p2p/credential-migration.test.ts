@@ -20,15 +20,15 @@ vi.mock('electron', () => ({
 // Generated once with a Go helper: a self-signed ed25519 identity that
 // satisfies assertPeerCredential's key, certificate and CN checks.
 const credential: PeerCredential = {
-  serviceId: 'b8f877496f1a6caa7f03def09871ec445934eb1e4d784e53dbfd5baafdce69a8',
-  deviceId: 'c7f82c93ae0f5cd32703000b336b5981',
-  userId: '99366d20795ddbbe733f0e4363ec9111',
+  serviceId: '0def8197fda5',
+  deviceId: 'e79659c33d94',
+  userId: '99366d20795d',
   name: 'migration-test-device',
-  publicKey: 'SiWm8UVhBPP8o4IJlxyR+Ilkgrau4X8cS/jm4df7Kro=',
+  publicKey: 'BVDgn9dw8miFSywIvnkKMDvat3liLfPm/Vyuvdng9is=',
   privateKey:
-    'dCLaPHzmvcIvymXy/DrVO5X5lwLakN9W8buBoVr3EedKJabxRWEE8/yjggmXHJH4iWSCtq7hfxxL+Obh1/squg==',
+    'm6UeobVM1YnnUopnBylTiXLRYl574lvt9+F5RsbDhnkFUOCf13DyaIVLLAi+eQowO9q3eWIt8+b9XK692eD2Kw==',
   certificate:
-    'MIIBFjCByaADAgECAgEBMAUGAytlcDArMSkwJwYDVQQDEyBjN2Y4MmM5M2FlMGY1Y2QzMjcwMzAwMGIzMzZiNTk4MTAeFw0yNjA5MTIxMzM1NDNaFw0yNzA5MTIxNDM1NDNaMCsxKTAnBgNVBAMTIGM3ZjgyYzkzYWUwZjVjZDMyNzAzMDAwYjMzNmI1OTgxMCowBQYDK2VwAyEASiWm8UVhBPP8o4IJlxyR+Ilkgrau4X8cS/jm4df7KrqjEjAQMA4GA1UdDwEB/wQEAwIHgDAFBgMrZXADQQBwDYsCUufn7DR4c7YDaNhXZTvOwCGa+xiRRz15G0NK4Mtq7wZpI4P+eo6haZokX95zYpfGhoByxzWf4Ajw7p0B'
+    'MIHuMIGhoAMCAQICAQEwBQYDK2VwMBcxFTATBgNVBAMTDGU3OTY1OWMzM2Q5NDAeFw0yNjA5MTIxMzM1NDNaFw0yNzA5MTIxNDM1NDNaMBcxFTATBgNVBAMTDGU3OTY1OWMzM2Q5NDAqMAUGAytlcAMhAAVQ4J/XcPJohUssCL55CjA72rd5Yi3z5v1crr3Z4PYroxIwEDAOBgNVHQ8BAf8EBAMCB4AwBQYDK2VwA0EAL8KHVOYF4LlAaqN/3Utm77d3hIuX3FfkJB3CeEePEr342YaxBvc/z5jVQbfcR5GjjcNkUsgBU/quYb/Knwt8Dg=='
 }
 
 /** An in-memory native provider with injectable failures. */
@@ -86,8 +86,8 @@ async function writeLegacyRecord(file: string, value: unknown = credential): Pro
 /** A pending enrollment shaped exactly like the one the previous release wrote. */
 const pending = {
   serviceId: credential.serviceId,
-  requestId: 'e'.repeat(32),
-  networkId: 'f'.repeat(32),
+  requestId: 'e'.repeat(12),
+  networkId: 'f'.repeat(12),
   userId: credential.userId,
   name: credential.name,
   publicKey: credential.publicKey,

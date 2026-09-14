@@ -15,13 +15,13 @@ import { resetRuntimeBrowserForTests, runtimeBrowser } from '../runtimeBrowserSt
 const runtimeUrl = 'http://127.0.0.1:3088/?token=must-not-be-copied'
 const peerComputer: P2PComputerView = {
   connectionId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-  serviceId: 'a'.repeat(64),
+  serviceId: 'a'.repeat(12),
   displayName: '办公室 Windows',
   pairId: '11111111111111111111111111111111',
-  networkId: '2'.repeat(32),
-  localDeviceId: '3'.repeat(32),
-  remoteDeviceId: '4'.repeat(32),
-  userId: '5'.repeat(32),
+  networkId: '2'.repeat(12),
+  localDeviceId: '3'.repeat(12),
+  remoteDeviceId: '4'.repeat(12),
+  userId: '5'.repeat(12),
   localPublicKey: 'local-key',
   remotePublicKey: 'remote-key',
   pairRevision: 1,
@@ -30,7 +30,7 @@ const peerComputer: P2PComputerView = {
 const peerConnection: P2PConnectionView = {
   serviceId: peerComputer.serviceId,
   pairId: peerComputer.pairId,
-  attemptId: '6'.repeat(32),
+  attemptId: '6'.repeat(12),
   generation: 1,
   stage: 'ready',
   error: '',
@@ -238,7 +238,7 @@ describe('RuntimeTabsPanel rendering controls', () => {
     }
     p2pManagement.catalog.value = {
       revision: 'b'.repeat(64),
-      catalogId: 'd'.repeat(32),
+      catalogId: 'd'.repeat(12),
       services: [],
       computers: [peerComputer, offlinePeer],
       forgottenServiceIds: []

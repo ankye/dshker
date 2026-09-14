@@ -29,7 +29,7 @@ const PREFIX = 'persist:dsh-peer-'
  * and using the service alone would let two peers share cookies.
  */
 export function peerPartition(serviceId: string, pairId: string): string {
-  assertAccountId(serviceId, 64)
+  assertAccountId(serviceId, 12)
   assertAccountId(pairId)
   const digest = createHash('sha256').update(`${serviceId}:${pairId}`).digest('hex')
   return `${PREFIX}${digest.slice(0, 32)}`

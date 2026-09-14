@@ -48,7 +48,7 @@ export class PeerRemoteProjects {
 
   /** Reads the roots the remote user explicitly authorized. */
   async roots(serviceId: string, pairId: string, signal: AbortSignal): Promise<PeerRemoteRoot[]> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     return this.#operation(serviceId, pairId, async () => {
       await this.authorize(serviceId, pairId)
@@ -79,7 +79,7 @@ export class PeerRemoteProjects {
     limit: number,
     signal: AbortSignal
   ): Promise<{ entries: PeerRemoteEntry[]; total: number }> {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     if (typeof rootId !== 'string' || rootId === '' || rootId.length > 128)
       throw new PeerHelperError('p2p.invalid_request')

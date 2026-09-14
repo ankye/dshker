@@ -80,7 +80,7 @@ func (store *Store) Enable() (Snapshot, error) {
 			return Snapshot{}, ErrExists
 		}
 	}
-	identifier := make([]byte, 16)
+	identifier := make([]byte, 6)
 	if _, err := rand.Read(identifier); err != nil {
 		return Snapshot{}, ErrWriteFailed
 	}

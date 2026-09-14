@@ -23,7 +23,7 @@ export function assertPendingEnrollment(value: unknown): asserts value is PeerPe
     'publicKey',
     'privateKey'
   ])
-  assertAccountId(record.serviceId, 64)
+  assertAccountId(record.serviceId, 12)
   for (const field of ['requestId', 'networkId', 'userId']) assertAccountId(record[field])
   assertAccountText(record.name)
   const publicKey = keyBytes(record.publicKey, 32)

@@ -11,7 +11,10 @@ import { PeerHelperError } from './wire'
 const certificate =
   'MIIBTDCB/6ADAgECAhQdvAzm/JylryF76uUuO7r+d071FzAFBgMrZXAwHDEaMBgGA1UEAwwRY2F0YWxvZy10ZXN0LW9ubHkwHhcNMjYwOTA3MDkzNDI0WhcNMjYwOTA4MDkzNDI0WjAcMRowGAYDVQQDDBFjYXRhbG9nLXRlc3Qtb25seTAqMAUGAytlcAMhAHZKq/+rjwt8Xbk/r6Ndl2OZJq3kO0qPI4m6QdmyBHh8o1MwUTAdBgNVHQ4EFgQUTzBnYBq4Sj67YKEwfjV4RQprqugwHwYDVR0jBBgwFoAUTzBnYBq4Sj67YKEwfjV4RQprqugwDwYDVR0TAQH/BAUwAwEB/zAFBgMrZXADQQCBoRFNNIoG4H5nDknITd+qNkK1U0YinUt0fnoMS8dSZ+u7rI1uCjuNRSiTLZ4nnspeqawDqAFFtrJcV4GNHBIM'
 const publicKey = 'dkqr/6uPC3xduT+vo12XY5kmreQ7So8jibpB2bIEeHw='
-const serviceId = createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('hex')
+const serviceId = createHash('sha256')
+  .update(Buffer.from(publicKey, 'base64'))
+  .digest('hex')
+  .slice(0, 12)
 
 const roots: string[] = []
 
@@ -47,14 +50,14 @@ function paired(record: PeerCatalogRecord): PeerCatalogRecord {
     ],
     computers: [
       {
-        connectionId: '1'.repeat(32),
+        connectionId: '1'.repeat(12),
         serviceId,
         displayName: 'Remote Mac',
-        pairId: '2'.repeat(32),
-        networkId: '3'.repeat(32),
-        localDeviceId: '4'.repeat(32),
-        remoteDeviceId: '5'.repeat(32),
-        userId: '6'.repeat(32),
+        pairId: '2'.repeat(12),
+        networkId: '3'.repeat(12),
+        localDeviceId: '4'.repeat(12),
+        remoteDeviceId: '5'.repeat(12),
+        userId: '6'.repeat(12),
         localPublicKey: publicKey,
         remotePublicKey: Buffer.alloc(32, 2).toString('base64'),
         pairRevision: 1,

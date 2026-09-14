@@ -10,7 +10,7 @@ const now = 1_788_000_000
 
 function device(overrides: Partial<P2PNetworkDeviceView> = {}): P2PNetworkDeviceView {
   return {
-    deviceId: 'a'.repeat(32),
+    deviceId: 'a'.repeat(12),
     name: 'Mac Studio',
     presence: 'online',
     lastSeen: now - 10,
@@ -97,9 +97,9 @@ describe('P2P device directory', () => {
   it('marks the local device and sorts it first, then online before offline', () => {
     const view = render({
       devices: [
-        device({ deviceId: 'b'.repeat(32), name: 'Zeta', presence: 'offline' }),
-        device({ deviceId: 'c'.repeat(32), name: 'Alpha', presence: 'online' }),
-        device({ deviceId: 'd'.repeat(32), name: 'Local', isLocal: true, presence: 'offline' })
+        device({ deviceId: 'b'.repeat(12), name: 'Zeta', presence: 'offline' }),
+        device({ deviceId: 'c'.repeat(12), name: 'Alpha', presence: 'online' }),
+        device({ deviceId: 'd'.repeat(12), name: 'Local', isLocal: true, presence: 'offline' })
       ]
     })
     const names = view.findAll('.p2p-devices__name').map((node) => node.text())
@@ -126,7 +126,7 @@ describe('P2P device directory', () => {
 
   it('reports the count against the capacity the server confirmed', () => {
     const view = render({
-      devices: [device(), device({ deviceId: 'e'.repeat(32), name: 'Second' })],
+      devices: [device(), device({ deviceId: 'e'.repeat(12), name: 'Second' })],
       maxDevices: 30
     })
     const summary = view.get('[data-testid="p2p-devices-summary"]').text()
@@ -137,7 +137,7 @@ describe('P2P device directory', () => {
   // Removal is an interface contract, not just a call: the row asks twice, says
   // it is working, and never claims an outcome the server has not confirmed.
   it('asks twice before removing a device', async () => {
-    const oldId = 'b'.repeat(32)
+    const oldId = 'b'.repeat(12)
     const view = render({ devices: [device(), device({ deviceId: oldId, name: 'Old PC' })] })
     await view.get('[data-testid="p2p-devices-remove-' + oldId + '"]').trigger('click')
     expect(view.emitted('remove')).toBeUndefined()
@@ -147,7 +147,7 @@ describe('P2P device directory', () => {
   })
 
   it('lets the owner back out of a removal', async () => {
-    const oldId = 'b'.repeat(32)
+    const oldId = 'b'.repeat(12)
     const view = render({ devices: [device({ deviceId: oldId, name: 'Old PC' })] })
     await view.get('[data-testid="p2p-devices-remove-' + oldId + '"]').trigger('click')
     await view.get('[data-testid="p2p-devices-cancel-' + oldId + '"]').trigger('click')
@@ -156,7 +156,7 @@ describe('P2P device directory', () => {
   })
 
   it('keeps the row busy, not ready, while a removal is in flight', async () => {
-    const oldId = 'b'.repeat(32)
+    const oldId = 'b'.repeat(12)
     const view = render({ devices: [device({ deviceId: oldId })], removing: oldId })
     expect(view.get('li').attributes('aria-busy')).toBe('true')
     expect(

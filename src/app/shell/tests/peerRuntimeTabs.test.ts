@@ -4,9 +4,9 @@ import type { P2PCatalogView, P2PComputerView, P2PConnectionView } from '@/share
 import { p2pConnections, p2pManagement } from '@/app/domains/remote-connections'
 import { resetRuntimeBrowserForTests, runtimeBrowser } from '../runtimeBrowserState'
 
-const serviceId = 'a'.repeat(64)
-const connectionId = 'c'.repeat(32)
-const pairId = '1'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const connectionId = 'c'.repeat(12)
+const pairId = '1'.repeat(12)
 
 function computer(overrides: Partial<P2PComputerView> = {}): P2PComputerView {
   return {
@@ -14,10 +14,10 @@ function computer(overrides: Partial<P2PComputerView> = {}): P2PComputerView {
     serviceId,
     displayName: 'Studio',
     pairId,
-    networkId: '2'.repeat(32),
-    localDeviceId: '3'.repeat(32),
-    remoteDeviceId: '4'.repeat(32),
-    userId: '5'.repeat(32),
+    networkId: '2'.repeat(12),
+    localDeviceId: '3'.repeat(12),
+    remoteDeviceId: '4'.repeat(12),
+    userId: '5'.repeat(12),
     localPublicKey: 'local-key',
     remotePublicKey: 'remote-key',
     pairRevision: 1,
@@ -29,7 +29,7 @@ function computer(overrides: Partial<P2PComputerView> = {}): P2PComputerView {
 function catalog(entries: P2PComputerView[]): P2PCatalogView {
   return {
     revision: 'b'.repeat(64),
-    catalogId: 'd'.repeat(32),
+    catalogId: 'd'.repeat(12),
     services: [],
     computers: entries,
     forgottenServiceIds: []
@@ -40,7 +40,7 @@ function peer(overrides: Partial<P2PConnectionView> = {}): P2PConnectionView {
   return {
     serviceId,
     pairId,
-    attemptId: '6'.repeat(32),
+    attemptId: '6'.repeat(12),
     generation: 1,
     stage: 'ready',
     error: '',

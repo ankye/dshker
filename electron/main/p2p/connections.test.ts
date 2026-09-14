@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PeerConnections } from './connections'
 
-const serviceId = 'a'.repeat(64)
-const pairId = '4'.repeat(32)
-const otherPair = '5'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const pairId = '4'.repeat(12)
+const otherPair = '5'.repeat(12)
 const signal = () => AbortSignal.timeout(5000)
 const url = 'http://127.0.0.1:51234/'
 
@@ -12,7 +12,7 @@ afterEach(() => vi.restoreAllMocks())
 function state(generation: number, stage = 'punching', pair = pairId) {
   return {
     pairId: pair,
-    attemptId: '7'.repeat(32),
+    attemptId: '7'.repeat(12),
     generation,
     stage,
     error: '',
@@ -111,7 +111,7 @@ describe('main-owned P2P connections', () => {
 
   it('invalidates every entry point of one service without touching others', async () => {
     const f = fixture()
-    const otherService = 'b'.repeat(64)
+    const otherService = 'b'.repeat(12)
     f.call.mockResolvedValueOnce({ state: state(1), url })
     const first = await f.connections.connect(serviceId, pairId, signal())
     f.call.mockResolvedValueOnce({ state: state(2), url: `${url}other` })

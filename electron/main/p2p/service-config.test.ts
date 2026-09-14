@@ -19,7 +19,10 @@ const moved = {
   stunAddress: 'moved.test:3478'
 }
 const publicKey = 'dkqr/6uPC3xduT+vo12XY5kmreQ7So8jibpB2bIEeHw='
-const serviceId = createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('hex')
+const serviceId = createHash('sha256')
+  .update(Buffer.from(publicKey, 'base64'))
+  .digest('hex')
+  .slice(0, 12)
 const certificate =
   'MIIBTDCB/6ADAgECAhQdvAzm/JylryF76uUuO7r+d071FzAFBgMrZXAwHDEaMBgGA1UEAwwRY2F0YWxvZy10ZXN0LW9ubHkwHhcNMjYwOTA3MDkzNDI0WhcNMjYwOTA4MDkzNDI0WjAcMRowGAYDVQQDDBFjYXRhbG9nLXRlc3Qtb25seTAqMAUGAytlcAMhAHZKq/+rjwt8Xbk/r6Ndl2OZJq3kO0qPI4m6QdmyBHh8o1MwUTAdBgNVHQ4EFgQUTzBnYBq4Sj67YKEwfjV4RQprqugwHwYDVR0jBBgwFoAUTzBnYBq4Sj67YKEwfjV4RQprqugwDwYDVR0TAQH/BAUwAwEB/zAFBgMrZXADQQCBoRFNNIoG4H5nDknITd+qNkK1U0YinUt0fnoMS8dSZ+u7rI1uCjuNRSiTLZ4nnspeqawDqAFFtrJcV4GNHBIM'
 
@@ -61,14 +64,14 @@ async function saved() {
     ...withService.record,
     computers: [
       {
-        connectionId: 'c'.repeat(32),
+        connectionId: 'c'.repeat(12),
         serviceId,
         displayName: 'Studio',
-        pairId: '1'.repeat(32),
-        networkId: '2'.repeat(32),
-        localDeviceId: '3'.repeat(32),
-        remoteDeviceId: '4'.repeat(32),
-        userId: '5'.repeat(32),
+        pairId: '1'.repeat(12),
+        networkId: '2'.repeat(12),
+        localDeviceId: '3'.repeat(12),
+        remoteDeviceId: '4'.repeat(12),
+        userId: '5'.repeat(12),
         localPublicKey: publicKey,
         remotePublicKey: Buffer.alloc(32, 3).toString('base64'),
         pairRevision: 1,
@@ -107,7 +110,10 @@ describe('shared P2P service configuration', () => {
     f.call.mockResolvedValue(
       identityFor(moved, {
         publicKey: otherKey,
-        serviceId: createHash('sha256').update(Buffer.from(otherKey, 'base64')).digest('hex')
+        serviceId: createHash('sha256')
+          .update(Buffer.from(otherKey, 'base64'))
+          .digest('hex')
+          .slice(0, 12)
       })
     )
     // Refused either as a mismatched identity or as an invalid record; what
@@ -129,7 +135,7 @@ describe('shared P2P service configuration', () => {
         f.snapshot.revision,
         serviceId,
         moved,
-        (connectionId) => connectionId === 'c'.repeat(32),
+        (connectionId) => connectionId === 'c'.repeat(12),
         signal()
       )
     ).rejects.toMatchObject({ code: 'p2p.service_busy' })
@@ -149,7 +155,7 @@ describe('shared P2P service configuration', () => {
   it('rejects an unknown service instead of creating one', async () => {
     const f = await saved()
     await expect(
-      f.services.updateConfig(f.snapshot.revision, 'b'.repeat(64), moved, idle, signal())
+      f.services.updateConfig(f.snapshot.revision, 'b'.repeat(12), moved, idle, signal())
     ).rejects.toMatchObject({ code: 'p2p.service_not_found' })
     expect(f.call).not.toHaveBeenCalled()
   })

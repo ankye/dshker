@@ -45,7 +45,7 @@ export class P2PSelectionStore {
   /** This service's remembered network for one account, if any. */
   async remembered(serviceId: string, userId: string): Promise<string | undefined> {
     assertServiceId(serviceId)
-    assertHexId(userId, 32, 'userId')
+    assertHexId(userId, 12, 'userId')
     const record = await this.#load()
     const entry = record.services[serviceId]
     return entry && entry.userId === userId ? entry.networkId : undefined
@@ -54,8 +54,8 @@ export class P2PSelectionStore {
   /** Records one explicit choice, replacing whatever this service remembered. */
   async remember(serviceId: string, userId: string, networkId: string): Promise<void> {
     assertServiceId(serviceId)
-    assertHexId(userId, 32, 'userId')
-    assertHexId(networkId, 32, 'networkId')
+    assertHexId(userId, 12, 'userId')
+    assertHexId(networkId, 12, 'networkId')
     const record = await this.#load()
     await this.#save({
       ...record,
@@ -188,15 +188,15 @@ export function parseP2PSelection(text: string): P2PSelectionRecord {
         'P2P selection entry fields are invalid.'
       )
     }
-    assertHexId(fields.userId, 32, 'userId')
-    assertHexId(fields.networkId, 32, 'networkId')
+    assertHexId(fields.userId, 12, 'userId')
+    assertHexId(fields.networkId, 12, 'networkId')
     services[serviceId] = { userId: fields.userId, networkId: fields.networkId }
   }
   return createP2PSelectionRecord(services)
 }
 
 function assertServiceId(value: unknown): asserts value is string {
-  assertHexId(value, 64, 'service id')
+  assertHexId(value, 12, 'service id')
 }
 
 /** Every persisted identifier is a fixed-length lowercase hex string, or refused. */

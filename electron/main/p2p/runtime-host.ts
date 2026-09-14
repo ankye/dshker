@@ -122,7 +122,7 @@ export class PeerRuntimeHost {
       payload,
       method === 'runtime.connect' ? ['serviceId', 'pairId'] : ['serviceId', 'state']
     )
-    assertAccountId(fields.serviceId, 64)
+    assertAccountId(fields.serviceId, 12)
     const state = method === 'peer.state' ? parseHelperState(fields.state) : undefined
     const pairId = state ? state.pairId : fields.pairId
     assertAccountId(pairId)

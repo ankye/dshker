@@ -3,7 +3,7 @@ import type { P2PCatalogView, P2PServiceView } from '@/shared/p2p-management'
 import { p2pManagement } from './p2pManagement'
 import { p2pServiceEditor as editor } from './useP2PServiceEditor'
 
-const serviceId = 'a'.repeat(64)
+const serviceId = 'a'.repeat(12)
 const revision = 'b'.repeat(64)
 const service: P2PServiceView = {
   serviceId,
@@ -21,7 +21,7 @@ const moved: P2PServiceView = {
 }
 const catalog = (entry: P2PServiceView, rev = 'c'.repeat(64)): P2PCatalogView => ({
   revision: rev,
-  catalogId: 'd'.repeat(32),
+  catalogId: 'd'.repeat(12),
   services: [entry],
   computers: [],
   forgottenServiceIds: []
@@ -137,7 +137,7 @@ describe('P2P shared service editor', () => {
   it('asks before discarding a dirty draft when switching service', () => {
     editor.open(service, revision)
     editor.draft.value!.httpsOrigin = moved.httpsOrigin
-    const other = { ...service, serviceId: '9'.repeat(64) }
+    const other = { ...service, serviceId: '9'.repeat(12) }
     expect(editor.open(other, revision)).toBe(false)
     expect(editor.discardRequested.value).toBe(true)
     // Keeping the draft leaves the original target loaded.

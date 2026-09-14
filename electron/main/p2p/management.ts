@@ -355,7 +355,7 @@ export class PeerManagement {
       deviceId = undefined // First run or unreadable preset: generate below.
     }
     if (!deviceId) {
-      deviceId = randomBytes(16).toString('hex')
+      deviceId = randomBytes(6).toString('hex')
       await mkdir(root, { recursive: true })
       await writeFile(file, JSON.stringify({ deviceId, name: hostname() }) + '\n', 'utf8')
     }
@@ -384,7 +384,7 @@ export class PeerManagement {
    * reconfigures the helper.
    */
   async removeService(serviceId: string, signal: AbortSignal) {
-    assertAccountId(serviceId, 64)
+    assertAccountId(serviceId, 12)
     this.#admit()
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
     // Local-only, tolerant removal: never contacts the coordinator, so a server

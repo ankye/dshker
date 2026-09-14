@@ -126,7 +126,7 @@ export class PeerCatalog {
     const marker = join(parent, 'p2p-enabled.json')
     if ((await exists(file)) || (await exists(marker)))
       throw new PeerHelperError('p2p.catalog_exists')
-    const catalogId = randomBytes(16).toString('hex')
+    const catalogId = randomBytes(6).toString('hex')
     const record: PeerCatalogRecord = {
       format: 'dshker.p2p-devices',
       version: 1,

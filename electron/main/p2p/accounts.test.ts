@@ -2,10 +2,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PeerAccounts } from './accounts'
 import { PeerHelperError } from './wire'
 
-const serviceId = 'a'.repeat(64)
-const otherServiceId = 'b'.repeat(64)
-const user = { userId: '1'.repeat(32), username: 'test-user' }
-const network = { networkId: '2'.repeat(32), userId: user.userId, name: 'Work', maxDevices: 10 }
+const serviceId = 'a'.repeat(12)
+const otherServiceId = 'b'.repeat(12)
+const user = { userId: '1'.repeat(12), username: 'test-user' }
+const network = { networkId: '2'.repeat(12), userId: user.userId, name: 'Work', maxDevices: 10 }
 const signal = () => AbortSignal.timeout(5000)
 const session = () => ({
   user,
@@ -130,7 +130,7 @@ describe('main-owned P2P accounts', () => {
       .mockResolvedValueOnce([
         {
           ...base,
-          deviceId: 'a'.repeat(32),
+          deviceId: 'a'.repeat(12),
           name: 'Mac',
           version: '0.1.25',
           platform: 'darwin',
@@ -138,7 +138,7 @@ describe('main-owned P2P accounts', () => {
         },
         {
           ...base,
-          deviceId: 'b'.repeat(32),
+          deviceId: 'b'.repeat(12),
           name: 'Linux box',
           presence: 'stale',
           // Self-declared values that cannot be rendered as-is are dropped to
@@ -150,7 +150,7 @@ describe('main-owned P2P accounts', () => {
       ])
     const devices = await f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
     expect(devices[0]).toEqual({
-      deviceId: 'a'.repeat(32),
+      deviceId: 'a'.repeat(12),
       userId: user.userId,
       name: 'Mac',
       presence: 'online',
@@ -170,7 +170,7 @@ describe('main-owned P2P accounts', () => {
 
   it('refuses a directory row that belongs to another user or reports an impossible state', async () => {
     for (const bad of [
-      { userId: '9'.repeat(32), presence: 'online', lastSeen: 0 },
+      { userId: '9'.repeat(12), presence: 'online', lastSeen: 0 },
       { userId: user.userId, presence: 'connected', lastSeen: 0 },
       { userId: user.userId, presence: 'online', lastSeen: -1 }
     ]) {
@@ -178,7 +178,7 @@ describe('main-owned P2P accounts', () => {
       f.call.mockResolvedValueOnce([network]).mockResolvedValueOnce([
         {
           ...bad,
-          deviceId: 'a'.repeat(32),
+          deviceId: 'a'.repeat(12),
           name: 'Mac',
           version: '',
           platform: '',
@@ -258,7 +258,7 @@ describe('main-owned P2P accounts', () => {
   it('does not issue a grant after the pending enrollment user changes', async () => {
     const f = await loggedIn()
     await expect(
-      f.accounts.enrollmentGrant(serviceId, network.networkId, 'f'.repeat(32), signal())
+      f.accounts.enrollmentGrant(serviceId, network.networkId, 'f'.repeat(12), signal())
     ).rejects.toMatchObject({ code: 'p2p.user_scope_mismatch' })
     expect(f.call).not.toHaveBeenCalled()
     f.call.mockResolvedValueOnce([])
@@ -276,7 +276,7 @@ describe('main-owned P2P accounts', () => {
         token: '8'.repeat(64),
         networkId: network.networkId,
         expiresAt: Math.floor(Date.now() / 1000) + 300,
-        [field]: field === 'networkId' ? 'f'.repeat(32) : 0
+        [field]: field === 'networkId' ? 'f'.repeat(12) : 0
       }
       f.call.mockResolvedValueOnce([network]).mockResolvedValueOnce(grant)
       await expect(
@@ -298,7 +298,7 @@ describe('main-owned P2P accounts', () => {
 
   it('does not admit a mismatched login readback or retain its session', async () => {
     const { accounts, call } = fixture()
-    call.mockResolvedValueOnce(session()).mockResolvedValueOnce({ ...user, userId: '3'.repeat(32) })
+    call.mockResolvedValueOnce(session()).mockResolvedValueOnce({ ...user, userId: '3'.repeat(12) })
     await expect(
       accounts.login(serviceId, user.username, 'test-password', signal())
     ).rejects.toMatchObject({ code: 'p2p.user_scope_mismatch' })
@@ -364,7 +364,7 @@ describe('main-owned P2P accounts', () => {
 
   it('rejects cross-user and duplicate network records', async () => {
     const { accounts, call } = await loggedIn()
-    call.mockResolvedValueOnce([{ ...network, userId: 'f'.repeat(32) }])
+    call.mockResolvedValueOnce([{ ...network, userId: 'f'.repeat(12) }])
     await expect(accounts.listNetworks(serviceId, signal())).rejects.toMatchObject({
       code: 'p2p.user_scope_mismatch'
     })
@@ -389,7 +389,7 @@ describe('main-owned P2P accounts', () => {
     const { accounts, call } = await loggedIn()
     call
       .mockResolvedValueOnce(network)
-      .mockResolvedValueOnce([{ ...network, networkId: '4'.repeat(32) }])
+      .mockResolvedValueOnce([{ ...network, networkId: '4'.repeat(12) }])
     await expect(accounts.createNetwork(serviceId, network.name, signal())).rejects.toMatchObject({
       code: 'p2p.management_result_unconfirmed'
     })
@@ -404,7 +404,7 @@ describe('main-owned P2P accounts', () => {
     ).toEqual(network)
     call.mockResolvedValueOnce([network])
     await expect(
-      accounts.renameNetwork(serviceId, 'f'.repeat(32), 'Other', signal())
+      accounts.renameNetwork(serviceId, 'f'.repeat(12), 'Other', signal())
     ).rejects.toMatchObject({ code: 'p2p.network_unavailable' })
     expect(call.mock.calls.map(([method]) => method)).toEqual(['networks.list', 'networks.list'])
   })
@@ -427,7 +427,7 @@ describe('main-owned P2P accounts', () => {
 
   it('cleans the removed network before readback without affecting other networks', async () => {
     const { accounts, call, cleanup } = await loggedIn()
-    const other = { ...network, networkId: '3'.repeat(32), name: 'Other' }
+    const other = { ...network, networkId: '3'.repeat(12), name: 'Other' }
     call.mockResolvedValueOnce([network, other]).mockResolvedValueOnce({})
     call.mockImplementationOnce(async () => {
       expect(cleanup).toHaveBeenCalledExactlyOnceWith(serviceId, network.networkId)

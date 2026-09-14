@@ -6,9 +6,9 @@ import type { PeerMainHandler } from './rpc'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
 import { PeerHelperError } from './wire'
 
-const serviceId = 'a'.repeat(64)
-const pairId = 'b'.repeat(32)
-const attemptId = 'c'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const pairId = 'b'.repeat(12)
+const attemptId = 'c'.repeat(12)
 const url = 'http://127.0.0.1:31234/?token=unit-test-only'
 const signal = () => new AbortController().signal
 const hosts: PeerRuntimeHost[] = []
@@ -44,7 +44,7 @@ function fixture() {
   const record = {
     format: 'dshker.p2p-devices',
     version: 1,
-    catalogId: 'd'.repeat(32),
+    catalogId: 'd'.repeat(12),
     services: [{ serviceId }],
     computers: [{ serviceId, pairId, pairState: 'active' }],
     forgottenServiceIds: []
@@ -150,7 +150,7 @@ describe('formal main P2P runtime ownership', () => {
     const f = fixture()
     await f.host.start(signal())
     await expect(f.connect()).rejects.toMatchObject({ code: 'p2p.runtime_request_unscoped' })
-    await expect(f.connect({ serviceId, pairId: 'f'.repeat(32) })).rejects.toMatchObject({
+    await expect(f.connect({ serviceId, pairId: 'f'.repeat(12) })).rejects.toMatchObject({
       code: 'p2p.pair_unauthorized'
     })
     await expect(f.connect({ serviceId, pairId, url })).rejects.toThrow()
@@ -263,7 +263,7 @@ describe('formal main P2P runtime ownership', () => {
     await f.host.start(signal())
     await f.emit(state('ready'))
     await expect(f.emit(state('punching'))).rejects.toMatchObject({ code: 'p2p.stale_generation' })
-    await expect(f.emit({ ...state('ready'), attemptId: 'f'.repeat(32) })).rejects.toMatchObject({
+    await expect(f.emit({ ...state('ready'), attemptId: 'f'.repeat(12) })).rejects.toMatchObject({
       code: 'p2p.attempt_mismatch'
     })
     await f.emit(state('disconnected'))

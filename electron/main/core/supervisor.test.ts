@@ -176,7 +176,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
         await supervisor.rpc.call('core.version', {}, AbortSignal.timeout(5_000))
         const second = await waitForCallbacks(callbackOut, 2)
         expect(second[1].error).toBe('')
-        expect(handled).toEqual([{ serviceId: 'a'.repeat(64), pairId: 'b'.repeat(32) }])
+        expect(handled).toEqual([{ serviceId: 'a'.repeat(12), pairId: 'b'.repeat(12) }])
         expect(second[1].payload).toMatchObject({ generation: 4 })
 
         // Detaching puts the refusal back: the core is never left talking to a

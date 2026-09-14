@@ -10,9 +10,9 @@ vi.mock('electron', () => ({
 const { installWebviewPolicy } = await import('./security')
 const { LOCAL_PARTITION, peerPartition } = await import('./p2p/partitions')
 
-const serviceId = 'a'.repeat(64)
-const pairA = '1'.repeat(32)
-const pairB = '2'.repeat(32)
+const serviceId = 'a'.repeat(12)
+const pairA = '1'.repeat(12)
+const pairB = '2'.repeat(12)
 const loopback = 'http://127.0.0.1:51234/'
 
 /** Drives one `will-attach-webview` decision and reports whether it was denied. */

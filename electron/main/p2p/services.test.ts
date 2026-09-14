@@ -14,7 +14,10 @@ const input = {
   stunAddress: 'example.test:3478'
 }
 const publicKey = 'dkqr/6uPC3xduT+vo12XY5kmreQ7So8jibpB2bIEeHw='
-const serviceId = createHash('sha256').update(Buffer.from(publicKey, 'base64')).digest('hex')
+const serviceId = createHash('sha256')
+  .update(Buffer.from(publicKey, 'base64'))
+  .digest('hex')
+  .slice(0, 12)
 // Public test-only CA, with no retained private key. The RPC double represents
 // Go's signature verification, not proof of real server connectivity.
 const certificate =

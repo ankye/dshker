@@ -129,7 +129,9 @@ export function peerNetworks(value: unknown, userId: string): PeerNetwork[] {
   return networks
 }
 
-export function assertAccountId(value: unknown, length = 32): asserts value is string {
+// Identifiers are twelve lowercase hex characters — the coordinator's shape for
+// every id it issues, device ids included, which are derived from the machine key.
+export function assertAccountId(value: unknown, length = 12): asserts value is string {
   if (typeof value !== 'string' || value.length !== length || !/^[a-f0-9]+$/.test(value))
     throw new PeerHelperError('p2p.invalid_request')
 }
