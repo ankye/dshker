@@ -138,6 +138,12 @@ export class ManagedWorkspaceService {
       if (error.code === 'managed.missing_bootstrap_locator') {
         return { kind: 'setup-required', code: error.code }
       }
+      // The settings root is known, but the document inside it is not there
+      // yet: this is that root's first run, so the defaults are registered
+      // instead of asking the user to repair storage that was never arranged.
+      if (error.code === 'managed.missing_registry') {
+        return projectReadyState(await this.#registerDefaultRoots())
+      }
       return { kind: 'recovery-required', code: error.code }
     }
   }
