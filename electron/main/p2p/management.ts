@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { readFile, writeFile, mkdir } from 'node:fs/promises'
+import { appendFile, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import type { LauncherHarnessService } from '../managed/launcher-harness-service'
@@ -176,7 +176,7 @@ export class PeerManagement {
         await session.pairing.adopt(service.serviceId, this.#lifetime.signal).catch(() => undefined)
         results.push({ serviceId: service.serviceId, online: true })
       } catch (error) {
-        const code = error instanceof PeerHelperError ? error.code : 'p2p.internal_error'
+        const code = this.#refusalCode(error)
         // The refusal is retained rather than discarded: without it the surface
         // could only say "offline" and never why, which left the cause of a
         // down session undiscoverable from the product.
@@ -258,16 +258,37 @@ export class PeerManagement {
         await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
         this.#setSession(service.serviceId, 'online', '')
       } catch (error) {
-        this.#setSession(
-          service.serviceId,
-          'offline',
-          error instanceof PeerHelperError ? error.code : 'p2p.internal_error'
-        )
+        this.#setSession(service.serviceId, 'offline', this.#refusalCode(error))
       }
     }
     // The same sweep repairs pair connections: a drop that happened while the
     // coordinator session stayed up is retried here without any user action.
     await this.#autoConnect.reconcile()
+  }
+
+  /**
+   * Maps a failure to its typed code, recording anything it cannot explain.
+   *
+   * The surface only shows codes, so a failure that is not a PeerHelperError used
+   * to collapse into `p2p.internal_error` and the original exception was lost --
+   * which left a failing join undiagnosable from the product. It is written next to
+   * the records this shell owns instead.
+   */
+  #refusalCode(error: unknown): string {
+    if (error instanceof PeerHelperError) return error.code
+    void this.#diagnose(error)
+    return 'p2p.internal_error'
+  }
+
+  async #diagnose(error: unknown): Promise<void> {
+    const root = await this.#resolveSettingsRoot().catch(() => undefined)
+    if (root === undefined) return
+    const described = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
+    await appendFile(
+      join(root, 'dsh-launcher', 'shell-diagnostics.log'),
+      `${new Date().toISOString()} ${described}\n`,
+      'utf8'
+    ).catch(() => undefined)
   }
 
   /** Records one session and notifies only on an actual change. */
