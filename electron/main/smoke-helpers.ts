@@ -31,6 +31,38 @@ export function delay(milliseconds: number): Promise<void> {
 }
 
 /**
+ * Bounds one renderer round trip.
+ *
+ * Every probe in this file asks the renderer a question, and a throttled or
+ * uncomposited renderer may never answer: Chromium throttles timers and stops
+ * frames entirely in an occluded window, a locked session, or a disconnected
+ * remote desktop, so a probe that waits on either can hang until the runner
+ * kills the whole smoke with no reason recorded. A deadline turns that into a
+ * named failure at the step that hung, and the settle waits that remain run on
+ * this side, where Node timers are never throttled.
+ */
+export async function withRendererDeadline<T>(
+  work: Promise<T>,
+  label: string,
+  milliseconds = 10_000
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`Renderer probe timed out after ${milliseconds}ms: ${label}`)),
+          milliseconds
+        )
+      })
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/**
  * Polls the renderer until the shell reports itself mounted with the trusted
  * preload bridge present, collecting console and crash errors throughout.
  */
@@ -56,14 +88,17 @@ export async function waitForRendererEvidence(
 
   while (Date.now() < deadline) {
     try {
-      evidence = await window.webContents.executeJavaScript(
-        `(() => ({
+      evidence = await withRendererDeadline(
+        window.webContents.executeJavaScript(
+          `(() => ({
           shellMounted: document.documentElement.dataset.appShellMounted === 'true',
           shellElement: Boolean(document.querySelector('.app-shell')),
           rendererText: document.body?.innerText?.includes('DSHKer Launcher') === true,
           preload: typeof window.dshLauncher === 'object' && window.dshLauncher !== null,
           errors: []
         }))()`
+        ),
+        'renderer evidence'
       )
       evidence.errors = errors
       if (
@@ -102,20 +137,26 @@ export async function smokeRoutes(window: ElectronBrowserWindow): Promise<RouteS
   const routes: RouteSmokeEvidence['routes'] = []
 
   for (const route of cases) {
-    const ok = await window.webContents.executeJavaScript(
-      `new Promise((resolve) => {
+    const ok = await withRendererDeadline(
+      window.webContents.executeJavaScript(
+        `(async () => {
         const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route.id)} + '"]');
-        if (!control) {
-          resolve(false);
-          return;
-        }
+        if (!control) return false;
         control.click();
-        setTimeout(() => {
-          const active = control.dataset.active === 'true';
-          const shown = document.querySelector(${JSON.stringify(route.selector)}) !== null;
-          resolve(active && shown);
-        }, 160);
-      })`
+        // Microtasks are never throttled, so the route's own update settles here
+        // even in a window that gets no frames and no timers. Each turn forces a
+        // layout pass, and the probe returns as soon as the route is really shown.
+        for (let turn = 0; turn < 60; turn += 1) {
+          await Promise.resolve();
+          void document.body.offsetHeight;
+          if (control.dataset.active === 'true' && document.querySelector(${JSON.stringify(route.selector)})) {
+            return true;
+          }
+        }
+        return false;
+      })()`
+      ),
+      `route ${route.id}`
     )
     routes.push({ ...route, ok: Boolean(ok) })
   }
@@ -169,7 +210,10 @@ export async function captureFirstFrame(window: ElectronBrowserWindow): Promise<
   let lastError: unknown
   for (let attempt = 0; attempt < 8; attempt += 1) {
     try {
-      const image = await window.webContents.capturePage()
+      const image = await withRendererDeadline(
+        window.webContents.capturePage(),
+        'first frame capture'
+      )
       if (!image.isEmpty()) return image
     } catch (error) {
       lastError = error
@@ -179,21 +223,18 @@ export async function captureFirstFrame(window: ElectronBrowserWindow): Promise<
   throw lastError instanceof Error ? lastError : new Error('Unable to capture first frame')
 }
 
-export async function waitForRendererPaint(window: ElectronBrowserWindow): Promise<void> {
-  // A locked session or an uncomposited window (RDP disconnect, headless
-  // runner) never fires requestAnimationFrame, so waiting on frames alone
-  // deadlocked the packaged smoke until the runner killed it. The frame wait
-  // stays best effort: the settle delay below still gives a live compositor
-  // its chance to paint.
-  await window.webContents.executeJavaScript(
-    `new Promise((resolve) => {
-       let settled = false;
-       const proceed = () => { if (settled) return; settled = true; resolve(); };
-       setTimeout(proceed, 2000);
-       requestAnimationFrame(() => requestAnimationFrame(proceed));
-     })`
-  )
-  await delay(250)
+/**
+ * Gives a live compositor its chance to paint before the frame is captured.
+ *
+ * The settle runs on this side on purpose. Waiting for frames in the renderer
+ * deadlocked the packaged smoke on a locked session or an uncomposited window
+ * (remote desktop disconnected, headless runner), because such a window never
+ * fires requestAnimationFrame and gets its timers throttled to the point where
+ * the probe never settles. Node timers here are never throttled, and the frame
+ * gate that follows still proves the window painted real content.
+ */
+export async function waitForRendererPaint(_window: ElectronBrowserWindow): Promise<void> {
+  await delay(400)
 }
 
 /** Per-route proof that a given window size keeps chrome visible and content reachable. */
@@ -235,8 +276,9 @@ export async function smokeHeightAdaptation(
       if (window.isDestroyed()) {
         throw new Error(`Smoke window was destroyed at height ${height}, route ${route}.`)
       }
-      const probe = await window.webContents.executeJavaScript(
-        `new Promise((resolve) => {
+      const probe = await withRendererDeadline(
+        window.webContents.executeJavaScript(
+          `(async () => {
           const root = document.documentElement;
           const body = document.body;
           const shell = document.querySelector('.app-shell');
@@ -258,62 +300,62 @@ export async function smokeHeightAdaptation(
             shell.style.height = '${height}px';
             shell.style.maxHeight = '${height}px';
           }
-          // rAF never fires in a locked or uncomposited session; the
-          // measurements below force their own layout pass, so the frame is a
-          // best-effort settle rather than a precondition.
-          let framed = false;
-          const onFrame = () => {
-            if (framed) return;
-            framed = true;
-            const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
-            if (control) control.click();
-            setTimeout(() => {
-            const doc = document.documentElement;
-            const shell = document.querySelector('.app-shell');
-            const stage = document.querySelector('.workbench-stage');
-            const rows = document.querySelectorAll('.app-shell > *');
-            // Chrome is whatever the shell puts in its first and last rows. This
-            // app moved its identity into the sidebar and has no '.topbar', so
-            // asserting that specific element would fail a shell that is correct.
-            const first = rows[0];
-            const last = rows[rows.length - 1];
-            const viewport = ${height};
-            const top = first && first.getBoundingClientRect();
-            const bottom = last && last.getBoundingClientRect();
-            let reachable = true;
-            if (stage && stage.scrollHeight > stage.clientHeight + 1) {
-              stage.scrollTop = stage.scrollHeight;
-              reachable = stage.scrollTop > 0;
-              stage.scrollTop = 0;
-            }
-            const result = {
-              chromeVisible: Boolean(
-                top && bottom &&
-                top.top >= -1 && top.bottom <= viewport + 1 &&
-                bottom.bottom <= viewport + 1
-              ),
-              contentReachable: reachable,
-              documentStatic:
-                doc.scrollHeight <= doc.clientHeight + 1 &&
-                Boolean(shell) &&
-                shell.getBoundingClientRect().height <= viewport + 1
-            };
-            root.style.height = previous.rootHeight;
-            root.style.maxHeight = previous.rootMaxHeight;
-            if (body) {
-              body.style.height = previous.bodyHeight;
-              body.style.maxHeight = previous.bodyMaxHeight;
-            }
-            if (shell) {
-              shell.style.height = previous.shellHeight;
-              shell.style.maxHeight = previous.shellMaxHeight;
-            }
-            resolve(result);
-            }, 170);
+          // Microtasks settle the renderer's own updates and are never throttled,
+          // unlike the frames and timers a locked or uncomposited session stops
+          // delivering. Each turn forces a layout pass, so the measurement below
+          // reads a settled document without waiting for a paint that may never
+          // come.
+          const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
+          if (control) control.click();
+          for (let turn = 0; turn < 60; turn += 1) {
+            await Promise.resolve();
+            void document.body.offsetHeight;
+            if (!control || control.dataset.active === 'true') break;
+          }
+          const doc = document.documentElement;
+          const settledShell = document.querySelector('.app-shell');
+          const stage = document.querySelector('.workbench-stage');
+          const rows = document.querySelectorAll('.app-shell > *');
+          // Chrome is whatever the shell puts in its first and last rows. This
+          // app moved its identity into the sidebar and has no '.topbar', so
+          // asserting that specific element would fail a shell that is correct.
+          const first = rows[0];
+          const last = rows[rows.length - 1];
+          const viewport = ${height};
+          const top = first && first.getBoundingClientRect();
+          const bottom = last && last.getBoundingClientRect();
+          let reachable = true;
+          if (stage && stage.scrollHeight > stage.clientHeight + 1) {
+            stage.scrollTop = stage.scrollHeight;
+            reachable = stage.scrollTop > 0;
+            stage.scrollTop = 0;
+          }
+          const result = {
+            chromeVisible: Boolean(
+              top && bottom &&
+              top.top >= -1 && top.bottom <= viewport + 1 &&
+              bottom.bottom <= viewport + 1
+            ),
+            contentReachable: reachable,
+            documentStatic:
+              doc.scrollHeight <= doc.clientHeight + 1 &&
+              Boolean(settledShell) &&
+              settledShell.getBoundingClientRect().height <= viewport + 1
           };
-          requestAnimationFrame(onFrame);
-          setTimeout(onFrame, 2000);
-        })`
+          root.style.height = previous.rootHeight;
+          root.style.maxHeight = previous.rootMaxHeight;
+          if (body) {
+            body.style.height = previous.bodyHeight;
+            body.style.maxHeight = previous.bodyMaxHeight;
+          }
+          if (shell) {
+            shell.style.height = previous.shellHeight;
+            shell.style.maxHeight = previous.shellMaxHeight;
+          }
+          return result;
+        })()`
+        ),
+        `height ${height} route ${route}`
       )
       cases.push({ height, route, ...probe })
     }

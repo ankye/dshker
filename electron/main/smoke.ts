@@ -12,6 +12,7 @@ import {
   smokeRoutes,
   waitForRendererEvidence,
   waitForRendererPaint,
+  withRendererDeadline,
   type FrameEvidence,
   type HeightAdaptationEvidence,
   type RendererEvidence,
@@ -51,30 +52,42 @@ async function captureRouteScreenshots(
   await mkdir(directory, { recursive: true })
   for (const route of routeIds) {
     try {
-      await smokeWindow.webContents.executeJavaScript(
-        `(() => {
+      await withRendererDeadline(
+        smokeWindow.webContents.executeJavaScript(
+          `(() => {
           const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
           if (control) control.click();
           return true;
         })()`
+        ),
+        `screenshot route ${route}`
       )
       await waitForRendererPaint(smokeWindow)
-      const image = await smokeWindow.webContents.capturePage()
+      const image = await withRendererDeadline(
+        smokeWindow.webContents.capturePage(),
+        `screenshot capture ${route}`
+      )
       await writeFile(join(directory, `${route}.png`), image.toPNG())
 
       // A route taller than the stage keeps its lower controls out of the first
       // frame, so a scrolled capture is recorded whenever one exists.
-      const scrolled = await smokeWindow.webContents.executeJavaScript(
-        `(() => {
+      const scrolled = await withRendererDeadline(
+        smokeWindow.webContents.executeJavaScript(
+          `(() => {
           const stage = document.querySelector('.workbench-stage');
           if (!stage || stage.scrollHeight <= stage.clientHeight + 8) return false;
           stage.scrollTop = stage.scrollHeight;
           return true;
         })()`
+        ),
+        `screenshot scroll ${route}`
       )
       if (scrolled === true) {
         await waitForRendererPaint(smokeWindow)
-        const tail = await smokeWindow.webContents.capturePage()
+        const tail = await withRendererDeadline(
+          smokeWindow.webContents.capturePage(),
+          `scrolled capture ${route}`
+        )
         await writeFile(join(directory, `${route}-scrolled.png`), tail.toPNG())
       }
     } catch {
