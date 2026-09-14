@@ -206,12 +206,14 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	server := core.Serve{}
+	var secrets secret.Store
 	if *dataRoot != "" {
 		store, err := secretStoreFor(secret.Open, *dataRoot)
 		if err != nil {
 			return fail(stderr, err)
 		}
 		server.Store = store
+		secrets = store
 	}
 	if *catalogRoot != "" {
 		store, err := catalog.Open(*catalogRoot)
@@ -235,6 +237,11 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	server.Brokers = brokers
 	host := helper.New(ctx)
 	defer host.Close()
+	// Same machine identity as the packaged core: one device key per data root,
+	// reused across accounts and networks.
+	if secrets != nil {
+		host.SetDeviceKeys(secrets)
+	}
 	if *rootsPath != "" {
 		roots, err := loadRoots(*rootsPath)
 		if err != nil {

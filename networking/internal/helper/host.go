@@ -2,6 +2,7 @@
 package helper
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/x509"
@@ -14,6 +15,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/peersession"
 	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/ankye/dshker/networking/internal/runtimebridge"
+	"github.com/ankye/dshker/networking/internal/secret"
 )
 
 type Main interface {
@@ -25,7 +27,11 @@ type Host struct {
 	main     Main
 	accounts map[string]*account
 	roots    *x509.CertPool
-	closed   bool
+	// deviceKeys is the machine's own key store, separate from any account's
+	// credential: see machineDeviceKey.
+	deviceKeys secret.Store
+	deviceKey  ed25519.PrivateKey
+	closed     bool
 }
 type account struct {
 	mu        sync.Mutex
@@ -43,6 +49,73 @@ type scopedRequest struct {
 
 func New(ctx context.Context) *Host   { return &Host{ctx: ctx, accounts: make(map[string]*account)} }
 func (host *Host) BindMain(main Main) { host.mu.Lock(); host.main = main; host.mu.Unlock() }
+
+// SetDeviceKeys names the store this machine's own device key lives in.
+//
+// It is the same OS-backed store the shell's credentials use, opened from the
+// core's data root, but the key it holds is not an account's credential: see
+// machineDeviceKey.
+func (host *Host) SetDeviceKeys(store secret.Store) {
+	host.mu.Lock()
+	host.deviceKeys = store
+	host.mu.Unlock()
+}
+
+// machineDeviceKeyName is the reserved secret holding this machine's device key.
+const machineDeviceKeyName = "machine.device-key"
+
+// machineDeviceKey returns this machine's device key, creating it once.
+//
+// A device identity is a property of the machine, like a hardware address, not
+// of an enrollment. Minting a fresh key per enrollment is what made every later
+// registration and every re-enrollment a different device: the pair, its pins and
+// every catalog row referenced the previous identity, the coordinator's list then
+// carried entries naming neither side of either machine, and each side wedged on
+// the other's stale identity — the failure this whole pass exists to remove.
+// Keeping the key beside the data root also means it survives losing the
+// credential record itself, which is the usual way a machine silently became a
+// new device.
+func (host *Host) machineDeviceKey() (ed25519.PrivateKey, error) {
+	host.mu.Lock()
+	store := host.deviceKeys
+	cached := host.deviceKey
+	host.mu.Unlock()
+	if len(cached) == ed25519.PrivateKeySize {
+		return cached, nil
+	}
+	if store != nil {
+		if value, err := store.Get(machineDeviceKeyName); err == nil {
+			// A wrong-sized value is a corrupt entry, not an identity: replace it
+			// rather than hand out a key that cannot sign.
+			if len(value) == ed25519.PrivateKeySize &&
+				bytes.Equal(value, ed25519.NewKeyFromSeed(ed25519.PrivateKey(value).Seed())) {
+				key := ed25519.PrivateKey(append([]byte(nil), value...))
+				host.mu.Lock()
+				host.deviceKey = key
+				host.mu.Unlock()
+				return key, nil
+			}
+		} else if !errors.Is(err, secret.ErrMissing) {
+			return nil, errors.New("p2p.secret_unavailable")
+		}
+	}
+	key, _, err := controlplane.NewDeviceKey()
+	if err != nil {
+		return nil, err
+	}
+	if store != nil {
+		if err := store.Set(machineDeviceKeyName, key); err != nil {
+			// Persisting is what makes the identity survive the next enrollment;
+			// answering with an unpersisted key would reintroduce the churn
+			// silently, so the caller is told instead.
+			return nil, errors.New("p2p.secret_write_failed")
+		}
+	}
+	host.mu.Lock()
+	host.deviceKey = key
+	host.mu.Unlock()
+	return key, nil
+}
 
 // SetRoots replaces the trust anchors for the coordinator HTTPS connection. A
 // nil pool keeps system roots, which is what the shell relies on: it passes no
@@ -93,7 +166,11 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 		if protocol.Decode(payload, &empty) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
-		key, csr, err := controlplane.NewDeviceKey()
+		key, err := host.machineDeviceKey()
+		if err != nil {
+			return nil, err
+		}
+		csr, err := controlplane.DeviceCSR(key)
 		return struct {
 			PrivateKey []byte `json:"privateKey"`
 			CSR        string `json:"csr"`

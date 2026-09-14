@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- This machine keeps one device identity. The device key was minted per
+  enrollment, so every registration, every join and every re-enrollment became a
+  different device: pairs, pins and catalog rows still referenced the identity
+  that had just been replaced, the coordinator's list carried entries naming
+  neither side of either machine, and both ends could wedge on the other's stale
+  identity — the outage this release's other fixes exist to unwind. The key now
+  lives in the core's own store beside the data root, like a hardware address:
+  one identity per machine, reused for every network and every account, and it
+  survives losing the credential record, which is the usual way a machine
+  silently became a new device.
+
 ## 0.1.38 — 2026-09-15
 
 - A paired computer that re-enrolled no longer disappears from the other machine.

@@ -144,12 +144,14 @@ func secretStoreFor(open func(string) (secret.Store, error), dataRoot string) (s
 
 func run(parsed options) error {
 	server := core.Serve{}
+	var secrets secret.Store
 	if parsed.dataRoot != "" {
 		store, err := secretStoreFor(secret.Open, parsed.dataRoot)
 		if err != nil {
 			return err
 		}
 		server.Store = store
+		secrets = store
 	}
 	// The catalog directory must already exist: it is the shell's settings root,
 	// which the shell creates and already relies on for the credential store. A
@@ -168,6 +170,12 @@ func run(parsed options) error {
 		return err
 	}
 	host := helper.New(ctx)
+	// The machine's own device key lives in the same OS-backed store as the
+	// shell's credentials, so this machine keeps one identity across accounts,
+	// networks and lost credential records.
+	if secrets != nil {
+		host.SetDeviceKeys(secrets)
+	}
 	// Explicit trust anchors for the coordinator, added to the machine's store.
 	// The shell passes none, so the app keeps refusing a server this machine does
 	// not already trust; a headless host that must reach a coordinator with a
