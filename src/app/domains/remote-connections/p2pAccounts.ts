@@ -97,6 +97,11 @@ export class P2PAccountsDomain {
     state.networkWriteUnconfirmed = false
     if (!result.data.some((network) => network.networkId === state.selectedNetworkId))
       state.selectedNetworkId = undefined
+    // A single owned network is not a choice, so asking for a click is friction
+    // with no decision behind it. Several networks stay unselected: choosing one
+    // there would be a guess about where the next edit or delete lands.
+    if (state.selectedNetworkId === undefined && result.data.length === 1)
+      state.selectedNetworkId = result.data[0].networkId
   }
 
   /** Reads one network's device directory; a failure is surfaced, never silent. */
@@ -109,6 +114,19 @@ export class P2PAccountsDomain {
     }
     state.devices[networkId] = result.data
     state.devicesFailed[networkId] = false
+  }
+
+  /**
+   * Removes one device from a network and reads the directory again.
+   *
+   * The coordinator owns the binding, so the list is re-read rather than edited
+   * locally: what the owner sees afterwards is what the server still holds.
+   */
+  async removeDevice(serviceId: string, networkId: string, deviceId: string): Promise<boolean> {
+    const result = await this.management.run('leaveNetwork', { serviceId, networkId, deviceId })
+    if (!result.ok) return false
+    await this.networkDevices(serviceId, networkId)
+    return true
   }
 
   select(serviceId: string, networkId: string): void {

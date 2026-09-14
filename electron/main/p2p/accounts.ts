@@ -243,6 +243,33 @@ export class PeerAccounts {
     })
   }
 
+  /**
+   * Removes one device from a network this user owns.
+   *
+   * Distinct from leaving: this is the owner evicting a device that need not be
+   * this machine, so no local credential is involved -- the coordinator
+   * authorizes with the owner's session, and the device keeps its own identity.
+   */
+  unbindDevice(
+    serviceId: string,
+    networkId: string,
+    deviceId: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    assertAccountId(networkId)
+    assertAccountId(deviceId)
+    return this.#operation(serviceId, signal, async () => {
+      const session = this.#session(serviceId)
+      await this.#ownedNetwork(serviceId, session, networkId, signal)
+      await this.#call(
+        serviceId,
+        'devices.unbind',
+        { token: session.token, networkId, deviceId },
+        signal
+      )
+    })
+  }
+
   createNetwork(serviceId: string, name: string, signal: AbortSignal): Promise<PeerNetwork> {
     assertAccountText(name)
     return this.#operation(serviceId, signal, async () => {

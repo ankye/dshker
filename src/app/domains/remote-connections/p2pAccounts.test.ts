@@ -46,16 +46,30 @@ describe('P2P user and network domain', () => {
     expect(accounts.state('service-a').user).toEqual(user)
   })
 
-  it('requires explicit selection and preserves network IDs instead of matching names', async () => {
+  it('selects the only network, still never matches a name, and keeps IDs', async () => {
     const { accounts } = setup()
     await accounts.currentUser('service-a')
     await accounts.networks('service-a')
-    expect(accounts.state('service-a').selectedNetworkId).toBeUndefined()
+    // One network is not a choice, so selecting it removes a click that carried
+    // no decision. Several networks are covered by the next case.
+    expect(accounts.state('service-a').selectedNetworkId).toBe('net-a')
     accounts.select('service-a', 'Office')
-    expect(accounts.state('service-a').selectedNetworkId).toBeUndefined()
+    // A display name is still never a key: the selection stays where it was.
+    expect(accounts.state('service-a').selectedNetworkId).toBe('net-a')
     accounts.select('service-a', 'net-a')
     expect(accounts.state('service-a').selectedNetworkId).toBe('net-a')
     expect(accounts.state('service-b').networks).toBeUndefined()
+  })
+
+  it('leaves the choice to the user when several networks exist', async () => {
+    const other = { ...network, networkId: 'net-b', name: 'Lab' }
+    const { accounts } = setup({
+      networks: vi.fn(async () => ({ ok: true as const, data: [network, other] }))
+    })
+    await accounts.networks('service-a')
+    // Two candidates: picking either one would be a guess about where the next
+    // edit, limit raise or delete lands.
+    expect(accounts.state('service-a').selectedNetworkId).toBeUndefined()
   })
 
   it('registers an account and adopts the returned user like a login', async () => {
@@ -110,11 +124,11 @@ describe('P2P user and network domain', () => {
     })
     await accounts.currentUser('service-a')
     // The new identity's own list is read immediately, so the assertion is that
-    // nothing from the previous user survives: no selection and no draft. The
-    // list itself is repopulated for user-b rather than left unread.
+    // nothing from the previous user survives: no draft, and the selection is the
+    // new user's own single network rather than an inherited pick.
     expect(accounts.state('service-a')).toMatchObject({
       user: { userId: 'user-b' },
-      selectedNetworkId: undefined,
+      selectedNetworkId: 'net-a',
       renameDrafts: {}
     })
     // Once for the first session, once for the explicit call, once for user-b.
@@ -139,7 +153,7 @@ describe('P2P user and network domain', () => {
     expect(accounts.state('service-a').selectedNetworkId).toBeUndefined()
   })
 
-  it('uses actual create/rename identity readback without selecting a default network', async () => {
+  it('uses actual create/rename identity readback and never moves the selection', async () => {
     const created = { ...network, networkId: 'new-id', name: 'New' }
     const renamed = { ...network, name: 'Renamed' }
     const { accounts } = setup({
@@ -151,7 +165,9 @@ describe('P2P user and network domain', () => {
     state.networkNameDraft = 'New'
     await accounts.createNetwork('service-a')
     expect(state.networks).toEqual([network, created])
-    expect(state.selectedNetworkId).toBeUndefined()
+    // The sole network was selected on read; creating a second one does not move
+    // an existing selection.
+    expect(state.selectedNetworkId).toBe('net-a')
     state.renameDrafts['net-a'] = 'Renamed'
     await accounts.renameNetwork('service-a', 'net-a')
     expect(state.networks).toEqual([renamed, created])

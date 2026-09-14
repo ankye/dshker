@@ -75,6 +75,20 @@ function connectionIdFor(pairId: string): string | undefined {
   )?.connectionId
 }
 
+/** The pair whose removal is being confirmed; empty while none is. */
+const revoking = ref('')
+/**
+ * Revokes one pair.
+ *
+ * The warning is shown before the write, not after: revoking drops the session
+ * and invalidates the old entry point immediately, and re-pairing never restores
+ * the old one.
+ */
+async function confirmRevoke(pairId: string): Promise<void> {
+  revoking.value = ''
+  await pairing.revoke(props.serviceId, pairId)
+}
+
 function openWorkbench(pairId: string): void {
   const connectionId = connectionIdFor(pairId)
   if (connectionId === undefined) return
@@ -244,6 +258,37 @@ function openWorkbench(pairId: string): void {
             >
               {{ t('p2p.connection.disconnect') }}
             </button>
+            <button
+              type="button"
+              class="prototype-button"
+              data-testid="p2p-pair-revoke"
+              :disabled="pending || live.resultUnconfirmed"
+              @click="revoking = pair.pairId"
+            >
+              {{ t('p2p.pairing.revoke') }}
+            </button>
+          </div>
+          <div v-if="revoking === pair.pairId" class="p2p-pairing-revoke" role="alert">
+            <p>{{ t('p2p.pairing.revokeWarning') }}</p>
+            <div class="p2p-pair-actions">
+              <button
+                type="button"
+                class="prototype-button prototype-button--primary"
+                data-testid="p2p-pair-revoke-confirm"
+                :disabled="pending || live.resultUnconfirmed"
+                @click="confirmRevoke(pair.pairId)"
+              >
+                {{ t('p2p.pairing.revoke') }}
+              </button>
+              <button
+                type="button"
+                class="prototype-button"
+                data-testid="p2p-pair-revoke-cancel"
+                @click="revoking = ''"
+              >
+                {{ t('p2p.pairing.closeReview') }}
+              </button>
+            </div>
           </div>
         </div>
       </li>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { P2PNetworkDeviceView } from '@/shared/p2p-management'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 
@@ -20,7 +20,31 @@ const props = defineProps<{
   loading: boolean
   /** Unix seconds; injected so the relative time is testable without fake timers. */
   now: number
+  /** The device currently being removed, if any; the row stays busy until it is. */
+  removing?: string
+  /** Whether the signed-in owner may remove this network's devices at all. */
+  canRemove?: boolean
 }>()
+
+/**
+ * Removing belongs to the panel that owns the read: this component only asks for
+ * it, and asks twice, because a device cannot be put back by clicking again.
+ */
+const emit = defineEmits<{ remove: [deviceId: string] }>()
+const confirming = ref('')
+watch(
+  () => props.devices,
+  () => {
+    confirming.value = ''
+  }
+)
+function askRemove(deviceId: string): void {
+  confirming.value = deviceId
+}
+function confirmRemove(deviceId: string): void {
+  confirming.value = ''
+  emit('remove', deviceId)
+}
 
 const t = useTranslator()
 
@@ -85,7 +109,12 @@ function build(device: P2PNetworkDeviceView): string {
     </p>
 
     <ul v-else-if="devices !== undefined" class="p2p-devices__list" data-testid="p2p-devices-list">
-      <li v-for="device in ordered" :key="device.deviceId" class="p2p-devices__row">
+      <li
+        v-for="device in ordered"
+        :key="device.deviceId"
+        class="p2p-devices__row"
+        :aria-busy="removing === device.deviceId"
+      >
         <span class="p2p-devices__identity">
           <span
             class="p2p-devices__dot"
@@ -101,6 +130,42 @@ function build(device: P2PNetworkDeviceView): string {
         </span>
         <span class="p2p-devices__meta">{{ lastSeen(device) }}</span>
         <span class="p2p-devices__meta p2p-devices__build">{{ build(device) }}</span>
+        <span v-if="canRemove && !device.isLocal" class="p2p-devices__actions">
+          <template v-if="confirming === device.deviceId">
+            <button
+              type="button"
+              class="prototype-button"
+              :data-testid="`p2p-devices-confirm-${device.deviceId}`"
+              :disabled="removing === device.deviceId"
+              :aria-busy="removing === device.deviceId"
+              @click="confirmRemove(device.deviceId)"
+            >
+              {{
+                removing === device.deviceId
+                  ? t('p2p.devices.removing')
+                  : t('p2p.devices.removeAsk')
+              }}
+            </button>
+            <button
+              type="button"
+              class="prototype-button"
+              :data-testid="`p2p-devices-cancel-${device.deviceId}`"
+              @click="confirming = ''"
+            >
+              {{ t('p2p.management.cancel') }}
+            </button>
+          </template>
+          <button
+            v-else
+            type="button"
+            class="prototype-button"
+            :data-testid="`p2p-devices-remove-${device.deviceId}`"
+            :disabled="removing !== undefined && removing !== ''"
+            @click="askRemove(device.deviceId)"
+          >
+            {{ t('p2p.devices.remove') }}
+          </button>
+        </span>
       </li>
     </ul>
   </section>

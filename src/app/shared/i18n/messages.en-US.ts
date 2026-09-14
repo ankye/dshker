@@ -90,7 +90,7 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.account.create': 'Create network',
   'p2p.account.selected': 'Selected network',
   'p2p.account.selectRequired':
-    'Select a network explicitly. The first network or a matching name is never selected automatically.',
+    'Pick a network when several exist. A single network is picked for you.',
   'p2p.account.deleteConfirm': 'Confirm deletion of this network',
   'p2p.account.deleteWarning':
     'Deletion revokes device bindings and pairing authority in this network and disconnects its P2P sessions. Recreating the name does not restore trust. Local, SSH and other networks are unaffected.',
@@ -321,10 +321,12 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.devices.columnStatus': 'Status',
   'p2p.devices.columnLastSeen': 'Last seen',
   'p2p.devices.columnBuild': 'Build',
-  'p2p.devices.leaveRequiresLogin':
-    'Leaving requires signing in: the server has no login-free removal.',
-  'p2p.myNetwork.leaveError':
-    'Leaving the network is not available yet: the server endpoint is not open.',
+  'p2p.devices.remove': 'Remove',
+  'p2p.devices.removeAsk': 'Remove this device?',
+  'p2p.devices.removing': 'Removing…',
+  'p2p.devices.removeFailed': 'The device could not be removed. Try again.',
+  'p2p.devices.leaveRequiresLogin': 'Leaving needs a sign-in: there is no free removal.',
+  'p2p.myNetwork.leaveError': 'Leaving is not available yet: the endpoint is closed.',
   'p2p.join.error.unavailable':
     'This build cannot join yet: the login-free enrollment endpoint is still being implemented on the server side.',
   'p2p.join.error.networkFull':

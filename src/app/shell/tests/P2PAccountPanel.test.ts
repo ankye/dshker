@@ -58,7 +58,7 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(ui.findAll('.p2p-network-row button')).toHaveLength(0)
   })
 
-  it('clears submitted passwords and reads the user and networks without guessing a selection', async () => {
+  it('clears submitted passwords and selects the only network without a click', async () => {
     const login = vi.fn<P2PManagementApi['login']>().mockResolvedValue({ ok: true, data: user })
     const networks = vi
       .fn<P2PManagementApi['networks']>()
@@ -93,8 +93,9 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(ui.find('[data-testid="p2p-register-form"]').exists()).toBe(false)
     expect(ui.get('.p2p-network-list').text()).toContain(network.networkId)
     expect(ui.get('.p2p-network-list').text()).toContain(network.name)
-    expect((ui.get('input[type="radio"]').element as HTMLInputElement).checked).toBe(false)
-    await ui.get('input[type="radio"]').setValue(true)
+    // One network is not a choice, so the panel must not ask for a click whose
+    // answer it already knows.
+    expect((ui.get('input[type="radio"]').element as HTMLInputElement).checked).toBe(true)
     expect(ui.text()).toContain('选定网络: Office')
     const { p2pAccounts } = await import('@/app/domains/remote-connections')
     expect(p2pAccounts.state('service-a').selectedNetworkId).toBe(network.networkId)
@@ -184,9 +185,11 @@ describe('P2P account public controls (component diagnostics)', () => {
       'Lab'
     ])
     expect(ui.text()).toContain('net-new')
+    // The selection stays on the network that was read first: adding a second one
+    // neither clears it nor moves it to the newcomer.
     expect(
-      ui.findAll('input[type="radio"]').every((node) => !(node.element as HTMLInputElement).checked)
-    ).toBe(true)
+      ui.findAll('input[type="radio"]').map((node) => (node.element as HTMLInputElement).checked)
+    ).toEqual([true, false])
   })
 
   describe('P2P network device capacity control', () => {

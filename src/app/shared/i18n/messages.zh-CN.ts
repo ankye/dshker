@@ -74,7 +74,7 @@ export const zhCN = {
   'p2p.account.delete': '删除网络',
   'p2p.account.create': '创建网络',
   'p2p.account.selected': '选定网络',
-  'p2p.account.selectRequired': '请选择网络；不会自动选择第一个或同名网络。',
+  'p2p.account.selectRequired': '有多个网络时请手动选择（不会替你猜）；只有一个时会自动选中。',
   'p2p.account.deleteConfirm': '确认删除这个网络',
   'p2p.account.deleteWarning':
     '删除会撤销此网络的设备绑定和配对授权，并断开相关 P2P 会话；重建同名网络不会恢复旧授权。Local、SSH 和其他网络不受此操作影响。',
@@ -271,6 +271,10 @@ export const zhCN = {
   'p2p.devices.columnStatus': '状态',
   'p2p.devices.columnLastSeen': '最后在线',
   'p2p.devices.columnBuild': '版本',
+  'p2p.devices.remove': '移除',
+  'p2p.devices.removeAsk': '确认移除',
+  'p2p.devices.removing': '移除中…',
+  'p2p.devices.removeFailed': '移除失败，请重试。',
   'p2p.devices.leaveRequiresLogin': '离开网络需要先登录，因为服务端不提供免登录移除。',
   'p2p.myNetwork.leaveError': '离开网络暂不可用：服务端尚未开放此接口。',
   'p2p.join.error.unavailable':

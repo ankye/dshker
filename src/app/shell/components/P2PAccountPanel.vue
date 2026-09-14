@@ -132,6 +132,10 @@ const failureMessage = computed<MessageKey | undefined>(() => {
   if (kind === 'unconfirmed') return 'p2p.management.unconfirmed'
   return `p2p.refusal.${kind}` as MessageKey
 })
+const removing = ref('')
+/** Only a signed-in owner may remove a device: the server has no login-free removal. */
+const canRemoveDevice = computed(() => Boolean(state.user))
+
 const deletion = ref<P2PNetworkView>()
 const confirmButton = ref<HTMLButtonElement>()
 /** Per-network target for the capacity raise; cleared once the list readback shows it. */
@@ -207,6 +211,17 @@ async function confirmDelete() {
   const target = deletion.value
   if (!target || pending.value || uncertain.value) return
   if (await accounts.deleteNetwork(props.serviceId, target.networkId)) await closeDelete()
+}
+
+/** Removes one device; the accounts domain re-reads the list afterwards. */
+async function removeDevice(deviceId: string): Promise<void> {
+  const network = selectedNetwork.value
+  if (!network || pending.value || uncertain.value || !canRemoveDevice.value) return
+  removing.value = deviceId
+  // A refusal is not swallowed and not duplicated: the accounts domain records it
+  // and this screen's error region shows the code, like every other write here.
+  await accounts.removeDevice(props.serviceId, network.networkId, deviceId)
+  removing.value = ''
 }
 
 /** Raising is only offered to the signed-in owner, and only for values above 10. */
@@ -606,6 +621,9 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
           :failed="state.devicesFailed[selectedNetwork.networkId] === true"
           :loading="directoryLoading"
           :now="now"
+          :removing="removing"
+          :can-remove="canRemoveDevice"
+          @remove="removeDevice"
         />
         <details class="p2p-network-create" :open="state.networks.length === 0">
           <summary>{{ t('p2p.account.create') }}</summary>

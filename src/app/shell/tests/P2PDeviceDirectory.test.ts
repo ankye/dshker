@@ -28,11 +28,23 @@ interface DirectoryProps {
   failed: boolean
   loading: boolean
   now: number
+  removing?: string
+  canRemove?: boolean
 }
 
 function render(props: Partial<DirectoryProps> = {}) {
   return mount(P2PDeviceDirectory, {
-    props: { devices: [device()], maxDevices: 10, failed: false, loading: false, now, ...props }
+    props: {
+      devices: [device()],
+      maxDevices: 10,
+      failed: false,
+      loading: false,
+      now,
+      // The ready state of this suite: a signed-in owner, nothing in flight.
+      canRemove: true,
+      removing: '',
+      ...props
+    }
   })
 }
 
@@ -120,5 +132,42 @@ describe('P2P device directory', () => {
     const summary = view.get('[data-testid="p2p-devices-summary"]').text()
     expect(summary).toContain('2')
     expect(summary).toContain('30')
+  })
+
+  // Removal is an interface contract, not just a call: the row asks twice, says
+  // it is working, and never claims an outcome the server has not confirmed.
+  it('asks twice before removing a device', async () => {
+    const oldId = 'b'.repeat(32)
+    const view = render({ devices: [device(), device({ deviceId: oldId, name: 'Old PC' })] })
+    await view.get('[data-testid="p2p-devices-remove-' + oldId + '"]').trigger('click')
+    expect(view.emitted('remove')).toBeUndefined()
+    expect(view.find('[data-testid="p2p-devices-confirm-' + oldId + '"]').exists()).toBe(true)
+    await view.get('[data-testid="p2p-devices-confirm-' + oldId + '"]').trigger('click')
+    expect(view.emitted('remove')).toEqual([[oldId]])
+  })
+
+  it('lets the owner back out of a removal', async () => {
+    const oldId = 'b'.repeat(32)
+    const view = render({ devices: [device({ deviceId: oldId, name: 'Old PC' })] })
+    await view.get('[data-testid="p2p-devices-remove-' + oldId + '"]').trigger('click')
+    await view.get('[data-testid="p2p-devices-cancel-' + oldId + '"]').trigger('click')
+    expect(view.find('[data-testid="p2p-devices-confirm-' + oldId + '"]').exists()).toBe(false)
+    expect(view.emitted('remove')).toBeUndefined()
+  })
+
+  it('keeps the row busy, not ready, while a removal is in flight', async () => {
+    const oldId = 'b'.repeat(32)
+    const view = render({ devices: [device({ deviceId: oldId })], removing: oldId })
+    expect(view.get('li').attributes('aria-busy')).toBe('true')
+    expect(
+      view.get('[data-testid="p2p-devices-remove-' + oldId + '"]').attributes('disabled')
+    ).toBeDefined()
+  })
+
+  it('offers no removal for this machine, nor without a signed-in owner', () => {
+    const local = render({ devices: [device({ isLocal: true })] })
+    expect(local.find('[data-testid^="p2p-devices-remove-"]').exists()).toBe(false)
+    const signedOut = render({ devices: [device()], canRemove: false })
+    expect(signedOut.find('[data-testid^="p2p-devices-remove-"]').exists()).toBe(false)
   })
 })

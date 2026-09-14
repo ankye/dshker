@@ -458,12 +458,28 @@ export class PeerManagement {
     )
   }
   async leaveNetwork(serviceId: string, networkId: string, deviceId: string, signal: AbortSignal) {
-    return (await this.#ready(signal)).enrollment.leave(
-      serviceId,
-      networkId,
-      deviceId,
-      this.#signal(signal)
+    // Two removals wear one name: this machine leaving a network, and its owner
+    // evicting a device that is not this one. Only the first clears the local
+    // credential, so only the first goes through enrollment -- which refuses any
+    // other device id by design.
+    const stored = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
+    if (stored?.kind === 'registered' && stored.credential.deviceId === deviceId) {
+      return (await this.#ready(signal)).enrollment.leave(
+        serviceId,
+        networkId,
+        deviceId,
+        this.#signal(signal)
+      )
+    }
+    await this.#account(serviceId, signal, (accounts, active) =>
+      accounts.unbindDevice(serviceId, networkId, deviceId, active)
     )
+    // The coordinator invalidates this device's pairs in the same transaction, so
+    // the catalog is re-recorded right here. Waiting for the next sweep leaves the
+    // dead pair as a row the user is expected to delete by hand -- which is what
+    // the catalog is meant to make unnecessary.
+    const session = await this.#ready(signal)
+    await this.#refreshMembers(serviceId, session, this.#signal(signal))
   }
   async submitEnrollment(serviceId: string, revision: string, signal: AbortSignal) {
     return (await this.#ready(signal)).enrollment.submitPending(
@@ -571,11 +587,17 @@ export class PeerManagement {
     const enrollee =
       credential ?? (await this.#credentials.load(serviceId).catch(() => undefined))?.credential
     if (!enrollee || enrollee.serviceId !== serviceId) return
-    await this.#syncMembers(serviceId, session, enrollee, signal).catch((error) => {
-      // Best-effort: the caller's read must still succeed. The refusal is logged
-      // rather than dropped, because a silent failure here is indistinguishable
-      // from "the coordinator reports no members" from every user surface.
-      console.error('[p2p] network member sync failed:', error)
+    const sync = (): Promise<void> => this.#syncMembers(serviceId, session, enrollee, signal)
+    await sync().catch(async (error) => {
+      // A concurrent read can hold this service's operation lock. One retry is
+      // cheap, and it matters: this sync is what prunes pairs the coordinator no
+      // longer has, so skipping it leaves dead rows the user must delete by hand.
+      if (!(error instanceof PeerHelperError) || error.code !== 'p2p.service_busy') {
+        console.error('[p2p] network member sync failed:', error)
+        return
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      await sync().catch((retried) => console.error('[p2p] network member sync failed:', retried))
     })
   }
 

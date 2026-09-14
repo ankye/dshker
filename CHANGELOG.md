@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- Devices in a network can be **removed** from the device list, and their pairs go
+  with them: unbinding a device already invalidated its pairs on the server, but
+  the launcher kept showing the dead pair until it happened to sync, so removing
+  one device looked like it needed a second manual cleanup. The list is now
+  re-recorded as soon as the removal succeeds, and the sync that does it no longer
+  loses to a busy operation lock.
+- A single pair can be **revoked** on its own, for when only that pairing should
+  end and the device itself should stay. The warning is shown before the write,
+  because revoking drops the session immediately and re-pairing never restores it.
+- A network is **selected for you when it is the only one**. The previous rule
+  never selected anything, to avoid aiming an edit at the wrong network; with a
+  single network there is nothing to guess, so the click is gone. Several networks
+  still wait for an explicit choice and are never matched by display name.
+
 ## 0.1.31 — 2026-09-14
 
 - The Launcher now runs **one background process** instead of two. The headless
