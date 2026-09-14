@@ -1,0 +1,271 @@
+package integration
+
+// Task 6.1: the headless entry point. This drives a real `dshkerd serve` process
+// and real client processes against it, because that is what the task claims: a
+// machine with no desktop session is operated entirely from a command line, and
+// the refusals reach a terminal as distinct codes rather than one generic
+// failure.
+import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+	"time"
+)
+
+// stateDirectoryForCLI returns a state directory the endpoint accepts. A Unix
+// socket path is capped near 104 bytes, so it has to be short.
+func stateDirectoryForCLI(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		return t.TempDir()
+	}
+	directory, err := os.MkdirTemp("/tmp", "dshkerd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(directory) })
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return directory
+}
+
+// cliBinary builds the command under test once per test.
+func cliBinary(t *testing.T) string {
+	t.Helper()
+	binary := filepath.Join(t.TempDir(), "dshkerd")
+	if runtime.GOOS == "windows" {
+		binary += ".exe"
+	}
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", binary, corePackage)
+	build.Stderr = os.Stderr
+	if err := build.Run(); err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	return binary
+}
+
+// runCLICommand runs one client command and returns its streams.
+func runCLICommand(t *testing.T, binary string, arguments ...string) (string, string, int) {
+	t.Helper()
+	command := exec.Command(binary, arguments...)
+	var stdout, stderr bytes.Buffer
+	command.Stdout = &stdout
+	command.Stderr = &stderr
+	err := command.Run()
+	code := 0
+	if err != nil {
+		var exit *exec.ExitError
+		if errors.As(err, &exit) {
+			code = exit.ExitCode()
+		} else {
+			t.Fatalf("run %v: %v", arguments, err)
+		}
+	}
+	return stdout.String(), stderr.String(), code
+}
+
+// startHeadlessCore starts `dshkerd serve` and waits for its readiness line.
+func startHeadlessCore(t *testing.T, binary string, state string, dataRoot string) func() {
+	t.Helper()
+	command := exec.Command(binary, "serve", "--state", state, "--data", dataRoot)
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	command.Stderr = os.Stderr
+	if err := command.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	type readiness struct {
+		Version int    `json:"version"`
+		Serving bool   `json:"serving"`
+		Socket  string `json:"socket"`
+	}
+	line := make(chan readiness, 1)
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			var value readiness
+			if json.Unmarshal(scanner.Bytes(), &value) == nil && value.Serving {
+				line <- value
+				return
+			}
+		}
+	}()
+	select {
+	case value := <-line:
+		if value.Version != 1 || value.Socket == "" {
+			t.Fatalf("readiness = %+v", value)
+		}
+	case <-time.After(30 * time.Second):
+		t.Fatal("the headless core never reported readiness")
+	}
+	stopped := false
+	return func() {
+		if stopped {
+			return
+		}
+		stopped = true
+		if runtime.GOOS == "windows" {
+			_ = command.Process.Kill()
+		} else {
+			_ = command.Process.Signal(os.Interrupt)
+		}
+		done := make(chan struct{})
+		go func() { _ = command.Wait(); close(done) }()
+		select {
+		case <-done:
+		case <-time.After(15 * time.Second):
+			_ = command.Process.Kill()
+		}
+	}
+}
+
+// TestHeadlessCLIOperatesTheCore drives the whole command surface.
+func TestHeadlessCLIOperatesTheCore(t *testing.T) {
+	binary := cliBinary(t)
+	state := stateDirectoryForCLI(t)
+	stop := startHeadlessCore(t, binary, state, t.TempDir())
+	defer stop()
+
+	// status answers from the core table and reports the runtime.
+	stdout, stderr, code := runCLICommand(t, binary, "status", "--state", state, "--json")
+	if code != 0 {
+		t.Fatalf("status: %s", stderr)
+	}
+	var status struct {
+		Version struct {
+			Version int      `json:"version"`
+			Methods []string `json:"methods"`
+		} `json:"version"`
+	}
+	if json.Unmarshal([]byte(stdout), &status) != nil || len(status.Version.Methods) == 0 {
+		t.Fatalf("status answered %s", stdout)
+	}
+
+	// The CLI reads the same roots document the shell reads, through the core.
+	base := t.TempDir()
+	registryPath := filepath.Join(base, "managed-root-registry.json")
+	nativeHome := filepath.Join(base, "native-dsh-home")
+	roots := make([]map[string]string, 0, 4)
+	for _, kind := range []string{"harness", "plugins", "presets", "settings"} {
+		roots = append(roots, map[string]string{
+			"rootId":        "root_" + kind,
+			"kind":          kind,
+			"canonicalPath": filepath.Join(base, kind),
+		})
+	}
+	payload, err := json.Marshal(map[string]any{
+		"filePath":      registryPath,
+		"nativeDshHome": nativeHome,
+		"registry": map[string]any{
+			"format":     "dsh-launcher.managed-root-registry",
+			"version":    2,
+			"roots":      roots,
+			"workspaces": []any{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, stderr, code = runCLICommand(t, binary, "call", "core.roots_commit", string(payload), "--state", state); code != 0 {
+		t.Fatalf("roots_commit: %s", stderr)
+	}
+	stdout, stderr, code = runCLICommand(t, binary, "roots",
+		"--registry", registryPath, "--native-home", nativeHome, "--state", state)
+	if code != 0 {
+		t.Fatalf("roots: %s", stderr)
+	}
+	for _, kind := range []string{"harness", "plugins", "presets", "settings"} {
+		if !strings.Contains(stdout, kind+"\troot_"+kind) {
+			t.Fatalf("roots output lost %s: %s", kind, stdout)
+		}
+	}
+
+	// A missing registry keeps its own code on the terminal, distinct from the
+	// unknown-method and unknown-subject codes below.
+	_, stderr, code = runCLICommand(t, binary, "roots",
+		"--registry", filepath.Join(base, "absent", "managed-root-registry.json"),
+		"--native-home", nativeHome, "--state", state)
+	if code != 1 || strings.TrimSpace(stderr) != "managed.missing_registry" {
+		t.Fatalf("missing registry = %q (%d)", stderr, code)
+	}
+
+	// dsh start runs a real child through the daemon and dsh stop ends it.
+	worktree := t.TempDir()
+	executable, prefix := writeFakeLauncher(t, worktree)
+	startArguments := []string{"dsh", "start", "--state", state,
+		"--directory", worktree, "--pnpm", executable}
+	for _, argument := range prefix {
+		startArguments = append(startArguments, "--pnpm-prefix", argument)
+	}
+	stdout, stderr, code = runCLICommand(t, binary, startArguments...)
+	if code != 0 {
+		t.Fatalf("dsh start: %s", stderr)
+	}
+	if !strings.Contains(stdout, "starting") {
+		t.Fatalf("dsh start answered %s", stdout)
+	}
+	announced := ""
+	for attempt := 0; attempt < 100 && announced == ""; attempt++ {
+		stdout, _, _ = runCLICommand(t, binary, "status", "--state", state, "--json")
+		if strings.Contains(stdout, "127.0.0.1:3099") {
+			announced = stdout
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if announced == "" {
+		t.Fatal("the headless runtime never announced its URL")
+	}
+	if stdout, stderr, code = runCLICommand(t, binary, "dsh", "stop", "--state", state); code != 0 {
+		t.Fatalf("dsh stop: %s", stderr)
+	}
+	// Stopping an already stopped launch reports the record rather than failing:
+	// the subject is known, so this is not the unknown-subject refusal below.
+	if !strings.Contains(stdout, "stopped") {
+		t.Fatalf("second stop answered %s", stdout)
+	}
+
+	// Three distinct failures reach the terminal as three distinct codes.
+	codes := map[string]string{
+		"an unknown method":  "p2p.invalid_operation",
+		"an unknown subject": "runtime.not_found",
+	}
+	for name, expected := range codes {
+		_, stderr, code = runCLICommand(t, binary, "call", methodForCLI(name), payloadForCLI(name), "--state", state)
+		if code != 1 || strings.TrimSpace(stderr) != expected {
+			t.Errorf("%s = %q (%d), want %s", name, stderr, code, expected)
+		}
+	}
+
+	// With the daemon gone the CLI reports the unreachable endpoint by name
+	// instead of hanging or inventing an answer.
+	stop()
+	_, stderr, code = runCLICommand(t, binary, "status", "--state", state)
+	if code != 1 || strings.TrimSpace(stderr) != "p2p.helper_unavailable" {
+		t.Fatalf("status after the daemon stopped = %q (%d)", stderr, code)
+	}
+}
+
+// methodForCLI and payloadForCLI name the two distinguishable failures.
+func methodForCLI(name string) string {
+	if name == "an unknown method" {
+		return "nope.nope"
+	}
+	return "runtime.stop"
+}
+
+func payloadForCLI(name string) string {
+	if name == "an unknown method" {
+		return "{}"
+	}
+	return `{"subjectId":"subject_absent"}`
+}

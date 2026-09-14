@@ -36,6 +36,12 @@ func main() {
 		fmt.Println("dshkerd/1")
 		return
 	}
+	// A named command runs the headless surface. With no command this binary is
+	// the shell's child and bootstraps from stdin, which is the same executable
+	// and the same method table; only the way it is reached differs.
+	if len(os.Args) > 1 && isCommand(os.Args[1]) {
+		os.Exit(runCLI(os.Args[1:], os.Stdout, os.Stderr))
+	}
 	parsed, err := parseArguments(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
