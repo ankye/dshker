@@ -9,12 +9,19 @@ import { fileURLToPath } from 'node:url'
 const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+// The packaged-smoke launch budget is explicit per native runner (docs/release.md):
+// 20 seconds on macOS, 60 on Windows, where the height-adaptation probes run on
+// slower compositors (RDP sessions, software rendering) and legitimately need the
+// larger budget CI already grants. One flat default timed out every local
+// Windows release run at a stage that was still making progress.
+const DEFAULT_LAUNCH_TIMEOUT_MS = process.platform === 'win32' ? 60_000 : 20_000
+
 function parseArgs(argv) {
   const args = {
     releaseDir: 'release',
     launch: false,
     json: false,
-    launchTimeoutMs: 20_000
+    launchTimeoutMs: DEFAULT_LAUNCH_TIMEOUT_MS
   }
 
   for (let index = 0; index < argv.length; index += 1) {
