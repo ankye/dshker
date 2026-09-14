@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -99,6 +100,13 @@ func (store *dpapiStore) Delete(key string) error {
 	return store.setBlobs(blobs)
 }
 
+// replaceBudget bounds how long a write waits for an open handle to release the
+// destination, and replaceDelay is how often it retries inside that budget.
+const (
+	replaceBudget = 250 * time.Millisecond
+	replaceDelay  = time.Millisecond
+)
+
 // setBlobs replaces the whole file atomically. Design decision D5 names one
 // writer per store, so the core is the only process that touches this file.
 func (store *dpapiStore) setBlobs(blobs map[string]string) error {
@@ -110,11 +118,43 @@ func (store *dpapiStore) setBlobs(blobs map[string]string) error {
 	if err = os.WriteFile(temporary, data, 0o600); err != nil {
 		return fmt.Errorf("%w: %v", ErrWrite, err)
 	}
-	if err = os.Rename(temporary, store.path); err != nil {
+	if err = store.replace(temporary); err != nil {
 		_ = os.Remove(temporary)
 		return fmt.Errorf("%w: %v", ErrWrite, err)
 	}
 	return nil
+}
+
+// replace renames the replacement over the blob, retrying only the transient
+// Windows refusals. Windows refuses to replace a destination that *any* open
+// handle holds — measured on this platform with both os.Rename and MoveFileEx,
+// and FILE_SHARE_DELETE on the reader does not lift it — so a concurrent Get
+// that is microseconds from finishing made a Set fail with
+// p2p.secret_write_failed and lose the value. Without the retry that was two to
+// three failures in five runs of TestStressConcurrentStoreOperations; with it,
+// six runs pass and the write only fails when a handle really does not go away
+// inside the budget.
+func (store *dpapiStore) replace(temporary string) error {
+	deadline := time.Now().Add(replaceBudget)
+	var err error
+	for {
+		if err = os.Rename(temporary, store.path); err == nil {
+			return nil
+		}
+		if !sharingViolation(err) || time.Now().After(deadline) {
+			return err
+		}
+		time.Sleep(replaceDelay)
+	}
+}
+
+// sharingViolation reports the Windows errors a replace hits while another
+// handle still holds the destination: a denial, or an explicit sharing or lock
+// violation. Anything else is a real failure and is reported immediately.
+func sharingViolation(err error) bool {
+	return errors.Is(err, windows.ERROR_ACCESS_DENIED) ||
+		errors.Is(err, windows.ERROR_SHARING_VIOLATION) ||
+		errors.Is(err, windows.ERROR_LOCK_VIOLATION)
 }
 
 func (store *dpapiStore) read() (map[string]string, error) {
