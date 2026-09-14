@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- A paired computer that re-enrolled no longer disappears from the other machine.
+  When both devices re-enroll (each getting a new device identity), the local
+  catalog still held the old pair as active, and every member sync tried to drop
+  it — which the catalog's transition guard correctly refuses, wedging the sync
+  on `p2p.revocation_required` forever: one machine could see the other, but not
+  the reverse, and the tab never opened. A row the coordinator's list no longer
+  carries is now recorded as revoked instead of dropped, so the catalog converges
+  on the next sync while the loss stays visible on screen.
+
 ## 0.1.37 — 2026-09-14
 
 - A typed refusal from the core no longer kills the private channel. The frame
