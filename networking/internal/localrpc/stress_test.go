@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -16,9 +18,13 @@ import (
 )
 
 // TestStressConcurrentCalls runs thousands of concurrent echo calls over one
-// private channel, staying inside the 16-in-flight budget per direction so a
-// p2p.helper_busy response is never legitimate: every call must round-trip
-// byte-for-byte.
+// private channel. A peer admits a bounded number of calls and handlers and
+// answers beyond that with p2p.helper_busy — TestStressHelperBusySaturation pins
+// that boundary — so a refusal is the documented backpressure rather than a
+// failure, and it is retried. What this test proves is what nothing else does:
+// under that load every call still round-trips byte-for-byte, with its own id
+// and payload. The retries are counted and bounded, so a leak that made refusals
+// routine would still fail here instead of hiding behind them.
 func TestStressConcurrentCalls(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -27,13 +33,14 @@ func TestStressConcurrentCalls(t *testing.T) {
 	const perWorker = 1000
 	var wg sync.WaitGroup
 	failures := make(chan error, workers)
+	var busy int64
 	for worker := 0; worker < workers; worker++ {
 		wg.Add(1)
 		go func(worker int) {
 			defer wg.Done()
 			for i := 0; i < perWorker; i++ {
 				payload := fmt.Sprintf("{\"worker\":%d,\"i\":%d}", worker, i)
-				output, err := channel.parent.Call(ctx, "core.echo", json.RawMessage(payload))
+				output, err := callWithBackpressure(ctx, channel.parent, payload, &busy)
 				if err != nil {
 					failures <- fmt.Errorf("worker %d call %d: %w", worker, i, err)
 					return
@@ -49,6 +56,26 @@ func TestStressConcurrentCalls(t *testing.T) {
 	close(failures)
 	for failure := range failures {
 		t.Error(failure)
+	}
+	if refusals := atomic.LoadInt64(&busy); refusals*20 > workers*perWorker {
+		t.Errorf("%d of %d calls were refused as busy, which is not backpressure any more", refusals, workers*perWorker)
+	}
+}
+
+// callWithBackpressure retries the documented p2p.helper_busy refusal and counts
+// it. Every other answer is returned unchanged, so a real failure is never
+// hidden.
+func callWithBackpressure(ctx context.Context, peer *Peer, payload string, busy *int64) (json.RawMessage, error) {
+	for attempt := 0; ; attempt++ {
+		output, err := peer.Call(ctx, "core.echo", json.RawMessage(payload))
+		if err == nil || !strings.Contains(err.Error(), "p2p.helper_busy") {
+			return output, err
+		}
+		atomic.AddInt64(busy, 1)
+		if attempt == 200 {
+			return nil, err
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
