@@ -83,6 +83,14 @@ export const defaultStages = [
     evidence: 'release/release-manifest.json'
   },
   {
+    id: 'core-headless-smoke',
+    label: 'Headless core entry point',
+    command: 'npm',
+    args: ['run', 'core:headless-smoke', '--', '--json'],
+    hardGate: true,
+    evidence: '.run/headless-core/latest.json'
+  },
+  {
     id: 'release-verify',
     label: 'Release metadata verify',
     command: 'npm',
@@ -144,7 +152,10 @@ export function createReadinessPlan(options = {}) {
   const stages = options.templateMode
     ? [
         ...defaultStages.filter(
-          (stage) => !['package', 'release-verify', 'release-smoke'].includes(stage.id)
+          (stage) =>
+            !['package', 'core-headless-smoke', 'release-verify', 'release-smoke'].includes(
+              stage.id
+            )
         ),
         templatePackageStage
       ]

@@ -101,6 +101,16 @@ directories only constrain the folder picker in this app — once a project is
 open, DSH's own permission and approval policy on the other computer still
 governs everything.
 
+The same core also runs **with no desktop session at all**, which is what makes
+a machine you only reach over SSH a usable host. `dshkerd serve` publishes its
+own private endpoint and answers the whole method table; `dshkerd dsh start`
+and `dshkerd dsh stop` run the DSH Web child under a fixed subject of their own;
+`status`, `pair`, `connect`, `proxy` and `service configure` are named
+commands over the operations the app performs, and `call` reaches any published
+method with its refusal code printed verbatim for scripting. The app is
+unaffected — it still starts the core as its own child and keeps its own launch
+subject.
+
 See the [user guide](docs/p2p-connections.md) and the
 [implementation checklist](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md).
 

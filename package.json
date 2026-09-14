@@ -26,6 +26,7 @@
     "environment:check": "node tools/environment-check.mjs",
     "architecture:check": "node tools/architecture-check.mjs",
     "p2p:preflight": "node tools/p2p-preflight.mjs",
+    "core:headless-smoke": "node tools/headless-core-smoke.mjs --build",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "type-check:foundation": "npm run type-check --workspace @desktop-workspace/foundation",

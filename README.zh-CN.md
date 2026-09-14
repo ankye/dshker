@@ -64,6 +64,8 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 
 规划前需了解两条限制：直连无法建立时，连接会回退到你自己部署的服务器作为不透明中继（TURN，只转发端到端加密的报文流），仅当直连与中继都无法建立时才报 `direct_unavailable`；授权目录只限制本应用的目录选择器——工程打开后，对方电脑上 DSH 自身的权限与审批策略仍然管辖一切。
 
+同一个核心进程也能**完全脱离桌面会话运行**，因此只能通过 SSH 访问的机器同样可以作为可用的主机。`dshkerd serve` 会自行发布私有端点并应答整张方法表；`dshkerd dsh start`／`dshkerd dsh stop` 以独立 subject 运行 DSH Web 子进程；`status`、`pair`、`connect`、`proxy`、`service configure` 是应用同名操作的命令行形式，`call` 可调用任意已发布方法并原样输出拒绝码，便于脚本化。应用本身不受影响——仍然把核心作为自己的子进程启动，并保有自己的启动 subject。
+
 详见[使用说明](docs/p2p-connections.zh-CN.md)与[实现清单](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md)。
 
 ## 安装

@@ -9,6 +9,15 @@
   before; what changes is that a machine whose core cannot start reports P2P as
   unavailable rather than quietly running a second process that no longer
   exists. The preflight check now verifies the core binary the app actually uses.
+- The same core now also runs **with no desktop session at all**: `dshkerd
+serve` publishes its own private endpoint and answers the whole method table,
+  `dshkerd dsh start|stop` runs the DSH Web child, `dshkerd status`, `pair`,
+  `connect`, `proxy` and `service configure` are named commands over the same
+  operations the app performs, and `call` reaches any published method with its
+  refusal code printed verbatim. The app is unaffected: it still starts the core
+  as its child. `npm run release:readiness` now builds the core and proves it
+  answers as a headless host, and the installer workflow runs the same check on
+  every platform it packages.
 - The core also owns the Launcher's **own root registry** now, so there is one
   writer for the file that says where your Harness, plugins, presets and settings
   live. The file keeps its format and location, an existing install is read

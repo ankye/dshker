@@ -79,6 +79,7 @@ jobs:
           - name: macOS arm64
             os: macos-14
             script: dist:mac-arm64
+            coreTarget: darwin-arm64
             artifact: dshker-launcher-macos-arm64
             launchTimeoutMs: 60000
             pattern: |
@@ -88,6 +89,7 @@ jobs:
           - name: macOS x64
             os: macos-15-intel
             script: dist:mac-x64
+            coreTarget: darwin-x64
             artifact: dshker-launcher-macos-x64
             launchTimeoutMs: 60000
             pattern: |
@@ -97,6 +99,7 @@ jobs:
           - name: Windows x64
             os: windows-latest
             script: dist:win-x64
+            coreTarget: win32-x64
             artifact: dshker-launcher-windows-x64
             launchTimeoutMs: 60000
             pattern: |
@@ -106,6 +109,7 @@ jobs:
           - name: Windows arm64
             os: windows-11-arm
             script: dist:win-arm64
+            coreTarget: win32-arm64
             artifact: dshker-launcher-windows-arm64
             launchTimeoutMs: 60000
             pattern: |
@@ -115,6 +119,7 @@ jobs:
           - name: Linux x64
             os: ubuntu-latest
             script: dist:linux-x64
+            coreTarget: linux-x64
             artifact: dshker-launcher-linux-x64
             launchTimeoutMs: 60000
             smokePrefix: xvfb-run -a
@@ -126,6 +131,7 @@ jobs:
           - name: Linux arm64
             os: ubuntu-latest
             script: dist:linux-arm64
+            coreTarget: linux-arm64
             artifact: dshker-launcher-linux-arm64
             launchTimeoutMs: 60000
             smokePrefix: xvfb-run -a
@@ -201,6 +207,16 @@ jobs:
 
       - name: Verify generated metadata
         run: npm run release:verify
+
+      # The core the installer carries must also answer as a headless host on the
+      # machine that built it: the binary matches its manifest, serve publishes
+      # its own endpoint, a named command answers over it, and a refusal keeps
+      # its typed code. A cross-built Linux arm64 core is skipped like the
+      # packaged smoke, because it cannot execute on the x64 runner.
+      - name: Verify the packaged core answers headlessly
+        if: ${{ !matrix.smokeSkip }}
+        shell: pwsh
+        run: node tools/headless-core-smoke.mjs --target ${{ matrix.coreTarget }} --json
 
       - name: Run packaged application smoke
         if: ${{ !matrix.smokeSkip }}

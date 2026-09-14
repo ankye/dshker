@@ -40,7 +40,7 @@ Two named commands expose it, both sugar over the published table:
   peer. This is the reverse-proxy half of hosting asked directly, so an operator
   with no display can see exactly what a remote is handed.
 - `dshkerd service configure --origin URL [--wss URL] [--stun ADDR] [--pinned-key
-  FILE] [--version V]` makes the same `service.configure` call the shell makes
+FILE] [--version V]` makes the same `service.configure` call the shell makes
   when a user enters a coordinator, with the endpoints read from flags. A pinned
   key file must hold exactly the 32 bytes the host admits, and a missing or padded
   file is refused here rather than by the coordinator.
@@ -71,6 +71,6 @@ already has, and the reason `proxy` prints it only when an operator asks.
 
 ## Still open in 6.1
 
-Nothing named by the task. The three *connection* failure families still need a
+Nothing named by the task. The three _connection_ failure families still need a
 live coordinator to be exercised through the CLI, which is 6.2's job rather than
 this one's, and the headless host's own hosting run is the 6.2 acceptance.
