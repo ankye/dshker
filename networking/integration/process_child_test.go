@@ -199,6 +199,10 @@ func (d *childDriver) execute(ctx context.Context, input command) (result, error
 		if err != nil {
 			return value, err
 		}
+		// Presence is reported per account by the heartbeat, exactly as the shell
+		// configures its core: this driver has no login flow, so it reports for the
+		// account its credential names.
+		d.client.SetAccount(d.config.Device.UserID)
 		d.signals, err = d.client.Subscribe(ctx, d.config.Device.DeviceID)
 		value.PID = os.Getpid()
 		return value, err

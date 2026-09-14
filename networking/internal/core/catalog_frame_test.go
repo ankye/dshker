@@ -80,7 +80,7 @@ func maximalCatalogRecord(t *testing.T) catalog.Record {
 	record := catalog.Record{
 		Format:              "dshker.p2p-devices",
 		Version:             1,
-		CatalogID:           randomHex(t, 16),
+		CatalogID:           randomHex(t, 6),
 		Services:            []catalog.Service{service},
 		Computers:           []catalog.Computer{},
 		ForgottenServiceIDs: []string{},
@@ -129,7 +129,7 @@ func maximalService(t *testing.T) catalog.Service {
 		t.Fatalf("service certificate: %v", err)
 	}
 	return catalog.Service{
-		ServiceID:   hex.EncodeToString(digest[:]),
+		ServiceID:   hex.EncodeToString(digest[:6]),
 		DisplayName: "frame-budget coordinator",
 		HTTPSOrigin: "https://coordinator.example:8443",
 		WSSURL:      "wss://coordinator.example:8443/v1/signals",
@@ -152,14 +152,14 @@ func maximalComputer(t *testing.T, service catalog.Service) catalog.Computer {
 		t.Fatalf("remote key: %v", err)
 	}
 	return catalog.Computer{
-		ConnectionID:    randomHex(t, 16),
+		ConnectionID:    randomHex(t, 6),
 		ServiceID:       service.ServiceID,
 		DisplayName:     maximalName(),
-		PairID:          randomHex(t, 16),
-		NetworkID:       randomHex(t, 16),
-		LocalDeviceID:   randomHex(t, 16),
-		RemoteDeviceID:  randomHex(t, 16),
-		UserID:          randomHex(t, 16),
+		PairID:          randomHex(t, 6),
+		NetworkID:       randomHex(t, 6),
+		LocalDeviceID:   randomHex(t, 6),
+		RemoteDeviceID:  randomHex(t, 6),
+		UserID:          randomHex(t, 6),
 		LocalPublicKey:  base64.StdEncoding.EncodeToString(local),
 		RemotePublicKey: base64.StdEncoding.EncodeToString(remote),
 		PairRevision:    1,

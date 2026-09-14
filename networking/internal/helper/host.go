@@ -295,17 +295,13 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 			State     peersession.State `json:"state"`
 		}{account.identity.ServiceID, state})
 	}
+	client.SetAccount(request.Device.UserID)
 	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: request.PrivateKey}, request.Pins, owner, emit)
 	if err != nil {
 		client.Close()
 		return nil, err
 	}
 	account.client, account.manager, account.device = client, manager, request.Device
-	// Presence is reported per account. The credential names the account this
-	// machine was enrolled under, which is the account it reports to until the
-	// launcher says otherwise; a machine that is signed in nowhere is told so
-	// explicitly and then reports no presence at all.
-	client.SetAccount(request.Device.UserID)
 	return struct {
 		DeviceID string `json:"deviceId"`
 	}{request.Device.DeviceID}, nil

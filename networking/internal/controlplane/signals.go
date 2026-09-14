@@ -56,6 +56,13 @@ func (client *Client) Subscribe(ctx context.Context, deviceID string) (*Signals,
 	child, cancel := context.WithCancel(ctx)
 	signals := &Signals{connection: connection, ctx: child, cancel: cancel, events: make(chan SignalEvent, 32), finished: make(chan struct{})}
 	go signals.read()
+	// Presence is registered before this call returns. The coordinator authorizes a
+	// connection attempt against presence, so a subscription that has not reported
+	// yet would make the very first attempt — by this machine or toward it — look
+	// like an offline peer, which is a race no retry loop should have to paper over.
+	if !client.beat(child, connection, deviceID, cancel) {
+		return nil, errors.New("p2p.server_unavailable")
+	}
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
@@ -64,23 +71,31 @@ func (client *Client) Subscribe(ctx context.Context, deviceID string) (*Signals,
 			case <-child.Done():
 				return
 			case <-ticker.C:
-				var heartbeat struct {
-					DeviceID string `json:"deviceId"`
-					At       int64  `json:"at"`
-				}
-				// The heartbeat carries this build's own description so the
-				// coordinator's device directory can tell deployments apart, and the
-				// account this machine is signed in to, because presence belongs to
-				// an account: signed in nowhere reports none and reads as offline.
-				if client.call(child, "POST", "/v1/heartbeat", "", client.heartbeat(), &heartbeat) != nil || heartbeat.DeviceID != deviceID {
-					cancel()
-					connection.CloseNow()
+				if !client.beat(child, connection, deviceID, cancel) {
 					return
 				}
 			}
 		}
 	}()
 	return signals, nil
+}
+
+// beat sends one heartbeat and reports whether the control connection survives it.
+func (client *Client) beat(ctx context.Context, connection *websocket.Conn, deviceID string, cancel context.CancelFunc) bool {
+	var heartbeat struct {
+		DeviceID string `json:"deviceId"`
+		At       int64  `json:"at"`
+	}
+	// The heartbeat carries this build's own description so the coordinator's device
+	// directory can tell deployments apart, and the account this machine is signed
+	// in to, because presence belongs to an account: signed in nowhere reports none
+	// and reads as offline.
+	if client.call(ctx, "POST", "/v1/heartbeat", "", client.heartbeat(), &heartbeat) != nil || heartbeat.DeviceID != deviceID {
+		cancel()
+		connection.CloseNow()
+		return false
+	}
+	return true
 }
 
 func (signals *Signals) read() {

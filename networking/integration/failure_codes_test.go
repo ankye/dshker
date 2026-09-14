@@ -51,7 +51,7 @@ func TestCoreDaemonKeepsFailureCodesDistinguishable(t *testing.T) {
 	// Authorization: a pair this device never pinned. The coordinator never sees
 	// the request, and the shell must be able to say "this pair is not yours"
 	// rather than "something failed".
-	code := refusalOf(t, ctx, parent, "peer.connect", scopedConnect(identity.ServiceID, strings.Repeat("f", 32), 1))
+	code := refusalOf(t, ctx, parent, "peer.connect", scopedConnect(identity.ServiceID, strings.Repeat("f", 12), 1))
 	if code != "p2p.pair_unauthorized" {
 		t.Fatalf("unpinned pair connect = %q", code)
 	}

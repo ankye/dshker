@@ -129,6 +129,8 @@ func reconnectCycles(t *testing.T, initiator, runtimeOwner int) {
 			defer bindingMu.Unlock()
 			return binding, nil
 		}
+		// Presence is reported per account, exactly as the shell configures its core.
+		f.devices[i].SetAccount(config.Device.UserID)
 		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private}, []controlplane.PairIdentity{config.Pin}, owner, func(state peersession.State) { states[i] <- state })
 		must(t, err)
 		managers[i] = manager

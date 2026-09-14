@@ -38,6 +38,8 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 	// daemon is the initiator, so it must never be asked for one of its own.
 	var bindingMu sync.Mutex
 	binding := runtimebridge.Binding{Generation: 1, URL: runtimeURL}
+	// Presence is reported per account, exactly as the shell configures its core.
+	f.devices[1].SetAccount(f.config[1].Device.UserID)
 	remoteStates := make(chan peersession.State, 256)
 	remote, err := peersession.New(
 		ctx,
