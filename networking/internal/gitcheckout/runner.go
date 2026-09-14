@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -275,35 +274,28 @@ func (runner *Runner) runPinned(ctx context.Context, executable string, context 
 	process := exec.Command(executable, DeterministicArguments(command.Arguments, isWindows())...)
 	process.Dir = context.WorkingDirectory
 	process.Env = environmentList(context.Environment)
-	stdout, err := process.StdoutPipe()
-	if err != nil {
-		return Result{}, fmt.Errorf("%w: Git executable could not start.", ErrExecutableUnavailable)
-	}
-	stderr, err := process.StderrPipe()
-	if err != nil {
-		return Result{}, fmt.Errorf("%w: Git executable could not start.", ErrExecutableUnavailable)
-	}
-	if err = process.Start(); err != nil {
-		return Result{}, fmt.Errorf("%w: Git executable could not start.", ErrExecutableUnavailable)
-	}
-
+	// The exec package owns the copying, so Wait is what guarantees every byte
+	// written before the process ended has been read. Draining pipes by hand
+	// races with Wait closing them, and the race loses output.
+	configureProcess(process)
 	captured := newCapture(context.MaximumOutputBytes)
-	termination := &termination{}
-	var readers sync.WaitGroup
-	readers.Add(2)
-	go captured.copyFrom(&readers, stdoutText, stdout, process, termination)
-	go captured.copyFrom(&readers, stderrText, stderr, process, termination)
+	ended := &termination{}
+	process.Stdout = boundedWriter{captured: captured, target: stdoutText, process: process, ended: ended}
+	process.Stderr = boundedWriter{captured: captured, target: stderrText, process: process, ended: ended}
+	if err := process.Start(); err != nil {
+		return Result{}, fmt.Errorf("%w: Git executable could not start.", ErrExecutableUnavailable)
+	}
 
 	timer := time.AfterFunc(time.Duration(context.TimeoutMilliseconds)*time.Millisecond, func() {
-		termination.set(terminatedTimeout)
-		_ = process.Process.Kill()
+		ended.set(terminatedTimeout)
+		_ = killProcess(process.Process)
 	})
 	stopped := make(chan struct{})
 	go func() {
 		select {
 		case <-ctx.Done():
-			termination.set(terminatedCancelled)
-			_ = process.Process.Kill()
+			ended.set(terminatedCancelled)
+			_ = killProcess(process.Process)
 		case <-stopped:
 		}
 	}()
@@ -311,9 +303,8 @@ func (runner *Runner) runPinned(ctx context.Context, executable string, context 
 	waitErr := process.Wait()
 	close(stopped)
 	timer.Stop()
-	readers.Wait()
 
-	switch termination.reason() {
+	switch ended.reason() {
 	case terminatedTimeout:
 		return Result{}, fmt.Errorf("%w: Git command exceeded its declared timeout.", ErrCommandTimeout)
 	case terminatedCancelled:
@@ -422,21 +413,21 @@ func newCapture(limit int) *capture {
 	return &capture{limit: limit}
 }
 
-// copyFrom drains one stream into the bounded capture. The two streams share one
-// byte budget, so a command cannot double its allowance by writing to both.
-func (captured *capture) copyFrom(readers *sync.WaitGroup, target streamTarget, stream io.ReadCloser, process *exec.Cmd, ended *termination) {
-	defer readers.Done()
-	defer stream.Close()
-	buffer := make([]byte, 32*1024)
-	for {
-		read, err := stream.Read(buffer)
-		if read > 0 {
-			captured.write(target, buffer[:read], process, ended)
-		}
-		if err != nil {
-			return
-		}
-	}
+// boundedWriter is the destination of one stream. It never fails a write: the
+// command is killed when the shared budget is spent, and the reason is reported
+// as the invocation's outcome rather than as a broken pipe.
+type boundedWriter struct {
+	captured *capture
+	target   streamTarget
+	process  *exec.Cmd
+	ended    *termination
+}
+
+// Write records one chunk and reports it as written, so the process sees a pipe
+// that keeps accepting until it is killed.
+func (writer boundedWriter) Write(chunk []byte) (int, error) {
+	writer.captured.write(writer.target, chunk, writer.process, writer.ended)
+	return len(chunk), nil
 }
 
 func (captured *capture) write(target streamTarget, chunk []byte, process *exec.Cmd, ended *termination) {
@@ -444,7 +435,7 @@ func (captured *capture) write(target streamTarget, chunk []byte, process *exec.
 	if total > int64(captured.limit) {
 		if captured.exceeded.CompareAndSwap(false, true) {
 			ended.set(terminatedOutputLimit)
-			_ = process.Process.Kill()
+			_ = killProcess(process.Process)
 		}
 		return
 	}

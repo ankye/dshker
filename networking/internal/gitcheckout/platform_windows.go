@@ -5,8 +5,22 @@ package gitcheckout
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"syscall"
 )
+
+// configureProcess has nothing to do on Windows, where a process group is not
+// what a child inherits.
+func configureProcess(*exec.Cmd) {}
+
+// killProcess ends the command. Windows has no equivalent of signalling a process
+// group from here, so the process the runner started is the one that ends.
+func killProcess(process *os.Process) error {
+	if process == nil {
+		return nil
+	}
+	return process.Kill()
+}
 
 // readFingerprint pins the file identity of one executable. Windows has no inode,
 // so the volume serial number stands in for the device and the file index for the
