@@ -1,4 +1,5 @@
 import { stat, realpath } from 'node:fs/promises'
+import nodePath from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type {
   CoreHarnessLaunchRequest,
@@ -9,6 +10,10 @@ import { ManagedHarnessWebRuntimeSupervisor } from './harness-web-runtime'
 import type { NodeExecutableRegistration } from './toolchain'
 
 const REVISION = 'a'.repeat(40)
+// The launch input is validated as an absolute, already-normalized path, and
+// what that means is platform-specific: a Windows path is only absolute with a
+// drive letter on it.
+const WORKTREE = nodePath.resolve('worktrees', 'installation-1')
 
 async function nodeRegistration(): Promise<NodeExecutableRegistration> {
   const canonicalPath = await realpath(process.execPath)
@@ -33,7 +38,7 @@ function coreLaunch(overrides: Partial<CoreHarnessLaunchView> = {}): CoreHarness
     launchId: 'launch-1',
     subjectId: 'installation-1',
     state: 'running',
-    directory: '/workspaces/harness/worktrees/installation-1',
+    directory: WORKTREE,
     port: { mode: 'auto' },
     diagnostics: {
       stdoutBytes: 12,
@@ -79,7 +84,7 @@ async function startInput() {
     installationId: 'installation-1',
     launchId: 'launch-1',
     node: await nodeRegistration(),
-    worktreePath: '/workspaces/harness/worktrees/installation-1',
+    worktreePath: WORKTREE,
     revision: REVISION
   }
 }
