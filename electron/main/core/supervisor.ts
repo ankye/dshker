@@ -140,9 +140,19 @@ export class CoreSupervisor {
       const secret = randomBytes(32).toString('hex')
       const ready = readPeerLine(child.stdout, budget)
       child.stdin.end(JSON.stringify({ version: 1, socket: socketPath, secret }))
-      const announcement = exactPeerObject(await ready, ['version', 'ready'])
-      if (announcement.version !== 1 || announcement.ready !== true)
+      let announcement: { version: number; ready: boolean }
+      try {
+        announcement = exactPeerObject(await ready, ['version', 'ready'])
+      } catch (error) {
+        // This first line is the whole handshake, so a core that says anything else
+        // is otherwise indistinguishable from one that said nothing at all.
+        console.error('[p2p] core handshake failed:', error)
+        throw error
+      }
+      if (announcement.version !== 1 || announcement.ready !== true) {
+        console.error('[p2p] core handshake rejected:', JSON.stringify(announcement))
         throw new PeerHelperError('p2p.protocol_mismatch')
+      }
       const socket = await authenticatePeer(socketPath, secret, budget)
       // The core calls back once a device is restored: runtime.connect for the
       // runtime owner and peer.state for every connection stage. Until the peer
@@ -164,7 +174,13 @@ export class CoreSupervisor {
       // readPeerLine pauses the socket; an explicitly paused stream does not
       // auto-resume when PeerRpc attaches its listener, so restart the flow
       // before any probe call. The peer supervisor does the same.
-      child.stdout.on('data', () => rpc?.close(new PeerHelperError('p2p.protocol_mismatch')))
+      // Only the announcement travels on this stream: from here the shell talks to
+      // the core over its own socket, so anything the core prints afterwards is
+      // console noise. Treating it as a protocol violation closed the channel on a
+      // core that merely said something, which surfaced as "cannot sign in at all".
+      child.stdout.on('data', (chunk: Buffer) => {
+        if (process.env.DSH_P2P_TRACE === '1') process.stderr.write(chunk)
+      })
       child.stdout.resume()
       socket.resume()
       // The version probe proves the core serves before the shell adopts it.
