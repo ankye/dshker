@@ -180,8 +180,18 @@ export async function captureFirstFrame(window: ElectronBrowserWindow): Promise<
 }
 
 export async function waitForRendererPaint(window: ElectronBrowserWindow): Promise<void> {
+  // A locked session or an uncomposited window (RDP disconnect, headless
+  // runner) never fires requestAnimationFrame, so waiting on frames alone
+  // deadlocked the packaged smoke until the runner killed it. The frame wait
+  // stays best effort: the settle delay below still gives a live compositor
+  // its chance to paint.
   await window.webContents.executeJavaScript(
-    `new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))`
+    `new Promise((resolve) => {
+       let settled = false;
+       const proceed = () => { if (settled) return; settled = true; resolve(); };
+       setTimeout(proceed, 2000);
+       requestAnimationFrame(() => requestAnimationFrame(proceed));
+     })`
   )
   await delay(250)
 }
@@ -248,10 +258,16 @@ export async function smokeHeightAdaptation(
             shell.style.height = '${height}px';
             shell.style.maxHeight = '${height}px';
           }
-          requestAnimationFrame(() => {
-          const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
-          if (control) control.click();
-          setTimeout(() => {
+          // rAF never fires in a locked or uncomposited session; the
+          // measurements below force their own layout pass, so the frame is a
+          // best-effort settle rather than a precondition.
+          let framed = false;
+          const onFrame = () => {
+            if (framed) return;
+            framed = true;
+            const control = document.querySelector('[data-testid="nav-' + ${JSON.stringify(route)} + '"]');
+            if (control) control.click();
+            setTimeout(() => {
             const doc = document.documentElement;
             const shell = document.querySelector('.app-shell');
             const stage = document.querySelector('.workbench-stage');
@@ -293,8 +309,10 @@ export async function smokeHeightAdaptation(
               shell.style.maxHeight = previous.shellMaxHeight;
             }
             resolve(result);
-          }, 170);
-          });
+            }, 170);
+          };
+          requestAnimationFrame(onFrame);
+          setTimeout(onFrame, 2000);
         })`
       )
       cases.push({ height, route, ...probe })
