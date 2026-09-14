@@ -65,7 +65,7 @@ describe('P2P owned DSH lifecycle', () => {
     const fresh = 'http://127.0.0.1:31992/?token=test-only-second'
     const { owner, set, start } = fixture({ kind: 'running', url })
     expect(await owner.connect(new AbortController().signal)).toEqual({ generation: 1, url })
-    set({ kind: 'failed', reason: 'crashed' })
+    set({ kind: 'failed', message: 'crashed' })
     const pending = owner.connect(new AbortController().signal)
     // The dead state is not answered from cache: the owner starts the runtime
     // again and answers with the address that start produces.
