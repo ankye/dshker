@@ -25,6 +25,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/helper"
 	"github.com/ankye/dshker/networking/internal/localrpc"
+	"github.com/ankye/dshker/networking/internal/remoteroute"
 	"github.com/ankye/dshker/networking/internal/rootregistry"
 	"github.com/ankye/dshker/networking/internal/secret"
 )
@@ -198,6 +199,9 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	supervisor := harnessruntime.NewSupervisor()
 	defer supervisor.Shutdown()
 	server.Runtime = supervisor
+	remoteRoute := remoteroute.NewRoute()
+	defer remoteRoute.Shutdown()
+	server.Remote = remoteRoute
 	host := helper.New(ctx)
 	defer host.Close()
 	if *rootsPath != "" {

@@ -15,6 +15,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/installcatalog"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/protocol"
+	"github.com/ankye/dshker/networking/internal/remoteroute"
 	"github.com/ankye/dshker/networking/internal/rootregistry"
 	"github.com/ankye/dshker/networking/internal/secret"
 )
@@ -44,6 +45,9 @@ var served = map[string]bool{
 	"runtime.console":              true,
 	"runtime.port_get":             true,
 	"runtime.port_set":             true,
+	"remote.connect":               true,
+	"remote.disconnect":            true,
+	"remote.status":                true,
 	"runtime.start":                true,
 	"runtime.status":               true,
 	"runtime.stop":                 true,
@@ -71,6 +75,9 @@ type Serve struct {
 	// Runtime is the DSH Web process authority. A composition without it cannot
 	// run children at all, which is what the daemon-less unit tests are.
 	Runtime *harnessruntime.Supervisor
+	// Remote is the SSH route authority: the descriptor transfer, the two port
+	// forwards, and the loopback broker call for each connection.
+	Remote *remoteroute.Route
 }
 
 // runtimeResult, runtimeStatusResult, runtimeConsoleResult and runtimePortResult
@@ -92,6 +99,24 @@ type runtimeConsoleResult struct {
 
 type runtimePortResult struct {
 	Port harnessruntime.PortSetting `json:"port"`
+}
+
+// remoteRoute reports the SSH route this composition was given.
+func (server Serve) remoteRoute() (*remoteroute.Route, error) {
+	if server.Remote == nil {
+		return nil, errors.New("p2p.not_implemented")
+	}
+	return server.Remote, nil
+}
+
+// remoteResult and remoteStatusResult reuse the route's own wire shapes.
+type remoteResult struct {
+	URL string `json:"url"`
+}
+
+type remoteStatusResult struct {
+	URL     string `json:"url,omitempty"`
+	Present bool   `json:"present"`
 }
 
 // runtimeSupervisor reports the process supervisor this composition was given.
@@ -376,6 +401,66 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return runtimeStatusResult{}, nil
 		}
 		return runtimeStatusResult{Launch: &view, Present: true}, nil
+	case "remote.connect":
+		var request struct {
+			ConnectionID string               `json:"connectionId"`
+			Computer     remoteroute.Computer `json:"computer"`
+			SSH          string               `json:"ssh"`
+			SCP          string               `json:"scp"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		route, err := server.remoteRoute()
+		if err != nil {
+			return nil, err
+		}
+		// A caller may name the OpenSSH clients; that is how a host with a
+		// non-standard installation and the tests say which pair to use. The route
+		// still owns the generation.
+		connector := route.Connector
+		if request.SSH != "" {
+			connector.Executables.SSH = request.SSH
+		}
+		if request.SCP != "" {
+			connector.Executables.SCP = request.SCP
+		}
+		url, err := route.ConnectWith(ctx, request.ConnectionID, request.Computer, connector, nil)
+		if err != nil {
+			return nil, err
+		}
+		return remoteResult{URL: url}, nil
+	case "remote.disconnect":
+		var request struct {
+			ConnectionID string `json:"connectionId"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		route, err := server.remoteRoute()
+		if err != nil {
+			return nil, err
+		}
+		if err := route.Disconnect(request.ConnectionID); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
+	case "remote.status":
+		var request struct {
+			ConnectionID string `json:"connectionId"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		route, err := server.remoteRoute()
+		if err != nil {
+			return nil, err
+		}
+		url, live := route.URL(request.ConnectionID)
+		if !live {
+			return remoteStatusResult{}, nil
+		}
+		return remoteStatusResult{URL: url, Present: true}, nil
 	case "runtime.console":
 		var request struct {
 			Cursor int64 `json:"cursor"`

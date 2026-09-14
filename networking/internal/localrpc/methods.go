@@ -81,7 +81,12 @@ var Methods = []Method{
 	{"pairs.share", RoleShell},
 	{"peer.connect", RoleShell},
 	{"peer.disconnect", RoleShell},
+	// The SSH route moved into the core in 5.1. Additive within version 1, with
+	// the shell's own remote.* refusal codes.
+	{"remote.connect", RoleShell},
 	{"remote.directory", RoleShell},
+	{"remote.disconnect", RoleShell},
+	{"remote.status", RoleShell},
 	{"remote.roots", RoleShell},
 	// The DSH Web child moved into the core in 4.3 to 4.5. These are additive
 	// within version 1, answered by the core's own process supervision, and they

@@ -67,6 +67,7 @@
 ## 5. P4 — Remote route moves to the core
 
 - [ ] 5.1 Owner: core. Depends: 4.5. Move OpenSSH and file-transfer resolution, the descriptor transfer, and the broker into the core; verify the SSH route connects with no Electron process running.
+  - Client half landed 2026-09-14: `internal/remoteroute` owns the platform OpenSSH pair, the strict descriptor intake, the two loopback forwards, the broker call and the loopback-only URL validation, with the shell's exact argument order and one code per failure; `Route` owns the live generations by connection id, and the core publishes `remote.connect`, `remote.disconnect` and `remote.status`. Evidence: 16 package cases (argument parity, strict parsers, a full generation over injected seams, every failure mode), 4 core cases over the private channel, and an integration case through the real daemon. The broker (server side), the connection catalog and the shell switch remain.
 - [ ] 5.2 Owner: core. Depends: 5.1. Keep the loopback-only validation and the opaque-relay invariant: the relay (TURN) forwards only end-to-end encrypted packets; verify a non-loopback resolved URL is refused and the relay cannot read plaintext.
 - [ ] 5.3 Owner: core. Depends: 5.1. Delete `electron/main/remote`; verify no shell code references it and the remote scenarios still pass.
 
