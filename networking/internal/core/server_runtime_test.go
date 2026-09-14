@@ -47,7 +47,7 @@ func startPayload(t *testing.T, base, executable string, prefix []string, port s
 	return json.RawMessage(fmt.Sprintf(
 		"{\"launchId\":\"launch_main\",\"subjectId\":\"subject_main\",\"directory\":%q,"+
 			"\"pnpmExecutable\":%q,\"pnpmPrefixArguments\":%s,\"pnpmResolutionError\":\"\","+
-			"\"pnpmCommandSearchPath\":\"\",\"diagnosticsPatchPath\":%q,\"port\":%s,\"logPath\":%q}",
+			"\"profile\":\"pnpm\",\"nodeExecutable\":\"\","+"\"pnpmCommandSearchPath\":\"\",\"diagnosticsPatchPath\":%q,\"port\":%s,\"logPath\":%q}",
 		base, executable, prefixJSON, filepath.Join(base, "verbose.patch.yml"), port,
 		filepath.Join(base, "logs", "dsh-web.log"),
 	))
@@ -199,7 +199,7 @@ func TestRuntimeStartStopThroughTheCore(t *testing.T) {
 // without a supervisor does not pretend the child is somewhere else.
 func TestRuntimeMethodsNeedAProcessAuthority(t *testing.T) {
 	payloads := map[string]string{
-		"runtime.start":   `{"launchId":"launch_main","subjectId":"subject_main","directory":"/tmp","pnpmExecutable":"/bin/sh","pnpmPrefixArguments":[],"pnpmResolutionError":"","pnpmCommandSearchPath":"","diagnosticsPatchPath":"/tmp/patch","port":{"mode":"auto"},"logPath":"/tmp/log"}`,
+		"runtime.start":   `{"launchId":"launch_main","subjectId":"subject_main","directory":"/tmp","profile":"pnpm","nodeExecutable":"","pnpmExecutable":"/bin/sh","pnpmPrefixArguments":[],"pnpmResolutionError":"","pnpmCommandSearchPath":"","diagnosticsPatchPath":"/tmp/patch","port":{"mode":"auto"},"logPath":"/tmp/log"}`,
 		"runtime.stop":    `{"subjectId":"subject_main"}`,
 		"runtime.status":  `{"subjectId":"subject_main"}`,
 		"runtime.console": `{"cursor":0}`,
@@ -223,5 +223,86 @@ func TestRuntimeRejectsMalformedPayloads(t *testing.T) {
 				t.Fatalf("%s was accepted", payload)
 			}
 		})
+	}
+}
+
+// managedStartPayload renders a complete managed-installation launch: its own
+// Node profile, its own worktree, and no pnpm facts.
+func managedStartPayload(directory, nodeExecutable, logPath string) json.RawMessage {
+	return json.RawMessage(fmt.Sprintf(
+		"{\"launchId\":\"launch_managed\",\"subjectId\":\"installation_main\",\"directory\":%q,"+
+			"\"profile\":\"node\",\"nodeExecutable\":%q,"+
+			"\"pnpmExecutable\":\"\",\"pnpmPrefixArguments\":[],\"pnpmResolutionError\":\"\","+
+			"\"pnpmCommandSearchPath\":\"\",\"diagnosticsPatchPath\":\"\",\"port\":{\"mode\":\"auto\"},"+
+			"\"logPath\":%q}",
+		directory, nodeExecutable, logPath,
+	))
+}
+
+// TestRuntimeRunsAManagedInstallationThroughTheCore covers the second named
+// profile over the private channel: an installation's own Node runs its own
+// built entry from its own worktree, an entry that is not direct is refused
+// before anything spawns, and the child stops with its subject.
+func TestRuntimeRunsAManagedInstallationThroughTheCore(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// The managed profile runs a JavaScript entry, and this stand-in is a
+		// shell script; the constructed command itself is pinned by the
+		// package's own platform-agnostic test.
+		t.Skip("the stand-in entry is a shell script")
+	}
+	base := t.TempDir()
+	worktree := filepath.Join(base, "worktree")
+	entry := filepath.Join(worktree, "apps", "cli", "lib", "bin.js")
+	if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, []byte("#!/bin/sh\necho 'dsh web: http://127.0.0.1:3098/?token=managed'\nexec sleep 30\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	server := Serve{Runtime: harnessruntime.NewSupervisor()}
+	ctx := context.Background()
+
+	if _, err := server.Handle(ctx, "runtime.start", managedStartPayload(base, "/bin/sh", "")); !errors.Is(err, harnessruntime.ErrWorktreeInvalid) {
+		t.Fatalf("missing entry = %v", err)
+	}
+	started, err := server.Handle(ctx, "runtime.start", managedStartPayload(worktree, "/bin/sh", ""))
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	launch, ok := started.(runtimeResult)
+	if !ok || launch.Launch == nil || launch.Launch.PID <= 0 {
+		t.Fatalf("start = %+v", started)
+	}
+	defer func() {
+		_, _ = server.Handle(ctx, "runtime.stop", json.RawMessage(`{"subjectId":"installation_main"}`))
+	}()
+
+	var running harnessruntime.LaunchView
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		answer, err := server.Handle(ctx, "runtime.status", json.RawMessage(`{"subjectId":"installation_main"}`))
+		if err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		status, ok := answer.(runtimeStatusResult)
+		if !ok || !status.Present || status.Launch == nil {
+			t.Fatalf("status = %+v", answer)
+		}
+		running = *status.Launch
+		if running.State == harnessruntime.StateRunning {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if running.State != harnessruntime.StateRunning || running.URL != "http://127.0.0.1:3098/?token=managed" {
+		t.Fatalf("running = %+v", running)
+	}
+	stopped, err := server.Handle(ctx, "runtime.stop", json.RawMessage(`{"subjectId":"installation_main"}`))
+	if err != nil {
+		t.Fatalf("stop: %v", err)
+	}
+	view, ok := stopped.(runtimeResult)
+	if !ok || view.Launch == nil || view.Launch.State == harnessruntime.StateRunning {
+		t.Fatalf("stop = %+v", stopped)
 	}
 }

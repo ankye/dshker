@@ -754,6 +754,8 @@ export class LauncherHarnessService {
         launchId: randomUUID(),
         subjectId: LAUNCHER_HARNESS_SUBJECT,
         directory: active.directory,
+        profile: 'pnpm',
+        nodeExecutable: '',
         pnpmExecutable: this.#options.pnpmExecutable,
         pnpmPrefixArguments: this.#options.pnpmLauncher?.prefixArguments ?? [],
         pnpmResolutionError: this.#options.pnpmLauncher?.resolutionError ?? '',

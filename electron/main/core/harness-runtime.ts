@@ -48,6 +48,13 @@ export interface CoreHarnessLaunchRequest {
   readonly launchId: string
   readonly subjectId: string
   readonly directory: string
+  /**
+   * The named command profile. `pnpm` is the Launcher's own DSH Web child;
+   * `node` is one managed installation's built entry run by its own Node.
+   */
+  readonly profile: 'pnpm' | 'node'
+  /** The Node that runs a `node` profile launch; empty for `pnpm`. */
+  readonly nodeExecutable: string
   readonly pnpmExecutable: string
   readonly pnpmPrefixArguments: readonly string[]
   readonly pnpmResolutionError: string

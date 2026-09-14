@@ -349,7 +349,9 @@ async function registerLauncherServices(
       }),
       executablePicker: new ElectronExecutablePicker(),
       temporaryDirectory: app.getPath('temp'),
-      runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor()
+      runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor({
+        runtime: () => coreHarnessRuntime
+      })
     })
   })
   return {

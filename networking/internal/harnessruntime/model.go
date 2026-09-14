@@ -13,6 +13,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -40,6 +41,20 @@ const (
 	MinPort = 1024
 	MaxPort = 65535
 )
+
+// The named command profiles the core can run. ProfilePnpm is the Launcher's
+// own DSH Web child — pnpm resolving the active checkout — and ProfileNode is
+// one managed installation's built entry run by the Node that installation
+// registered. An empty profile means ProfilePnpm, so the shell that was already
+// asking for one keeps its exact command.
+const (
+	ProfilePnpm = "pnpm"
+	ProfileNode = "node"
+)
+
+// ManagedEntryPath is the built DSH entry inside a managed checkout, spelled
+// relative to the launch directory exactly as the shell spelled it.
+const ManagedEntryPath = "apps/cli/lib/bin.js"
 
 // PortSetting is either an automatic selection or one exact unprivileged port.
 type PortSetting struct {
@@ -77,6 +92,8 @@ type LaunchRequest struct {
 	LaunchID              string      `json:"launchId"`
 	SubjectID             string      `json:"subjectId"`
 	Directory             string      `json:"directory"`
+	Profile               string      `json:"profile,omitempty"`
+	NodeExecutable        string      `json:"nodeExecutable,omitempty"`
 	PnpmExecutable        string      `json:"pnpmExecutable"`
 	PnpmPrefixArguments   []string    `json:"pnpmPrefixArguments,omitempty"`
 	PnpmResolutionError   string      `json:"pnpmResolutionError,omitempty"`
@@ -95,10 +112,28 @@ func AssertLaunchRequest(request LaunchRequest) error {
 	if !opaqueIDPattern.MatchString(request.LaunchID) || !opaqueIDPattern.MatchString(request.SubjectID) {
 		return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
 	}
-	for _, value := range []string{request.Directory, request.PnpmExecutable, request.DiagnosticsPatchPath, request.LogPath} {
-		if !absoluteNormalized(value) {
+	if !absoluteNormalized(request.Directory) {
+		return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+	}
+	switch request.Profile {
+	case ProfileNode:
+		// A managed launch runs one installation's own Node against its own
+		// checkout, so the pnpm facts are absent and the Node path is the fact
+		// that must hold. The log is the shell's business and may be absent.
+		if !absoluteNormalized(request.NodeExecutable) {
 			return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
 		}
+		if request.LogPath != "" && !absoluteNormalized(request.LogPath) {
+			return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+		}
+	case "", ProfilePnpm:
+		for _, value := range []string{request.PnpmExecutable, request.DiagnosticsPatchPath, request.LogPath} {
+			if !absoluteNormalized(value) {
+				return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+			}
+		}
+	default:
+		return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
 	}
 	if _, err := AssertPortSetting(request.Port); err != nil {
 		return err
@@ -128,6 +163,21 @@ func BuildCommand(request LaunchRequest) (Command, error) {
 	if err := AssertLaunchRequest(request); err != nil {
 		return Command{}, err
 	}
+	if request.Profile == ProfileNode {
+		if err := AssertBuiltEntry(request.Directory); err != nil {
+			return Command{}, err
+		}
+		arguments := make([]string, 0, 4)
+		arguments = append(arguments, ManagedEntryPath, "web", "--no-open")
+		if request.Port.Mode == "fixed" {
+			arguments = append(arguments, "--port", strconv.Itoa(request.Port.Port))
+		}
+		return Command{
+			Executable: request.NodeExecutable,
+			Arguments:  arguments,
+			Directory:  request.Directory,
+		}, nil
+	}
 	if request.PnpmResolutionError != "" {
 		return Command{}, fmt.Errorf("%w: %s", ErrSpawnFailed, request.PnpmResolutionError)
 	}
@@ -143,6 +193,32 @@ func BuildCommand(request LaunchRequest) (Command, error) {
 		Directory:  request.Directory,
 		Path:       request.PnpmCommandSearchPath,
 	}, nil
+}
+
+// AssertBuiltEntry refuses a managed checkout whose built DSH entry is missing,
+// indirect or not the file the entry claims to be. It is the shell's own rule —
+// a symlink or a replaced file could run something other than the checkout the
+// installation record points at — applied before the core spawns anything.
+func AssertBuiltEntry(directory string) error {
+	if !absoluteNormalized(directory) {
+		return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+	}
+	// The directory itself may be reached through a link (a temporary directory
+	// on macOS is), so it is resolved first: what must be direct is the entry.
+	resolvedDirectory, err := filepath.EvalSymlinks(directory)
+	if err != nil {
+		return fmt.Errorf("%w: Managed Harness has no direct built dsh entry.", ErrWorktreeInvalid)
+	}
+	entry := filepath.Join(resolvedDirectory, filepath.FromSlash(ManagedEntryPath))
+	info, err := os.Lstat(entry)
+	if err != nil || info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+		return fmt.Errorf("%w: Managed Harness has no direct built dsh entry.", ErrWorktreeInvalid)
+	}
+	resolved, err := filepath.EvalSymlinks(entry)
+	if err != nil || resolved != entry {
+		return fmt.Errorf("%w: Managed Harness has no direct built dsh entry.", ErrWorktreeInvalid)
+	}
+	return nil
 }
 
 // announcedURLPattern is DSH's own startup line. The query and fragment are

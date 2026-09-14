@@ -285,3 +285,132 @@ func TestIsResidualDshWebCommandMatchesTheShellRule(t *testing.T) {
 		}
 	}
 }
+
+// managedRequest is one managed installation's launch: its own Node, its own
+// worktree, and no pnpm facts at all.
+func managedRequest(base, directory string) LaunchRequest {
+	return LaunchRequest{
+		LaunchID:       "launch_managed",
+		SubjectID:      "installation_main",
+		Directory:      directory,
+		Profile:        ProfileNode,
+		NodeExecutable: filepath.Join(base, "node"),
+		Port:           AutoPort(),
+	}
+}
+
+// writeBuiltEntry creates the direct built entry a managed checkout must have.
+func writeBuiltEntry(t *testing.T, directory string) {
+	t.Helper()
+	entry := filepath.Join(directory, filepath.FromSlash(ManagedEntryPath))
+	if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(entry, []byte("// built dsh entry\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestBuildCommandForAManagedInstallation pins the command the shell used to
+// spawn itself for one managed installation: the installation's own Node, the
+// entry named relative to the worktree it is started in, and a port only when
+// one was fixed.
+func TestBuildCommandForAManagedInstallation(t *testing.T) {
+	base := t.TempDir()
+	directory := filepath.Join(base, "worktree")
+	writeBuiltEntry(t, directory)
+	request := managedRequest(base, directory)
+
+	command, err := BuildCommand(request)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	want := []string{ManagedEntryPath, "web", "--no-open"}
+	if strings.Join(command.Arguments, " ") != strings.Join(want, " ") {
+		t.Fatalf("arguments = %v", command.Arguments)
+	}
+	if command.Executable != request.NodeExecutable || command.Directory != directory {
+		t.Fatalf("command = %+v", command)
+	}
+	if command.Path != "" {
+		t.Fatalf("path override = %q", command.Path)
+	}
+
+	fixed, err := FixedPort(3088)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Port = fixed
+	withPort, err := BuildCommand(request)
+	if err != nil {
+		t.Fatalf("fixed: %v", err)
+	}
+	expected := append(append([]string{}, want...), "--port", "3088")
+	if strings.Join(withPort.Arguments, " ") != strings.Join(expected, " ") {
+		t.Fatalf("fixed arguments = %v", withPort.Arguments)
+	}
+}
+
+// TestAssertBuiltEntryRefusesIndirectEntries covers the shell's own rule: a
+// missing, indirect or replaced entry is refused before anything is spawned.
+func TestAssertBuiltEntryRefusesIndirectEntries(t *testing.T) {
+	base := t.TempDir()
+	if err := AssertBuiltEntry(base); !errors.Is(err, ErrWorktreeInvalid) {
+		t.Fatalf("missing entry = %v", err)
+	}
+	directory := filepath.Join(base, "worktree")
+	writeBuiltEntry(t, directory)
+	if err := AssertBuiltEntry(directory); err != nil {
+		t.Fatalf("direct entry = %v", err)
+	}
+
+	entry := filepath.Join(directory, filepath.FromSlash(ManagedEntryPath))
+	if err := os.Remove(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(entry, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := AssertBuiltEntry(directory); !errors.Is(err, ErrWorktreeInvalid) {
+		t.Fatalf("directory entry = %v", err)
+	}
+
+	if err := os.Remove(entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(base, "elsewhere.js"), entry); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := AssertBuiltEntry(directory); !errors.Is(err, ErrWorktreeInvalid) {
+		t.Fatalf("symlinked entry = %v", err)
+	}
+}
+
+// TestAssertLaunchRequestChecksTheManagedProfile confirms the two profiles
+// require the facts they actually use and nothing else.
+func TestAssertLaunchRequestChecksTheManagedProfile(t *testing.T) {
+	base := t.TempDir()
+	directory := filepath.Join(base, "worktree")
+	writeBuiltEntry(t, directory)
+
+	request := managedRequest(base, directory)
+	request.NodeExecutable = "node"
+	if err := AssertLaunchRequest(request); !errors.Is(err, ErrInputInvalid) {
+		t.Fatalf("relative node = %v", err)
+	}
+	request = managedRequest(base, directory)
+	request.LogPath = filepath.Join(base, "logs", "managed.log")
+	if err := AssertLaunchRequest(request); err != nil {
+		t.Fatalf("absolute log = %v", err)
+	}
+	request = managedRequest(base, directory)
+	request.Profile = "shell"
+	if err := AssertLaunchRequest(request); !errors.Is(err, ErrInputInvalid) {
+		t.Fatalf("unknown profile = %v", err)
+	}
+	request = managedRequest(base, directory)
+	request.Directory = "worktree"
+	if err := AssertLaunchRequest(request); !errors.Is(err, ErrInputInvalid) {
+		t.Fatalf("relative directory = %v", err)
+	}
+}

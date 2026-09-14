@@ -425,6 +425,8 @@ func runDshStart(args []string, stdout io.Writer, stderr io.Writer) int {
 		LaunchID              string                     `json:"launchId"`
 		SubjectID             string                     `json:"subjectId"`
 		Directory             string                     `json:"directory"`
+		Profile               string                     `json:"profile"`
+		NodeExecutable        string                     `json:"nodeExecutable"`
 		PnpmExecutable        string                     `json:"pnpmExecutable"`
 		PnpmPrefixArguments   []string                   `json:"pnpmPrefixArguments"`
 		PnpmResolutionError   string                     `json:"pnpmResolutionError"`
@@ -433,9 +435,13 @@ func runDshStart(args []string, stdout io.Writer, stderr io.Writer) int {
 		Port                  harnessruntime.PortSetting `json:"port"`
 		LogPath               string                     `json:"logPath"`
 	}{
-		LaunchID:             newIdentifier(),
-		SubjectID:            HeadlessSubject,
-		Directory:            *directory,
+		LaunchID:  newIdentifier(),
+		SubjectID: HeadlessSubject,
+		Directory: *directory,
+		// The CLI starts the Launcher's own profile: pnpm resolving the active
+		// checkout. A managed installation's Node profile is the shell's to ask
+		// for, and it names the entry itself.
+		Profile:              harnessruntime.ProfilePnpm,
 		PnpmExecutable:       *pnpm,
 		PnpmPrefixArguments:  []string(prefix),
 		DiagnosticsPatchPath: *patch,

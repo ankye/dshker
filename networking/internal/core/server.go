@@ -379,6 +379,8 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			LaunchID              string                     `json:"launchId"`
 			SubjectID             string                     `json:"subjectId"`
 			Directory             string                     `json:"directory"`
+			Profile               string                     `json:"profile"`
+			NodeExecutable        string                     `json:"nodeExecutable"`
 			PnpmExecutable        string                     `json:"pnpmExecutable"`
 			PnpmPrefixArguments   []string                   `json:"pnpmPrefixArguments"`
 			PnpmResolutionError   string                     `json:"pnpmResolutionError"`
@@ -411,6 +413,8 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			LaunchID:              request.LaunchID,
 			SubjectID:             request.SubjectID,
 			Directory:             request.Directory,
+			Profile:               request.Profile,
+			NodeExecutable:        request.NodeExecutable,
 			PnpmExecutable:        request.PnpmExecutable,
 			PnpmPrefixArguments:   request.PnpmPrefixArguments,
 			PnpmResolutionError:   request.PnpmResolutionError,

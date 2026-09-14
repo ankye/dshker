@@ -1,6 +1,12 @@
-import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
-import { lstat, realpath } from 'node:fs/promises'
+// The managed installation's DSH Web child.
+//
+// The shell used to spawn `node apps/cli/lib/bin.js web --no-open` itself, from
+// the installation's worktree. The core does now — the same command through its
+// named `node` profile, the same worktree, the same bounded diagnostics — so
+// this file is the shell's view of that child: the facts the shell owns (which
+// installation, which worktree, which revision) joined with the core's answer.
 import nodePath from 'node:path'
+import type { CoreHarnessLaunchView, CoreHarnessRuntimePort } from '../core/harness-runtime'
 import { assertRegisteredNodeExecutable, type NodeExecutableRegistration } from './toolchain'
 import { ManagedHarnessRuntimeError, type ManagedHarnessRuntimeErrorCode } from './runtime-errors'
 
@@ -41,157 +47,135 @@ export interface ManagedHarnessWebRuntimeStartInput {
   readonly revision: string
 }
 
-/** Process spawner retained as a narrow test seam. */
-export type ManagedHarnessWebSpawner = (
-  executable: string,
-  arguments_: readonly string[],
-  options: SpawnOptions
-) => ChildProcess
-
+/** One installation the shell has observed, and what the core last said about it. */
 interface RuntimeRecord {
-  readonly input: ManagedHarnessWebRuntimeStartInput
-  readonly child: ChildProcess
-  state: ManagedHarnessRuntimeState
-  failure: ManagedHarnessLaunchView['failure']
-  diagnostics: MutableDiagnostics
+  readonly input: ManagedHarnessWebRuntimeStartInput | undefined
+  readonly view: ManagedHarnessLaunchView
 }
-
-interface MutableDiagnostics extends ManagedHarnessRuntimeDiagnostics {
-  stdoutBytes: number
-  stderrBytes: number
-  stdoutTruncated: boolean
-  stderrTruncated: boolean
-  exitCode: number | undefined
-  exitSignal: string | undefined
-}
-
-const MAXIMUM_OUTPUT_BYTES = 64 * 1024
 
 /** Starts the ordinary built DSH Web profile without supplying DSH_HOME or private descriptor state. */
 export class ManagedHarnessWebRuntimeSupervisor {
   readonly #records = new Map<string, RuntimeRecord>()
-  readonly #spawnProcess: ManagedHarnessWebSpawner
-  readonly #inheritedEnvironment: () => NodeJS.ProcessEnv
+  readonly #runtime: () => CoreHarnessRuntimePort | undefined
 
-  constructor(
-    options: {
-      readonly spawnProcess?: ManagedHarnessWebSpawner
-      readonly inheritedEnvironment?: () => NodeJS.ProcessEnv
-    } = {}
-  ) {
-    this.#spawnProcess = options.spawnProcess ?? spawn
-    this.#inheritedEnvironment = options.inheritedEnvironment ?? (() => process.env)
+  constructor(options: { readonly runtime?: () => CoreHarnessRuntimePort | undefined } = {}) {
+    this.#runtime = options.runtime ?? (() => undefined)
   }
 
-  /** Starts the worktree's standard `dsh web --no-open` command. */
+  /** Starts the worktree's standard `dsh web --no-open` command through the core. */
   async start(input: ManagedHarnessWebRuntimeStartInput): Promise<ManagedHarnessLaunchView> {
     assertStartInput(input)
-    const existing = this.#records.get(input.installationId)
-    if (existing?.state === 'running') {
+    if (this.#records.get(input.installationId)?.view.state === 'running') {
       throw new ManagedHarnessRuntimeError(
         'runtime.operation_in_progress',
         'Managed Harness is already running.'
       )
     }
+    // The registration is the shell's own record of the Node it pinned, and its
+    // identity is re-checked here as it always was. The built entry is the
+    // core's to verify, because the core is what runs it.
     await assertRegisteredNodeExecutable(input.node)
-    await assertBuiltDshEntry(input.worktreePath)
-    let child: ChildProcess
-    try {
-      child = this.#spawnProcess(
-        input.node.canonicalPath,
-        ['apps/cli/lib/bin.js', 'web', '--no-open'],
-        {
-          cwd: input.worktreePath,
-          env: { ...this.#inheritedEnvironment() },
-          shell: false,
-          windowsHide: true,
-          stdio: ['ignore', 'pipe', 'pipe']
-        }
-      )
-    } catch (error) {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.spawn_failed',
-        'Managed DSH process could not be created.',
-        {
-          cause: error instanceof Error ? error.name : 'unknown'
-        }
-      )
-    }
-    const record: RuntimeRecord = {
-      input,
-      child,
-      state: 'running',
-      failure: undefined,
-      diagnostics: {
-        stdoutBytes: 0,
-        stderrBytes: 0,
-        stdoutTruncated: false,
-        stderrTruncated: false,
-        receivedFrameCount: 0,
-        lastFrameType: undefined,
-        exitCode: undefined,
-        exitSignal: undefined
-      }
-    }
-    this.#records.set(input.installationId, record)
-    child.stdout?.on('data', (chunk: unknown) => appendOutput(record.diagnostics, 'stdout', chunk))
-    child.stderr?.on('data', (chunk: unknown) => appendOutput(record.diagnostics, 'stderr', chunk))
-    child.on('error', (error) => {
-      record.state = 'failed'
-      record.failure = { code: 'runtime.child_crashed', message: error.message }
+    const answered = await this.#requireRuntime().start({
+      launchId: input.launchId,
+      subjectId: input.installationId,
+      directory: input.worktreePath,
+      profile: 'node',
+      nodeExecutable: input.node.canonicalPath,
+      pnpmExecutable: '',
+      pnpmPrefixArguments: [],
+      pnpmResolutionError: '',
+      pnpmCommandSearchPath: '',
+      diagnosticsPatchPath: '',
+      port: { mode: 'auto' },
+      logPath: ''
     })
-    child.on('exit', (code, signal) => {
-      record.diagnostics.exitCode = code ?? undefined
-      record.diagnostics.exitSignal = signal ?? undefined
-      if (record.state === 'failed') return
-      if (code === 0 || signal === 'SIGTERM' || signal === 'SIGINT') {
-        record.state = 'stopped'
-        return
-      }
-      record.state = 'failed'
-      record.failure = {
-        code: 'runtime.child_crashed',
-        message: 'Managed DSH Web process exited unexpectedly.'
-      }
-    })
-    return this.#view(record)
+    const view = this.#viewOf(input, answered)
+    this.#records.set(input.installationId, { input, view })
+    return view
   }
 
   /** Stops exactly one active DSH process without modifying its DSH configuration. */
   async stop(installationId: string): Promise<ManagedHarnessLaunchView> {
-    const record = this.#records.get(installationId)
-    if (record === undefined)
+    const answered = await this.#requireRuntime().stop(installationId)
+    const existing = this.#records.get(installationId)
+    const view = this.#viewOf(existing?.input, answered)
+    this.#records.set(installationId, { input: existing?.input, view })
+    return view
+  }
+
+  /**
+   * Reads one installation's launch record from the core.
+   *
+   * The answer is authoritative rather than cached: a child that exited while no
+   * one was looking is a stopped or failed record the moment it is read, which is
+   * what the shell's own exit listeners used to decide.
+   */
+  async launchFor(installationId: string): Promise<ManagedHarnessLaunchView> {
+    const answered = await this.#requireRuntime().status(installationId)
+    if (answered === undefined) {
+      this.#records.delete(installationId)
       throw new ManagedHarnessRuntimeError('runtime.not_found', 'Managed Harness is not running.')
-    if (record.state === 'running' && !record.child.kill('SIGTERM')) {
+    }
+    const existing = this.#records.get(installationId)
+    const view = this.#viewOf(existing?.input, answered)
+    this.#records.set(installationId, { input: existing?.input, view })
+    return view
+  }
+
+  #requireRuntime(): CoreHarnessRuntimePort {
+    const runtime = this.#runtime()
+    if (runtime === undefined) {
       throw new ManagedHarnessRuntimeError(
         'runtime.child_unavailable',
-        'Managed DSH process could not be stopped.'
+        'The Launcher core is not running, so no managed Harness can be supervised.'
       )
     }
-    if (record.state === 'running') record.state = 'stopped'
-    return this.#view(record)
+    return runtime
   }
 
-  /** Returns one Launcher-owned process record. */
-  launchFor(installationId: string): ManagedHarnessLaunchView {
-    const record = this.#records.get(installationId)
-    if (record === undefined)
-      throw new ManagedHarnessRuntimeError('runtime.not_found', 'Managed Harness is not running.')
-    return this.#view(record)
-  }
-
-  #view(record: RuntimeRecord): ManagedHarnessLaunchView {
+  #viewOf(
+    input: ManagedHarnessWebRuntimeStartInput | undefined,
+    answered: CoreHarnessLaunchView
+  ): ManagedHarnessLaunchView {
     return {
-      installationId: record.input.installationId,
-      launchId: record.input.launchId,
-      state: record.state,
-      worktreePath: record.input.worktreePath,
-      revision: record.input.revision,
+      installationId: input?.installationId ?? answered.subjectId,
+      launchId: input?.launchId ?? answered.launchId,
+      state: managedStateOf(answered),
+      worktreePath: input?.worktreePath ?? answered.directory,
+      revision: input?.revision ?? '',
       descriptorPath: undefined,
       descriptorIdentity: undefined,
-      failure: record.failure,
-      diagnostics: { ...record.diagnostics }
+      failure:
+        answered.failure === undefined
+          ? undefined
+          : {
+              code: answered.failure.code as ManagedHarnessRuntimeErrorCode,
+              message: answered.failure.message
+            },
+      diagnostics: diagnosticsOf(answered)
     }
+  }
+}
+
+/** Projects the core's four launch states onto the three the renderer knows. */
+function managedStateOf(answered: CoreHarnessLaunchView): ManagedHarnessRuntimeState {
+  if (answered.state === 'stopped') return 'stopped'
+  if (answered.state === 'failed') return 'failed'
+  return 'running'
+}
+
+function diagnosticsOf(answered: CoreHarnessLaunchView): ManagedHarnessRuntimeDiagnostics {
+  return {
+    stdoutBytes: answered.diagnostics.stdoutBytes,
+    stderrBytes: answered.diagnostics.stderrBytes,
+    stdoutTruncated: answered.diagnostics.stdoutTruncated,
+    stderrTruncated: answered.diagnostics.stderrTruncated,
+    // These counters belonged to the descriptor handshake this profile never
+    // used; they stay at the values a fresh launch reports.
+    receivedFrameCount: 0,
+    lastFrameType: undefined,
+    exitCode: answered.diagnostics.exitCode,
+    exitSignal: answered.diagnostics.exitSignal
   }
 }
 
@@ -209,26 +193,4 @@ function assertStartInput(input: ManagedHarnessWebRuntimeStartInput): void {
       'Managed DSH launch input is invalid.'
     )
   }
-}
-
-async function assertBuiltDshEntry(worktreePath: string): Promise<void> {
-  const entry = nodePath.join(worktreePath, 'apps', 'cli', 'lib', 'bin.js')
-  const metadata = await lstat(entry)
-  if (metadata.isSymbolicLink() || !metadata.isFile() || (await realpath(entry)) !== entry) {
-    throw new ManagedHarnessRuntimeError(
-      'runtime.worktree_invalid',
-      'Managed Harness has no direct built dsh entry.'
-    )
-  }
-}
-
-function appendOutput(
-  diagnostics: MutableDiagnostics,
-  stream: 'stdout' | 'stderr',
-  chunk: unknown
-): void {
-  const key = stream === 'stdout' ? 'stdoutBytes' : 'stderrBytes'
-  const truncatedKey = stream === 'stdout' ? 'stdoutTruncated' : 'stderrTruncated'
-  diagnostics[key] += Buffer.byteLength(typeof chunk === 'string' ? chunk : String(chunk))
-  if (diagnostics[key] > MAXIMUM_OUTPUT_BYTES) diagnostics[truncatedKey] = true
 }

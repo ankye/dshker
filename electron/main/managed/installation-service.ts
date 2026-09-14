@@ -161,7 +161,7 @@ export class ManagedInstallationService {
       if (existing) {
         return {
           toolchainId: existing.toolchainId,
-          state: projectInstallationsState(catalog, this.#runtimeSupervisor)
+          state: await projectInstallationsState(catalog, this.#runtimeSupervisor)
         }
       }
       const next: ManagedInstallationCatalog = {
@@ -171,7 +171,7 @@ export class ManagedInstallationService {
       await this.#workspaceService.saveInstallationCatalog(next)
       return {
         toolchainId: toolchain.toolchainId,
-        state: projectInstallationsState(next, this.#runtimeSupervisor)
+        state: await projectInstallationsState(next, this.#runtimeSupervisor)
       }
     })
   }
@@ -331,7 +331,7 @@ export class ManagedInstallationService {
         )
       }
       const installation = catalog.installations[index]
-      this.#assertInstallationStopped(installation.installationId)
+      await this.#assertInstallationStopped(installation.installationId)
       const toolchain = findToolchain(catalog, installation.toolchainId)
       const workspace = await this.#workspaceService.getWorkspaceDirectories(request.workspaceId)
       const paths = createManagedGitInstallationPaths(
@@ -572,9 +572,9 @@ export class ManagedInstallationService {
   }
 
   /** Rejects source mutation while this installation's child still owns its selected worktree. */
-  #assertInstallationStopped(installationId: string): void {
+  async #assertInstallationStopped(installationId: string): Promise<void> {
     try {
-      const state = this.#runtimeSupervisor.launchFor(installationId).state
+      const state = (await this.#runtimeSupervisor.launchFor(installationId)).state
       if (state !== 'stopped' && state !== 'failed') {
         throw new ManagedRootError(
           'managed.operation_in_progress',
@@ -588,37 +588,40 @@ export class ManagedInstallationService {
   }
 }
 
-function projectInstallationsState(
+async function projectInstallationsState(
   catalog: ManagedInstallationCatalog,
   runtimeSupervisor: ManagedHarnessWebRuntimeSupervisor
-): ManagedInstallationsState {
+): Promise<ManagedInstallationsState> {
   const toolchains: readonly ManagedToolchainView[] = catalog.toolchains.map((entry) => ({
     toolchainId: entry.toolchainId,
     gitVersion: entry.git.version.text,
     nodeVersion: entry.node.version.text,
     pnpmVersion: entry.pnpm.version.text
   }))
-  const installations: readonly ManagedHarnessInstallationView[] = catalog.installations.map(
-    (entry) => ({
+  // Launch state is the core's to report, so it is read per installation and for
+  // all of them at once: an installation whose child exited is stopped the
+  // moment the state is projected, exactly as the shell's exit listeners made it.
+  const installations: readonly ManagedHarnessInstallationView[] = await Promise.all(
+    catalog.installations.map(async (entry) => ({
       installationId: entry.installationId,
       workspaceId: entry.workspaceId,
       toolchainId: entry.toolchainId,
       remoteUrl: entry.remote.source.declaredUrl,
       requestedRevision: requestedRevision(entry.selection),
       resolvedCommit: entry.commit,
-      launch: projectRuntimeLaunch(runtimeSupervisor, entry.installationId)
-    })
+      launch: await projectRuntimeLaunch(runtimeSupervisor, entry.installationId)
+    }))
   )
   return { toolchains, installations }
 }
 
 /** Projects a missing transient record as stopped; this is expected after the Launcher process starts. */
-function projectRuntimeLaunch(
+async function projectRuntimeLaunch(
   runtimeSupervisor: ManagedHarnessWebRuntimeSupervisor,
   installationId: string
-): RendererManagedHarnessLaunchView {
+): Promise<RendererManagedHarnessLaunchView> {
   try {
-    return projectRuntimeLaunchView(runtimeSupervisor.launchFor(installationId))
+    return projectRuntimeLaunchView(await runtimeSupervisor.launchFor(installationId))
   } catch (error) {
     if (error instanceof ManagedHarnessRuntimeError && error.code === 'runtime.not_found') {
       return { kind: 'stopped' }

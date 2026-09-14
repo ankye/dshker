@@ -38,6 +38,8 @@ describe('core harness runtime client', () => {
       launchId: 'launch-1',
       subjectId: 'launcher-harness',
       directory: '/launcher/versions/abc',
+      profile: 'pnpm' as const,
+      nodeExecutable: '',
       pnpmExecutable: '/opt/pnpm',
       pnpmPrefixArguments: ['shim.js'],
       pnpmResolutionError: '',
@@ -48,6 +50,34 @@ describe('core harness runtime client', () => {
     }
     await expect(new CoreHarnessRuntime(rpc).start(request)).resolves.toEqual(launchView())
     expect(rpc.calls).toEqual([{ method: 'runtime.start', payload: request }])
+  })
+
+  it('carries a managed installation own-Node profile to the core', async () => {
+    const rpc = fakeRpc(() => ({ launch: launchView() }))
+    await new CoreHarnessRuntime(rpc).start({
+      launchId: 'launch-2',
+      subjectId: 'installation-1',
+      directory: '/workspaces/harness/abc',
+      profile: 'node',
+      nodeExecutable: '/toolchains/node/bin/node',
+      pnpmExecutable: '',
+      pnpmPrefixArguments: [],
+      pnpmResolutionError: '',
+      pnpmCommandSearchPath: '',
+      diagnosticsPatchPath: '',
+      port: { mode: 'auto' },
+      logPath: ''
+    })
+    expect(rpc.calls).toEqual([
+      {
+        method: 'runtime.start',
+        payload: expect.objectContaining({
+          subjectId: 'installation-1',
+          profile: 'node',
+          nodeExecutable: '/toolchains/node/bin/node'
+        })
+      }
+    ])
   })
 
   it('reports a subject that never ran as no launch at all', async () => {
