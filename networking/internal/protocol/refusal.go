@@ -12,12 +12,14 @@ const MaxRefusalBytes = 96
 // RefusalFamilies are the prefixes a public refusal code may use.
 //
 // The peer vocabulary is p2p.*. The Launcher's own management operations use
-// managed.* and launcher.*, and those codes reach the renderer too, so they have
-// to survive this channel once the core performs the operation: the root
-// registry, for instance, refuses with managed.* and the shell maps each one to
-// its own message. A code from outside these families is still collapsed, which
-// is what keeps a library's internal error string from masquerading as one.
-var RefusalFamilies = []string{"p2p", "managed", "launcher"}
+// managed.* and launcher.*, and the DSH Web runtime uses runtime.*; all three
+// reach the renderer, so they have to survive this channel once the core
+// performs the operation: the root registry refuses with managed.*, and a
+// launch that is already running refuses with runtime.operation_in_progress,
+// and the shell maps each one to its own message. A code from outside these
+// families is still collapsed, which is what keeps a library's internal error
+// string from masquerading as one.
+var RefusalFamilies = []string{"p2p", "managed", "launcher", "runtime"}
 
 // Refusal reports the public refusal code an error carries.
 //

@@ -113,8 +113,9 @@ Limits and lifetimes:
 ## 5. Refusal codes
 
 A public code is one of the declared families — `p2p.` for the peer vocabulary,
-`managed.` and `launcher.` for the Launcher's own management operations —
-followed by lowercase letters, `_` and `.`, at most 96 characters. Anything else
+`managed.` and `launcher.` for the Launcher's own management operations, and
+`runtime.` for the DSH Web child the core starts — followed by lowercase
+letters, `_` and `.`, at most 96 characters. Anything else
 is collapsed to `p2p.operation_failed` before it crosses the boundary, so a shell
 never has to interpret an internal error string. The wider set matters because
 the core performs operations whose refusals the renderer already maps:
@@ -196,7 +197,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | pairs    | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                                                                                                                                                                 | shell  |
 | peer     | `peer.connect`, `peer.disconnect`                                                                                                                                                                                                                                                         | shell  |
 | remote   | `remote.directory`, `remote.roots`                                                                                                                                                                                                                                                        | shell  |
-| runtime  | `runtime.invalidate`                                                                                                                                                                                                                                                                      | shell  |
+| runtime  | `runtime.console`, `runtime.invalidate`, `runtime.port_get`, `runtime.port_set`, `runtime.start`, `runtime.status`, `runtime.stop`                                                                                                                                                        | shell  |
 | service  | `service.configure`                                                                                                                                                                                                                                                                       | shell  |
 | user     | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                                                                                              | shell  |
 | callback | `runtime.connect`, `peer.state`                                                                                                                                                                                                                                                           | parent |

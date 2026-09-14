@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/ankye/dshker/networking/internal/catalog"
+	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/installcatalog"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/protocol"
@@ -40,6 +41,12 @@ var served = map[string]bool{
 	"core.secret_delete":           true,
 	"core.secret_get":              true,
 	"core.secret_set":              true,
+	"runtime.console":              true,
+	"runtime.port_get":             true,
+	"runtime.port_set":             true,
+	"runtime.start":                true,
+	"runtime.status":               true,
+	"runtime.stop":                 true,
 }
 
 // Peer is the installed-peer half of the table: the coordinator, pairing,
@@ -61,6 +68,40 @@ type Serve struct {
 	Store   secret.Store
 	Catalog *catalog.Store
 	Peer    Peer
+	// Runtime is the DSH Web process authority. A composition without it cannot
+	// run children at all, which is what the daemon-less unit tests are.
+	Runtime *harnessruntime.Supervisor
+}
+
+// runtimeResult, runtimeStatusResult, runtimeConsoleResult and runtimePortResult
+// are the shell-facing envelopes. Each reuses the runtime package's own wire
+// shapes so the shell parses them with the contract it already renders.
+type runtimeResult struct {
+	Launch *harnessruntime.LaunchView `json:"launch,omitempty"`
+}
+
+type runtimeStatusResult struct {
+	Launch  *harnessruntime.LaunchView `json:"launch,omitempty"`
+	Present bool                       `json:"present"`
+}
+
+type runtimeConsoleResult struct {
+	Entries []harnessruntime.ConsoleEntry `json:"entries"`
+	Cursor  int64                         `json:"cursor"`
+}
+
+type runtimePortResult struct {
+	Port harnessruntime.PortSetting `json:"port"`
+}
+
+// runtimeSupervisor reports the process supervisor this composition was given.
+// A core started without one refuses these methods rather than pretending the
+// child is somewhere else.
+func (server Serve) runtimeSupervisor() (*harnessruntime.Supervisor, error) {
+	if server.Runtime == nil {
+		return nil, errors.New("p2p.not_implemented")
+	}
+	return server.Runtime, nil
 }
 
 // installCatalogResult reuses the installation catalog's own wire shape, so the
@@ -254,6 +295,136 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, err
 		}
 		return catalogSnapshot(&snapshot), nil
+	case "runtime.start":
+		var request struct {
+			LaunchID              string                     `json:"launchId"`
+			SubjectID             string                     `json:"subjectId"`
+			Directory             string                     `json:"directory"`
+			PnpmExecutable        string                     `json:"pnpmExecutable"`
+			PnpmPrefixArguments   []string                   `json:"pnpmPrefixArguments"`
+			PnpmResolutionError   string                     `json:"pnpmResolutionError"`
+			PnpmCommandSearchPath string                     `json:"pnpmCommandSearchPath"`
+			DiagnosticsPatchPath  string                     `json:"diagnosticsPatchPath"`
+			Port                  harnessruntime.PortSetting `json:"port"`
+			LogPath               string                     `json:"logPath"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		supervisor, err := server.runtimeSupervisor()
+		if err != nil {
+			return nil, err
+		}
+		// A fixed port is prepared before anything is spawned: a leftover DSH Web
+		// the core itself started is adopted, and any other holder is refused with
+		// the message the renderer explains.
+		if request.Port.Mode == "fixed" {
+			asserted, err := harnessruntime.AssertPortSetting(request.Port)
+			if err != nil {
+				return nil, err
+			}
+			decision := harnessruntime.PreparePortForLaunch(asserted.Port, supervisor.Platform(), harnessruntime.PortPreparation{})
+			if decision.Kind == harnessruntime.PortForeign {
+				return nil, harnessruntime.ForeignPortFailure(asserted.Port, *decision.Occupant)
+			}
+		}
+		view, err := supervisor.Start(harnessruntime.LaunchRequest{
+			LaunchID:              request.LaunchID,
+			SubjectID:             request.SubjectID,
+			Directory:             request.Directory,
+			PnpmExecutable:        request.PnpmExecutable,
+			PnpmPrefixArguments:   request.PnpmPrefixArguments,
+			PnpmResolutionError:   request.PnpmResolutionError,
+			PnpmCommandSearchPath: request.PnpmCommandSearchPath,
+			DiagnosticsPatchPath:  request.DiagnosticsPatchPath,
+			Port:                  request.Port,
+			LogPath:               request.LogPath,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return runtimeResult{Launch: &view}, nil
+	case "runtime.stop":
+		var request struct {
+			SubjectID string `json:"subjectId"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		supervisor, err := server.runtimeSupervisor()
+		if err != nil {
+			return nil, err
+		}
+		view, err := supervisor.Stop(request.SubjectID)
+		if err != nil {
+			return nil, err
+		}
+		return runtimeResult{Launch: &view}, nil
+	case "runtime.status":
+		var request struct {
+			SubjectID string `json:"subjectId"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		supervisor, err := server.runtimeSupervisor()
+		if err != nil {
+			return nil, err
+		}
+		view, present := supervisor.Status(request.SubjectID)
+		if !present {
+			return runtimeStatusResult{}, nil
+		}
+		return runtimeStatusResult{Launch: &view, Present: true}, nil
+	case "runtime.console":
+		var request struct {
+			Cursor int64 `json:"cursor"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		supervisor, err := server.runtimeSupervisor()
+		if err != nil {
+			return nil, err
+		}
+		entries, cursor := supervisor.Console().After(request.Cursor)
+		return runtimeConsoleResult{Entries: entries, Cursor: cursor}, nil
+	case "runtime.port_get":
+		var request struct {
+			FilePath string `json:"filePath"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := harnessruntime.OpenPreferences(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		setting, err := store.Load()
+		if err != nil {
+			return nil, err
+		}
+		return runtimePortResult{Port: setting}, nil
+	case "runtime.port_set":
+		var request struct {
+			FilePath string                     `json:"filePath"`
+			Port     harnessruntime.PortSetting `json:"port"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := harnessruntime.OpenPreferences(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		setting, err := harnessruntime.AssertPortSetting(request.Port)
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Save(setting); err != nil {
+			return nil, err
+		}
+		return runtimePortResult{Port: setting}, nil
 	case "core.install_catalog_inspect":
 		var request struct {
 			FilePath string `json:"filePath"`

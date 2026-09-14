@@ -12,6 +12,7 @@ import (
 
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/core"
+	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/helper"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/secret"
@@ -169,6 +170,13 @@ func run(parsed options) error {
 		}
 		host.SetRoots(roots)
 	}
+	// The DSH Web child belongs to the core now. The supervisor is created once
+	// per process so a launch survives a renderer reload, and the deferred
+	// shutdown means no child outlives the channel that started it: a crashed
+	// shell closes this connection, which ends the daemon and stops the tree.
+	runtimeSupervisor := harnessruntime.NewSupervisor()
+	defer runtimeSupervisor.Shutdown()
+	server.Runtime = runtimeSupervisor
 	server.Peer = host
 	// The host must be bound before any request is answered: device.restore
 	// installs the callback the host uses to ask the shell for a runtime owner

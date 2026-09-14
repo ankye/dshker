@@ -83,7 +83,16 @@ var Methods = []Method{
 	{"peer.disconnect", RoleShell},
 	{"remote.directory", RoleShell},
 	{"remote.roots", RoleShell},
+	// The DSH Web child moved into the core in 4.3 to 4.5. These are additive
+	// within version 1, answered by the core's own process supervision, and they
+	// carry the shell's runtime.* refusal codes unchanged.
+	{"runtime.console", RoleShell},
 	{"runtime.invalidate", RoleShell},
+	{"runtime.port_get", RoleShell},
+	{"runtime.port_set", RoleShell},
+	{"runtime.start", RoleShell},
+	{"runtime.status", RoleShell},
+	{"runtime.stop", RoleShell},
 	{"service.configure", RoleShell},
 	{"user.current", RoleShell},
 	{"user.login", RoleShell},
