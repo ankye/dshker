@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.36 — 2026-09-14
+
+- A failed sign-in, join or start now leaves the real error behind. Anything that was
+  not a typed refusal collapsed into `p2p.internal_error` and the original exception was
+  dropped, so a join that reached the coordinator and failed locally could not be
+  diagnosed from the product. The reason is now written to `shell-diagnostics.log`
+  beside the shell's own records, next to the core channel's own diagnostics.
+
 ## 0.1.35 — 2026-09-14
 
 - The launcher now records why its private channel to the local core failed, in
