@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -226,7 +227,10 @@ func TestTemporaryDirectoryIsPrivate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info.Mode().Perm() != 0o700 {
+	// As with the private endpoint record, the POSIX mode is the guarantee only
+	// on the platforms that have one; on Windows the directory sits under the
+	// user's own profile and inherits its ACLs.
+	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o700 {
 		t.Fatalf("mode = %v", info.Mode().Perm())
 	}
 	if filepath.Base(directory) == "" {

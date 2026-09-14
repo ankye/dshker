@@ -2,6 +2,7 @@ package remoteroute
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -11,8 +12,11 @@ func computer() Computer { return Computer{Host: "build.example", Port: 2222, Us
 // TestBuildArgumentsMatchTheShell pins the exact argument order both OpenSSH
 // clients are given, because a reordered option is a different connection.
 func TestBuildArgumentsMatchTheShell(t *testing.T) {
-	scp := BuildScpArguments(computer(), "/tmp/route/remote-peer.json")
-	wantScp := "-q -B -o StrictHostKeyChecking=yes -P 2222 deploy@build.example:.dshlauncher/remote-peer.json /tmp/route/remote-peer.json"
+	// The destination is the platform's own path spelling: scp receives whatever
+	// the core resolved, and a Windows destination is not a POSIX path.
+	destination := filepath.Join("route", "remote-peer.json")
+	scp := BuildScpArguments(computer(), destination)
+	wantScp := "-q -B -o StrictHostKeyChecking=yes -P 2222 deploy@build.example:.dshlauncher/remote-peer.json " + destination
 	if strings.Join(scp, " ") != wantScp {
 		t.Fatalf("scp = %v", scp)
 	}

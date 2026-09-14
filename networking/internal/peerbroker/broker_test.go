@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/ankye/dshker/networking/internal/remoteroute"
@@ -68,7 +69,11 @@ func TestStartPublishesOneDescriptor(t *testing.T) {
 	if err != nil || parsed != descriptor {
 		t.Fatalf("published = %+v, %v", parsed, err)
 	}
-	if info, err := os.Stat(path); err == nil && info.Mode().Perm() != 0o600 {
+	// Windows has no POSIX permission bits: the descriptor lives in the user's
+	// own profile and inherits its ACLs, which is the platform's protection. The
+	// explicit mode is what the POSIX platforms are held to, the way the private
+	// endpoint record already is.
+	if info, err := os.Stat(path); err == nil && runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %v", info.Mode().Perm())
 	}
 	// The broker binds loopback only, so the descriptor is not a network address.
