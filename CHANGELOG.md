@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.38 — 2026-09-15
 
 - A paired computer that re-enrolled no longer disappears from the other machine.
   When both devices re-enroll (each getting a new device identity), the local
