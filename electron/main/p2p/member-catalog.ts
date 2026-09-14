@@ -50,11 +50,14 @@ export async function recordMembers(
 ): Promise<void> {
   const saved = await catalog.inspect()
   if (!saved) throw new PeerHelperError('p2p.not_enabled')
-  const computers = saved.record.computers.filter(
+  type Computer = (typeof saved.record.computers)[number]
+  const kept = saved.record.computers.filter(
     (computer) =>
       computer.serviceId !== serviceId && computer.remoteDeviceId !== credential.deviceId
   )
-  const recorded = new Set(computers.map((computer) => computer.connectionId))
+  const recorded = new Set(kept.map((computer) => computer.connectionId))
+  const fresh: Computer[] = []
+  const freshIds = new Set<string>()
   for (const member of members) {
     // The catalog only admits a positive revision and an active pair.
     if (member.state !== 'active' || member.revision <= 0) continue
@@ -66,9 +69,9 @@ export async function recordMembers(
     if (remote.deviceId === local.deviceId) continue
     // One fixed tab per computer: a second pair with the same peer (over
     // another network) must not create a duplicate connection id.
-    if (recorded.has(remote.deviceId)) continue
-    recorded.add(remote.deviceId)
-    computers.push({
+    if (recorded.has(remote.deviceId) || freshIds.has(remote.deviceId)) continue
+    freshIds.add(remote.deviceId)
+    fresh.push({
       connectionId: remote.deviceId,
       serviceId,
       displayName: remote.name.length > 0 ? remote.name : remote.deviceId,
@@ -87,11 +90,40 @@ export async function recordMembers(
       pairState: 'active'
     })
   }
-  for (const computer of saved.record.computers) {
-    if (computer.serviceId !== serviceId || computer.remoteDeviceId === credential.deviceId)
-      continue
-    if (computer.pairState === 'revoked' || recorded.has(computer.connectionId)) continue
-    computers.push({ ...computer, pairState: 'revoked' })
+  // Rows of this service the coordinator no longer carries are recorded as
+  // revoked rather than dropped, because dropping an active computer is what the
+  // catalog's guard refuses; an already revoked row is simply not carried
+  // forward, so it disappears on the next rewrite instead of accumulating.
+  const carried = saved.record.computers
+    .filter(
+      (computer) =>
+        computer.serviceId === serviceId &&
+        computer.remoteDeviceId !== credential.deviceId &&
+        computer.pairState !== 'revoked' &&
+        !freshIds.has(computer.connectionId)
+    )
+    .map((computer) => ({ ...computer, pairState: 'revoked' as const }))
+  // A connection whose authorization the coordinator has issued again — the same
+  // two devices re-paired, or a network rejoined — cannot be revived in the same
+  // commit that replaces its revoked row: the catalog refuses to take a revoked
+  // computer back to active at all, and a fresh pairing numbers its revision from
+  // the start, so a newer revision is not something to rely on. Retiring the
+  // revoked row is its own legal step (dropping a revoked computer is exactly
+  // what retirement means), so it is committed first and the new authorization is
+  // recorded against the revision that commit produced.
+  const retired = saved.record.computers.filter(
+    (computer) =>
+      computer.serviceId === serviceId &&
+      computer.pairState === 'revoked' &&
+      freshIds.has(computer.connectionId)
+  )
+  let revision = saved.revision
+  if (retired.length > 0) {
+    const committed = await catalog.commit(revision, {
+      ...saved.record,
+      computers: saved.record.computers.filter((computer) => !retired.includes(computer))
+    })
+    revision = committed.revision
   }
-  await catalog.commit(saved.revision, { ...saved.record, computers })
+  await catalog.commit(revision, { ...saved.record, computers: [...kept, ...fresh, ...carried] })
 }

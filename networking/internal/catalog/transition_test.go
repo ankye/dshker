@@ -171,6 +171,23 @@ func TestTransitionRefusesARewoundOrRevivedPair(t *testing.T) {
 	if err := AssertTransition(previous, transitionRecord(services, []Computer{forward}, nil)); err != nil {
 		t.Fatalf("advancing a revision: %v", err)
 	}
+
+	// A revoked connection is retired before a re-authorization can be recorded,
+	// because this guard refuses to revive one at all — including at a newer
+	// revision, since a fresh pairing numbers its revision from the start. The
+	// shell performs that retirement as its own commit; see recordMembers.
+	repaired := revoked
+	repaired.PairState = "active"
+	repaired.PairRevision = 3
+	if err := AssertTransition(afterRevoke, transitionRecord(services, []Computer{repaired}, nil)); !errors.Is(err, ErrTrustRestore) {
+		t.Fatalf("reviving a revoked pair at a newer revision = %v, want %v", err, ErrTrustRestore)
+	}
+	if err := AssertTransition(afterRevoke, transitionRecord(services, nil, nil)); err != nil {
+		t.Fatalf("retiring a revoked pair: %v", err)
+	}
+	if err := AssertTransition(transitionRecord(services, nil, nil), transitionRecord(services, []Computer{repaired}, nil)); err != nil {
+		t.Fatalf("recording a re-authorized pair after retirement: %v", err)
+	}
 }
 
 func TestTransitionRefusesASilentPairRemoval(t *testing.T) {

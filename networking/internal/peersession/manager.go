@@ -43,7 +43,7 @@ type Manager struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	client          *controlplane.Client
-	signals         *controlplane.Signals
+	signals         *signaling
 	config          Config
 	owner           runtimebridge.RuntimeOwner
 	emit            func(State)
@@ -76,9 +76,11 @@ type session struct {
 	err       error
 	// refusal is the named code for a failed attempt, so a caller that returns
 	// the failure to the shell does not hand it the raw transport sentence.
-	refusal  string
-	mux      *peer.Mux
-	endpoint *runtimebridge.Endpoint
+	refusal string
+	// finishOnce makes retiring a session idempotent; see Manager.finish.
+	finishOnce sync.Once
+	mux        *peer.Mux
+	endpoint   *runtimebridge.Endpoint
 }
 
 func newSession(parent context.Context) *session {
@@ -98,13 +100,14 @@ func New(ctx context.Context, client *controlplane.Client, config Config, pins [
 			return nil, err
 		}
 	}
-	signals, err := client.Subscribe(child, config.Device.DeviceID)
+	signals, err := newSignaling(child, func(ctx context.Context, deviceID string) (subscription, error) {
+		return client.Subscribe(ctx, deviceID)
+	}, config.Device.DeviceID, manager.receive)
 	if err != nil {
 		cancel()
 		return nil, err
 	}
 	manager.signals = signals
-	go manager.receive()
 	return manager, nil
 }
 
@@ -191,7 +194,7 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 	deadline, cancel := context.WithTimeout(connection.ctx, 30*time.Second)
 	offer, err := connection.transport.Offer(deadline)
 	if err == nil {
-		err = manager.signals.Send(deadline, offer)
+		err = manager.signals.send(deadline, offer)
 	}
 	cancel()
 	if err != nil {
@@ -250,14 +253,22 @@ func namedRefusal(err error, transportReady bool) string {
 	return "p2p.runtime_unavailable"
 }
 
+// finish retires a session exactly once.
+//
+// Both the connecting caller and the session runner can reach it — the caller
+// abandons an attempt whose transport failed while the runner is still unwinding
+// — and closing an already closed channel panics the whole core, which takes
+// every pair down with it until the application is restarted. The once also
+// keeps the waiters correct: whoever arrives second still observes a closed
+// done.
 func (manager *Manager) finish(pairID string, connection *session) {
 	connection.cancel()
 	manager.mu.Lock()
 	if manager.sessions[pairID] == connection {
 		delete(manager.sessions, pairID)
 	}
-	close(connection.done)
 	manager.mu.Unlock()
+	connection.finishOnce.Do(func() { close(connection.done) })
 }
 func (manager *Manager) end(lease protocol.Lease) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -304,7 +315,7 @@ func (manager *Manager) Close() {
 	manager.endpoints = make(map[string]*runtimebridge.Endpoint)
 	manager.mu.Unlock()
 	manager.cancel()
-	manager.signals.Close()
+	manager.signals.close()
 	for _, done := range pending {
 		<-done
 	}
@@ -441,7 +452,17 @@ func (manager *Manager) sessionByAttemptLocked(attemptID string) *session {
 // decision has to be testable on its own.
 func (manager *Manager) revoke(pairID string) {
 	manager.mu.Lock()
+	pin, pinned := manager.pins[pairID]
 	delete(manager.pins, pairID)
+	if pinned {
+		// Record the network the way RevokeNetwork does, so a session still being
+		// reserved for this pair is closed too instead of outliving its
+		// authorization.
+		if manager.revokedPairs == nil {
+			manager.revokedPairs = make(map[string]string)
+		}
+		manager.revokedPairs[pairID] = pin.Pair.NetworkID
+	}
 	endpoint := manager.endpoints[pairID]
 	delete(manager.endpoints, pairID)
 	connection := manager.sessions[pairID]
@@ -457,8 +478,14 @@ func (manager *Manager) revoke(pairID string) {
 	}
 }
 
-func (manager *Manager) receive() {
-	for event := range manager.signals.Events() {
+// receive consumes one subscription until it ends.
+//
+// The subscription is a parameter rather than manager state on purpose: after a
+// loss the supervisor installs a new one and starts a new loop, and the old loop
+// must drain the old channel instead of reading events that belong to its
+// replacement.
+func (manager *Manager) receive(active subscription) {
+	for event := range active.Events() {
 		if event.Type == "attempt" {
 			if event.Lease.FromDeviceID != manager.config.Device.DeviceID {
 				manager.mu.Lock()
@@ -468,6 +495,12 @@ func (manager *Manager) receive() {
 					if _, err := manager.start(pairID, event.Lease, nil); err != nil {
 						fmt.Fprintf(os.Stderr, "start %s: %v\n", pairID, err)
 					}
+				} else {
+					// A pinned pair is how this device proves it may answer, so a
+					// missing pin is why the offer that follows will be dropped.
+					// Without this line the failure is invisible on the side that
+					// is being connected to.
+					fmt.Fprintf(os.Stderr, "attempt %s: %v\n", event.Lease.AttemptID, errors.New("p2p.pair_not_pinned"))
 				}
 			}
 			continue
@@ -483,6 +516,12 @@ func (manager *Manager) receive() {
 		negotiating := connection != nil && connection.transport != nil
 		manager.mu.Unlock()
 		if !negotiating {
+			// The peer sent a signal this device has no session for. Staying
+			// silent here is what made a remote "no answer" impossible to
+			// explain from either side; the line costs nothing and names it.
+			if event.Type == "signal" {
+				fmt.Fprintf(os.Stderr, "signal %s: %v\n", event.Signal.AttemptID, errors.New("p2p.unknown_attempt"))
+			}
 			continue
 		}
 		if event.Type == "revoked" {
@@ -498,13 +537,14 @@ func (manager *Manager) receive() {
 			var answer protocol.Signal
 			answer, err = connection.transport.AcceptOffer(ctx, event.Signal)
 			if err == nil {
-				err = manager.signals.Send(ctx, answer)
+				err = active.Send(ctx, answer)
 			}
 		} else {
 			err = connection.transport.AcceptAnswer(event.Signal)
 		}
 		cancel()
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "signal %s: %v\n", event.Signal.AttemptID, err)
 			connection.cancel()
 		}
 	}

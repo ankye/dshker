@@ -14,6 +14,20 @@ import { assertAccountId } from './account-records'
 import { PeerHelperError } from './wire'
 
 /**
+ * Reports whether a failed pair read means "this machine is not one of this
+ * pair's ends" rather than a real failure. `p2p.identity_mismatch` is what the
+ * helper answers when the record names neither of this device's identities, and
+ * a pair the coordinator has already retired answers `p2p.pair_not_found`;
+ * neither says anything about the pairs that do belong to this machine.
+ */
+function isForeignPair(error: unknown): boolean {
+  return (
+    error instanceof PeerHelperError &&
+    (error.code === 'p2p.identity_mismatch' || error.code === 'p2p.pair_not_found')
+  )
+}
+
+/**
  * Named main-only pairing operations.
  *
  * The pairing sequence is deliberately two-sided: an invite is minted by one
@@ -71,6 +85,14 @@ export class PeerPairing {
    * `pairs.identity`. The raw public keys those replies carry are what the
    * catalog stores and what a re-pin after a restore needs; they never reach the
    * renderer, which keeps reading fingerprints.
+   *
+   * A pair this device is not one of the ends of is skipped, not fatal. The
+   * coordinator lists every pair of the account's network, including ones left
+   * over from a device identity this machine no longer holds (exactly what both
+   * devices re-enrolling leaves behind), and refusing the whole read for one of
+   * them meant the sync never reached the code that writes pins and the
+   * catalog: the machine went on seeing only itself and answered no offers,
+   * while every sweep failed on the same reply.
    */
   members(serviceId: string, signal: AbortSignal): Promise<PeerPairMember[]> {
     return this.#operation(serviceId, signal, async () => {
@@ -78,12 +100,17 @@ export class PeerPairing {
       const pairs = peerPairs(await this.#call(serviceId, 'pairs.list', {}, signal), local)
       const members: PeerPairMember[] = []
       for (const pair of pairs) {
-        members.push(
-          peerPairMember(
-            await this.#call(serviceId, 'pairs.identity', { pairId: pair.pairId }, signal),
-            local
+        try {
+          members.push(
+            peerPairMember(
+              await this.#call(serviceId, 'pairs.identity', { pairId: pair.pairId }, signal),
+              local
+            )
           )
-        )
+        } catch (error) {
+          if (!isForeignPair(error)) throw error
+          console.error('[p2p] skipping a pair this device is not part of:', pair.pairId)
+        }
       }
       return members
     })

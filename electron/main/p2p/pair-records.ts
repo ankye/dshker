@@ -211,14 +211,25 @@ export function peerPairMember(value: unknown, localDeviceId: string): PeerPairM
   return { ...pair, initiator, target }
 }
 
-/** Validates a `pairs.list` reply; duplicate pair ids indicate a broken source. */
+/**
+ * Validates a `pairs.list` reply; duplicate pair ids indicate a broken source.
+ *
+ * An entry naming neither side of this device is skipped, not fatal. The
+ * coordinator lists the network's pairs, so a device identity this machine no
+ * longer holds — what both machines re-enrolling leaves behind — keeps an entry
+ * that belongs to two other devices. Rejecting the whole reply for it aborted
+ * every member sync before it could write pins or the catalog, which is why a
+ * re-enrolled machine went on seeing only itself and answered no offers. The
+ * entries that do belong here are still validated exactly as before, and a
+ * duplicate pair id is still refused.
+ */
 export function peerPairs(value: unknown, localDeviceId: string): PeerPair[] {
   if (!Array.isArray(value)) throw new PeerHelperError('p2p.invalid_payload')
-  const pairs = value.map((record) => {
+  const pairs: PeerPair[] = []
+  for (const record of value) {
+    const raw = record as { initiator?: unknown; target?: unknown }
+    if (raw?.initiator !== localDeviceId && raw?.target !== localDeviceId) continue
     const core = peerPairCore(record)
-    const raw = record as { initiator: string; target: string }
-    if (localDeviceId !== raw.initiator && localDeviceId !== raw.target)
-      throw new PeerHelperError('p2p.identity_mismatch')
     // `pairs.list` carries ids only; identities arrive through pairs.identity.
     const placeholder = (deviceId: string): PeerPairDevice => ({
       deviceId,
@@ -227,13 +238,13 @@ export function peerPairs(value: unknown, localDeviceId: string): PeerPair[] {
       fingerprint: '',
       presence: 'offline'
     })
-    return {
+    pairs.push({
       ...core,
-      initiator: placeholder(raw.initiator),
-      target: placeholder(raw.target),
+      initiator: placeholder(raw.initiator as string),
+      target: placeholder(raw.target as string),
       localIsInitiator: localDeviceId === raw.initiator
-    }
-  })
+    })
+  }
   if (new Set(pairs.map((pair) => pair.pairId)).size !== pairs.length)
     throw new PeerHelperError('p2p.invalid_payload')
   return pairs

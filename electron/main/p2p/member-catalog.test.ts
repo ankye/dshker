@@ -53,6 +53,7 @@ function computer(overrides: Record<string, unknown> = {}): Record<string, unkno
 
 function fixture(computers: readonly Record<string, unknown>[]) {
   let committed: { computers: readonly Record<string, unknown>[] } | undefined
+  const commits: Array<{ computers: readonly Record<string, unknown>[] }> = []
   const record = {
     format: 'dshker.p2p-devices',
     version: 1,
@@ -75,10 +76,11 @@ function fixture(computers: readonly Record<string, unknown>[]) {
     inspect: vi.fn(async () => ({ revision: 'e'.repeat(64), record: structuredClone(record) })),
     commit: vi.fn(async (_revision: string, next: typeof record) => {
       committed = next as unknown as { computers: readonly Record<string, unknown>[] }
+      commits.push(committed)
       return { revision: 'f'.repeat(64), record: next }
     })
   } as unknown as PeerCatalog
-  return { catalog, committed: () => committed }
+  return { catalog, committed: () => committed, commits: () => commits }
 }
 
 describe('member catalog rewrite', () => {
@@ -142,6 +144,28 @@ describe('member catalog rewrite', () => {
     expect(f.committed()?.computers.map((value) => String(value.remoteDeviceId))).toEqual([
       '5'.repeat(32)
     ])
+  })
+
+  it('retires a revoked connection in its own commit before recording it again', async () => {
+    // The catalog refuses to take a revoked computer back to active, so a peer
+    // the coordinator has authorized again (re-paired, or a network rejoined)
+    // could never be recorded — the member sync failed on every sweep and the
+    // computer stayed revoked on screen. Retirement is the legal step, and it
+    // has to be committed before the new authorization.
+    const revokedRow = computer({
+      remoteDeviceId: '6'.repeat(32),
+      connectionId: '6'.repeat(32),
+      pairId: '6'.repeat(32),
+      pairState: 'revoked'
+    })
+    const f = fixture([revokedRow])
+    const repaired = member({ target: { ...member().target, deviceId: '6'.repeat(32) } })
+    await recordMembers(f.catalog, serviceId, credential, [repaired])
+    const commits = f.commits()
+    expect(commits.map((entry) => entry.computers.length)).toEqual([0, 1])
+    expect(
+      commits[1]?.computers.map((value) => [String(value.remoteDeviceId), String(value.pairState)])
+    ).toEqual([['6'.repeat(32), 'active']])
   })
 
   it('admits only an active pair with a positive revision', async () => {

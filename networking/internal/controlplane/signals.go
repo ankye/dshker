@@ -129,7 +129,12 @@ func (signals *Signals) read() {
 			event.PairID = value.PairID
 			event.Revision = value.Revision
 		default:
-			return
+			// An event this build does not know is not a reason to tear down the
+			// control connection: dropping the subscription here silently killed
+			// every future pairing (nothing reconnects a closed event channel on
+			// the caller side) and a coordinator that grows a new event type
+			// would break every older launcher. Skip it and keep reading.
+			continue
 		}
 		select {
 		case signals.events <- event:
