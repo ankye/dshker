@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.32 — 2026-09-14
 
 - Devices in a network can be **removed** from the device list, and their pairs go
   with them: unbinding a device already invalidated its pairs on the server, but
