@@ -14,6 +14,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/installcatalog"
 	"github.com/ankye/dshker/networking/internal/localrpc"
+	"github.com/ankye/dshker/networking/internal/peerbroker"
 	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/ankye/dshker/networking/internal/remoteroute"
 	"github.com/ankye/dshker/networking/internal/rootregistry"
@@ -45,6 +46,9 @@ var served = map[string]bool{
 	"runtime.console":              true,
 	"runtime.port_get":             true,
 	"runtime.port_set":             true,
+	"remote.broker_start":          true,
+	"remote.broker_status":         true,
+	"remote.broker_stop":           true,
 	"remote.connect":               true,
 	"remote.disconnect":            true,
 	"remote.status":                true,
@@ -78,6 +82,9 @@ type Serve struct {
 	// Remote is the SSH route authority: the descriptor transfer, the two port
 	// forwards, and the loopback broker call for each connection.
 	Remote *remoteroute.Route
+	// Brokers is the server half of that route: the endpoint a remote peer
+	// reaches, and the descriptor it is told about.
+	Brokers *peerbroker.Holder
 }
 
 // runtimeResult, runtimeStatusResult, runtimeConsoleResult and runtimePortResult
@@ -109,7 +116,18 @@ func (server Serve) remoteRoute() (*remoteroute.Route, error) {
 	return server.Remote, nil
 }
 
-// remoteResult and remoteStatusResult reuse the route's own wire shapes.
+// remoteBrokerResult, remoteBrokerStatusResult and remoteResult reuse the route's
+// own wire shapes.
+type remoteBrokerResult struct {
+	Port       int    `json:"port"`
+	InstanceID string `json:"instanceId"`
+}
+
+type remoteBrokerStatusResult struct {
+	Present    bool   `json:"present"`
+	Port       int    `json:"port,omitempty"`
+	InstanceID string `json:"instanceId,omitempty"`
+}
 type remoteResult struct {
 	URL string `json:"url"`
 }
@@ -401,6 +419,58 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return runtimeStatusResult{}, nil
 		}
 		return runtimeStatusResult{Launch: &view, Present: true}, nil
+	case "remote.broker_start":
+		var request struct {
+			DescriptorPath string `json:"descriptorPath"`
+			SubjectID      string `json:"subjectId"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.Brokers == nil || server.Runtime == nil {
+			return nil, errors.New("p2p.not_implemented")
+		}
+		holder := server.Brokers
+		supervisor := server.Runtime
+		// The endpoint answers with the session this host already runs: a peer
+		// asks for a runtime, it does not get to start one.
+		runtime := func(ctx context.Context) (string, error) {
+			view, present := supervisor.Status(request.SubjectID)
+			if !present || view.State != harnessruntime.StateRunning || view.URL == "" {
+				return "", errors.New("remote.runtime_unavailable")
+			}
+			return view.URL, nil
+		}
+		descriptor, err := holder.Start(request.DescriptorPath, runtime, "")
+		if err != nil {
+			return nil, err
+		}
+		return remoteBrokerResult{Port: descriptor.Port, InstanceID: descriptor.InstanceID}, nil
+	case "remote.broker_stop":
+		var request struct{}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.Brokers == nil {
+			return nil, errors.New("p2p.not_implemented")
+		}
+		if err := server.Brokers.Stop(); err != nil {
+			return nil, err
+		}
+		return struct{}{}, nil
+	case "remote.broker_status":
+		var request struct{}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.Brokers == nil {
+			return nil, errors.New("p2p.not_implemented")
+		}
+		descriptor, live := server.Brokers.Status()
+		if !live {
+			return remoteBrokerStatusResult{}, nil
+		}
+		return remoteBrokerStatusResult{Present: true, Port: descriptor.Port, InstanceID: descriptor.InstanceID}, nil
 	case "remote.connect":
 		var request struct {
 			ConnectionID string               `json:"connectionId"`

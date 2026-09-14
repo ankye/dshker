@@ -25,6 +25,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/helper"
 	"github.com/ankye/dshker/networking/internal/localrpc"
+	"github.com/ankye/dshker/networking/internal/peerbroker"
 	"github.com/ankye/dshker/networking/internal/remoteroute"
 	"github.com/ankye/dshker/networking/internal/rootregistry"
 	"github.com/ankye/dshker/networking/internal/secret"
@@ -202,6 +203,9 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute
+	brokers := &peerbroker.Holder{}
+	defer brokers.Shutdown()
+	server.Brokers = brokers
 	host := helper.New(ctx)
 	defer host.Close()
 	if *rootsPath != "" {

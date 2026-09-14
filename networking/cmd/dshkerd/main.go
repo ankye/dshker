@@ -15,6 +15,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/helper"
 	"github.com/ankye/dshker/networking/internal/localrpc"
+	"github.com/ankye/dshker/networking/internal/peerbroker"
 	"github.com/ankye/dshker/networking/internal/remoteroute"
 	"github.com/ankye/dshker/networking/internal/secret"
 )
@@ -187,6 +188,9 @@ func run(parsed options) error {
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute
+	brokers := &peerbroker.Holder{}
+	defer brokers.Shutdown()
+	server.Brokers = brokers
 	server.Peer = host
 	// The host must be bound before any request is answered: device.restore
 	// installs the callback the host uses to ask the shell for a runtime owner

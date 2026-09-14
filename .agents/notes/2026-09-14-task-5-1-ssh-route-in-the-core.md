@@ -59,6 +59,42 @@ declared refusal families, and `cmd/dshkerd` creates one route with a deferred
   a route whose OpenSSH client cannot exist is `remote.ssh_unavailable`.
 - `go build`, `go vet` (host and `GOOS=windows`) and the Go unit suite pass.
 
+## The server half, same task
+
+`internal/peerbroker` is the other end: the loopback endpoint a remote peer
+reaches through its forward, the bearer secret it authenticates with, and the
+descriptor file that tells it where to connect. It is the Go half of
+`peer-broker.ts`, ported rule for rule — loopback-only peers (a malformed or
+non-loopback address is 403), exactly one route (`POST /v1/runtime/connect`),
+404 for anything else, a constant-time bearer comparison, the same
+`{version, url}` answer, 503 when this host has no session to hand out, and a
+descriptor written atomically `0600` with the same format and version.
+`peerbroker.Holder` owns the one broker a core can run, and the core publishes
+`remote.broker_start`, `remote.broker_status` and `remote.broker_stop`; the
+session it hands out is the one this host already runs, looked up from the core's
+own runtime supervisor, so a peer asks for a runtime rather than starting one.
+
+Evidence: `internal/peerbroker` covers the published descriptor (shape, mode,
+round trip through the client parser), every refusal (non-loopback, malformed
+address, wrong path, wrong method, no bearer, a truncated bearer), the accepted
+IPv6 loopback case, an answer the client parser accepts, the 503 without a
+runtime, the busy second start, and the retracted descriptor after shutdown.
+
+## The cross-machine route, in progress
+
+The route was exercised against the second machine and got as far as the host
+half running for real: `dshkerd serve` on the Windows box published the endpoint,
+`remote.broker_start` opened the broker and wrote
+`C:\Users\Administrator\.dshlauncher\remote-peer.json` with a real port and
+secret, and the box's own core answered the whole table including the three new
+broker methods. The client half then needs one more pass: the stand-in DSH the box
+launches for the test announced its URL but the core reported
+`runtime.spawn_failed` for that one executable, while the same core spawned a
+`cmd.exe` child without trouble — so the remaining work is a launch-path
+diagnostic, not a route defect. That end-to-end run, and the same route on a
+second platform, is what still stands between this task and its acceptance
+sentence.
+
 ## What is left of 5.1 and 5.2
 
 The **broker** (the server side: the loopback endpoint that hands a remote peer one
