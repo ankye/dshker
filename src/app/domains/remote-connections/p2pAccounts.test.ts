@@ -9,6 +9,9 @@ function setup(overrides: Partial<P2PManagementApi> = {}) {
   const api = {
     currentUser: vi.fn(async () => ({ ok: true as const, data: user })),
     networks: vi.fn(async () => ({ ok: true as const, data: [network] })),
+    // Nothing is remembered until a case says so, which is also the first-run state.
+    accountSelection: vi.fn(async () => ({ ok: true as const, data: { networkId: null } })),
+    rememberAccountSelection: vi.fn(async () => ({ ok: true as const, data: undefined })),
     ...overrides
   } as P2PManagementApi
   const management = new P2PManagementDomain(() => api)
@@ -53,12 +56,47 @@ describe('P2P user and network domain', () => {
     // One network is not a choice, so selecting it removes a click that carried
     // no decision. Several networks are covered by the next case.
     expect(accounts.state('service-a').selectedNetworkId).toBe('net-a')
-    accounts.select('service-a', 'Office')
+    await accounts.select('service-a', 'Office')
     // A display name is still never a key: the selection stays where it was.
     expect(accounts.state('service-a').selectedNetworkId).toBe('net-a')
-    accounts.select('service-a', 'net-a')
+    await accounts.select('service-a', 'net-a')
     expect(accounts.state('service-a').selectedNetworkId).toBe('net-a')
     expect(accounts.state('service-b').networks).toBeUndefined()
+  })
+
+  it('restores the network this account chose by hand', async () => {
+    const other = { ...network, networkId: 'net-b', name: 'Lab' }
+    const { accounts, api } = setup({
+      networks: vi.fn(async () => ({ ok: true as const, data: [network, other] })),
+      accountSelection: vi.fn(async () => ({ ok: true as const, data: { networkId: 'net-b' } }))
+    })
+    await accounts.currentUser('service-a')
+    expect(accounts.state('service-a').selectedNetworkId).toBe('net-b')
+    // The memory is read for the signed-in account, never for the machine.
+    expect(api.accountSelection).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'service-a', userId: user.userId })
+    )
+  })
+
+  it('ignores a remembered network that is gone, and then never guesses', async () => {
+    const other = { ...network, networkId: 'net-b', name: 'Lab' }
+    const { accounts } = setup({
+      networks: vi.fn(async () => ({ ok: true as const, data: [network, other] })),
+      accountSelection: vi.fn(async () => ({ ok: true as const, data: { networkId: 'net-gone' } }))
+    })
+    await accounts.networks('service-a')
+    expect(accounts.state('service-a').selectedNetworkId).toBeUndefined()
+  })
+
+  it('remembers only an explicit selection', async () => {
+    const { accounts, api } = setup()
+    await accounts.currentUser('service-a')
+    // The single network was selected for the owner; that default is not a choice.
+    expect(api.rememberAccountSelection).not.toHaveBeenCalled()
+    await accounts.select('service-a', 'net-a')
+    expect(api.rememberAccountSelection).toHaveBeenCalledWith(
+      expect.objectContaining({ serviceId: 'service-a', userId: user.userId, networkId: 'net-a' })
+    )
   })
 
   it('leaves the choice to the user when several networks exist', async () => {
@@ -116,7 +154,7 @@ describe('P2P user and network domain', () => {
     const { accounts, api } = setup()
     await accounts.currentUser('service-a')
     await accounts.networks('service-a')
-    accounts.select('service-a', 'net-a')
+    await accounts.select('service-a', 'net-a')
     accounts.state('service-a').renameDrafts['net-a'] = 'draft'
     vi.mocked(api.currentUser).mockResolvedValueOnce({
       ok: true,
@@ -138,7 +176,7 @@ describe('P2P user and network domain', () => {
   it('retains last readback after a failed list and clears a deleted selection only after successful readback', async () => {
     const { accounts, api } = setup()
     await accounts.networks('service-a')
-    accounts.select('service-a', 'net-a')
+    await accounts.select('service-a', 'net-a')
     vi.mocked(api.networks).mockResolvedValueOnce({
       ok: false,
       code: 'p2p.server_unavailable',
@@ -186,7 +224,7 @@ describe('P2P user and network domain', () => {
     const { accounts } = setup({ deleteNetwork })
     await accounts.currentUser('service-a')
     await accounts.networks('service-a')
-    accounts.select('service-a', 'net-a')
+    await accounts.select('service-a', 'net-a')
     expect(await accounts.deleteNetwork('service-a', 'net-a')).toBe(false)
     expect(accounts.state('service-a').networks).toEqual([network])
     await accounts.currentUser('service-a')

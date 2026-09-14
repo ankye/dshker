@@ -19,6 +19,9 @@ export const P2P_MANAGEMENT_CHANNELS = {
   joinNetwork: 'dsh-launcher:p2p:join-network',
   /** Login-free removal of this device from a network it joined. */
   leaveNetwork: 'dsh-launcher:p2p:leave-network',
+  /** The network this account last chose by hand, if it is still remembered. */
+  accountSelection: 'dsh-launcher:p2p:account-selection',
+  rememberAccountSelection: 'dsh-launcher:p2p:remember-account-selection',
   registration: 'dsh-launcher:p2p:registration',
   registerDevice: 'dsh-launcher:p2p:register-device',
   submitEnrollment: 'dsh-launcher:p2p:submit-enrollment',
@@ -324,6 +327,15 @@ export interface P2PManagementInputs {
    * The local credential is cleared only after the server confirms the removal.
    */
   leaveNetwork: NetworkRequest & { deviceId: string }
+  /**
+   * Reads the remembered choice for one account.
+   *
+   * Scoped by account on purpose: a selection belongs to the owner who made it,
+   * so signing in as somebody else never inherits it.
+   */
+  accountSelection: ServiceRequest & { userId: string }
+  /** Records an explicit choice. An automatic selection is not one, and is not sent. */
+  rememberAccountSelection: ServiceRequest & { userId: string; networkId: string }
   submitEnrollment: RevisionRequest
   recoverEnrollment: RevisionRequest
   pairs: ServiceRequest
@@ -382,6 +394,9 @@ export interface P2PManagementResults {
   joinNetwork: P2PRegistrationView
   /** Nothing remains on success; the local credential is then cleared. */
   leaveNetwork: void
+  /** Null when nothing is remembered, which is not the same as "no networks". */
+  accountSelection: { networkId: string | null }
+  rememberAccountSelection: void
   submitEnrollment: P2PRegistrationView
   recoverEnrollment: P2PRegistrationView
   pairs: P2PPairView[]

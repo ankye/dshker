@@ -26,6 +26,8 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   registerDevice: ['serviceId', 'networkId', 'name'],
   joinNetwork: ['serviceId', 'networkId', 'name'],
   leaveNetwork: ['serviceId', 'networkId', 'deviceId'],
+  accountSelection: ['serviceId', 'userId'],
+  rememberAccountSelection: ['serviceId', 'userId', 'networkId'],
   submitEnrollment: ['serviceId', 'revision'],
   recoverEnrollment: ['serviceId', 'revision'],
   pairs: ['serviceId'],

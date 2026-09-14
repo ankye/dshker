@@ -11,6 +11,10 @@
 - A single pair can be **revoked** on its own, for when only that pairing should
   end and the device itself should stay. The warning is shown before the write,
   because revoking drops the session immediately and re-pairing never restores it.
+- The network you last chose is **remembered** (per account, on this machine
+  only), so returning to the screen lands where you left instead of asking again.
+  The memory never decides for you: it is used only while that network still
+  exists and belongs to the same account, and only a choice you made is stored.
 - A network is **selected for you when it is the only one**. The previous rule
   never selected anything, to avoid aiming an edit at the wrong network; with a
   single network there is nothing to guess, so the click is gone. Several networks

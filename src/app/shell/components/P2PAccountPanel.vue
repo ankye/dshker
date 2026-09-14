@@ -492,7 +492,7 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
                   :name="`network-${serviceId}`"
                   :checked="state.selectedNetworkId === network.networkId"
                   :disabled="pending || uncertain"
-                  @change="accounts.select(serviceId, network.networkId)"
+                  @change="void accounts.select(serviceId, network.networkId)"
                 />
                 {{ network.name }}</label
               >

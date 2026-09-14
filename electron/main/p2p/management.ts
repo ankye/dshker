@@ -14,6 +14,7 @@ import { PeerPairing } from './pairing'
 import type { PeerPairMember, PeerPairMemberDevice } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
+import { P2PSelectionStore } from './selection-preferences'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
 import { memberAsPair } from './management-projection'
@@ -61,9 +62,11 @@ export class PeerManagement {
   #sessionSweep: ReturnType<typeof setInterval> | undefined
   readonly #autoConnect: PeerAutoConnect
   readonly #resolveSettingsRoot: () => Promise<string>
+  readonly #selection: P2PSelectionStore
 
   constructor(options: Options) {
     this.#resolveSettingsRoot = options.resolveSettingsRoot
+    this.#selection = new P2PSelectionStore({ resolveSettingsRoot: options.resolveSettingsRoot })
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot, options.catalog)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot, options.secrets)
     this.#host = new PeerRuntimeHost({
@@ -458,10 +461,8 @@ export class PeerManagement {
     )
   }
   async leaveNetwork(serviceId: string, networkId: string, deviceId: string, signal: AbortSignal) {
-    // Two removals wear one name: this machine leaving a network, and its owner
-    // evicting a device that is not this one. Only the first clears the local
-    // credential, so only the first goes through enrollment -- which refuses any
-    // other device id by design.
+    // Two removals wear one name: leaving (clears this machine's credential, so
+    // it goes through enrollment) and the owner evicting another device.
     const stored = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
     if (stored?.kind === 'registered' && stored.credential.deviceId === deviceId) {
       return (await this.#ready(signal)).enrollment.leave(
@@ -481,6 +482,14 @@ export class PeerManagement {
     const session = await this.#ready(signal)
     await this.#refreshMembers(serviceId, session, this.#signal(signal))
   }
+  async accountSelection(serviceId: string, userId: string) {
+    return this.#selection.remembered(serviceId, userId)
+  }
+
+  async rememberAccountSelection(serviceId: string, userId: string, networkId: string) {
+    return this.#selection.remember(serviceId, userId, networkId)
+  }
+
   async submitEnrollment(serviceId: string, revision: string, signal: AbortSignal) {
     return (await this.#ready(signal)).enrollment.submitPending(
       serviceId,
@@ -589,9 +598,8 @@ export class PeerManagement {
     if (!enrollee || enrollee.serviceId !== serviceId) return
     const sync = (): Promise<void> => this.#syncMembers(serviceId, session, enrollee, signal)
     await sync().catch(async (error) => {
-      // A concurrent read can hold this service's operation lock. One retry is
-      // cheap, and it matters: this sync is what prunes pairs the coordinator no
-      // longer has, so skipping it leaves dead rows the user must delete by hand.
+      // This sync is what prunes pairs the coordinator no longer has, so a lock
+      // collision must not silently leave dead rows behind.
       if (!(error instanceof PeerHelperError) || error.code !== 'p2p.service_busy') {
         console.error('[p2p] network member sync failed:', error)
         return

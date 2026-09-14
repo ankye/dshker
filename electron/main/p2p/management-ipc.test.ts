@@ -57,6 +57,8 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   registerDevice: { serviceId, networkId, name: 'Mac' },
   joinNetwork: { serviceId, networkId, name: 'Mac' },
   leaveNetwork: { serviceId, networkId, deviceId: 'e'.repeat(32) },
+  accountSelection: { serviceId, userId: 'd'.repeat(32) },
+  rememberAccountSelection: { serviceId, userId: 'd'.repeat(32), networkId },
   submitEnrollment: { serviceId, revision },
   recoverEnrollment: { serviceId, revision },
   pairs: { serviceId },
@@ -186,7 +188,9 @@ function fixture() {
     remoteDirectory: vi.fn(async () => ({
       entries: [{ ref: 'abc', name: 'alpha', isDirectory: true, isProject: true }],
       total: 1
-    }))
+    })),
+    accountSelection: vi.fn(async () => 'net-a' as string | undefined),
+    rememberAccountSelection: vi.fn(async () => undefined)
   }
   registerPeerManagementIpc(owner as unknown as PeerManagementOwner)
   const invoke = (

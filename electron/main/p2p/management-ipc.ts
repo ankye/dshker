@@ -131,6 +131,14 @@ export function registerPeerManagementIpc(
   )
   // Leaving requires the owner's session: the coordinator has no login-free
   // removal, so without one any holder of a deviceId could evict a device.
+  // The remembered selection is this account's and this device's own state: it
+  // never leaves the machine and is never used to authorize anything.
+  register('accountSelection', false, async (r) => ({
+    networkId: (await owner.accountSelection(r.serviceId, r.userId)) ?? null
+  }))
+  register('rememberAccountSelection', true, (r) =>
+    owner.rememberAccountSelection(r.serviceId, r.userId, r.networkId)
+  )
   register('leaveNetwork', true, (r, s) =>
     owner.leaveNetwork(r.serviceId, r.networkId, r.deviceId, s)
   )

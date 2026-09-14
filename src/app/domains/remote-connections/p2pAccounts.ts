@@ -100,8 +100,21 @@ export class P2PAccountsDomain {
     // A single owned network is not a choice, so asking for a click is friction
     // with no decision behind it. Several networks stay unselected: choosing one
     // there would be a guess about where the next edit or delete lands.
-    if (state.selectedNetworkId === undefined && result.data.length === 1)
-      state.selectedNetworkId = result.data[0].networkId
+    if (state.selectedNetworkId !== undefined) return
+    // The owner's own earlier choice comes first, but only for the account that
+    // made it and only while that network is still there. Failing that, a single
+    // network needs no choice at all. Several unknown networks stay unselected:
+    // picking one would be a guess about where the next edit lands.
+    const userId = state.user?.userId
+    if (userId !== undefined) {
+      const remembered = await this.management.runRead('accountSelection', { serviceId, userId })
+      const preferred = remembered.ok ? remembered.data.networkId : null
+      if (preferred !== null && result.data.some((item) => item.networkId === preferred)) {
+        state.selectedNetworkId = preferred
+        return
+      }
+    }
+    if (result.data.length === 1) state.selectedNetworkId = result.data[0].networkId
   }
 
   /** Reads one network's device directory; a failure is surfaced, never silent. */
@@ -129,7 +142,7 @@ export class P2PAccountsDomain {
     return true
   }
 
-  select(serviceId: string, networkId: string): void {
+  async select(serviceId: string, networkId: string): Promise<void> {
     const state = this.state(serviceId)
     if (
       this.management.busy(serviceId) ||
@@ -137,6 +150,11 @@ export class P2PAccountsDomain {
     )
       return
     state.selectedNetworkId = networkId
+    // Only an explicit choice is remembered: this machine must never store its own
+    // default as though the owner had asked for it.
+    const userId = state.user?.userId
+    if (userId !== undefined)
+      await this.management.run('rememberAccountSelection', { serviceId, userId, networkId })
   }
 
   async createNetwork(serviceId: string): Promise<void> {
