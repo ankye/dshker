@@ -30,6 +30,8 @@ for it, and pretending otherwise would be worse than refusing by name.
 
 ```text
 dshkerd status [--state D] [--json]
+dshkerd pair   --service ID [--share NETWORK] [--invite CODE --network NETWORK] [--state D]
+dshkerd connect --service ID --pair ID [--generation N] [--disconnect] [--state D]
 dshkerd roots  --registry FILE --native-home DIR [--state D] [--json]
 dshkerd dsh start --directory DIR --pnpm FILE [--pnpm-prefix A] [--patch FILE] [--port N] [--state D]
 dshkerd dsh stop [--state D]
@@ -42,6 +44,16 @@ stdin, so an installed shell keeps working unchanged.
 `call` is what makes the surface whole: every published operation is reachable
 before it has a friendlier command, the refusal code is printed verbatim, and a
 payload can come from stdin. The named commands are sugar over it.
+
+`pair` and `connect` came after the first pass of this task, and writing them
+taught the one thing the CLI had to get right: every host operation except
+`service.configure` and the two key operations travels in the host's
+`{serviceId, data}` envelope. Sending `pairs.list` with a bare `{}` is refused as
+`p2p.invalid_request` before the host ever looks at the service — which is exactly
+what the first version of the command did, and what the integration test caught.
+On a host that has never been configured, both commands refuse with
+`p2p.service_unconfigured`: a distinct code, and an honest one, rather than a
+guessed service.
 
 ## The two carry-forwards
 

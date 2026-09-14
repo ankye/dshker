@@ -37,12 +37,14 @@ const HeadlessSubject = "dshkerd-dsh"
 // parent-driven mode the shell starts, which stays the default so an existing
 // shell keeps working unchanged.
 var cliCommands = map[string]bool{
-	"serve":  true,
-	"status": true,
-	"roots":  true,
-	"dsh":    true,
-	"call":   true,
-	"help":   true,
+	"serve":   true,
+	"status":  true,
+	"roots":   true,
+	"dsh":     true,
+	"call":    true,
+	"pair":    true,
+	"connect": true,
+	"help":    true,
 }
 
 // isCommand reports whether the first argument names a CLI subcommand.
@@ -61,6 +63,10 @@ func runCLI(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runDsh(args[1:], stdout, stderr)
 	case "call":
 		return runCall(args[1:], stdout, stderr)
+	case "pair":
+		return runPair(args[1:], stdout, stderr)
+	case "connect":
+		return runConnect(args[1:], stdout, stderr)
 	default:
 		writeUsage(stdout)
 		return 0
@@ -75,6 +81,8 @@ func writeUsage(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  dsh start --directory DIR --pnpm FILE [--pnpm-prefix A] [--patch FILE] [--port N] [--state D]")
 	fmt.Fprintln(stdout, "  dsh stop [--state D]")
 	fmt.Fprintln(stdout, "  call   <method> [json|-] [--state D]")
+	fmt.Fprintln(stdout, "  pair   --service ID [--share NETWORK] [--invite CODE --network NETWORK] [--state D]")
+	fmt.Fprintln(stdout, "  connect --service ID --pair ID [--generation N] [--disconnect] [--state D]")
 	fmt.Fprintln(stdout, "With no command, dshkerd is the child of the shell and bootstraps from stdin.")
 }
 

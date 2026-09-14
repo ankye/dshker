@@ -246,6 +246,24 @@ func TestHeadlessCLIOperatesTheCore(t *testing.T) {
 		}
 	}
 
+	// The pairing and connection commands reach the same host operations the
+	// shell reaches, and their refusals are the host's own codes: nothing is
+	// configured on this host, which is a different failure from the three above.
+	_, stderr, code = runCLICommand(t, binary, "pair", "--service", "service_main", "--state", state)
+	if code != 1 || strings.TrimSpace(stderr) != "p2p.service_unconfigured" {
+		t.Fatalf("pair = %q (%d)", stderr, code)
+	}
+	_, stderr, code = runCLICommand(t, binary, "connect", "--service", "service_main",
+		"--pair", "pair_main", "--state", state)
+	if code != 1 || strings.TrimSpace(stderr) != "p2p.service_unconfigured" {
+		t.Fatalf("connect = %q (%d)", stderr, code)
+	}
+	// A missing argument is refused before any call is made.
+	if _, stderr, code = runCLICommand(t, binary, "connect", "--service", "service_main", "--state", state); code != 1 ||
+		!strings.Contains(stderr, "p2p.invalid_arguments") {
+		t.Fatalf("connect without a pair = %q (%d)", stderr, code)
+	}
+
 	// With the daemon gone the CLI reports the unreachable endpoint by name
 	// instead of hanging or inventing an answer.
 	stop()
