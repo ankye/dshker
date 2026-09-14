@@ -47,6 +47,8 @@ var cliCommands = map[string]bool{
 	"call":    true,
 	"pair":    true,
 	"connect": true,
+	"proxy":   true,
+	"service": true,
 	"help":    true,
 }
 
@@ -70,6 +72,10 @@ func runCLI(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runPair(args[1:], stdout, stderr)
 	case "connect":
 		return runConnect(args[1:], stdout, stderr)
+	case "proxy":
+		return runProxy(args[1:], stdout, stderr)
+	case "service":
+		return runService(args[1:], stdout, stderr)
 	default:
 		writeUsage(stdout)
 		return 0
@@ -86,6 +92,8 @@ func writeUsage(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  call   <method> [json|-] [--state D]")
 	fmt.Fprintln(stdout, "  pair   --service ID [--share NETWORK] [--invite CODE --network NETWORK] [--state D]")
 	fmt.Fprintln(stdout, "  connect --service ID --pair ID [--generation N] [--disconnect] [--state D]")
+	fmt.Fprintln(stdout, "  proxy  [--json] [--state D]")
+	fmt.Fprintln(stdout, "  service configure --origin URL [--wss URL] [--stun ADDR] [--pinned-key FILE] [--version V] [--state D]")
 	fmt.Fprintln(stdout, "With no command, dshkerd is the child of the shell and bootstraps from stdin.")
 }
 
@@ -138,19 +146,33 @@ func clientFor(ctx context.Context, state string) (*localrpc.Peer, func(), error
 }
 
 // headlessMain answers the parent callbacks a core can send.
-type headlessMain struct{}
+type headlessMain struct {
+	// binding is the runtime owner: the address this host serves, which is what
+	// a remote is handed when it asks for this machine's workbench.
+	binding *core.RuntimeBinding
+}
 
-func (headlessMain) Call(_ context.Context, method string, _ any) (json.RawMessage, error) {
+func (main headlessMain) Call(_ context.Context, method string, _ any) (json.RawMessage, error) {
 	switch method {
 	case "peer.state":
 		// A headless host has no renderer to inform. The state is still real, and
 		// it is what the next `status` call reads.
 		return json.RawMessage("{}"), nil
 	case "runtime.connect":
-		// The remote asked this host to own its runtime. A headless core can only
-		// answer that once a child has been started for it, so it refuses by name
-		// rather than pretending to have one.
-		return nil, errors.New("p2p.runtime_unavailable")
+		// The remote asked this host to own its runtime. The answer is the same
+		// binding the desktop shell's runtime owner gives: the loopback address of
+		// the running child and the generation that identifies it. With no child
+		// there is nothing to bind, which is a named refusal and not an invented
+		// address.
+		binding, err := main.binding.Binding()
+		if err != nil {
+			return nil, err
+		}
+		encoded, encodeErr := json.Marshal(binding)
+		if encodeErr != nil {
+			return nil, errors.New("p2p.invalid_result")
+		}
+		return encoded, nil
 	}
 	return nil, errors.New("p2p.invalid_operation")
 }
@@ -201,6 +223,10 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	supervisor := harnessruntime.NewSupervisor()
 	defer supervisor.Shutdown()
 	server.Runtime = supervisor
+	// The binding a peer is handed is answered from that supervisor, so a
+	// headless host serves its workbench with no shell and no display.
+	binding := &core.RuntimeBinding{Runtime: supervisor, Subject: HeadlessSubject}
+	server.RuntimeBinding = binding
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute
@@ -216,7 +242,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		host.SetRoots(roots)
 	}
-	host.BindMain(headlessMain{})
+	host.BindMain(headlessMain{binding: binding})
 	server.Peer = host
 
 	endpoint, err := endpointFor(directory)

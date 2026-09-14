@@ -60,6 +60,7 @@ var served = map[string]bool{
 	"runtime.start":                true,
 	"runtime.status":               true,
 	"runtime.stop":                 true,
+	"core.runtime_binding":         true,
 }
 
 // Peer is the installed-peer half of the table: the coordinator, pairing,
@@ -90,6 +91,10 @@ type Serve struct {
 	// Brokers is the server half of that route: the endpoint a remote peer
 	// reaches, and the descriptor it is told about.
 	Brokers *peerbroker.Holder
+	// RuntimeBinding answers what a peer is handed when it asks this host for a
+	// workbench: the loopback address of the running child and its generation.
+	// A composition without one refuses, exactly as a host with no child does.
+	RuntimeBinding *RuntimeBinding
 }
 
 // runtimeResult, runtimeStatusResult, runtimeConsoleResult and runtimePortResult
@@ -427,6 +432,18 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, err
 		}
 		return runtimeResult{Launch: &view}, nil
+	case "core.runtime_binding":
+		// The reverse-proxy half of hosting, asked directly rather than by a peer
+		// transport: a caller with no desktop session can see the address this
+		// machine would bind a peer to, and the generation that identifies it.
+		var request struct{}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		if server.RuntimeBinding == nil {
+			return nil, ErrRuntimeUnavailable
+		}
+		return server.RuntimeBinding.Binding()
 	case "runtime.stop":
 		var request struct {
 			SubjectID string `json:"subjectId"`

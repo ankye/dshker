@@ -46,6 +46,10 @@ var Methods = []Method{
 	// version 1, and the refusal codes are the shell's own managed.* ones.
 	{"core.roots_commit", RoleShell},
 	{"core.roots_inspect", RoleShell},
+	// The reverse-proxy binding moved with the DSH child in 6.1: a peer asks what
+	// address this host serves, and a headless core answers from the child it
+	// supervises. Additive within version 1.
+	{"core.runtime_binding", RoleShell},
 	{"core.secret_delete", RoleShell},
 	{"core.secret_get", RoleShell},
 	{"core.secret_set", RoleShell},

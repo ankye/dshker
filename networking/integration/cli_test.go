@@ -199,6 +199,20 @@ func TestHeadlessCLIOperatesTheCore(t *testing.T) {
 		t.Fatalf("missing registry = %q (%d)", stderr, code)
 	}
 
+	// The reverse-proxy binding is a refusal before any child exists: a headless
+	// host with nothing running has no address to hand a peer, which is a named
+	// code rather than an invented one.
+	_, stderr, code = runCLICommand(t, binary, "proxy", "--state", state)
+	if code != 1 || strings.TrimSpace(stderr) != "p2p.runtime_unavailable" {
+		t.Fatalf("proxy before a launch = %q (%d)", stderr, code)
+	}
+	// Configuring a service without a coordinator address is refused before any
+	// call is made.
+	if _, stderr, code = runCLICommand(t, binary, "service", "configure", "--state", state); code != 1 ||
+		!strings.Contains(stderr, "p2p.invalid_arguments") {
+		t.Fatalf("service configure without an origin = %q (%d)", stderr, code)
+	}
+
 	// dsh start runs a real child through the daemon and dsh stop ends it.
 	worktree := t.TempDir()
 	executable, prefix := writeFakeLauncher(t, worktree)
@@ -225,8 +239,33 @@ func TestHeadlessCLIOperatesTheCore(t *testing.T) {
 	if announced == "" {
 		t.Fatal("the headless runtime never announced its URL")
 	}
+	// With a child running, the proxy binding is the address a peer is handed:
+	// the announced loopback URL and the first generation of it.
+	stdout, stderr, code = runCLICommand(t, binary, "proxy", "--state", state, "--json")
+	if code != 0 {
+		t.Fatalf("proxy: %s", stderr)
+	}
+	var binding struct {
+		Generation uint64 `json:"generation"`
+		URL        string `json:"url"`
+	}
+	if json.Unmarshal([]byte(stdout), &binding) != nil || binding.Generation != 1 ||
+		!strings.Contains(binding.URL, "127.0.0.1:3099") {
+		t.Fatalf("proxy answered %s", stdout)
+	}
+	stdout, stderr, code = runCLICommand(t, binary, "proxy", "--state", state)
+	if code != 0 || !strings.Contains(stdout, "proxy generation 1:") {
+		t.Fatalf("proxy line = %q (%d) %s", stdout, code, stderr)
+	}
+
 	if stdout, stderr, code = runCLICommand(t, binary, "dsh", "stop", "--state", state); code != 0 {
 		t.Fatalf("dsh stop: %s", stderr)
+	}
+	// With the child gone the binding is refused again rather than pointing at
+	// an address that no longer answers.
+	if _, stderr, code = runCLICommand(t, binary, "proxy", "--state", state); code != 1 ||
+		strings.TrimSpace(stderr) != "p2p.runtime_unavailable" {
+		t.Fatalf("proxy after a stop = %q (%d)", stderr, code)
 	}
 	// Stopping an already stopped launch reports the record rather than failing:
 	// the subject is known, so this is not the unknown-subject refusal below.

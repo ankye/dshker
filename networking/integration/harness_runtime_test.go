@@ -15,6 +15,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/ankye/dshker/networking/internal/harnessruntime"
 )
 
 // writeFakeLauncher writes a stand-in pnpm that ignores the DSH arguments and
@@ -49,6 +51,8 @@ func TestCoreDaemonOwnsTheHarnessRuntime(t *testing.T) {
 		LaunchID              string   `json:"launchId"`
 		SubjectID             string   `json:"subjectId"`
 		Directory             string   `json:"directory"`
+		Profile               string   `json:"profile"`
+		NodeExecutable        string   `json:"nodeExecutable"`
 		PnpmExecutable        string   `json:"pnpmExecutable"`
 		PnpmPrefixArguments   []string `json:"pnpmPrefixArguments"`
 		PnpmResolutionError   string   `json:"pnpmResolutionError"`
@@ -62,6 +66,7 @@ func TestCoreDaemonOwnsTheHarnessRuntime(t *testing.T) {
 		LaunchID:             "launch_main",
 		SubjectID:            "subject_main",
 		Directory:            base,
+		Profile:              harnessruntime.ProfilePnpm,
 		PnpmExecutable:       executable,
 		PnpmPrefixArguments:  prefix,
 		DiagnosticsPatchPath: filepath.Join(base, "patch.yml"),

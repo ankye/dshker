@@ -189,7 +189,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 
 | group    | methods                                                                                                                                                                                                                                                                                   | role   |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
+| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.runtime_binding`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
 | device   | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                                                            | shell  |
 | devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                                                                                          | shell  |
 | network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                                                                                     | shell  |
@@ -239,6 +239,17 @@ than answers them. `device.createCSR` and `device.createKey` were called by the 
 missing from this table; they are published now, which is additive within version 1 and closes the
 gap between the table and the contract it describes.
 
+`core.runtime_binding` is the reverse-proxy half of hosting, published in 6.1 so a caller
+with no display can ask what this machine hands a peer. It answers
+`{"generation":N,"url":"http://127.0.0.1:P/?token=..."}` — the loopback address of the
+running child and the generation that identifies it — and refuses with
+`p2p.runtime_unavailable` when no child is running, which is the same code the desktop
+runtime owner reports for a stopped or failed child. The generation advances when the
+child is replaced or announces a different address and is stable while it is the same
+launch, so a peer that reconnects to an unchanged child is not told its proxy target
+moved. The address carries a session credential: it is a main-side value, and this
+method is only reachable on the private channel the shell's bootstrap created.
+
 Because a whole record now travels in one frame, its own cap is deliberately smaller than the frame cap: `catalog.MaxRecordBytes` is 60 KiB against the 64 KiB of section 4, leaving room for the envelope of both `core.catalog_inspect` and `core.catalog_commit`. `internal/core/catalog_frame_test.go` pins the relationship, since a record at the frame cap would make the frame writer drop the answer and leave the caller waiting for a reply that can never arrive.
 
 Two findings from writing this table down, both deliberate:
@@ -273,6 +284,16 @@ crashed shell, the core and any `dshker-peer` it started must exit with it
 detaches, never writes to the shell's terminal, and never listens on anything
 other than the private endpoint above.
 
+One mode has no shell above it: `dshkerd serve` (6.1) is the headless host, for a
+machine with no desktop session. It publishes its own endpoint — a `0700` per-user
+state directory, the same private endpoint the shell's child creates, and
+`core.json` in the shape of the stdin bootstrap written `0600` — and answers every
+client that authenticates against it until it is asked to stop. The bootstrap
+secret is the same secret; the difference is only who wrote it. The composition is
+the one the shell's child has, with one policy of its own: it accepts and drops
+`peer.state` because a host with no renderer has nothing to inform, and it answers
+the parent-role `runtime.connect` from the child it supervises (see section 6).
+
 ## 9. Core arguments
 
 The core takes its state as explicit absolute paths and nothing else. The shell
@@ -291,6 +312,13 @@ the operator chose, the same act as installing them in the OS store, and it is
 launcher: a machine that does not already trust the server refuses it, and the
 fix is on the server. The flag exists for the headless host of P5 and for the
 test suite, which runs a coordinator on a private CA.
+
+The headless host is driven through named subcommands, each of which is sugar over
+the same published table: `serve`, `status`, `roots`, `dsh start`, `dsh stop`, `call`,
+`pair`, `connect`, `proxy` and `service configure`. `call` reaches any published
+method and prints a refusal code verbatim, so every named command can be reproduced
+without it. With no subcommand the binary is still the shell's child and bootstraps
+from stdin, which is what keeps an installed shell unchanged.
 
 ## 10. Conformance
 
