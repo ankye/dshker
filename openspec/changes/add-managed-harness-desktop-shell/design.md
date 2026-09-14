@@ -15,7 +15,7 @@ This change requires no DeepSeek Harness modification. Harness ships no `desktop
 - Reuse the native Harness home across branch and version changes without the launcher reading or changing it.
 - Keep managed source and Launcher settings separate while using DSH's own profile, plugin, and Agent directories.
 - Require explicit Git, Node.js, and pnpm identities, and treat only the child's own announced startup URL as readiness.
-- Keep operating-system authority in Electron main and expose a narrow, typed renderer API.
+- Keep operating-system authority in the trusted core — child processes, credentials, Git, and the filesystem — and expose a narrow, typed renderer API through the shell. The shell keeps the window, native dialogs, the guest surface, and the renderer-facing typed API, and proxies named operations to the core.
 - Use one Launcher version identity and expose higher stable GitHub Releases as an optional manual download.
 
 **Non-Goals:**
@@ -114,7 +114,7 @@ Alternative considered: HTTP polling of a guessed port. Rejected because it cann
 
 ### Decision: Electron process boundaries remain narrow
 
-The renderer runs from the trusted `dsh-app://` origin with context isolation and sandboxing. Preload exposes named typed operations only. Electron main validates sender, workspace, root, executable, and runtime-generation identities, owns native dialogs and child processes, and never accepts renderer-provided arbitrary paths or commands.
+The renderer runs from the trusted `dsh-app://` origin with context isolation and sandboxing. Preload exposes named typed operations only. Electron main validates sender, workspace, root, executable, and runtime-generation identities, owns native dialogs, and never accepts renderer-provided arbitrary paths or commands. Child processes belong to the trusted core, which the shell reaches only through its typed proxy.
 
 The accepted child runtime is the only source of Harness client traffic. Bridge streams and lifecycle events are generation-fenced; a stopped or crashed child cannot affect a new runtime. Physical transport, protocol failure, and Harness business failure remain distinct user-visible states.
 

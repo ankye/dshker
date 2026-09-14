@@ -128,7 +128,9 @@ async function peerHelperIntegrityHolds(releaseDir, manifest) {
       const directory = path.join(root, entry.name)
       let coreManifest
       try {
-        coreManifest = JSON.parse(await readFile(path.join(directory, 'dshkerd-manifest.json'), 'utf8'))
+        coreManifest = JSON.parse(
+          await readFile(path.join(directory, 'dshkerd-manifest.json'), 'utf8')
+        )
       } catch {
         return false
       }

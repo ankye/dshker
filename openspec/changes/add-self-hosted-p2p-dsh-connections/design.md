@@ -46,7 +46,7 @@ full P2P implementation or production-interface acceptance complete.
 
 ### 1. 自研控制面，使用标准协议实现数据面
 
-选择 Go coordinator + Go peer helper + Pion WebRTC。服务器负责信令和 STUN；DTLS/SCTP 会话终止于两台 peer，不终止于 coordinator。helper 在用户态运行，随 DSHKer 启停，Electron main 保留本地 DSH 所有权。
+选择 Go coordinator + Go peer helper + Pion WebRTC。服务器负责信令和 STUN；DTLS/SCTP 会话终止于两台 peer，不终止于 coordinator。helper 在用户态运行，随 DSHKer 启停；本地 DSH 子进程的所有权属于受信任的核心（Go），shell 只渲染核心报告的记录（后续落地见 go-owned-headless-core P3）。
 
 ```mermaid
 flowchart TB
@@ -90,7 +90,7 @@ WSS 转发受限的 offer/answer/candidate，不转发 DataChannel 帧或 DSH �
 
 用户管理编排由 main 的 `PeerAccounts` 持有每服务短期用户会话，公开返回值仅含用户/网络身份和展示字段；登录密码、Bearer token 不进入 projection 或目录。登录须独立查询当前用户并匹配登录回复后才接受，过期令牌禁止继续发送，helper 关闭清除会话并拒绝迟到回复恢复。操作锁按 serviceId 隔离。网络创建/改名用服务端返回的 networkId/userId/name 再列举读回，不用同名推断身份；无变化不写入，失败不自动重发。网络删除确认后必须通知 owning connection workflow 清理该网络授权，即使随后的结果读回失败也不得恢复旧授权。显式登出先清本地会话；远端登出失败继续返回错误而非声称撤销成功。设备身份和配对不因用户登出自动替换，完整 UI/IPC/连接撤销编排仍是独立接入任务。
 
-主进程凭据实现将每个 serviceId 的设备身份、密钥和证书作为整体，经 Electron safeStorage 加密后写入已登记 settings root 的 `dsh-launcher/p2p-credentials/<serviceId>.json`。明文目录配置仍属于 `p2p-devices.json`，不向 renderer 返回密文或解密结果。首次登记显式 create，已存在拒绝覆盖；更新检查原密文 revision 和设备/用户/公钥身份，原子替换并解密读回。删除只由已完成撤销或已持久 tombstone 的服务工作流调用；凭据文件缺失、损坏或不可解密不能触发自动重新登记。
+凭据实现将每个 serviceId 的设备身份、密钥和证书作为整体加密后写入已登记 settings root 的 `dsh-launcher/p2p-credentials/<serviceId>.json`；该存储已迁入受信任的核心（平台原生存储：macOS 钥匙串、Windows DPAPI），shell 既不读取密文也不持有明文（见 go-owned-headless-core P2）。明文目录配置仍属于 `p2p-devices.json`，不向 renderer 返回密文或解密结果。首次登记显式 create，已存在拒绝覆盖；更新检查原密文 revision 和设备/用户/公钥身份，原子替换并解密读回。删除只由已完成撤销或已持久 tombstone 的服务工作流调用；凭据文件缺失、损坏或不可解密不能触发自动重新登记。
 
 1. 管理员在独立服务器本地创建账号；用户在 DSHKer 配置 HTTPS 服务、登录并显式选择或创建自己的私有网络，再申请 5 分钟单次绑定凭证。没有默认网络、跨用户配对或匿名注册。HTTPS 必须正常校验证书；用户会话仅用于管理，设备 mTLS 用于信令。
 2. helper 生成公钥与 CSR，证明私钥持有；服务器原子消费限定 userId/networkId 的凭证、绑定 deviceId 并签发设备证书。后续设备 REST/WSS 使用 mTLS，绑定凭证不成为长效客户端凭证。分享码、配对和授权租约必须限定明确网络，双方均需属于该用户且有有效绑定。删除网络、解绑设备或删除配对会撤销相应授权，重绑不恢复旧配对。
@@ -282,10 +282,3 @@ helper 控制协议 v1 使用当前用户私有 Unix socket（Windows 对应 nam
 
 1. 在现有 DSHKer 仓库创建独立 Go module 和 server/peer 制品流水线，不修改 ZeroTierOne checkout。
 2. 使用明确服务器配置启动新 coordinator，验证 HTTPS/WSS/STUN，再分发兼容的新 DSHKer；未配置 P2P 的用户继续使用现有 Local/SSH 功能。
-3. 用户选择 P2P、登记并批准配对后新增固定 peer tab。旧 SSH 记录不隐式转换，同名设备不自动合并；用户可主动移除不需要的旧登记。
-4. 升级要求客户端 helper、协调服务、wire protocol 明确兼容；未知版本拒绝。停止与撤销必须清理各自临时入口。
-5. 回退先停 P2P generations，服务端先备份并按数据 schema 使用匹配版本。保留新配置及配对记录供恢复；不自动删用户数据，不恢复旧运行凭证。SSH 与 Local 不受 P2P 撤销影响。
-
-## Open Questions
-
-服务器公网地址/域名、Linux 架构、证书来源和运维凭证将在部署任务执行前提供；这些值不改变本方案协议和任务边界。此阶段没有真实服务器目标，因此文档完成不等于服务器已部署或 P2P 已验收。

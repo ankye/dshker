@@ -32,7 +32,7 @@ The launcher SHALL start the child without setting, clearing, translating, or ot
 
 ### Requirement: Runtime starts through the selected named profile
 
-The launcher SHALL spawn only the registered Node executable and the selected worktree's built `apps/cli/lib/bin.js` as `dsh web --no-open`, with the selected worktree as cwd. The spawn SHALL not set, clear, or alter `DSH_HOME`, use a shell, a global `dsh`, a package bin, another worktree, or an Electron process as a substitute.
+The trusted core SHALL spawn only the registered pnpm command for the selected worktree's built `apps/cli/lib/bin.js` as `dsh web --patch … --no-open`, with the selected worktree as cwd; the shell SHALL pass the verified paths, the packaged pnpm facts, and the selected worktree to the core in the launch request and SHALL NOT start a child of its own. The spawn SHALL not set, clear, or alter `DSH_HOME`, use a shell, a global `dsh`, a package bin, another worktree, or the shell process as a substitute.
 
 #### Scenario: Exact child command is constructed
 
@@ -48,18 +48,18 @@ The launcher SHALL spawn only the registered Node executable and the selected wo
 
 ### Requirement: Lifecycle state and diagnostics are explicit
 
-The launcher SHALL record bounded child standard output, standard error, exit, and stop evidence for each runtime generation. Its Console SHALL also show Launcher-owned lifecycle events for preflight, child creation, readiness, stopping, and exit, distinctly from child output. A pnpm one-line script echo SHALL be labeled as a launch command even when pnpm writes it through standard error. The child SHALL receive a Launcher-owned DSH `--patch` overlay that enables the Cordis console exporter at debug level without writing to the native DSH home or changing the selected Harness checkout. It SHALL expose distinct preflighting, starting, ready, stopping, stopped, crashed, and blocked states. It SHALL NOT parse native Harness persistence files for diagnostics.
+The trusted core SHALL record bounded child standard output, standard error, exit, and stop evidence for each runtime generation and SHALL expose it to the shell by cursor. The Console SHALL show those records plus Launcher-owned lifecycle events for preflight, child creation, readiness, stopping, and exit, distinctly from child output. A pnpm one-line script echo SHALL be labeled as a launch command even when pnpm writes it through standard error. The child SHALL receive a Launcher-owned DSH `--patch` overlay that enables the Cordis console exporter at debug level without writing to the native DSH home or changing the selected Harness checkout. It SHALL expose distinct preflighting, starting, ready, stopping, stopped, crashed, and blocked states. It SHALL NOT parse native Harness persistence files for diagnostics.
 
-The packaged application SHALL resolve pnpm for its current platform and supply the resulting command search path to every Launcher-owned pnpm operation. It SHALL not assume an interactive terminal PATH: macOS/Linux pnpm shebangs that use `env node` and Windows pnpm command shims must receive the platform-resolved command environment. Its `--patch` flags belong to the DSH `web` command (`pnpm dsh web --patch …`), not after pnpm's argument separator where DSH Web would receive them as unknown application options.
+The shell SHALL resolve pnpm for its current platform and supply the resulting command search path, executable, and shim prefix arguments to the core with every launch request, and to every pnpm operation the shell still performs itself. It SHALL not assume an interactive terminal PATH: macOS/Linux pnpm shebangs that use `env node` and Windows pnpm command shims must receive the platform-resolved command environment. Its `--patch` flags belong to the DSH `web` command (`pnpm dsh web --patch …`), not after pnpm's argument separator where DSH Web would receive them as unknown application options.
 
-On POSIX, the Launcher SHALL spawn the pnpm child as a dedicated process group and terminate that group rather than only the pnpm wrapper. It SHALL wait for the root child to exit before reporting the runtime stopped or permitting a version mutation. Electron application quit and `SIGINT`/`SIGTERM` shutdown SHALL use the same termination path.
+On POSIX, the core SHALL spawn the pnpm child as a dedicated process group and terminate that group rather than only the pnpm wrapper; on Windows it SHALL terminate the child tree. It SHALL wait for the root child to exit before reporting the runtime stopped or permitting a version mutation, escalate once, and refuse to report a stop it cannot observe. The shell SHALL stop the child through the core, and a shell that quits or receives `SIGINT`/`SIGTERM`, or whose private channel closes, SHALL leave no child behind.
 
-Readiness SHALL come from exactly one signal: the child's own startup URL announcement. Because this change ships no private child IPC handshake, an arbitrary log line, a successful spawn, or elapsed time SHALL NOT be treated as readiness. The launcher SHALL accept only a loopback http(s) announcement and SHALL preserve its URL unmodified, including any session credential.
+Readiness SHALL come from exactly one signal: the child's own startup URL announcement. Because this change ships no private child IPC handshake, an arbitrary log line, a successful spawn, or elapsed time SHALL NOT be treated as readiness. The core SHALL accept only a loopback http(s) announcement, read it from complete lines only, and preserve its URL unmodified, including any session credential; the shell SHALL render exactly the URL the core reports and SHALL NOT predict a port or synthesize an address.
 
 #### Scenario: Child announces readiness
 
 - **WHEN** the child prints its own startup URL line with a loopback http(s) address
-- **THEN** the launcher transitions that generation from starting to ready and records the exact announced URL
+- **THEN** the core transitions that generation from starting to ready and reports the exact announced URL, and the shell renders it
 - **AND** no other output text advances the state
 
 #### Scenario: User controls the process from Console

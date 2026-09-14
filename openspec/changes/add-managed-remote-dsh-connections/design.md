@@ -1,6 +1,6 @@
 ## Context
 
-See [proposal.md](proposal.md) for motivation and [specs/managed-remote-dsh-connections/spec.md](specs/managed-remote-dsh-connections/spec.md) for behavior. Today the Launcher supervises one local `dsh web --no-open` child and admits only that child's exact announced loopback URL into a disposable-tab Run page. Electron main owns child processes and credentials; the renderer has no SSH, network, filesystem, or arbitrary command authority.
+See [proposal.md](proposal.md) for motivation and [specs/managed-remote-dsh-connections/spec.md](specs/managed-remote-dsh-connections/spec.md) for behavior. Today the Launcher supervises one local `dsh web --no-open` child and admits only that child's exact announced loopback URL into a disposable-tab Run page. The trusted core owns child processes and credentials; the Electron shell proxies named operations and the renderer has no SSH, network, filesystem, or arbitrary command authority.
 
 The user already has ordinary SSH access to each target computer. The missing piece is transporting the remote Launcher's exact announced URL and credential, then forwarding the corresponding remote loopback port. DSH must remain bound to loopback because its Web API can execute tools and commands.
 
@@ -26,7 +26,7 @@ The user already has ordinary SSH access to each target computer. The missing pi
 
 ### Decision: OpenSSH is an explicit native prerequisite
 
-Electron main launches the platform OpenSSH `scp` and `ssh` clients directly with argument arrays and no shell. macOS uses the fixed system executable paths. Windows uses the fixed OpenSSH command names supplied by the operating system. Both run in batch mode and require strict host-key verification, so an unknown host or missing non-interactive identity is an error rather than a password prompt or trust downgrade.
+The trusted core owns this route and launches the platform OpenSSH `scp` and `ssh` clients directly with argument arrays and no shell; until that port lands (go-owned-headless-core P4) the shell hosts the connector behind the same typed boundary, and the shell never gains a second implementation of the resolution, validation, or broker rules. macOS uses the fixed system executable paths. Windows uses the fixed OpenSSH command names supplied by the operating system. Both run in batch mode and require strict host-key verification, so an unknown host or missing non-interactive identity is an error rather than a password prompt or trust downgrade.
 
 The connection record contains separate validated `host`, `port`, and `user` fields. None can inject an option because each is passed after the fixed option set and host/user syntax rejects control characters, whitespace, leading dashes, separators, and URL syntax.
 
@@ -82,7 +82,7 @@ The browser continues accepting only loopback HTTP(S) navigation. External links
 
 ### Decision: Test Connection uses the production connection path and owns no durable tunnel
 
-`test` is a separate typed IPC operation admitted only by a registered connection id. Electron main runs the same `OpenSshRemoteConnector.connect` sequence used by Connect, including SCP descriptor retrieval, strict SSH authentication and host verification, peer bearer authentication, remote DSH readiness, URL validation, and both loopback forwards. After readiness it immediately stops both forwards before reporting success. It never replaces a failed step with a shallow TCP probe.
+`test` is a separate typed IPC operation admitted only by a registered connection id. The trusted core runs the same OpenSSH connect sequence used by Connect, including SCP descriptor retrieval, strict SSH authentication and host verification, peer bearer authentication, remote DSH readiness, URL validation, and both loopback forwards. After readiness it immediately stops both forwards before reporting success. It never replaces a failed step with a shallow TCP probe.
 
 Each computer has a process-local test state (`untested`, `testing`, `passed`, or typed `failed`) separate from its live tunnel state. A successful real Connect also proves the path and marks the test state passed. Tests are rejected while a connection is connecting or ready, and Connect is rejected while a test is active. Disconnect and application shutdown abort an in-flight test through the same generation fence and abort controller used for connection setup.
 
