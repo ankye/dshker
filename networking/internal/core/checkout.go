@@ -66,6 +66,10 @@ type checkoutRequest struct {
 	Git            gitRegistration         `json:"git"`
 	BundlePath     string                  `json:"bundlePath"`
 	Selection      gitcheckout.Selection   `json:"selection"`
+	// Previous is what the installation last recorded for a mutable reference, so
+	// the core can refuse a branch that moved or a tag that changed before it
+	// materializes anything from it.
+	Previous gitcheckout.ReferenceObservation `json:"previous"`
 }
 
 type checkoutVerifyRequest struct {
@@ -87,6 +91,7 @@ type checkoutResult struct {
 	Selection         gitcheckout.Selection   `json:"selection"`
 	ObservedReference string                  `json:"observedReference"`
 	ObservedObject    string                  `json:"observedObject"`
+	TagObject         string                  `json:"tagObject"`
 }
 
 // checkoutRefusal translates one checkout failure into the code the renderer
@@ -201,9 +206,29 @@ func (server Serve) handleCheckoutPrepare(ctx context.Context, payload json.RawM
 	if err != nil {
 		return nil, checkoutRefusal(err)
 	}
-	worktree, err := gitcheckout.MaterializeWorktree(ctx, runner, executable, execution, paths, request.Remote, resolved.Commit)
+	if request.Previous.Commit != "" && resolved.Selection.Kind != gitcheckout.SelectionCommit && gitcheckout.SameSelection(request.Previous.Selection, resolved.Selection) {
+		if err := gitcheckout.AssertReferenceNotRewritten(ctx, runner, executable, execution, paths, request.Previous, resolved); err != nil {
+			return nil, checkoutRefusal(err)
+		}
+	}
+	// An installation that already has the worktree for this commit is verified
+	// rather than materialized again: switching back to a revision that is already
+	// checked out is a normal thing to ask for.
+	worktreePath, err := gitcheckout.ManagedWorktreePath(paths, resolved.Commit)
 	if err != nil {
 		return nil, checkoutRefusal(err)
+	}
+	worktree := gitcheckout.Worktree{Path: worktreePath, Commit: resolved.Commit, Remote: request.Remote}
+	if _, statErr := os.Lstat(worktreePath); statErr == nil {
+		worktree, err = gitcheckout.VerifyWorktree(ctx, runner, executable, execution, paths, request.Remote, resolved.Commit)
+		if err != nil {
+			return nil, checkoutRefusal(err)
+		}
+	} else {
+		worktree, err = gitcheckout.MaterializeWorktree(ctx, runner, executable, execution, paths, request.Remote, resolved.Commit)
+		if err != nil {
+			return nil, checkoutRefusal(err)
+		}
 	}
 	return checkoutResult{
 		InstallationPath:  paths.InstallationPath,
@@ -214,6 +239,7 @@ func (server Serve) handleCheckoutPrepare(ctx context.Context, payload json.RawM
 		Selection:         resolved.Selection,
 		ObservedReference: resolved.ObservedReference,
 		ObservedObject:    resolved.ObservedObject,
+		TagObject:         resolved.TagObject,
 	}, nil
 }
 

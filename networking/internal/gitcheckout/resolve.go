@@ -61,23 +61,36 @@ func ResolveRevision(ctx context.Context, runner *Runner, executable Executable,
 	return ResolvedRevision{Selection: selection, Commit: commit, ObservedReference: selection.Commit, ObservedObject: commit}, nil
 }
 
-// AssertReferenceNotRewritten detects a branch that moved or a tag whose object
-// changed since it was last observed, before anything is activated from it. A
-// mutable reference moving is not an error the launcher may resolve by itself: it
-// is a decision the operator has to make again.
-func AssertReferenceNotRewritten(previous ReferenceObservation, current ResolvedRevision) error {
+// AssertReferenceNotRewritten detects a branch that no longer descends from the commit
+// it was observed at, or a tag that now points somewhere else, before anything is
+// activated from it. A mutable reference moving is not something the launcher may
+// resolve by itself: it is a decision the operator has to make again.
+func AssertReferenceNotRewritten(ctx context.Context, runner *Runner, executable Executable, context ExecutionContext, paths InstallationPaths, previous ReferenceObservation, current ResolvedRevision) error {
 	if previous.Selection.Kind != current.Selection.Kind || !SameSelection(previous.Selection, current.Selection) {
-		return fmt.Errorf("%w: Managed Git reference observation does not describe the same selection.", ErrRefRewritten)
+		return fmt.Errorf("%w: Reference rewrite comparison requires the same selected reference.", ErrRefInvalid)
 	}
-	switch current.Selection.Kind {
-	case SelectionBranch:
+	if err := AssertManagedTarget(paths, paths.MirrorPath, "Managed Git mirror"); err != nil {
+		return err
+	}
+	if current.Selection.Kind == SelectionTag {
 		if previous.Commit != current.Commit {
-			return fmt.Errorf("%w: Managed Git branch moved since it was observed (was %s, now %s).", ErrRefRewritten, previous.Commit, current.Commit)
+			return fmt.Errorf("%w: Tracked tag now resolves to a different commit (was %s, now %s).", ErrRefRewritten, previous.Commit, current.Commit)
 		}
-	case SelectionTag:
-		if previous.ObservedObject != current.ObservedObject {
-			return fmt.Errorf("%w: Managed Git tag changed since it was observed (was %s, now %s).", ErrRefRewritten, previous.ObservedObject, current.ObservedObject)
-		}
+		return nil
+	}
+	result, err := runner.Run(ctx, executable, context, Command{
+		Operation: "git.verify_branch_descends",
+		Arguments: []string{"--git-dir", paths.MirrorPath, "merge-base", "--is-ancestor", previous.Commit, current.Commit},
+	})
+	if err != nil {
+		return err
+	}
+	descends, err := IsGitAncestryResult(result)
+	if err != nil {
+		return err
+	}
+	if !descends {
+		return fmt.Errorf("%w: Tracked branch no longer descends from its previous commit (was %s, now %s).", ErrRefRewritten, previous.Commit, current.Commit)
 	}
 	return nil
 }

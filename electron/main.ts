@@ -25,6 +25,7 @@ import { CoreSupervisor } from './main/core/supervisor'
 import { CoreSecrets, type CoreSecretPort } from './main/core/secrets'
 import { CoreCatalog, type CoreCatalogPort } from './main/core/catalog'
 import { CoreInstallCatalog, type CoreInstallCatalogPort } from './main/core/install-catalog'
+import { CoreCheckoutClient, type CoreCheckoutPort } from './main/core/checkout'
 import { CoreHarnessRuntime, type CoreHarnessRuntimePort } from './main/core/harness-runtime'
 import { CoreRoots, type CoreRootsPort } from './main/core/roots'
 import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
@@ -202,6 +203,7 @@ async function registerLauncherServices(
   // The installation catalog moves the same way the registry did: the core owns
   // the file, and the shell only reaches it through the port below.
   let coreInstallCatalog: CoreInstallCatalogPort | undefined
+  let coreCheckout: CoreCheckoutPort | undefined
   // The Launcher's own directory, created here rather than as a side effect of
   // the first-run root registration: that registration now happens after the
   // core starts, while the shell's own files below this directory — the remote
@@ -310,6 +312,9 @@ async function registerLauncherServices(
       .catch(() => undefined)
     coreHarnessRuntime = new CoreHarnessRuntime(coreSupervisor.rpc)
     coreInstallCatalog = new CoreInstallCatalog(coreSupervisor.rpc)
+    // The checkout layer is the core's too: the shell asks for one operation and
+    // keeps only what the core answers with.
+    coreCheckout = new CoreCheckoutClient(coreSupervisor.rpc)
   } catch (error) {
     console.error('DSHKer Launcher could not start its headless core.', error)
   }
@@ -351,7 +356,8 @@ async function registerLauncherServices(
       temporaryDirectory: app.getPath('temp'),
       runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor({
         runtime: () => coreHarnessRuntime
-      })
+      }),
+      checkout: coreCheckout
     })
   })
   return {

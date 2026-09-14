@@ -26,29 +26,21 @@ import {
   type ExecutableSelectionPurpose
 } from './executable-capabilities'
 import {
-  assertGitReferenceNotRewritten,
   createGitNamedRemote,
-  createGitReferenceObservation,
-  createManagedGitInstallationPaths,
-  createManagedGitMirror,
-  createManagedGitMirrorFromBundle,
-  createGitExecutionEnvironment,
-  fetchManagedGitMirror,
-  GitCommandRunner,
   GitRuntimeError,
-  materializeManagedGitWorktree,
-  managedWorktreePath,
   parseGitCommitSha,
-  registerGitExecutable,
-  resolveGitRevision,
   selectGitBranch,
   selectGitCommit,
   selectGitTag,
-  type GitExecutionContext,
   type GitRevisionSelection,
-  type GitToolPolicy,
-  verifyManagedGitWorktree
+  type GitToolPolicy
 } from './git'
+import type {
+  CoreCheckoutPort,
+  CoreNamedRemote,
+  CoreReferenceObservation,
+  CoreRevisionSelection
+} from '../core/checkout'
 import { loadVerifiedBundledSeed, type VerifiedBundledSeed } from './bundled-seed'
 import type {
   ManagedHarnessInstallationRecord,
@@ -88,7 +80,7 @@ export interface ManagedInstallationServiceOptions {
   readonly runtimeSupervisor: ManagedHarnessWebRuntimeSupervisor
   /** Package-only seed reader; production never probes a source or development directory. */
   readonly bundledSeedLoader?: () => Promise<VerifiedBundledSeed>
-  readonly gitRunner?: GitCommandRunner
+  readonly checkout?: CoreCheckoutPort
   readonly worktreePreparer?: ManagedHarnessWorktreePreparer
 }
 
@@ -100,7 +92,7 @@ export class ManagedInstallationService {
   readonly #temporaryDirectory: string
   readonly #runtimeSupervisor: ManagedHarnessWebRuntimeSupervisor
   readonly #bundledSeedLoader: () => Promise<VerifiedBundledSeed>
-  readonly #gitRunner: GitCommandRunner
+  readonly #checkoutPort?: CoreCheckoutPort
   readonly #worktreePreparer: ManagedHarnessWorktreePreparer
   #mutationActive = false
 
@@ -111,8 +103,19 @@ export class ManagedInstallationService {
     this.#temporaryDirectory = options.temporaryDirectory
     this.#runtimeSupervisor = options.runtimeSupervisor
     this.#bundledSeedLoader = options.bundledSeedLoader ?? loadVerifiedBundledSeed
-    this.#gitRunner = options.gitRunner ?? new GitCommandRunner()
+    this.#checkoutPort = options.checkout
     this.#worktreePreparer = options.worktreePreparer ?? new ManagedHarnessWorktreePreparer()
+  }
+
+  /** The core is the only thing that may touch a managed checkout. */
+  #checkout(): CoreCheckoutPort {
+    if (this.#checkoutPort === undefined) {
+      throw new ManagedRootError(
+        'managed.core_unavailable',
+        'The headless core is required to manage a Harness installation.'
+      )
+    }
+    return this.#checkoutPort
   }
 
   /** Projects only persisted installation facts and the supervisor's current non-persistent launch state. */
@@ -195,37 +198,17 @@ export class ManagedInstallationService {
       const installationId = newOpaqueId('installation')
       const remote = managedRemote(seed.remoteUrl)
       const selection = selectGitCommit(seed.revision)
-      const paths = createManagedGitInstallationPaths(
-        workspaceRootPath(workspace, 'harness'),
-        installationId
-      )
-      const context = gitContext(workspaceRootPath(workspace, 'harness'))
-      await createManagedGitMirrorFromBundle(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        remote,
-        seed.bundlePath
-      )
-      const resolved = await resolveGitRevision(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        remote,
-        selection
-      )
-      const worktree = await materializeManagedGitWorktree(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        remote,
-        resolved.commit
-      )
+      const checkout = await this.#checkout().prepare({
+        namespacePath: workspaceRootPath(workspace, 'harness'),
+        installationId,
+        remote: wireRemote(remote),
+        git: toolchain.git,
+        bundlePath: seed.bundlePath,
+        selection: wireSelection(selection),
+        previous: emptyObservation()
+      })
       await this.#worktreePreparer.prepare({
-        worktreePath: worktree.path,
+        worktreePath: checkout.worktreePath,
         node: toolchain.node,
         pnpm: toolchain.pnpm
       })
@@ -234,11 +217,11 @@ export class ManagedInstallationService {
         workspaceId: workspace.workspace.workspaceId,
         toolchainId: toolchain.toolchainId,
         remote,
-        selection: resolved.selection,
-        commit: resolved.commit,
-        observedReference: resolved.observedReference,
-        observedObject: resolved.observedObject,
-        ...(resolved.tagObject === undefined ? {} : { tagObject: resolved.tagObject })
+        selection: checkout.selection as GitRevisionSelection,
+        commit: parseGitCommitSha(checkout.commit),
+        observedReference: checkout.observedReference,
+        observedObject: checkout.observedObject,
+        ...(checkout.tagObject === '' ? {} : { tagObject: checkout.tagObject })
       }
       const next: ManagedInstallationCatalog = {
         ...catalog,
@@ -265,30 +248,17 @@ export class ManagedInstallationService {
       const installationId = newOpaqueId('installation')
       const remote = managedRemote(request.remoteUrl)
       const selection = revisionSelection(request.revision)
-      const paths = createManagedGitInstallationPaths(
-        workspaceRootPath(workspace, 'harness'),
-        installationId
-      )
-      const context = gitContext(workspaceRootPath(workspace, 'harness'))
-      await createManagedGitMirror(this.#gitRunner, toolchain.git, context, paths, remote)
-      const resolved = await resolveGitRevision(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        remote,
-        selection
-      )
-      const worktree = await materializeManagedGitWorktree(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        remote,
-        resolved.commit
-      )
+      const checkout = await this.#checkout().prepare({
+        namespacePath: workspaceRootPath(workspace, 'harness'),
+        installationId,
+        remote: wireRemote(remote),
+        git: toolchain.git,
+        bundlePath: '',
+        selection: wireSelection(selection),
+        previous: emptyObservation()
+      })
       await this.#worktreePreparer.prepare({
-        worktreePath: worktree.path,
+        worktreePath: checkout.worktreePath,
         node: toolchain.node,
         pnpm: toolchain.pnpm
       })
@@ -297,11 +267,11 @@ export class ManagedInstallationService {
         workspaceId: workspace.workspace.workspaceId,
         toolchainId: toolchain.toolchainId,
         remote,
-        selection: resolved.selection,
-        commit: resolved.commit,
-        observedReference: resolved.observedReference,
-        observedObject: resolved.observedObject,
-        ...(resolved.tagObject === undefined ? {} : { tagObject: resolved.tagObject })
+        selection: checkout.selection as GitRevisionSelection,
+        commit: parseGitCommitSha(checkout.commit),
+        observedReference: checkout.observedReference,
+        observedObject: checkout.observedObject,
+        ...(checkout.tagObject === '' ? {} : { tagObject: checkout.tagObject })
       }
       const next: ManagedInstallationCatalog = {
         ...catalog,
@@ -334,66 +304,27 @@ export class ManagedInstallationService {
       await this.#assertInstallationStopped(installation.installationId)
       const toolchain = findToolchain(catalog, installation.toolchainId)
       const workspace = await this.#workspaceService.getWorkspaceDirectories(request.workspaceId)
-      const paths = createManagedGitInstallationPaths(
-        workspaceRootPath(workspace, 'harness'),
-        installation.installationId
-      )
-      const context = gitContext(workspaceRootPath(workspace, 'harness'))
-      await fetchManagedGitMirror(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        installation.remote
-      )
-      const selection = revisionSelection(request.revision)
-      const resolved = await resolveGitRevision(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        installation.remote,
-        selection
-      )
-      if (
-        sameSelection(installation.selection, resolved.selection) &&
-        installation.selection.kind !== 'commit'
-      ) {
-        await assertGitReferenceNotRewritten(
-          this.#gitRunner,
-          toolchain.git,
-          context,
-          paths,
-          createGitReferenceObservation({
-            selection: installation.selection,
-            commit: parseGitCommitSha(installation.commit),
-            observedReference: installation.observedReference,
-            observedObject: installation.observedObject,
-            ...(installation.tagObject === undefined ? {} : { tagObject: installation.tagObject })
-          }),
-          resolved
-        )
-      }
-      const worktree = await materializeOrVerifyWorktree(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        installation.remote,
-        resolved.commit
-      )
+      const checkout = await this.#checkout().prepare({
+        namespacePath: workspaceRootPath(workspace, 'harness'),
+        installationId: installation.installationId,
+        remote: wireRemote(installation.remote),
+        git: toolchain.git,
+        bundlePath: '',
+        selection: wireSelection(revisionSelection(request.revision)),
+        previous: observationOf(installation)
+      })
       await this.#worktreePreparer.prepare({
-        worktreePath: worktree.path,
+        worktreePath: checkout.worktreePath,
         node: toolchain.node,
         pnpm: toolchain.pnpm
       })
       const updated: ManagedHarnessInstallationRecord = {
         ...installation,
-        selection: resolved.selection,
-        commit: resolved.commit,
-        observedReference: resolved.observedReference,
-        observedObject: resolved.observedObject,
-        ...(resolved.tagObject === undefined ? {} : { tagObject: resolved.tagObject })
+        selection: checkout.selection as GitRevisionSelection,
+        commit: parseGitCommitSha(checkout.commit),
+        observedReference: checkout.observedReference,
+        observedObject: checkout.observedObject,
+        ...(checkout.tagObject === '' ? {} : { tagObject: checkout.tagObject })
       }
       const next: ManagedInstallationCatalog = {
         ...catalog,
@@ -424,21 +355,15 @@ export class ManagedInstallationService {
       }
       const toolchain = findToolchain(catalog, installation.toolchainId)
       const workspace = await this.#workspaceService.getWorkspaceDirectories(request.workspaceId)
-      const paths = createManagedGitInstallationPaths(
-        workspaceRootPath(workspace, 'harness'),
-        installation.installationId
-      )
-      const context = gitContext(workspaceRootPath(workspace, 'harness'))
-      const worktree = await verifyManagedGitWorktree(
-        this.#gitRunner,
-        toolchain.git,
-        context,
-        paths,
-        installation.remote,
-        parseGitCommitSha(installation.commit)
-      )
+      const checkout = await this.#checkout().verify({
+        namespacePath: workspaceRootPath(workspace, 'harness'),
+        installationId: installation.installationId,
+        remote: wireRemote(installation.remote),
+        git: toolchain.git,
+        commit: parseGitCommitSha(installation.commit)
+      })
       await this.#worktreePreparer.prepare({
-        worktreePath: worktree.path,
+        worktreePath: checkout.worktreePath,
         node: toolchain.node,
         pnpm: toolchain.pnpm
       })
@@ -446,8 +371,8 @@ export class ManagedInstallationService {
         installationId: installation.installationId,
         launchId: newOpaqueId('launch'),
         node: toolchain.node,
-        worktreePath: worktree.path,
-        revision: worktree.commit
+        worktreePath: checkout.worktreePath,
+        revision: checkout.commit
       })
       return projectInstallationsState(catalog, this.#runtimeSupervisor)
     })
@@ -500,12 +425,12 @@ export class ManagedInstallationService {
     }>
   ): Promise<ManagedToolchainRecord> {
     return this.#withProbeDirectory(async (probeDirectory) => {
-      const git = await registerGitExecutable(
-        selections.git.canonicalPath,
-        gitContext(probeDirectory),
-        GIT_TOOL_POLICY,
-        this.#gitRunner
-      )
+      const git = await this.#checkout().gitRegister({
+        executablePath: selections.git.canonicalPath,
+        workingDirectory: probeDirectory,
+        minimum: GIT_TOOL_POLICY.minimumVersion,
+        maximumExclusive: GIT_TOOL_POLICY.maximumExclusiveVersion
+      })
       const node = await registerNodeExecutable(
         selections.node.canonicalPath,
         toolchainContext(probeDirectory)
@@ -746,12 +671,41 @@ function findToolchain(
   return toolchain
 }
 
-function gitContext(workingDirectory: string): GitExecutionContext {
+/** One named remote, in the wire shape the core validates again. */
+function wireRemote(remote: { name: string; source: unknown }): CoreNamedRemote {
+  return remote as unknown as CoreNamedRemote
+}
+
+/** One selection, with every field present: the core's decoder is strict. */
+function wireSelection(selection: {
+  readonly kind: 'branch' | 'tag' | 'commit'
+  readonly branch?: string
+  readonly tag?: string
+  readonly commit?: string
+}): CoreRevisionSelection {
   return {
-    workingDirectory,
-    environment: platformGitEnvironment(),
-    timeoutMilliseconds: 120_000,
-    maximumOutputBytes: 1_048_576
+    kind: selection.kind,
+    branch: selection.kind === 'branch' ? (selection.branch ?? '') : '',
+    tag: selection.kind === 'tag' ? (selection.tag ?? '') : '',
+    commit: selection.kind === 'commit' ? (selection.commit ?? '') : ''
+  }
+}
+
+/** No previous observation: a fresh installation has nothing to compare against. */
+function emptyObservation(): CoreReferenceObservation {
+  return {
+    selection: wireSelection({ kind: 'commit', commit: '' }),
+    commit: '',
+    observedObject: ''
+  }
+}
+
+/** What the installation recorded for a mutable reference, for the rewrite rule. */
+function observationOf(installation: ManagedHarnessInstallationRecord): CoreReferenceObservation {
+  return {
+    selection: wireSelection(installation.selection),
+    commit: installation.commit,
+    observedObject: installation.observedObject
   }
 }
 
@@ -762,10 +716,6 @@ function toolchainContext(workingDirectory: string): ToolchainProcessContext {
     timeoutMilliseconds: 30_000,
     maximumOutputBytes: 64 * 1024
   }
-}
-
-function platformGitEnvironment(): Readonly<Record<string, string>> {
-  return createGitExecutionEnvironment(platformEnvironmentOptions())
 }
 
 function platformToolchainEnvironment(): Readonly<Record<string, string>> {
@@ -835,33 +785,6 @@ async function launcherForPnpm(
   return /^#!.*\bnode(?:\s|$)/u.test(prefix) ? { kind: 'node-script', node } : { kind: 'native' }
 }
 
-async function materializeOrVerifyWorktree(
-  runner: GitCommandRunner,
-  git: ManagedToolchainRecord['git'],
-  context: GitExecutionContext,
-  paths: ReturnType<typeof createManagedGitInstallationPaths>,
-  remote: ManagedHarnessInstallationRecord['remote'],
-  commit: string
-) {
-  const target = managedWorktreePath(paths, commit)
-  try {
-    await lstat(target)
-  } catch (error) {
-    if (isNodeCode(error, 'ENOENT')) {
-      return materializeManagedGitWorktree(
-        runner,
-        git,
-        context,
-        paths,
-        remote,
-        parseGitCommitSha(commit)
-      )
-    }
-    throw error
-  }
-  return verifyManagedGitWorktree(runner, git, context, paths, remote, parseGitCommitSha(commit))
-}
-
 function sameToolchain(left: ManagedToolchainRecord, right: ManagedToolchainRecord): boolean {
   return (
     JSON.stringify({ git: left.git, node: left.node, pnpm: left.pnpm }) ===
@@ -869,17 +792,6 @@ function sameToolchain(left: ManagedToolchainRecord, right: ManagedToolchainReco
   )
 }
 
-function sameSelection(left: GitRevisionSelection, right: GitRevisionSelection): boolean {
-  if (left.kind !== right.kind) return false
-  if (left.kind === 'branch' && right.kind === 'branch') return left.branch === right.branch
-  if (left.kind === 'tag' && right.kind === 'tag') return left.tag === right.tag
-  return left.kind === 'commit' && right.kind === 'commit' && left.commit === right.commit
-}
-
 function newOpaqueId(prefix: string): string {
   return `${prefix}_${randomUUID().replace(/-/g, '')}`
-}
-
-function isNodeCode(value: unknown, expected: string): boolean {
-  return Boolean(value && typeof value === 'object' && 'code' in value && value.code === expected)
 }
