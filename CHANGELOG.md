@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.34 — 2026-09-14
+## 0.1.35 — 2026-09-14
 
 - The launcher now records why its private channel to the local core failed, in
   `core-diagnostics.log` next to the core's own state: the exact bytes the core sent
