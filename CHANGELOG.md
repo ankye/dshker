@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.33 — 2026-09-14
+
+- The private channel to the local core no longer closes when the core writes to
+  stdout. Only the one-line handshake travels on that stream, so any other output was
+  read as a protocol violation and the whole channel was dropped with
+  `p2p.protocol_mismatch` — on Windows that surfaced as no device identity, no account
+  state, and no way to sign in or out. Core output is now relayed only when
+  `DSH_P2P_TRACE=1` is set.
+- A failed core handshake now logs what the core actually answered, instead of failing
+  silently, so a core that cannot start is distinguishable from one that answered
+  wrongly.
+- Diagnostics for the local core channel, on every platform: start the app with
+  `DSH_P2P_TRACE=1` and the core's own stdout and stderr are relayed, together with the
+  reason its handshake was refused. This is what identifies a core that failed to start
+  instead of one that started and disagreed.
+
 ## 0.1.32 — 2026-09-14
 
 - Devices in a network can be **removed** from the device list, and their pairs go
