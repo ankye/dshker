@@ -8,6 +8,7 @@ import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
 import P2PDeviceDirectory from './P2PDeviceDirectory.vue'
+import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
 import {
   P2P_ACCOUNT_PASSWORD_MIN,
   P2P_NETWORK_DEVICE_LIMITS,
@@ -590,7 +591,10 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
                 <details class="p2p-technical-details">
                   <summary>{{ t('p2p.account.networkDetails') }}</summary>
                   <p>{{ t('p2p.account.networkIdHint') }}</p>
+                  <!-- The network id is what another machine joins by, so it carries
+                       its own copy control rather than being selected by hand. -->
                   <code>{{ network.networkId }}</code>
+                  <CopyPathButton :value="network.networkId" />
                 </details>
                 <div class="p2p-network-danger">
                   <span>{{ t('p2p.account.deleteWarning') }}</span>

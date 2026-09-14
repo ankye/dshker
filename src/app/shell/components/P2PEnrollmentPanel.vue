@@ -6,6 +6,7 @@ import {
   p2pAccounts as accounts
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
+import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
 
 const props = defineProps<{ serviceId: string }>()
 const t = useTranslator()
@@ -188,6 +189,7 @@ async function submit() {
             <dt>{{ t('p2p.enrollment.network') }}</dt>
             <dd>
               <code>{{ state.registration.networkId }}</code>
+              <CopyPathButton :value="state.registration.networkId" />
             </dd>
           </div>
         </template>
@@ -195,6 +197,7 @@ async function submit() {
           <dt>{{ t('p2p.enrollment.device') }}</dt>
           <dd>
             <code>{{ state.registration.deviceId }}</code>
+            <CopyPathButton :value="state.registration.deviceId" />
           </dd>
         </div>
       </dl>

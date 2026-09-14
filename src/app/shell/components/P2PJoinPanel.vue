@@ -8,6 +8,7 @@ import {
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
+import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
 
 /**
  * 「我的网络」 card (Connect tab).
@@ -263,6 +264,16 @@ async function leave(): Promise<void> {
             <dt>{{ t('p2p.myNetwork.deviceName') }}</dt>
             <dd>{{ deviceName }}</dd>
           </div>
+          <!-- The machine's own id sits with its name, in the open, because it is the
+               one fact that is true in every phase and the one an owner reads out
+               loud or pastes into another machine. -->
+          <div>
+            <dt>{{ t('p2p.myNetwork.deviceId') }}</dt>
+            <dd>
+              <code>{{ deviceId }}</code>
+              <CopyPathButton :value="deviceId" />
+            </dd>
+          </div>
         </dl>
         <p
           v-if="registration?.kind === 'registered'"
@@ -280,7 +291,11 @@ async function leave(): Promise<void> {
         <dl>
           <dt>{{ t('p2p.myNetwork.deviceId') }}</dt>
           <dd>
+            <!-- This machine's identity is what an owner needs to read or share, so
+                 it is shown with its own copy control instead of being selected by
+                 hand out of a monospace string. -->
             <code>{{ deviceId }}</code>
+            <CopyPathButton :value="deviceId" />
           </dd>
         </dl>
       </details>

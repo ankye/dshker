@@ -113,12 +113,16 @@ describe('P2P 「我的网络」 card', () => {
     const ui = await render({})
     const info = ui.get('[data-testid="p2p-device-info"]')
     expect(info.text()).toContain('设备名称')
+    // The machine's own id is shown in the open, next to its name, with a copy
+    // control: it is the value an owner reads out loud or pastes elsewhere.
+    expect(info.text()).toContain('设备标识')
+    expect(info.text()).toContain('local-device-a')
+    expect(info.find('.copy-path-button').exists()).toBe(true)
     const technical = ui.get('.connect-device-details')
     expect(technical.attributes('open')).toBeUndefined()
     expect(technical.text()).toContain('设备标识')
     // Before joining, the card shows this machine's generated local device id.
     expect(technical.text()).toContain('local-device-a')
-    expect(info.text()).not.toContain('local-device-a')
     expect(ui.find('input[name]').exists()).toBe(false)
     expect(ui.findAll('input')).toHaveLength(1)
     expect((ui.get('[data-testid="p2p-join-network"]').element as HTMLInputElement).type).toBe(

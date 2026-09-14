@@ -2,15 +2,25 @@
 
 ## Unreleased
 
+- Identifiers are twelve characters, the length and alphabet of a hardware
+  address, so a device id can be read out, typed and compared by a person. A
+  device id is derived from the machine's key, which means one machine is one
+  device for the life of the machine — across accounts, networks and
+  re-enrollments — and the coordinator records which accounts a machine reports
+  to instead of a single owner.
+- The device id is shown next to the device name on the Connect card, in the
+  open, with a copy button, and the network id and enrollment identifiers carry
+  the same copy control instead of being selected by hand. The pairing
+  fingerprint is the same twelve-character key id.
 - This machine keeps one device identity. The device key was minted per
   enrollment, so every registration, every join and every re-enrollment became a
   different device: pairs, pins and catalog rows still referenced the identity
   that had just been replaced, the coordinator's list carried entries naming
   neither side of either machine, and both ends could wedge on the other's stale
-  identity — the wedge the same release's other P2P fixes exist to unwind. The key now
-  lives in the core's own store beside the data root, like a hardware address:
-  one identity per machine, reused for every network and every account, and it
-  survives losing the credential record, which is the usual way a machine
+  identity — the wedge the same release's other P2P fixes exist to unwind. The key
+  now lives in the core's own store beside the data root, like a hardware
+  address: one identity per machine, reused for every network and every account,
+  and it survives losing the credential record, which is the usual way a machine
   silently became a new device.
 
 ## 0.1.38 — 2026-09-15
