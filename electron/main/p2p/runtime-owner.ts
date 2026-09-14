@@ -31,7 +31,18 @@ export class PeerRuntimeOwner {
   connect(signal: AbortSignal): Promise<PeerRuntimeBinding> {
     if (this.#closed) return Promise.reject(new PeerHelperError('p2p.runtime_owner_closed'))
     if (signal.aborted) return Promise.reject(new PeerHelperError('p2p.request_cancelled'))
-    if (this.#binding) return Promise.resolve({ ...this.#binding })
+    // The cached binding is only as fresh as the last state event. A workbench
+    // that died without the shell observing it (a crash, a kill from outside)
+    // would otherwise be handed out as running, and the peer would bind a dead
+    // URL and fail later at its own readiness probe with a transport-shaped
+    // error. Re-reading the source here is what makes the answer current.
+    if (this.#binding) {
+      const current = this.source.getRuntimeState()
+      if (current.kind === 'running' && current.url === this.#binding.url)
+        return Promise.resolve({ ...this.#binding })
+      this.#accept(current)
+      if (this.#binding) return Promise.resolve({ ...this.#binding })
+    }
     const waiting = this.#wait(signal)
     const current = this.source.getRuntimeState()
     if (current.kind !== 'starting' && !this.#starting) {

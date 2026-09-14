@@ -28,8 +28,19 @@ const LIVE_STAGES = new Set(['punching', 'starting-runtime', 'ready'])
 
 // Refusals that will not change by trying again: the pair's authorization is
 // gone, so retrying would only produce the same refusal and hide the reason.
+//
+// The two authorization stops the core actually answers with are
+// `p2p.pair_unauthorized` (this device holds no pin for the pair) and
+// `p2p.network_revoked` (the network's authorization was withdrawn). Leaving
+// them out is what turned "removed by another device" into a silent retry loop
+// that never succeeded and never said why: the computer stayed listed as active
+// and the shell re-attempted it forever, while the refusal never reached a
+// surface. `clearRefusals` still forgets them when the machine's own state
+// changes, so a re-authorized pair is attempted again.
 const TERMINAL_CODES = new Set([
   'p2p.not_enabled',
+  'p2p.pair_unauthorized',
+  'p2p.network_revoked',
   'p2p.pair_revoked',
   'p2p.pair_not_found',
   'p2p.identity_mismatch',

@@ -10,6 +10,42 @@
   the reverse, and the tab never opened. A row the coordinator's list no longer
   carries is now recorded as revoked instead of dropped, so the catalog converges
   on the next sync while the loss stays visible on screen.
+- Pairing survives the coordinator connection dropping. The core subscribed to the
+  coordinator once, and a lost connection — a network change, a laptop sleeping, a
+  coordinator restart, a half-open socket — ended the subscription for good:
+  attempts and signals stopped arriving, nothing reconnected, and only restarting
+  the application brought P2P back, while the shell went on showing a healthy
+  device. The subscription is now supervised and re-established in-process with
+  capped backoff, and a connect attempt made while it is down fails at once with
+  `p2p.server_unavailable` instead of waiting out its deadline and blaming the
+  transport.
+- A pairing relationship whose authorization the coordinator issues again can be
+  recorded again. A revoked computer is never revived by the catalog's guard, so
+  re-pairing the same two devices — the repair path after a removal — could not be
+  written at all and the computer stayed revoked. The revoked record is now
+  retired in its own commit before the new authorization is recorded.
+- A pair that names neither side of this machine no longer aborts the entire
+  member sync. That leftover from a re-enrollment is skipped, so the read that
+  writes pins and the catalog still runs; rejecting the whole reply for one stale
+  entry is what left a machine permanently seeing only itself and answering no
+  offers.
+- Being removed by another device now stops the reconnect attempts. The two
+  authorization refusals the core actually sends (`p2p.pair_unauthorized`,
+  `p2p.network_revoked`) were missing from the terminal list, so a removed
+  computer stayed listed as active and was re-attempted forever in silence.
+- A runtime refusal keeps its reason. The peer handshake answered every workbench
+  failure with one constant, and the management boundary then mapped every
+  `runtime.*` code to `p2p.internal_error`, so "the tunnel is up but the desktop
+  is not" had no readable cause anywhere. The refusal the runtime owner named now
+  survives both hops.
+- A workbench that died without the shell noticing is no longer reported as
+  available: the owner re-reads the runtime state instead of answering from cache,
+  so the peer is never handed an address that is already gone.
+- The packaged smoke can no longer hang on a machine whose session is locked or
+  whose desktop is disconnected. Its probes settled on renderer timers and frames,
+  which such a session stops delivering, so the smoke stalled until the runner
+  killed it; they now settle on microtasks and force their own layout, and every
+  renderer round trip is bounded so a stall is reported where it happened.
 
 ## 0.1.37 — 2026-09-14
 

@@ -57,6 +57,24 @@ describe('P2P owned DSH lifecycle', () => {
     expect(start).not.toHaveBeenCalled()
   })
 
+  it('re-reads the runtime instead of handing out a binding for a workbench that died', async () => {
+    // The cached binding is only as fresh as the last state event the shell saw,
+    // and a crash the shell did not observe left it saying "running" — so a peer
+    // bound a dead URL and failed later with a transport-shaped error instead of
+    // being told the desktop was gone.
+    const fresh = 'http://127.0.0.1:31992/?token=test-only-second'
+    const { owner, set, start } = fixture({ kind: 'running', url })
+    expect(await owner.connect(new AbortController().signal)).toEqual({ generation: 1, url })
+    set({ kind: 'failed', reason: 'crashed' })
+    const pending = owner.connect(new AbortController().signal)
+    // The dead state is not answered from cache: the owner starts the runtime
+    // again and answers with the address that start produces.
+    await Promise.resolve()
+    expect(start).toHaveBeenCalledTimes(1)
+    set({ kind: 'running', url: fresh })
+    await expect(pending).resolves.toMatchObject({ url: fresh })
+  })
+
   it('coalesces cold-start callers and cancels only the caller, retaining DSH', async () => {
     const { owner, start, set, invalidate } = fixture()
     const controller = new AbortController()

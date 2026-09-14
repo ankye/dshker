@@ -28,7 +28,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   computers.push({ ...computer, pairState: 'revoked' })                                   // 94
   ```
 - **Symptom:** the peer re-pairs (new `pairId`, new `networkId`, higher revision). The
-  sync's first loop at `member-catalog.ts:53-56` keeps only rows of *other* services, so
+  sync's first loop at `member-catalog.ts:53-56` keeps only rows of _other_ services, so
   `computers` starts empty and `recorded` is also empty; the active member is matched at
   line 69 against `recorded` (empty) and is therefore **skipped** — its row already exists
   in `saved.record.computers` as `revoked`, but line 69's `add` never happens for it. The
@@ -48,7 +48,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
 
 ---
 
-## 2. Two networks between the same two devices produce the *same* connection id → `p2p.catalog_invalid` and a silently dead peer
+## 2. Two networks between the same two devices produce the _same_ connection id → `p2p.catalog_invalid` and a silently dead peer
 
 - **Severity: high.** One of two peers in a shared second network never appears, and the
   member sync fails for that service forever with no user-visible reason.
@@ -69,8 +69,8 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
 - **Symptom:** with the same peer on two networks, the row stored is whichever member comes
   first in the coordinator's list; the other network's pair can never be connected (the
   coordinator keys an attempt by pair, and the losing `pairId` is not in the catalog), and
-  every later sync for the service fails outright, so *no* later membership change lands.
-- **Minimal fix:** make the dedupe *and* the identity explicit. Add a
+  every later sync for the service fails outright, so _no_ later membership change lands.
+- **Minimal fix:** make the dedupe _and_ the identity explicit. Add a
   `connectionIdFor(serviceId, remoteDeviceId, pairId)` helper (e.g.
   `sha256(serviceId + ':' + member.pairId)` hex-truncated to 32) in `member-catalog.ts`,
   use it as `connectionId`, and mark the extra pair by keeping `pairId` distinct — this needs
@@ -92,7 +92,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   ```ts
   if (member.state !== 'active' || member.revision <= 0) continue
   ```
-  A pair the coordinator reports as `revoked` is simply not recorded, so the *existing*
+  A pair the coordinator reports as `revoked` is simply not recorded, so the _existing_
   local row keeps `pairState: 'active'` and is never marked revoked. On the Go side a
   revoked pair is not pinned (`manager.go:119` requires `pin.Pair.State == "active"`) and —
   critically — a "revoked" signal event only exists while the app is running
@@ -114,7 +114,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   2. Add `p2p.pair_unauthorized` (and `p2p.network_revoked`, `p2p.pair_not_found`) to
      `TERMINAL_CODES` in `auto-connect.ts:31` so the loop stops, and project
      `autoConnect.refusal()` through the `serviceSessions`/`connections` read so the row can
-     say *why*.
+     say _why_.
 - **Test:** `member-catalog.test.ts` — a row `active` + a member list containing that remote
   with `state:'revoked'`; assert the committed row is `revoked` and its `pairRevision` is the
   member's. `auto-connect.test.ts` — `connect` rejecting `p2p.pair_unauthorized` schedules no
@@ -166,7 +166,12 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   ```ts
   const pairs = peerPairs(await this.#call(serviceId, 'pairs.list', {}, signal), local)
   for (const pair of pairs) {
-    members.push(peerPairMember(await this.#call(serviceId, 'pairs.identity', { pairId: pair.pairId }, signal), local))
+    members.push(
+      peerPairMember(
+        await this.#call(serviceId, 'pairs.identity', { pairId: pair.pairId }, signal),
+        local
+      )
+    )
   }
   ```
   `peerPairs` (`pair-records.ts:220-221`) and `peerPairMember` (`pair-records.ts:209-210`)
@@ -174,7 +179,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   which is exactly the state left behind by a re-enrollment under a new device identity, the
   scenario the 0.1.38 fix was about. One such dangling pair makes `members()` reject, so
   `#recordMembers` never runs (`management.ts:685`) and the catalog never converges.
-  This is a second permanent-wedge mechanism *beside* the fixed one: the fixed one fired on a
+  This is a second permanent-wedge mechanism _beside_ the fixed one: the fixed one fired on a
   valid member list, this one fires before the list is even built.
 - **Symptom:** "Windows could see the Mac, the Mac saw only itself" persists even after the
   0.1.38 fix, because the Mac's sync dies at `pairs.identity`.
@@ -196,7 +201,8 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
 - **Evidence:** `electron/main/p2p/member-catalog.ts:53-56,90-94`
   ```ts
   const computers = saved.record.computers.filter(
-    (computer) => computer.serviceId !== serviceId && computer.remoteDeviceId !== credential.deviceId
+    (computer) =>
+      computer.serviceId !== serviceId && computer.remoteDeviceId !== credential.deviceId
   )
   ```
   Only rows naming **this machine** as the peer are dropped. A row whose `localDeviceId` is an
@@ -208,12 +214,12 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   tab per row, so the user gains a permanent dead tab per re-enrollment.
 - **Symptom:** computer appears twice; the old one is "Revoked" forever; the newly paired one
   may appear only after finding 3 is fixed.
-- **Minimal fix:** prune rows of *this* service whose `localDeviceId !== credential.deviceId`,
+- **Minimal fix:** prune rows of _this_ service whose `localDeviceId !== credential.deviceId`,
   regardless of `pairState` — they are already revoked (if they are not, mark them revoked in
   the same commit first). Concretely, in `recordMembers` extend the filter at line 53-56 with
   a third clause `|| (computer.serviceId === serviceId && computer.localDeviceId !== credential.deviceId)`,
   and in the second loop drop rows with `localDeviceId !== credential.deviceId` (legal because
-  the guard only protects *active* rows). Add `p2p.catalog.identityPruned` to the diagnostics
+  the guard only protects _active_ rows). Add `p2p.catalog.identityPruned` to the diagnostics
   log so the loss stays visible.
 - **Test:** `member-catalog.test.ts` — fixture row with `localDeviceId: '9'…` ≠ credential,
   `pairState: 'revoked'`; assert it is absent from the committed record, and with
@@ -230,14 +236,14 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
     device A for the whole helper lifetime (`#restored` is only cleared on
     `removeService`, `management.ts:400`, or helper loss, `management.ts:970`).
   - `management.ts:543-568` — `#readyAsDevice` reads device A's credential and passes it to
-    `device.restore`; the reply is only *shape*-checked:
+    `device.restore`; the reply is only _shape_-checked:
     ```ts
     exactPeerObject(await session.rpc.call('device.restore', {serviceId, data:{device:…, pins: []}}, …), ['deviceId'])
     ```
     `deviceId` is never compared with the credential (contrast `enrollment.ts:164-165`, which
     does compare). The Go handler refuses a second restore with `p2p.invalid_device_state`
     (`networking/internal/helper/host.go:188-190`) and `management.ts:569-573` treats exactly
-    that code as "already restored: not an error" — so a *different* device in the helper is
+    that code as "already restored: not an error" — so a _different_ device in the helper is
     indistinguishable from a successful restore.
   - `electron/main/p2p/enrollment-bootstrap.ts:45-46` —
     ```ts
@@ -280,7 +286,8 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
 - **Severity: high.** "Paired, listed, and every connect fails" with no message.
 - **Evidence:** `electron/main/p2p/management.ts:681-683`
   ```ts
-  await session.pairing.pin(serviceId, member, remote.deviceId, this.#lifetime.signal)
+  await session.pairing
+    .pin(serviceId, member, remote.deviceId, this.#lifetime.signal)
     .catch((error) => console.error('[p2p] pair pin failed:', error))
   ```
   `pin` uses `#operation`'s `#busy` guard (`pairing.ts:291`: `p2p.service_busy`) and can also
@@ -379,7 +386,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
 
 - **Severity: medium.** The machine is stranded as pending and the join form is gone.
 - **Evidence:** `enrollment.ts:217` removes the registered credential on a confirmed leave.
-  `management.ts:490-510` (`leaveNetwork`) then refreshes members, but on the *next*
+  `management.ts:490-510` (`leaveNetwork`) then refreshes members, but on the _next_
   `goOnline`/`#readyAsDevice`, `enrollWhenMissing` (`enrollment-bootstrap.ts:45-51`) signs in
   and calls `host.register` → `#submit` (`enrollment.ts:262-300`). If the coordinator refuses
   (already-enrolled device, network full, token refusal), the durable pending record stays
@@ -412,7 +419,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   `account.client.Pairs(ctx)` = `GET /v1/pairs` with **no network or user scoping**
   (`networking/internal/helper/management.go:108-113`, `controlplane/management.go:122-126`).
   `recordMembers` therefore rewrites every computer of the service from one undifferentiated
-  list, and `leaveNetwork` only marks rows revoked through the *next* sync
+  list, and `leaveNetwork` only marks rows revoked through the _next_ sync
   (`management.ts:508-509`), which cannot distinguish "left network A" from "coordinator
   omitted B".
 - **Symptom:** after leaving a network, its computer may linger as active (until a sync that
@@ -434,7 +441,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   play.
 - **Evidence:** `accounts.ts:164-174` deletes `#sessions` entry then calls `user.logout`;
   nothing calls `PeerCredentialStore.removeUserSession` for the logout path (only
-  `management.ts:600`, on an *adopted* session the server rejected) and nothing clears the
+  `management.ts:600`, on an _adopted_ session the server rejected) and nothing clears the
   device credential (`credentials.ts:194-213` is reachable only from `enrollment.leave`).
   `P2PSelectionStore.forget` (`selection-preferences.ts:67-74`) is never called from
   production code, so `p2p-selection.json` keeps the previous account's choice (harmless only
@@ -466,7 +473,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   ...
   localIsInitiator: true
   ```
-  Both `presence` values are hardcoded `'offline'` and the display name is the *remote's*
+  Both `presence` values are hardcoded `'offline'` and the display name is the _remote's_
   name on both sides; `expiresAt` is `0` for every row; the state is hardcoded `'active'`
   even for a revoked row (`management.ts:712` filters those out, so a revoked pair is
   invisible in the panel while its Run tab says "Revoked" — cf. finding 3 on the same data).
@@ -494,7 +501,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
   returns it; `P2PJoinPanel.vue:79-83` falls back to it when nothing is registered, and
   `P2PJoinPanel.vue:281-285` labels it "Device ID" beside the enrolled name. The enrolled
   `deviceId` only appears once `registration.kind === 'registered'`
-  (`P2PJoinPanel.vue:79-83`), and `networkDevices` uses the *registered* id for `isLocal`
+  (`P2PJoinPanel.vue:79-83`), and `networkDevices` uses the _registered_ id for `isLocal`
   (`management.ts:441-443`, `management-projection.ts:48`). If the two differ, the device
   directory marks this machine "not local" and `P2PDeviceDirectory.vue:58-60` shows
   `p2p.devices.localAbsent` ("This machine is not in this network") on the machine itself.
@@ -535,7 +542,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
 
 ---
 
-## 18. Replay guard: a legitimate renderer *can* be refused, and one id is burned by the cap
+## 18. Replay guard: a legitimate renderer _can_ be refused, and one id is burned by the cap
 
 - **Severity: low** (narrow windows; the guard itself is sound and well tested).
 - **Evidence:** `management-requests.ts:73-83`
@@ -559,7 +566,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
      today this needs an unusual reload.
 - **Symptom:** under either window the user sees `p2p.request_replayed` / `p2p.request_limit`
   for a call they just made, with no retry.
-- **Minimal fix:** move the `seen.add`/`highWater` update to *after* the pending-cap check (or
+- **Minimal fix:** move the `seen.add`/`highWater` update to _after_ the pending-cap check (or
   check the cap first), and retire on any navigation whose URL differs from the current
   `senderFrame.url` even when `inPlace` is true. Keep `p2p.request_replayed` as-is otherwise.
 - **Test:** `management-requests.test.ts` — (a) fill 16 pending, attempt a 17th, then retry
@@ -614,7 +621,7 @@ Legend: **[wedge]** = state only a restart or a manual re-pair escapes.
    revoked when the coordinator reports that remote as terminal, matching by
    `remoteDeviceId`; prune rows whose `localDeviceId` is a dead identity; and give each row a
    distinct `connectionId` when two networks share a peer. Without this, the catalog can
-   still wedge on the *next* identity change, and one peer in a second network kills the
+   still wedge on the _next_ identity change, and one peer in a second network kills the
    whole service's sync.
 2. **Make device identity and account identity agree** (findings 7, 11, 14, 16):
    `enrollment-bootstrap.ts:45` must compare the credential's `userId` with the signed-in
@@ -642,13 +649,13 @@ convergence (`member-catalog.test.ts:102-131`), the 0.1.36 `internal_error` diag
 
 ### Untested today (the gaps these findings exploit)
 
-- `member-catalog.ts` with a *pre-existing revoked row* for a remote the coordinator reports
+- `member-catalog.ts` with a _pre-existing revoked row_ for a remote the coordinator reports
   again (findings 1, 6) — the fixture only ever holds non-revoked or self-rows.
 - Two members with the same remote device id and different networks (finding 2).
 - `recordMembers` against a catalog that no longer holds the service (finding 19).
 - `members()` with a pair whose local device id is neither side (finding 5).
 - `#restored` invalidation on a credential change and cross-account credentials (findings 7, 11).
 - `pairs.pin` refusal having any consequence (finding 8) — `management.test.ts:370` only asserts
-  the pin *was* called.
+  the pin _was_ called.
 - `autoConnect.refusal()` reaching a user surface (finding 9).
 - The pending-enrollment path after a leave (finding 12).

@@ -581,7 +581,10 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.runtime_generation_mismatch',
   'p2p.runtime_http_failed',
   'p2p.runtime_invalid',
+  'p2p.runtime_invalidation_failed',
   'p2p.runtime_invalidated',
+  'p2p.runtime_owner_closed',
+  'p2p.runtime_timeout',
   'p2p.runtime_unavailable',
   'p2p.runtime_websocket_failed',
   'p2p.send_limit',
@@ -644,6 +647,32 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.unsupported_schema',
   'p2p.user_conflict',
   'p2p.user_not_found',
-  'p2p.user_unauthorized'
+  'p2p.user_unauthorized',
+  // The runtime family. The peer's workbench is the DSH Web runtime, and a
+  // failure there is answered with a runtime.* code — a port already held, a
+  // workbench that could not start, a readiness timeout. Those are exactly the
+  // cases where the user needs to know it was the desktop and not the tunnel:
+  // without them here, every one of them reached the renderer as a bare
+  // p2p.internal_error and "dshkerd connected but the desktop did not" had no
+  // readable cause anywhere.
+  'runtime.busy_running',
+  'runtime.child_crashed',
+  'runtime.child_unavailable',
+  'runtime.descriptor_invalid',
+  'runtime.descriptor_write_failed',
+  'runtime.handshake_timeout',
+  'runtime.input_invalid',
+  'runtime.node_invalid',
+  'runtime.not_found',
+  'runtime.operation_in_progress',
+  'runtime.plugin_operation_failed',
+  'runtime.port_in_use',
+  'runtime.protocol_invalid',
+  'runtime.protocol_mismatch',
+  'runtime.ready_timeout',
+  'runtime.shutdown_timeout',
+  'runtime.spawn_failed',
+  'runtime.version_pointer_invalid',
+  'runtime.worktree_invalid'
 ] as const
 export type P2PManagementErrorCode = (typeof P2P_MANAGEMENT_ERROR_CODES)[number]

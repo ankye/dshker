@@ -32,6 +32,27 @@ function clock() {
 }
 
 describe('PeerAutoConnect', () => {
+  it('stops retrying a pair whose authorization the core refused', async () => {
+    // These are the codes the core really answers with when this device holds no
+    // pin for a pair, or when a network's authorization was withdrawn. Without
+    // them the pair stayed listed as active and was re-attempted forever while
+    // the refusal never reached a surface.
+    for (const code of ['p2p.pair_unauthorized', 'p2p.network_revoked']) {
+      const connect = vi.fn().mockRejectedValue(new PeerHelperError(code))
+      const auto = new PeerAutoConnect({
+        intents: () => Promise.resolve([{ serviceId, pairId }]),
+        stage: () => undefined,
+        connect
+      })
+      await auto.reconcile()
+      await Promise.resolve()
+      expect(auto.refusal(serviceId, pairId)).toBe(code)
+      await auto.reconcile()
+      expect(connect).toHaveBeenCalledTimes(1)
+      auto.close()
+    }
+  })
+
   it('connects every authorized pair without a user action', async () => {
     const connect = vi.fn().mockResolvedValue({})
     const auto = new PeerAutoConnect({

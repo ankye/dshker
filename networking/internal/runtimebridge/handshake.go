@@ -58,6 +58,15 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 			return nil, nil, nil, binding, err
 		}
 		if response.Type != "runtime.result" || response.Error != "" {
+			// The far side already named the refusal. Returning the constant here
+			// threw that away: every runtime problem — a workbench that could not
+			// start, a port already held, a worktree that failed verification —
+			// reached the user as one indistinguishable "runtime unavailable".
+			// Only a code the protocol admits is passed through; anything else
+			// still collapses, so a library sentence cannot masquerade as one.
+			if code, ok := protocol.Refusal(errors.New(response.Error)); ok {
+				return nil, nil, nil, binding, errors.New(code)
+			}
 			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
 		}
 		binding = Binding{Generation: response.RuntimeGeneration, URL: response.URL}
@@ -85,9 +94,16 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 		request.Type = "runtime.result"
 		if err != nil {
 			// Never swallow the reason: a flattened code here is indistinguishable
-			// from a genuinely unavailable runtime and hides the real refusal.
+			// from a genuinely unavailable runtime and hides the real refusal, so
+			// the refusal the owner named is what the peer is told — a runtime.*
+			// code from the shell (a port already held, a workbench that failed to
+			// start) is exactly what the far side's user needs to read.
+			code := "p2p.runtime_unavailable"
+			if named, ok := protocol.Refusal(err); ok {
+				code = named
+			}
 			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v\n", peerDeviceID, err)
-			request.Error = "p2p.runtime_unavailable"
+			request.Error = code
 			sendHello(transport, request)
 			return nil, nil, nil, binding, err
 		}
