@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.34 — 2026-09-14
+
+- The launcher now records why its private channel to the local core failed, in
+  `core-diagnostics.log` next to the core's own state: the exact bytes the core sent
+  for its handshake, whether the named pipe or Unix socket authenticated, what
+  `core.version` answered, and the child's exit code. This is the difference between a
+  core that never started and one that started and disagreed, which a bare
+  `p2p.protocol_mismatch` cannot tell apart.
+
 ## 0.1.33 — 2026-09-14
 
 - The private channel to the local core no longer closes when the core writes to

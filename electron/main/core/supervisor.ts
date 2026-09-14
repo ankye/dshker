@@ -1,7 +1,7 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { lstat, mkdir } from 'node:fs/promises'
-import { isAbsolute } from 'node:path'
+import { appendFile, lstat, mkdir } from 'node:fs/promises'
+import { isAbsolute, join } from 'node:path'
 import { authenticatePeer, readPeerLine } from '../p2p/bootstrap'
 import { createPeerChannel, removePeerChannel } from '../p2p/private-channel'
 import { PeerRpc, type PeerMainHandler } from '../p2p/rpc'
@@ -126,10 +126,35 @@ export class CoreSupervisor {
       windowsHide: true,
       env: { ...process.env }
     })
+    // A handshake that fails on one platform and not another cannot be argued
+    // about from the outside: keep the exact bytes the core sent, and where the
+    // shell got to, in a file next to the core's own state. It stays tiny and is
+    // only written on failure.
+    let announcementBytes = Buffer.alloc(0)
+    const diagnose = (message: string): void => {
+      void appendFile(
+        join(options.dataRoot, 'core-diagnostics.log'),
+        `${new Date().toISOString()} ${message}\n`,
+        'utf8'
+      ).catch(() => undefined)
+    }
+    const tap = (chunk: Buffer): void => {
+      if (announcementBytes.length < 512)
+        announcementBytes = Buffer.concat([
+          announcementBytes,
+          chunk.subarray(0, 512 - announcementBytes.length)
+        ])
+    }
+    child.stdout.on('data', tap)
     const exit = new Promise<void>((resolve) => {
-      child.once('close', () => resolve())
+      child.once('close', (code, signal) => {
+        diagnose(
+          `exit code=${String(code)} signal=${String(signal)} announcement=${JSON.stringify(announcementBytes.toString('utf8'))}`
+        )
+        resolve()
+      })
     })
-    child.on('error', () => undefined)
+    child.on('error', (error) => diagnose(`spawn-error ${String(error)}`))
     child.stdin.on('error', () => undefined)
     if (process.env.DSH_P2P_TRACE === '1')
       child.stderr.on('data', (chunk: Buffer) => process.stderr.write(chunk))
@@ -146,14 +171,23 @@ export class CoreSupervisor {
       } catch (error) {
         // This first line is the whole handshake, so a core that says anything else
         // is otherwise indistinguishable from one that said nothing at all.
+        diagnose(
+          `handshake-failed raw=${JSON.stringify(announcementBytes.toString('utf8'))} ${String(error)}`
+        )
         console.error('[p2p] core handshake failed:', error)
         throw error
       }
+      child.stdout.off('data', tap)
       if (announcement.version !== 1 || announcement.ready !== true) {
+        diagnose(`handshake-rejected ${JSON.stringify(announcement)}`)
         console.error('[p2p] core handshake rejected:', JSON.stringify(announcement))
         throw new PeerHelperError('p2p.protocol_mismatch')
       }
-      const socket = await authenticatePeer(socketPath, secret, budget)
+      diagnose(`handshake-ok core.version=${JSON.stringify(version)}`)
+      const socket = await authenticatePeer(socketPath, secret, budget).catch((error: unknown) => {
+        diagnose(`authenticate-failed socket=${socketPath} ${String(error)}`)
+        throw error
+      })
       // The core calls back once a device is restored: runtime.connect for the
       // runtime owner and peer.state for every connection stage. Until the peer
       // state machine attaches, every inbound method is a typed not-implemented
@@ -184,7 +218,10 @@ export class CoreSupervisor {
       child.stdout.resume()
       socket.resume()
       // The version probe proves the core serves before the shell adopts it.
-      const version = await rpc.call('core.version', {}, budget)
+      const version = await rpc.call('core.version', {}, budget).catch((error: unknown) => {
+        diagnose(`version-probe-failed ${String(error)}`)
+        throw error
+      })
       if (
         typeof version !== 'object' ||
         version === null ||
