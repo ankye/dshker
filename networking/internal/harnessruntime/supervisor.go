@@ -341,6 +341,17 @@ func (supervisor *Supervisor) Status(subjectID string) (LaunchView, bool) {
 	return active.view(), true
 }
 
+// markStopped records that a requested stop ended the child. Windows reports a
+// forced tree kill as an exit code rather than a signal, so without this a
+// deliberate stop would be rendered as a crash on that platform — which is what
+// the shell's own stop avoided by setting its state after the tree was gone.
+func (active *record) markStopped() {
+	active.mutex.Lock()
+	defer active.mutex.Unlock()
+	active.state = StateStopped
+	active.failure = nil
+}
+
 // Stop signals exactly the tree one launch created and waits for it to exit.
 func (supervisor *Supervisor) Stop(subjectID string) (LaunchView, error) {
 	supervisor.mutex.Lock()
@@ -358,6 +369,7 @@ func (supervisor *Supervisor) Stop(subjectID string) (LaunchView, error) {
 		// The process may already be gone; its exit is what decides the outcome.
 		select {
 		case <-active.exited:
+			active.markStopped()
 			return active.view(), nil
 		default:
 			return active.view(), fmt.Errorf("%w: Managed DSH process could not be stopped.", ErrChildUnavailable)
@@ -365,12 +377,14 @@ func (supervisor *Supervisor) Stop(subjectID string) (LaunchView, error) {
 	}
 	select {
 	case <-active.exited:
+		active.markStopped()
 		return active.view(), nil
 	case <-time.After(ShutdownTimeout):
 	}
 	_ = terminateProcessTree(active.pid(), true)
 	select {
 	case <-active.exited:
+		active.markStopped()
 		return active.view(), nil
 	case <-time.After(time.Second):
 		return active.view(), fmt.Errorf("%w: Managed DSH process did not exit after SIGTERM.", ErrShutdownTimeout)

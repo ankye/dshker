@@ -62,6 +62,31 @@ be resolved refuses the launch instead of guessing.
 - macOS: `go build`, `go vet` (host and `GOOS=windows`), the full unit suite and
   the integration suite pass.
 
+## Windows, and a session trap worth recording
+
+The full Windows suite is green: `go build`, `go vet` and every package including
+`internal/harnessruntime` and the runtime cases in `internal/core`.
+
+Getting there cost one real fix and one environment finding.
+
+1. **A requested stop is not a crash.** Windows reports a forced tree kill
+   (`taskkill /t /f`) as an exit code, not as a signal, so the exit handler marked
+   a deliberate stop as `failed` and the launch view lied about it. The shell never
+   had this problem because its `stop` set the state after the tree was gone;
+   `Stop` now records the stop explicitly. The Windows run found it, and only
+   Windows could: on Unix the same path reports `SIGTERM` and was already correct.
+2. **DPAPI does not work from session 0, so an SSH-driven run cannot test the
+   credential store.** `internal/secret` failed every `Set` with
+   `p2p.secret_write_failed` on this box while the same code passed an hour
+   earlier. A twelve-line probe settled it: `windows.CryptProtectData` itself
+   answers `Access is denied` in that session. `query session` shows why — the
+   SSH login lands in the `services` session (0), while the box has an
+   Administrator console session (1) with a loaded profile. Running the same suite
+   through a one-shot scheduled task (which executes in session 1) gives a green
+   `internal/secret`, including six of six stress runs. Every future Windows
+   credential or stress run has to use that route; a failure from session 0 is an
+   environment artefact, not a defect.
+
 ## Still to do
 
 - The **shell switch**: `LauncherHarnessService` and the launcher window still run
