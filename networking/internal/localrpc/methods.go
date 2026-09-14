@@ -83,6 +83,10 @@ var Methods = []Method{
 	{"peer.disconnect", RoleShell},
 	// The SSH route moved into the core in 5.1. Additive within version 1, with
 	// the shell's own remote.* refusal codes.
+	{"remote.catalog_create", RoleShell},
+	{"remote.catalog_inspect", RoleShell},
+	{"remote.catalog_remove", RoleShell},
+	{"remote.catalog_update", RoleShell},
 	{"remote.broker_start", RoleShell},
 	{"remote.broker_status", RoleShell},
 	{"remote.broker_stop", RoleShell},

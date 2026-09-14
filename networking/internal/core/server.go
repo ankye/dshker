@@ -16,6 +16,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/peerbroker"
 	"github.com/ankye/dshker/networking/internal/protocol"
+	"github.com/ankye/dshker/networking/internal/remoteconnections"
 	"github.com/ankye/dshker/networking/internal/remoteroute"
 	"github.com/ankye/dshker/networking/internal/rootregistry"
 	"github.com/ankye/dshker/networking/internal/secret"
@@ -46,6 +47,10 @@ var served = map[string]bool{
 	"runtime.console":              true,
 	"runtime.port_get":             true,
 	"runtime.port_set":             true,
+	"remote.catalog_create":        true,
+	"remote.catalog_inspect":       true,
+	"remote.catalog_remove":        true,
+	"remote.catalog_update":        true,
 	"remote.broker_start":          true,
 	"remote.broker_status":         true,
 	"remote.broker_stop":           true,
@@ -114,6 +119,37 @@ func (server Serve) remoteRoute() (*remoteroute.Route, error) {
 		return nil, errors.New("p2p.not_implemented")
 	}
 	return server.Remote, nil
+}
+
+// remoteCatalogResult reuses the catalog's own wire shape, so the shell parses it
+// with the validator it used while it owned the file. The revision is the one the
+// shell already computes for a stale-edit check.
+type remoteCatalogResult struct {
+	Connections []remoteCatalogConnection `json:"connections"`
+}
+
+type remoteCatalogConnection struct {
+	ConnectionID   string `json:"connectionId"`
+	DisplayName    string `json:"displayName"`
+	Host           string `json:"host"`
+	Port           int    `json:"port"`
+	User           string `json:"user"`
+	ConfigRevision string `json:"configRevision"`
+}
+
+func remoteCatalogSnapshot(connections []remoteconnections.Computer) remoteCatalogResult {
+	projected := make([]remoteCatalogConnection, 0, len(connections))
+	for _, connection := range connections {
+		projected = append(projected, remoteCatalogConnection{
+			ConnectionID:   connection.ConnectionID,
+			DisplayName:    connection.DisplayName,
+			Host:           connection.Host,
+			Port:           connection.Port,
+			User:           connection.User,
+			ConfigRevision: remoteconnections.ConfigRevision(connection),
+		})
+	}
+	return remoteCatalogResult{Connections: projected}
 }
 
 // remoteBrokerResult, remoteBrokerStatusResult and remoteResult reuse the route's
@@ -419,6 +455,81 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return runtimeStatusResult{}, nil
 		}
 		return runtimeStatusResult{Launch: &view, Present: true}, nil
+	case "remote.catalog_inspect":
+		var request struct {
+			FilePath string `json:"filePath"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := remoteconnections.Open(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		record, err := store.Load()
+		if err != nil {
+			return nil, err
+		}
+		return remoteCatalogSnapshot(record.Connections), nil
+	case "remote.catalog_create":
+		var request struct {
+			FilePath    string `json:"filePath"`
+			DisplayName string `json:"displayName"`
+			Host        string `json:"host"`
+			Port        int    `json:"port"`
+			User        string `json:"user"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := remoteconnections.Open(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		connections, err := store.Create(request.DisplayName, request.Host, request.Port, request.User)
+		if err != nil {
+			return nil, err
+		}
+		return remoteCatalogSnapshot(connections), nil
+	case "remote.catalog_update":
+		var request struct {
+			FilePath               string `json:"filePath"`
+			ConnectionID           string `json:"connectionId"`
+			DisplayName            string `json:"displayName"`
+			Host                   string `json:"host"`
+			Port                   int    `json:"port"`
+			User                   string `json:"user"`
+			ExpectedConfigRevision string `json:"expectedConfigRevision"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := remoteconnections.Open(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		connections, err := store.Update(request.ConnectionID, request.DisplayName, request.Host, request.Port, request.User, request.ExpectedConfigRevision)
+		if err != nil {
+			return nil, err
+		}
+		return remoteCatalogSnapshot(connections), nil
+	case "remote.catalog_remove":
+		var request struct {
+			FilePath     string `json:"filePath"`
+			ConnectionID string `json:"connectionId"`
+		}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		store, err := remoteconnections.Open(request.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		connections, err := store.Remove(request.ConnectionID)
+		if err != nil {
+			return nil, err
+		}
+		return remoteCatalogSnapshot(connections), nil
 	case "remote.broker_start":
 		var request struct {
 			DescriptorPath string `json:"descriptorPath"`
