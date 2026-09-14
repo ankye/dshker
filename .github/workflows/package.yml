@@ -31,6 +31,12 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Set up Go for the core
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: networking/go.mod
+          cache-dependency-path: networking/go.sum
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -68,6 +74,33 @@ jobs:
           npm run service:smoke
           npm run visual:smoke
           npm run performance:check -- --mode release-readiness --json
+
+      # The core is Go, and this job is the only place the suite runs on Linux:
+      # the packaging jobs build and run it, but they do not test it. The
+      # fixture-backed integration package is excluded because it needs a built
+      # coordination server, which is a separate, explicit run.
+      - name: Run core unit tests
+        working-directory: networking
+        run: |
+          go vet ./...
+          go test ./internal/... ./cmd/...
+
+      # The Linux credential provider talks to the Secret Service, so proving it
+      # round-trips needs a session bus and an unlocked keyring. Without them the
+      # provider reports itself unavailable, which the suite already covers; with
+      # them the round-trip runs instead of skipping. This step is best-effort on
+      # purpose: the tests decide, not the setup.
+      - name: Round-trip a credential through the Linux keyring
+        working-directory: networking
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsecret-tools gnome-keyring dbus-x11
+          dbus-run-session -- bash -lc '
+            set -u
+            eval "$(printf %s "unlock" | gnome-keyring-daemon --unlock --daemonize 2>/dev/null || true)"
+            export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
+            go test ./internal/secret/ -run SecretService -v
+          '
 
   package:
     name: ${{ matrix.name }}
