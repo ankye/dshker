@@ -250,6 +250,16 @@ func TestHeadlessCLIOperatesTheCore(t *testing.T) {
 	if !strings.Contains(stdout, "starting") {
 		t.Fatalf("dsh start answered %s", stdout)
 	}
+	// The child treats --patch as a required file, so the command that names it
+	// has to create it: a headless host that starts a child which cannot read its
+	// overlay is a host that never serves anything.
+	overlay, overlayErr := os.ReadFile(filepath.Join(state, "no-overlay.yml"))
+	if overlayErr != nil {
+		t.Fatalf("the headless start left no overlay: %v", overlayErr)
+	}
+	if strings.TrimSpace(string(overlay)) != "[]" {
+		t.Fatalf("overlay = %q", overlay)
+	}
 	announced := ""
 	for attempt := 0; attempt < 100 && announced == ""; attempt++ {
 		stdout, _, _ = runCLICommand(t, binary, "status", "--state", state, "--json")

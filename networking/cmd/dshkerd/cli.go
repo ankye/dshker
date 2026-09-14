@@ -477,10 +477,26 @@ func runDshStart(args []string, stdout io.Writer, stderr io.Writer) int {
 	if len(request.PnpmPrefixArguments) == 0 {
 		request.PnpmPrefixArguments = []string{}
 	}
-	if request.DiagnosticsPatchPath == "" {
+	namedPatch := request.DiagnosticsPatchPath != ""
+	if !namedPatch {
 		// A launch without an overlay is legitimate, and the core requires an
 		// absolute path, so the state directory names the file it would read.
 		request.DiagnosticsPatchPath = filepath.Join(stateDirectory, "no-overlay.yml")
+	}
+	if !namedPatch {
+		// The child treats --patch as a required file: a missing one is a
+		// misconfiguration, not "no overlay". This command named the file, so this
+		// command creates it -- the same empty overlay the desktop shell writes for
+		// the profile it starts. A patch the caller named is the caller's file and
+		// is left exactly as it is.
+		if err := os.MkdirAll(stateDirectory, 0o700); err != nil {
+			return fail(stderr, err)
+		}
+		if _, statErr := os.Stat(request.DiagnosticsPatchPath); os.IsNotExist(statErr) {
+			if writeErr := os.WriteFile(request.DiagnosticsPatchPath, []byte("[]\n"), 0o600); writeErr != nil {
+				return fail(stderr, writeErr)
+			}
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
