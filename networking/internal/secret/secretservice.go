@@ -20,10 +20,20 @@ import (
 // store_linux.go is the file that binds it to the tool, and a machine without the
 // tool has no provider at all.
 const (
-	secretServiceTool      = "secret-tool"
-	secretServiceSchema    = "dshkerd"
-	secretServiceAttribute = "key"
+	secretServiceTool         = "secret-tool"
+	secretServiceSchema       = "dshkerd"
+	secretServiceAttribute    = "service"
+	secretServiceKeyAttribute = "key"
 )
+
+// secretServiceAttributes renders the item's identity as secret-tool spells it:
+// attributes and values in pairs, so the schema names the service and the key
+// names the item. Passing a bare schema name is refused by the tool itself
+// ("must specify attributes and values in pairs"), which is how the live Linux
+// run caught this the first time it was exercised.
+func secretServiceAttributes(key string) []string {
+	return []string{secretServiceAttribute, secretServiceSchema, secretServiceKeyAttribute, key}
+}
 
 // secretServiceRunner runs one tool invocation and returns its streams. It is a
 // seam: production wires exec.Command in, tests record what was asked.
@@ -37,7 +47,7 @@ type secretServiceStore struct {
 // stored base64-encoded — a text channel would otherwise mangle binary key
 // material — and the trailing newline the tool may add is trimmed.
 func (store secretServiceStore) Get(key string) ([]byte, error) {
-	stdout, stderr, err := store.run("", "lookup", secretServiceSchema, secretServiceAttribute, key)
+	stdout, stderr, err := store.run("", append([]string{"lookup"}, secretServiceAttributes(key)...)...)
 	if err != nil {
 		return nil, classifySecretServiceFailure(stderr, err)
 	}
@@ -53,7 +63,8 @@ func (store secretServiceStore) Get(key string) ([]byte, error) {
 // commit is the store itself: a failed write leaves the previous value in place.
 func (store secretServiceStore) Set(key string, value []byte) error {
 	encoded := base64.StdEncoding.EncodeToString(value)
-	_, stderr, err := store.run(encoded, "store", "--label", secretServiceLabel(key), secretServiceSchema, secretServiceAttribute, key)
+	storeArguments := append([]string{"store", "--label", secretServiceLabel(key)}, secretServiceAttributes(key)...)
+	_, stderr, err := store.run(encoded, storeArguments...)
 	if err != nil {
 		if classified := classifySecretServiceFailure(stderr, err); errors.Is(classified, ErrUnavailable) {
 			return classified
@@ -66,7 +77,7 @@ func (store secretServiceStore) Set(key string, value []byte) error {
 // Delete removes one item, and deleting an absent key succeeds: the tool reports
 // "no such item" as a failure, which is the state the caller asked for.
 func (store secretServiceStore) Delete(key string) error {
-	_, stderr, err := store.run("", "clear", secretServiceSchema, secretServiceAttribute, key)
+	_, stderr, err := store.run("", append([]string{"clear"}, secretServiceAttributes(key)...)...)
 	if err != nil {
 		if classified := classifySecretServiceFailure(stderr, err); errors.Is(classified, ErrMissing) {
 			return nil
@@ -88,17 +99,21 @@ type exitCoder interface {
 }
 
 // classifySecretServiceFailure maps a tool failure onto the package's codes.
-// "No such item" is exit status 1 with nothing on either stream; a keyring that
-// cannot be reached is a missing provider rather than a damaged item, which
-// matters most on a machine with no desktop session and therefore no session
-// bus; anything else is a read failure.
+// "No such item" is exit status 1 — the tool's own answer for a lookup that
+// found nothing, whatever it prints alongside it; a keyring that cannot be
+// reached is a missing provider rather than a damaged item, which matters most on
+// a machine with no desktop session and therefore no session bus; anything else
+// is a read failure.
 func classifySecretServiceFailure(stderr string, err error) error {
-	var coder exitCoder
-	if errors.As(err, &coder) && coder.ExitCode() == 1 && strings.TrimSpace(stderr) == "" {
-		return ErrMissing
-	}
+	// A keyring that cannot be reached is checked first, because the tool reports
+	// it with the same exit status as a missing item: the machine has no provider,
+	// which is a different answer from "this credential was never stored".
 	if noSessionBus(stderr) {
 		return ErrUnavailable
+	}
+	var coder exitCoder
+	if errors.As(err, &coder) && coder.ExitCode() == 1 {
+		return ErrMissing
 	}
 	return ErrRead
 }

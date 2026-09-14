@@ -31,10 +31,10 @@ func (tool *recorder) run(stdin string, arguments ...string) (string, string, er
 
 func (tool *recorder) store() secretServiceStore { return secretServiceStore{run: tool.run} }
 
-// TestSecretServiceArgumentsAreTheContract pins the invocation: the schema and
-// the key are the item's identity, the label is what a keyring browser shows,
-// and a write carries the value on stdin rather than in argv where any process
-// listing could read it.
+// TestSecretServiceArgumentsAreTheContract pins the invocation: the attributes
+// are the item's identity and secret-tool takes them in pairs, the label is what
+// a keyring browser shows, and a write carries the value on stdin rather than in
+// argv where any process listing could read it.
 func TestSecretServiceArgumentsAreTheContract(t *testing.T) {
 	tool := &recorder{}
 	if err := tool.store().Set("device.p12", []byte{0x00, 0xff, 0x10}); err != nil {
@@ -43,7 +43,15 @@ func TestSecretServiceArgumentsAreTheContract(t *testing.T) {
 	if len(tool.calls) != 1 {
 		t.Fatalf("calls = %v", tool.calls)
 	}
-	want := []string{"store", "--label", "dshkerd device.p12", secretServiceSchema, secretServiceAttribute, "device.p12"}
+	want := []string{
+		"store",
+		"--label",
+		"dshkerd device.p12",
+		"service",
+		"dshkerd",
+		"key",
+		"device.p12",
+	}
 	if strings.Join(tool.calls[0], " ") != strings.Join(want, " ") {
 		t.Fatalf("store arguments = %v", tool.calls[0])
 	}
@@ -58,7 +66,7 @@ func TestSecretServiceArgumentsAreTheContract(t *testing.T) {
 	if _, err := tool.store().Get("device.p12"); err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	want = []string{"lookup", secretServiceSchema, secretServiceAttribute, "device.p12"}
+	want = []string{"lookup", "service", "dshkerd", "key", "device.p12"}
 	if strings.Join(tool.calls[0], " ") != strings.Join(want, " ") {
 		t.Fatalf("lookup arguments = %v", tool.calls[0])
 	}
