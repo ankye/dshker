@@ -82,6 +82,9 @@ describe('P2P selection memory', () => {
     const { mode } = await import('node:fs/promises').then((fs) =>
       fs.stat(p2pSelectionFilePath(root))
     )
-    expect(mode & 0o077).toBe(0)
+    // POSIX mode bits are the privacy contract the store writes (0o600). Windows
+    // synthesizes them from ACLs, so the bits there do not state ownership and
+    // asserting them would fail every Windows release without proving anything.
+    if (process.platform !== 'win32') expect(mode & 0o077).toBe(0)
   })
 })
