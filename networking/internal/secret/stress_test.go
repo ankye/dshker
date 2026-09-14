@@ -2,6 +2,7 @@ package secret
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sync"
 	"testing"
@@ -13,6 +14,11 @@ import (
 // the same load through the Keychain.
 func TestStressConcurrentStoreOperations(t *testing.T) {
 	store, err := Open(t.TempDir())
+	if errors.Is(err, ErrUnavailable) {
+		// A machine with no provider has nothing to stress; the refusal itself is
+		// pinned by the platform tests.
+		t.Skipf("no credential provider on this machine: %v", err)
+	}
 	if err != nil {
 		t.Fatal(err)
 	}

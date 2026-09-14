@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -29,6 +30,23 @@ func TestConcurrentBidirectionalCalls(t *testing.T) {
 		return data, nil
 	}
 	left, right := rpcPair(t, echo)
+	// A peer admits sixteen calls in flight and refuses beyond that with
+	// p2p.helper_busy, which TestStressHelperBusySaturation pins. Sixteen workers
+	// here is deliberately at that bound, so a refusal is the documented
+	// backpressure rather than a failure: it is retried, and what this test
+	// proves is that every call still round-trips with its own id and payload.
+	call := func(client *Peer, input struct{ Worker, Sequence int }) (json.RawMessage, error) {
+		for attempt := 0; ; attempt++ {
+			result, err := client.Call(client.ctx, "echo", input)
+			if err == nil || !strings.Contains(err.Error(), "p2p.helper_busy") {
+				return result, err
+			}
+			if attempt == 200 {
+				return nil, err
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
 	var workers sync.WaitGroup
 	for _, client := range []*Peer{left, right} {
 		for worker := 0; worker < 8; worker++ {
@@ -37,7 +55,7 @@ func TestConcurrentBidirectionalCalls(t *testing.T) {
 				defer workers.Done()
 				for sequence := 0; sequence < 50; sequence++ {
 					input := struct{ Worker, Sequence int }{worker, sequence}
-					result, err := client.Call(client.ctx, "echo", input)
+					result, err := call(client, input)
 					if err != nil {
 						t.Errorf("call %d/%d: %v", worker, sequence, err)
 						return
