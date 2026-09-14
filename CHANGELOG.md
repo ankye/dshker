@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.31 — 2026-09-14
 
 - The Launcher now runs **one background process** instead of two. The headless
   core that already holds your device credential and your device catalog also
@@ -23,6 +23,20 @@ serve` publishes its own private endpoint and answers the whole method table,
   live. The file keeps its format and location, an existing install is read
   exactly as before, and a machine whose core cannot start reports its
   configuration as unavailable instead of writing it a second way.
+
+- Your managed Harness installations are the **core's** now too. Registering a
+  toolchain, cloning a Harness, switching its revision and starting it ask the core
+  for one operation and keep only what it answers with, so a machine whose core
+  cannot start reports these operations as unavailable instead of quietly running
+  Git itself. The rules that protect a checkout — the pinned Git, the mirror, the
+  worktree, and the refusal to follow a branch that moved or a tag that changed —
+  live in one place instead of two, and behave exactly as before.
+- Fixed a defect that stopped every **headless host** from hosting anything:
+  `dshkerd dsh start` told the DSH child to read an overlay file it never created,
+  so the child exited immediately (`runtime.child_crashed`) and the host had no
+  address to give. The command that names the file now creates it — an empty
+  overlay, the same one the desktop app writes for its own profile — while a
+  patch you name yourself is left exactly as it is.
 
 ## 0.1.30 — 2026-09-14
 
