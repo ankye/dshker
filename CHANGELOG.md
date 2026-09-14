@@ -7,7 +7,7 @@
   different device: pairs, pins and catalog rows still referenced the identity
   that had just been replaced, the coordinator's list carried entries naming
   neither side of either machine, and both ends could wedge on the other's stale
-  identity — the outage this release's other fixes exist to unwind. The key now
+  identity — the wedge the same release's other P2P fixes exist to unwind. The key now
   lives in the core's own store beside the data root, like a hardware address:
   one identity per machine, reused for every network and every account, and it
   survives losing the credential record, which is the usual way a machine
