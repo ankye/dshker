@@ -30,16 +30,15 @@ export function exitedWithin(exit: Promise<void>, milliseconds: number): Promise
   })
 }
 
-// The packaged helper directory still holds two executables and two manifests —
-// dshker-peer (manifest.json, frozen schema) and dshkerd (dshkerd-manifest.json) —
-// because the peer binary stays packaged until P6 deletes it. Only dshkerd is
-// started now. Both runtime-verify their own bytes.
-export async function verifyHelperResource(
-  root: string,
-  name: 'dshker-peer' | 'dshkerd'
-): Promise<string> {
-  if (name !== 'dshker-peer' && name !== 'dshkerd')
-    throw new PeerHelperError('p2p.invalid_arguments')
+// The packaged directory holds one executable and one manifest: dshkerd, the
+// whole core. dshker-peer is neither built nor packaged any more — it was kept
+// only until the core answered the peer table itself — so a package that still
+// carried it would be shipping a binary nothing starts.
+//
+// The executable runtime-verifies its own bytes against the digest recorded when
+// it was built, which is what makes a tampered or half-signed package refuse
+// instead of starting.
+export async function verifyCoreExecutable(root: string): Promise<string> {
   if (
     !isAbsolute(root) ||
     !['darwin', 'linux', 'win32'].includes(process.platform) ||
@@ -48,9 +47,9 @@ export async function verifyHelperResource(
     throw new PeerHelperError('p2p.helper_platform_unsupported')
   const target = `${process.platform}-${process.arch}`
   const directory = join(root, 'p2p', target)
-  const fileName = process.platform === 'win32' ? name + '.exe' : name
+  const fileName = process.platform === 'win32' ? 'dshkerd.exe' : 'dshkerd'
   const executable = join(directory, fileName)
-  const manifestFile = name === 'dshkerd' ? 'dshkerd-manifest.json' : 'manifest.json'
+  const manifestFile = 'dshkerd-manifest.json'
   try {
     const info = await lstat(executable)
     if (!info.isFile() || info.isSymbolicLink()) throw new PeerHelperError('p2p.helper_invalid')

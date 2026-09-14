@@ -126,20 +126,20 @@ async function peerHelperIntegrityHolds(releaseDir, manifest) {
     if (directories.length === 0) return false
     for (const entry of directories) {
       const directory = path.join(root, entry.name)
-      let helperManifest
+      let coreManifest
       try {
-        helperManifest = JSON.parse(await readFile(path.join(directory, 'manifest.json'), 'utf8'))
+        coreManifest = JSON.parse(await readFile(path.join(directory, 'dshkerd-manifest.json'), 'utf8'))
       } catch {
         return false
       }
-      if (helperManifest.target !== entry.name) return false
+      if (coreManifest.target !== entry.name) return false
       let binary
       try {
-        binary = await readFile(path.join(directory, helperManifest.file))
+        binary = await readFile(path.join(directory, coreManifest.file))
       } catch {
         return false
       }
-      if (createHash('sha256').update(binary).digest('hex') !== helperManifest.sha256) return false
+      if (createHash('sha256').update(binary).digest('hex') !== coreManifest.sha256) return false
     }
   }
   return true

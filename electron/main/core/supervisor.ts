@@ -5,7 +5,7 @@ import { isAbsolute } from 'node:path'
 import { authenticatePeer, readPeerLine } from '../p2p/bootstrap'
 import { createPeerChannel, removePeerChannel } from '../p2p/private-channel'
 import { PeerRpc, type PeerMainHandler } from '../p2p/rpc'
-import { stopChild, verifyHelperResource } from '../p2p/supervisor'
+import { stopChild, verifyCoreExecutable } from '../p2p/supervisor'
 import { exactPeerObject, PeerHelperError } from '../p2p/wire'
 
 /** The core's argv: `--data` always, `--catalog` only when the shell owns a settings root. */
@@ -118,7 +118,7 @@ export class CoreSupervisor {
         throw new PeerHelperError('p2p.invalid_arguments')
     }
 
-    const executable = await verifyHelperResource(options.resourcesRoot, 'dshkerd')
+    const executable = await verifyCoreExecutable(options.resourcesRoot)
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
     const { directory, path: socketPath } = await createPeerChannel()
     const child = spawn(executable, coreArguments(options), {

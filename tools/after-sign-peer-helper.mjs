@@ -3,13 +3,13 @@ import { readFile, writeFile, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 
 /**
- * Recomputes the peer helper manifest digest after code signing.
+ * Recomputes the core executable manifest digest after code signing.
  *
- * The manifest is written when the Go helper is built, but electron-builder then
+ * The manifest is written when the Go core is built, but electron-builder then
  * code-signs every executable inside the package. Signing rewrites the binary, so
  * the recorded digest no longer described the file that shipped. The launcher
- * verifies that digest before it will start the helper, so it refused with
- * p2p.helper_integrity_failed: the app opened normally, the helper never ran, and
+ * verifies that digest before it will start the core, so it refused with
+ * p2p.helper_integrity_failed: the app opened normally, the core never ran, and
  * every P2P feature was silently dead in every packaged build.
  *
  * The check itself is worth keeping, so the manifest is corrected here rather than
@@ -24,8 +24,8 @@ export default async function afterSign(context) {
   try {
     targets = await readdir(root, { withFileTypes: true })
   } catch {
-    // A package built without the helper has nothing to correct; the packaging
-    // contract test is what guarantees the helper is present.
+    // A package built without the core has nothing to correct; the packaging
+    // contract test is what guarantees it is present.
     return
   }
 
@@ -39,9 +39,9 @@ export default async function afterSign(context) {
     } catch {
       throw new Error(`peer helper directory unreadable for ${entry.name}`)
     }
-    // Every manifest in the target directory is resealed: the frozen peer
-    // helper's manifest.json and the core's dshkerd-manifest.json both describe
-    // code-signed executables whose digest signing invalidates.
+    // Every manifest in the target directory is resealed: the core's
+    // dshkerd-manifest.json describes a code-signed executable whose digest
+    // signing invalidates.
     for (const file of files) {
       if (!file.isFile() || !file.name.endsWith('.json')) continue
       const manifestPath = join(directory, file.name)

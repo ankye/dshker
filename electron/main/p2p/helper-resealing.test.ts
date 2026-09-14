@@ -6,14 +6,14 @@ import { createHash } from 'node:crypto'
 import afterSign from '../../../tools/after-sign-peer-helper.mjs'
 
 /**
- * The helper manifest is written when the Go binary is built, but electron-builder
+ * The core manifest is written when the Go binary is built, but electron-builder
  * then code-signs every executable in the package, which rewrites the binary. The
  * recorded digest therefore described a file that no longer shipped, and since the
  * launcher verifies that digest before starting the helper, it refused: the app
  * opened normally, the helper never ran, and P2P was silently dead in every
  * packaged build with nothing failing at build time.
  */
-describe('peer helper manifest resealing', () => {
+describe('core executable manifest resealing', () => {
   async function packaged(options: {
     readonly binary: string
     readonly recordedDigest: string
@@ -24,10 +24,10 @@ describe('peer helper manifest resealing', () => {
     const target = options.target ?? 'darwin-arm64'
     const directory = join(resources, 'p2p', target)
     await mkdir(directory, { recursive: true })
-    await writeFile(join(directory, 'dshker-peer'), options.binary)
+    await writeFile(join(directory, 'dshkerd'), options.binary)
     await writeFile(
-      join(directory, 'manifest.json'),
-      `${JSON.stringify({ version: 1, target, file: 'dshker-peer', sha256: options.recordedDigest })}\n`
+      join(directory, 'dshkerd-manifest.json'),
+      `${JSON.stringify({ version: 1, target, file: 'dshkerd', sha256: options.recordedDigest })}\n`
     )
     return {
       context: {
@@ -36,7 +36,7 @@ describe('peer helper manifest resealing', () => {
         packager: { appInfo: { productFilename: 'Fixture' } }
       },
       directory,
-      manifestPath: join(directory, 'manifest.json')
+      manifestPath: join(directory, 'dshkerd-manifest.json')
     }
   }
 
@@ -62,7 +62,7 @@ describe('peer helper manifest resealing', () => {
     expect(JSON.parse(await readFile(manifestPath, 'utf8'))).toEqual({
       version: 1,
       target: 'darwin-arm64',
-      file: 'dshker-peer',
+      file: 'dshkerd',
       sha256: digestOf('signed-bytes')
     })
   })
@@ -85,8 +85,8 @@ describe('peer helper manifest resealing', () => {
       recordedDigest: digestOf('signed-bytes')
     })
     await writeFile(
-      join(directory, 'manifest.json'),
-      `${JSON.stringify({ version: 1, target: 'win32-x64', file: 'dshker-peer', sha256: 'x' })}\n`
+      join(directory, 'dshkerd-manifest.json'),
+      `${JSON.stringify({ version: 1, target: 'win32-x64', file: 'dshkerd', sha256: 'x' })}\n`
     )
     await expect(afterSign(context)).rejects.toThrow(/target/u)
   })

@@ -14,7 +14,6 @@ if (!['darwin', 'linux', 'win32'].includes(platform) || !['arm64', 'x64'].includ
 const root = fileURLToPath(new URL('..', import.meta.url))
 const target = `${platform}-${arch}`
 const directory = resolve(root, 'build/p2p', target)
-const file = platform === 'win32' ? 'dshker-peer.exe' : 'dshker-peer'
 await mkdir(directory, { recursive: true })
 const run = promisify(execFile)
 const environment = {
@@ -24,13 +23,10 @@ const environment = {
   CGO_ENABLED: '0'
 }
 const cwd = resolve(root, 'networking')
-// Both binaries share one target directory: dshker-peer is the frozen helper,
-// dshkerd is the core the supervisor spawns. Each has its own manifest so the
-// peer runtime's manifest schema is untouched.
-const artifacts = [
-  { package: './cmd/dshker-peer', file: 'dshker-peer', manifest: 'manifest.json' },
-  { package: './cmd/dshkerd', file: 'dshkerd', manifest: 'dshkerd-manifest.json' }
-]
+// One binary ships now: dshkerd is the whole core, and the shell starts nothing
+// else. dshker-peer is no longer built or packaged — it was kept only until the
+// core answered the peer table itself, which it has since task 3.7.
+const artifacts = [{ package: './cmd/dshkerd', file: 'dshkerd', manifest: 'dshkerd-manifest.json' }]
 for (const artifact of artifacts) {
   const outputName = platform === 'win32' ? artifact.file + '.exe' : artifact.file
   const output = resolve(directory, outputName)
