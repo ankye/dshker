@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.37 — 2026-09-14
+
+- A typed refusal from the core no longer kills the private channel. The frame
+  decoder only admitted `p2p.*` error codes, so a refusal such as
+  `runtime.port_in_use` failed decoding, closed the channel, and reached the user
+  as a bare `p2p.protocol_mismatch` — taking every other core operation down with
+  it until restart. The decoder now admits every family the core declares
+  (`p2p.`, `managed.`, `launcher.`, `runtime.`, `remote.`), so the real reason
+  surfaces and the channel survives the failure.
+
 ## 0.1.36 — 2026-09-14
 
 - A failed sign-in, join or start now leaves the real error behind. Anything that was
