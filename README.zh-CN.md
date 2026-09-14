@@ -4,22 +4,19 @@
 
 # DSHKer Launcher
 
-一个桌面入口，连接本地与远程的 DeepSeek Harness 工作空间。
+**把 DeepSeek Harness 当应用来用。** 装好、点一下开始，就能开工——在这台电脑上，或在你任何一台其它电脑上，同一个窗口里。
 
 [English](README.md) · [使用说明](docs/usage.zh-CN.md) · [产品截图](docs/screenshots.md) · [最新版本](https://github.com/ankye/dshker/releases/latest) · [GitHub Actions 构建](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
-## 核心功能
+## 它能为你做什么
 
-- **多台电脑，一个工作台**：管理可信 SSH 连接，测试完整 DSH 会话链路，按需打开各电脑运行页签并在本地与远程间切换，无需手动复制 DSH Web 认证凭据。
-- **一键启动 DSH Web**：准备内置 Harness 初始版本、选择内核提交，并启动标准 DSH Web 命令。
-- **内核版本管理**：刷新远端历史、查看提交，并明确切换 Launcher 管理的 DSH 内核。
-- **扩展管理**：查看已安装扩展，并浏览 Awesome DSH Plugin 精选目录。
-- **控制台与按需运行页签**：查看精确进程输出、终止受管进程，始终保留本地页签；在运行页点击“+”并选择可用设备，才为对应电脑创建远程页签。
-- **Token 消耗汇总**：只读汇总原生 DSH 会话与每日模型数据，不写入原生 DSH 数据。
-- **清晰的数据边界**：Harness、插件、预设、设置与原生 `~/.dsh` 数据分别保存在声明目录，应用不会静默替换它们。
-- **自托管远程工作台**：通过[你自己托管的协调服务器](https://github.com/ankye/dshker-server)把你的电脑互联；同一网络内的设备自动配对，每台电脑使用隔离的浏览器会话，远端目录与工程通过授权链路浏览。
-- **设备管理说清每一步**：查看网络里有哪些电脑；移除一台时它在其中的配对随之消失，也可以只撤销某一条配对而不动设备；新机器登录即自动登记上线。选过的网络按账号记住，只有一个网络时自动选中；本机已不在当前网络时列表会明确说明，而不是莫名缺席。
-- **单一后台核心，也能无界面运行**：一个核心进程持有私有通道、根目录登记、凭据与整套点对点协议，因此应用只跑一个后台进程而不是两个。同一个二进制也能在没有桌面会话时充当主机：`dshkerd serve`、`dsh start|stop`、`status`、`pair`、`connect`、`proxy`、`service configure`、`call`。
+- **点一下就开始。** Launcher 替你准备好并启动标准 DSH Web 会话：不用手动装东西，不用记命令，也不用一直开着一个终端窗口。
+- **换版本不冒险。** 看清有哪些内核可用，想用新的就切换，出问题了再切回来。
+- **把所有电脑放进一个窗口。** 把已经在用的机器加进来，每台在“本地”旁边各占一个页签——不用手抄 DSH 凭据，也不用把端口开到公网。
+- **连接，但不暴露自己。** 设备之间逐台认证：哪些电脑可以互相访问由你决定，远程会话只能浏览你授权给它的目录。
+- **看得见在发生什么。** 控制台跟着真实进程输出，Token 消耗汇总直接读 DSH 自己写的日志。
+- **数据始终是你的。** Harness、插件、预设、设置与原生 `~/.dsh` 目录都留在原地：Launcher 只是沿用，绝不静默替换或重置。
+- **旧机器自己收尾。** 在新电脑上登录就会自动登记上线；移除一台会带走它的配对；你选过的网络会被记住；一台已经不在当前网络里的电脑会明确说明，而不是悄悄消失。
 
 DSHKer Launcher 是面向 macOS 与 Windows 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面启动器。
 
@@ -72,6 +69,12 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 同一个核心进程也能**完全脱离桌面会话运行**，因此只能通过 SSH 访问的机器同样可以作为可用的主机。`dshkerd serve` 会自行发布私有端点并应答整张方法表；`dshkerd dsh start`／`dshkerd dsh stop` 以独立 subject 运行 DSH Web 子进程；`status`、`pair`、`connect`、`proxy`、`service configure` 是应用同名操作的命令行形式，`call` 可调用任意已发布方法并原样输出拒绝码，便于脚本化。应用本身不受影响——仍然把核心作为自己的子进程启动，并保有自己的启动 subject。
 
 详见[使用说明](docs/p2p-connections.zh-CN.md)与[实现清单](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md)。
+
+## 技术架构
+
+- **单一后台核心，也能无界面运行。** 一个核心进程持有私有通道、根目录登记、凭据与整套点对点协议，因此应用只跑一个后台进程而不是两个。同一个二进制也能在没有桌面会话时充当主机：`dshkerd serve`、`dsh start|stop`、`status`、`pair`、`connect`、`proxy`、`service configure`、`call`。
+- **自托管远程工作台。** 通过[你自己托管的协调服务器](https://github.com/ankye/dshker-server)把你的电脑互联：同一网络内的设备自动配对，每台电脑使用隔离的浏览器会话，远端目录与工程通过授权链路浏览。
+- **SSH 通路。** 另一条远程通路是 **SSH 隧道**，把 HTTP 与 WebSocket 流量转发到远端 DSH 真实的回环地址与端口。
 
 ## 安装
 

@@ -4,24 +4,21 @@
 
 # DSHKer Launcher
 
-One desktop home for your local and remote DeepSeek Harness sessions.
+**Run DeepSeek Harness like an app.** Install it, press start, and get to work — on this computer or on any of your others, from one window.
 
 [简体中文](README.zh-CN.md) · [Usage guide](docs/usage.en.md) · [Product screenshots](docs/screenshots.md) · [Latest release](https://github.com/ankye/dshker/releases/latest) · [GitHub Actions builds](https://github.com/ankye/dshker/actions/workflows/package.yml)
 
-## Core features
+## What it does for you
 
-- **Multiple computers, one workspace** — manage trusted SSH connections, test the full DSH session path, and open per-computer Run tabs on demand alongside Local without manually copying DSH Web credentials.
-- **One-click DSH Web** — prepare the bundled Harness seed, select a core commit, and start the standard DSH Web command.
-- **Version control** — refresh remote history, inspect commits, and explicitly switch the managed DSH core.
-- **Extension management** — see installed extensions and browse the curated Awesome DSH Plugin catalog.
-- **Console and on-demand runtime tabs** — follow exact process output, stop the managed process, and keep Local available while creating a remote tab only when you choose a ready workspace from Run’s **+** picker.
-- **Token usage** — read session and daily model totals from native DSH logs without writing native DSH data.
-- **Safe ownership boundaries** — keep Harness, plugins, presets, settings, and native `~/.dsh` data in their declared roots without silently replacing them.
-- **Self-hosted remote workbench** — connect your own computers through a [coordinator you host](https://github.com/ankye/dshker-server): devices in the same network pair themselves, each computer gets an isolated browser session, and remote directories and projects are browsed over the authorized path.
-- **Device management that explains itself** — see which computers a network holds, remove one and the pairs it had there go with it, revoke a single pairing without touching the device, and let a new machine enrol itself when you sign in. The network you chose is remembered per account, a single network is selected for you, and a machine that is no longer in the network you are looking at says so instead of vanishing.
-- **One background core, also headless** — a single core process owns the private channel, the root registry, credentials and the whole peer protocol, so the app runs one background process rather than two. The same binary hosts without a desktop session: `dshkerd serve`, `dsh start|stop`, `status`, `pair`, `connect`, `proxy`, `service configure` and `call`.
+- **Start in one click.** The Launcher prepares and runs the standard DSH Web session for you: nothing to install by hand, no command to remember, and no terminal window to keep open.
+- **Move between versions safely.** See which cores are available, switch to a newer one when you want it, and go back when something misbehaves.
+- **Put all your computers in one window.** Add the machines you already use and open each as a tab next to Local — no DSH credentials copied by hand, no ports opened to the internet.
+- **Connect without exposing yourself.** Machines are authenticated one by one: you decide which computers may reach each other, and a remote session can only browse the folders you grant it.
+- **See what is going on.** A console follows the real process output, and Token usage totals come from the logs DSH already writes.
+- **Your data stays yours.** Harness, plugins, presets, settings and your native `~/.dsh` folders stay where they are: the Launcher reuses them and never silently replaces or resets them.
+- **Old machines clean up after themselves.** Signing in on a new computer enrols it automatically, removing one takes its pairings with it, the network you picked is remembered, and a computer that is no longer part of the network you are looking at says so instead of quietly disappearing.
 
-DSHKer Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows.
+DSHKer Launcher is a desktop app for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows.
 
 The Launcher never replaces, moves, or resets native DSH state. Your existing `$DSH_HOME` or `~/.dsh` remains owned by DeepSeek Harness and is reused when you change the selected core version.
 
@@ -123,6 +120,20 @@ subject.
 
 See the [user guide](docs/p2p-connections.md) and the
 [implementation checklist](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md).
+
+## How it works
+
+- **One background core, also headless.** A single core process owns the private
+  channel, the root registry, credentials and the whole peer protocol, so the app runs
+  one background process rather than two. The same binary also hosts with no desktop
+  session at all: `dshkerd serve`, `dsh start|stop`, `status`, `pair`, `connect`,
+  `proxy`, `service configure` and `call`.
+- **Self-hosted remote workbench.** Connect your own computers through a
+  [coordinator you host](https://github.com/ankye/dshker-server): devices in the same
+  network pair themselves, each computer gets an isolated browser session, and remote
+  directories and projects are browsed over the authorized path.
+- **SSH path.** The other remote path is an **SSH tunnel**, forwarding HTTP and
+  WebSocket traffic to the remote DSH's real loopback address and port.
 
 ## Install
 
