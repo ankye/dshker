@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type {
   P2PCatalogView,
   P2PUserView,
@@ -167,5 +168,47 @@ export function projectPeerConnections(snapshot: {
   return {
     error: snapshot.error,
     peers: snapshot.peers.map((peer) => projectPeerConnection(peer.serviceId, peer.state))
+  }
+}
+
+export function memberAsPair(computer: {
+  connectionId: string
+  serviceId: string
+  displayName: string
+  pairId: string
+  networkId: string
+  localDeviceId: string
+  remoteDeviceId: string
+  userId: string
+  localPublicKey: string
+  remotePublicKey: string
+  pairRevision: number
+  pairState: 'active' | 'revoked'
+}) {
+  const fingerprintOf = (base64: string): string => {
+    const digest = createHash('sha256').update(Buffer.from(base64, 'base64')).digest('hex')
+    return (digest.slice(0, 32).match(/.{4}/g) ?? []).join(' ')
+  }
+  return {
+    pairId: computer.pairId,
+    networkId: computer.networkId,
+    state: 'active' as const,
+    revision: computer.pairRevision,
+    expiresAt: 0,
+    initiator: {
+      deviceId: computer.localDeviceId,
+      userId: computer.userId,
+      name: computer.displayName,
+      fingerprint: fingerprintOf(computer.localPublicKey),
+      presence: 'offline' as const
+    },
+    target: {
+      deviceId: computer.remoteDeviceId,
+      userId: computer.userId,
+      name: computer.displayName,
+      fingerprint: fingerprintOf(computer.remotePublicKey),
+      presence: 'offline' as const
+    },
+    localIsInitiator: true
   }
 }

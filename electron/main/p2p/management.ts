@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { hostname } from 'node:os'
 import { isAbsolute, join } from 'node:path'
@@ -9,12 +9,14 @@ import { PeerCatalog } from './catalog'
 import { PeerConnections } from './connections'
 import { PeerCredentialStore, type PeerCredential } from './credentials'
 import { PeerEnrollment } from './enrollment'
+import { enrollWhenMissing } from './enrollment-bootstrap'
 import { PeerPairing } from './pairing'
 import type { PeerPairMember, PeerPairMemberDevice } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
+import { memberAsPair } from './management-projection'
 import { PeerAutoConnect } from './auto-connect'
 import type { CoreCatalogPort } from '../core/catalog'
 import type { CoreSecretPort } from '../core/secrets'
@@ -128,6 +130,35 @@ export class PeerManagement {
     for (const service of snapshot.record.services) {
       if (this.#lifetime.signal.aborted) break
       try {
+        await enrollWhenMissing(
+          {
+            credentials: this.#credentials,
+            signIn: async (serviceId, signal) => {
+              const session = await this.#ready(signal)
+              await session.services.activate(serviceId, this.#signal(signal))
+              await this.#restoreUserSession(serviceId, session, this.#signal(signal)).catch(
+                () => undefined
+              )
+              const account = await this.#credentials
+                .loadUserSession(serviceId)
+                .catch(() => undefined)
+              return account !== undefined
+            },
+            networks: (serviceId, signal) =>
+              this.#account(serviceId, signal, (accounts, active) =>
+                accounts.listNetworks(serviceId, active)
+              ),
+            createNetwork: (serviceId, signal) =>
+              this.#account(serviceId, signal, (accounts, active) =>
+                accounts.createNetwork(serviceId, hostname(), active)
+              ),
+            register: (serviceId, networkId, name) =>
+              this.registerDevice(serviceId, networkId, name, this.#lifetime.signal)
+          },
+          service.serviceId,
+          hostname(),
+          this.#lifetime.signal
+        )
         const session = await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
         this.#setSession(service.serviceId, 'online', '')
         // Devices in the same network are already authorized to reach each other,
@@ -934,46 +965,4 @@ function remoteSide(
 /** Compares two base64 public keys by their bytes rather than their encoding. */
 function samePublicKey(left: string, right: string): boolean {
   return Buffer.from(left, 'base64').equals(Buffer.from(right, 'base64'))
-}
-
-function memberAsPair(computer: {
-  connectionId: string
-  serviceId: string
-  displayName: string
-  pairId: string
-  networkId: string
-  localDeviceId: string
-  remoteDeviceId: string
-  userId: string
-  localPublicKey: string
-  remotePublicKey: string
-  pairRevision: number
-  pairState: 'active' | 'revoked'
-}) {
-  const fingerprintOf = (base64: string): string => {
-    const digest = createHash('sha256').update(Buffer.from(base64, 'base64')).digest('hex')
-    return (digest.slice(0, 32).match(/.{4}/g) ?? []).join(' ')
-  }
-  return {
-    pairId: computer.pairId,
-    networkId: computer.networkId,
-    state: 'active' as const,
-    revision: computer.pairRevision,
-    expiresAt: 0,
-    initiator: {
-      deviceId: computer.localDeviceId,
-      userId: computer.userId,
-      name: computer.displayName,
-      fingerprint: fingerprintOf(computer.localPublicKey),
-      presence: 'offline' as const
-    },
-    target: {
-      deviceId: computer.remoteDeviceId,
-      userId: computer.userId,
-      name: computer.displayName,
-      fingerprint: fingerprintOf(computer.remotePublicKey),
-      presence: 'offline' as const
-    },
-    localIsInitiator: true
-  }
 }
