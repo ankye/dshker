@@ -99,7 +99,7 @@ describe('member catalog rewrite', () => {
     expect(f.committed()?.computers).toEqual([])
   })
 
-  it('drops this service rows the coordinator no longer reports, and keeps other services', async () => {
+  it('marks this service rows the coordinator no longer reports as revoked, and keeps other services', async () => {
     const stale = computer({
       remoteDeviceId: '6'.repeat(32),
       connectionId: '6'.repeat(32),
@@ -113,12 +113,35 @@ describe('member catalog rewrite', () => {
     })
     const f = fixture([stale, other])
     await recordMembers(f.catalog, serviceId, credential, [member()])
+    const committed = f.committed()?.computers ?? []
+    expect(committed.map((value) => String(value.remoteDeviceId)).sort()).toEqual([
+      '5'.repeat(32),
+      '6'.repeat(32),
+      '7'.repeat(32)
+    ])
+    // The omitted row is recorded as revoked, not dropped: dropping an active
+    // pair is the transition the catalog's guard refuses, which wedged every
+    // sync once both devices had re-enrolled under new identities.
     expect(
-      f
-        .committed()
-        ?.computers.map((value) => value.remoteDeviceId)
-        .sort()
-    ).toEqual(['5'.repeat(32), '7'.repeat(32)])
+      committed.find((value) => String(value.remoteDeviceId) === '6'.repeat(32))?.pairState
+    ).toBe('revoked')
+    expect(
+      committed.find((value) => String(value.remoteDeviceId) === '5'.repeat(32))?.pairState
+    ).toBe('active')
+  })
+
+  it('does not carry a revoked row into the next rewrite', async () => {
+    const alreadyRevoked = computer({
+      remoteDeviceId: '6'.repeat(32),
+      connectionId: '6'.repeat(32),
+      pairId: '6'.repeat(32),
+      pairState: 'revoked'
+    })
+    const f = fixture([alreadyRevoked])
+    await recordMembers(f.catalog, serviceId, credential, [member()])
+    expect(f.committed()?.computers.map((value) => String(value.remoteDeviceId))).toEqual([
+      '5'.repeat(32)
+    ])
   })
 
   it('admits only an active pair with a positive revision', async () => {

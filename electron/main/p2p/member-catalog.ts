@@ -31,6 +31,16 @@ function samePublicKey(left: string, right: string): boolean {
  * machine as its own peer is dropped wherever it appears: an older build could
  * write one, and it would otherwise survive every rewrite because it belongs to
  * the service being rewritten.
+ *
+ * A row of this service the coordinator's list no longer carries is marked
+ * revoked rather than dropped. Dropping an active pair is exactly what the
+ * catalog's transition guard exists to refuse — a silent loss — so the drop
+ * used to fail the whole commit and wedge every later sync on
+ * p2p.revocation_required (both machines re-enrolling left each side stuck on
+ * the other's old identity). The server's omission is itself the evidence the
+ * authorization is gone, so recording it as a revocation converges the catalog
+ * while keeping the loss visible. A revoked row is not carried into later
+ * rewrites, so it disappears on the next sync instead of accumulating.
  */
 export async function recordMembers(
   catalog: PeerCatalog,
@@ -76,6 +86,12 @@ export async function recordMembers(
       pairRevision: member.revision,
       pairState: 'active'
     })
+  }
+  for (const computer of saved.record.computers) {
+    if (computer.serviceId !== serviceId || computer.remoteDeviceId === credential.deviceId)
+      continue
+    if (computer.pairState === 'revoked' || recorded.has(computer.connectionId)) continue
+    computers.push({ ...computer, pairState: 'revoked' })
   }
   await catalog.commit(saved.revision, { ...saved.record, computers })
 }
