@@ -87,8 +87,22 @@ export function exactPeerObject(value: unknown, keys: readonly string[]): Record
   return record
 }
 
+/**
+ * Refusal-code families the private channel admits on a frame.
+ *
+ * The core answers with the whole typed vocabulary, not only p2p.*: a launch
+ * that is already running refuses with runtime.operation_in_progress, the root
+ * registry with managed.missing_registry, and the SSH route with
+ * remote.ssh_authentication_failed. These are the same families the core's own
+ * protocol.RefusalFamilies declares, so a code from any of them survives
+ * decoding. A frame carrying one used to fail admission and close the channel,
+ * surfacing the refusal as a bare p2p.protocol_mismatch and taking every other
+ * core operation down with it.
+ */
+const PEER_ERROR_CODE = /^(?:p2p|managed|launcher|runtime|remote)\.[a-z_.]+$/
+
 export function peerErrorCode(value: unknown): value is string {
-  return typeof value === 'string' && /^p2p\.[a-z_.]{1,92}$/.test(value)
+  return typeof value === 'string' && value.length <= 96 && PEER_ERROR_CODE.test(value)
 }
 
 export function decodePeerFrame(text: string): PeerFrame {

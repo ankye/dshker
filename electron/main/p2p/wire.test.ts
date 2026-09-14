@@ -46,4 +46,19 @@ describe('private peer wire admission', () => {
     expect(() => parsePeerJson('['.repeat(14) + '0' + ']'.repeat(14))).toThrow()
     expect(() => decodePeerFrame('{"version":1,"id":1,"method":"","payload":{}}')).toThrow()
   })
+
+  it('admits every refusal family the core answers with', () => {
+    // The core's protocol.RefusalFamilies is the authority: a code outside
+    // p2p.* still has to decode, or the channel dies reporting a mismatch.
+    for (const error of [
+      'p2p.service_busy',
+      'runtime.port_in_use',
+      'managed.missing_registry',
+      'launcher.selection_cancelled',
+      'remote.ssh_authentication_failed'
+    ]) {
+      const frame = { version: 1, id: 5, method: '', payload: {}, error }
+      expect(decodePeerFrame(JSON.stringify(frame))).toEqual(frame)
+    }
+  })
 })
