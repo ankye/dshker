@@ -461,8 +461,7 @@ export class PeerManagement {
     )
   }
   async leaveNetwork(serviceId: string, networkId: string, deviceId: string, signal: AbortSignal) {
-    // Two removals wear one name: leaving (clears this machine's credential, so
-    // it goes through enrollment) and the owner evicting another device.
+    // Leaving clears this machine's credential; evicting another device does not.
     const stored = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
     if (stored?.kind === 'registered' && stored.credential.deviceId === deviceId) {
       return (await this.#ready(signal)).enrollment.leave(
@@ -598,8 +597,8 @@ export class PeerManagement {
     if (!enrollee || enrollee.serviceId !== serviceId) return
     const sync = (): Promise<void> => this.#syncMembers(serviceId, session, enrollee, signal)
     await sync().catch(async (error) => {
-      // This sync is what prunes pairs the coordinator no longer has, so a lock
-      // collision must not silently leave dead rows behind.
+      // This sync prunes pairs the coordinator no longer has: a lock collision
+      // must not drop it.
       if (!(error instanceof PeerHelperError) || error.code !== 'p2p.service_busy') {
         console.error('[p2p] network member sync failed:', error)
         return
@@ -612,13 +611,8 @@ export class PeerManagement {
   /**
    * Re-records the coordinator's pairs as the catalog the Run route renders.
    *
-   * Trust is still network membership, but the network device directory
-   * deliberately withholds credential material: the peer's real public key only
-   * ever reaches this device through `pairs.identity`. Sourcing the catalog from
-   * the pairs is therefore the only correct read — the previous source
-   * (`networks.devices`) carries no key at all, so every member was silently
-   * skipped and the catalog stayed empty while the device directory showed the
-   * computer online.
+   * The network device directory withholds credential material, so this is the
+   * only read that carries the peer's real public key.
    */
   async #syncMembers(
     serviceId: string,
@@ -654,7 +648,12 @@ export class PeerManagement {
   ): Promise<void> {
     const saved = await this.#catalog.inspect()
     if (!saved) throw new PeerHelperError('p2p.not_enabled')
-    const computers = saved.record.computers.filter((computer) => computer.serviceId !== serviceId)
+    // A record naming this machine as its own peer is an artifact of an older build;
+    // it survives every prune otherwise, because it belongs to this service.
+    const computers = saved.record.computers.filter(
+      (computer) =>
+        computer.serviceId !== serviceId && computer.remoteDeviceId !== credential.deviceId
+    )
     const recorded = new Set(computers.map((computer) => computer.connectionId))
     for (const member of members) {
       // The catalog only admits a positive revision and an active pair.

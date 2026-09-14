@@ -11,6 +11,9 @@
 - A single pair can be **revoked** on its own, for when only that pairing should
   end and the device itself should stay. The warning is shown before the write,
   because revoking drops the session immediately and re-pairing never restores it.
+- A stale catalog row that named this machine as **its own peer** (an artifact of an
+  older build) is dropped whenever the network catalog is rewritten, so such a row
+  clears itself instead of lingering as a second, impossible "device".
 - When this machine is **no longer a member** of the network you are looking at,
   the device list says so instead of leaving an unexplained gap. Removing a device
   only removes it from that network: its identity and session remain, which is why
