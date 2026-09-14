@@ -54,8 +54,13 @@ Three things were deliberately removed rather than left as a second copy:
   stream names.
 - The full shell suite is green: 158 files, 1298 tests, plus type-check, format
   and the architecture gate (including its 1000-line budget).
-- The local packaged smoke passes with the new wiring, which is the check that
-  the shell still boots and paints when its runtime lives somewhere else.
+- The packaged smoke passes on **macOS and Windows** with the new wiring, which is
+  the check that the shell still boots and paints when its runtime lives somewhere
+  else. On both hosts the smoke's first-run path ends with the core's own bytes in
+  the managed catalog and all four roots registered through it.
+- Windows also runs the whole JavaScript gate on the same commit: type-check,
+  format, the architecture check and vitest (157 passed, 1 platform skip, the same
+  158 files macOS reports).
 
 ## Still to do
 
