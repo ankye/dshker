@@ -301,6 +301,11 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		return nil, err
 	}
 	account.client, account.manager, account.device = client, manager, request.Device
+	// Presence is reported per account. The credential names the account this
+	// machine was enrolled under, which is the account it reports to until the
+	// launcher says otherwise; a machine that is signed in nowhere is told so
+	// explicitly and then reports no presence at all.
+	client.SetAccount(request.Device.UserID)
 	return struct {
 		DeviceID string `json:"deviceId"`
 	}{request.Device.DeviceID}, nil

@@ -16,6 +16,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ankye/dshker/networking/internal/protocol"
@@ -39,13 +40,42 @@ type Client struct {
 	http      *http.Client
 	transport *http.Transport
 	deviceID  string
+	mu        sync.Mutex
 	telemetry Telemetry
+	// account is the account this machine is signed in to. Presence is reported
+	// per account, so the heartbeat carries it; an empty account means the machine
+	// is signed in nowhere and reports no presence at all.
+	account string
 }
 
 // SetTelemetry records what to report on subsequent heartbeats. The launcher
 // owns its version string, so the helper is told rather than guessing.
 func (client *Client) SetTelemetry(telemetry Telemetry) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
 	client.telemetry = telemetry
+}
+
+// SetAccount records the account this machine is signed in to, which is what the
+// heartbeat reports presence for. The launcher calls it when the signed-in user
+// changes, and clears it on sign-out.
+func (client *Client) SetAccount(userID string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	client.account = userID
+}
+
+// heartbeat is the body sent on every heartbeat: what this build reports about
+// itself, plus the account the machine is signed in to.
+type heartbeat struct {
+	Telemetry
+	UserID string `json:"userId"`
+}
+
+func (client *Client) heartbeat() heartbeat {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return heartbeat{Telemetry: client.telemetry, UserID: client.account}
 }
 
 func New(endpoints Endpoints, roots *x509.CertPool) (*Client, error) {

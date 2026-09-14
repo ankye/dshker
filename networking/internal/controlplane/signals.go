@@ -69,8 +69,10 @@ func (client *Client) Subscribe(ctx context.Context, deviceID string) (*Signals,
 					At       int64  `json:"at"`
 				}
 				// The heartbeat carries this build's own description so the
-				// coordinator's device directory can tell deployments apart.
-				if client.call(child, "POST", "/v1/heartbeat", "", client.telemetry, &heartbeat) != nil || heartbeat.DeviceID != deviceID {
+				// coordinator's device directory can tell deployments apart, and the
+				// account this machine is signed in to, because presence belongs to
+				// an account: signed in nowhere reports none and reads as offline.
+				if client.call(child, "POST", "/v1/heartbeat", "", client.heartbeat(), &heartbeat) != nil || heartbeat.DeviceID != deviceID {
 					cancel()
 					connection.CloseNow()
 					return
