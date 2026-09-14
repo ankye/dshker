@@ -11,6 +11,10 @@
 - A single pair can be **revoked** on its own, for when only that pairing should
   end and the device itself should stay. The warning is shown before the write,
   because revoking drops the session immediately and re-pairing never restores it.
+- The device list no longer keeps rows the coordinator will **not authorize**: a
+  refused member sync used to be logged and skipped, which left dead computers on
+  screen (and filled the log) until something else happened to rewrite the list.
+  It is now treated as the answer it is, and a transient busy lock is retried.
 - A stale catalog row that named this machine as **its own peer** (an artifact of an
   older build) is dropped whenever the network catalog is rewritten, so such a row
   clears itself instead of lingering as a second, impossible "device".

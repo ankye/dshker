@@ -11,9 +11,13 @@ import { PeerCredentialStore, type PeerCredential } from './credentials'
 import { PeerEnrollment } from './enrollment'
 import { enrollWhenMissing } from './enrollment-bootstrap'
 import { PeerPairing } from './pairing'
-import type { PeerPairMember, PeerPairMemberDevice } from './pair-records'
+import type { PeerPairMember } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
+import { recordMembers, remoteSide } from './member-catalog'
+
+/** Refusals that mean this machine holds no authorized pair for the service. */
+const UNAUTHORIZED_MEMBER_CODES = new Set(['p2p.pair_unauthorized', 'p2p.device_unauthorized'])
 import { P2PSelectionStore } from './selection-preferences'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
@@ -63,6 +67,8 @@ export class PeerManagement {
   readonly #autoConnect: PeerAutoConnect
   readonly #resolveSettingsRoot: () => Promise<string>
   readonly #selection: P2PSelectionStore
+  /** Last member-sync refusal that means "no authorized pair", so it logs once. */
+  #memberRefusal: string | undefined
 
   constructor(options: Options) {
     this.#resolveSettingsRoot = options.resolveSettingsRoot
@@ -596,16 +602,34 @@ export class PeerManagement {
       credential ?? (await this.#credentials.load(serviceId).catch(() => undefined))?.credential
     if (!enrollee || enrollee.serviceId !== serviceId) return
     const sync = (): Promise<void> => this.#syncMembers(serviceId, session, enrollee, signal)
-    await sync().catch(async (error) => {
-      // This sync prunes pairs the coordinator no longer has: a lock collision
-      // must not drop it.
-      if (!(error instanceof PeerHelperError) || error.code !== 'p2p.service_busy') {
-        console.error('[p2p] network member sync failed:', error)
-        return
-      }
-      await new Promise((resolve) => setTimeout(resolve, 250))
-      await sync().catch((retried) => console.error('[p2p] network member sync failed:', retried))
-    })
+    await sync()
+      .then(() => {
+        this.#memberRefusal = undefined
+      })
+      .catch(async (error) => {
+        // A refusal that means this machine holds no authorized pair is an answer
+        // rather than a failure: keeping rows the coordinator will not authorize is
+        // what leaves dead computers on screen. The catalog is rewritten empty, and
+        // the code is logged once per service so it is never swallowed.
+        if (error instanceof PeerHelperError && UNAUTHORIZED_MEMBER_CODES.has(error.code)) {
+          if (this.#memberRefusal !== error.code) {
+            this.#memberRefusal = error.code
+            console.error('[p2p] this machine holds no authorized pair:', error.code)
+          }
+          await recordMembers(this.#catalog, serviceId, enrollee, []).catch((writeError) =>
+            console.error('[p2p] network member prune failed:', writeError)
+          )
+          return
+        }
+        // This sync prunes pairs the coordinator no longer has: a lock collision
+        // must not drop it.
+        if (!(error instanceof PeerHelperError) || error.code !== 'p2p.service_busy') {
+          console.error('[p2p] network member sync failed:', error)
+          return
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250))
+        await sync().catch((retried) => console.error('[p2p] network member sync failed:', retried))
+      })
   }
 
   /**
@@ -646,48 +670,7 @@ export class PeerManagement {
     credential: { deviceId: string; userId: string; publicKey: string },
     members: readonly PeerPairMember[]
   ): Promise<void> {
-    const saved = await this.#catalog.inspect()
-    if (!saved) throw new PeerHelperError('p2p.not_enabled')
-    // A record naming this machine as its own peer is an artifact of an older build;
-    // it survives every prune otherwise, because it belongs to this service.
-    const computers = saved.record.computers.filter(
-      (computer) =>
-        computer.serviceId !== serviceId && computer.remoteDeviceId !== credential.deviceId
-    )
-    const recorded = new Set(computers.map((computer) => computer.connectionId))
-    for (const member of members) {
-      // The catalog only admits a positive revision and an active pair.
-      if (member.state !== 'active' || member.revision <= 0) continue
-      const remote = remoteSide(member, credential.deviceId)
-      if (remote === undefined) continue
-      const local = remote === member.initiator ? member.target : member.initiator
-      if (local.deviceId !== credential.deviceId) continue
-      if (!samePublicKey(local.publicKey, credential.publicKey)) continue
-      if (remote.deviceId === local.deviceId) continue
-      // One fixed tab per computer: a second pair with the same peer (over
-      // another network) must not create a duplicate connection id.
-      if (recorded.has(remote.deviceId)) continue
-      recorded.add(remote.deviceId)
-      computers.push({
-        connectionId: remote.deviceId,
-        serviceId,
-        displayName: remote.name.length > 0 ? remote.name : remote.deviceId,
-        // The coordinator keys a connection attempt by the TARGET DEVICE ID and
-        // the lease reports it back the same way, so the id every consumer
-        // (peer.connect, the connection stage lookup) must use is the device id,
-        // not the pairs-table row id.
-        pairId: remote.deviceId,
-        networkId: member.networkId,
-        localDeviceId: local.deviceId,
-        remoteDeviceId: remote.deviceId,
-        userId: local.userId,
-        localPublicKey: local.publicKey,
-        remotePublicKey: remote.publicKey,
-        pairRevision: member.revision,
-        pairState: 'active'
-      })
-    }
-    await this.#catalog.commit(saved.revision, { ...saved.record, computers })
+    return recordMembers(this.#catalog, serviceId, credential, members)
   }
 
   /**
@@ -978,20 +961,4 @@ export class PeerManagement {
   #admit(): void {
     if (this.#lifetime.signal.aborted) throw new PeerHelperError('p2p.helper_closed')
   }
-}
-
-/** Formats one network member as an always-active pair view entry. */
-/** The peer side of a pair, or undefined when this device is not one of its ends. */
-function remoteSide(
-  member: PeerPairMember,
-  localDeviceId: string
-): PeerPairMemberDevice | undefined {
-  if (member.initiator.deviceId === localDeviceId) return member.target
-  if (member.target.deviceId === localDeviceId) return member.initiator
-  return undefined
-}
-
-/** Compares two base64 public keys by their bytes rather than their encoding. */
-function samePublicKey(left: string, right: string): boolean {
-  return Buffer.from(left, 'base64').equals(Buffer.from(right, 'base64'))
 }
