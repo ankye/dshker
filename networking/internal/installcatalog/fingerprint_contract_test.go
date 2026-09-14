@@ -1,6 +1,7 @@
 package installcatalog
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -17,6 +18,14 @@ import (
 // captured document uses small hand-written integers, so on its own it proves the
 // encoder round-trips and says nothing about the values a real stat produces.
 func TestParsePinsTheFingerprintTimeContract(t *testing.T) {
+	if os.PathSeparator == '\\' {
+		// The golden spells its paths the way the shell wrote them, on posix, so
+		// this platform refuses the document for a reason that has nothing to do
+		// with the two numbers below -- exactly why TestGoldenBytesRoundTrip
+		// skips here too. The rule itself is platform-independent, and the shell
+		// asserts its half of it on every platform.
+		t.Skip("the golden uses posix path spelling, which this platform does not accept")
+	}
 	whole := strings.Replace(shellGolden, `"modifiedAtMilliseconds": 4`, `"modifiedAtMilliseconds": 1789354676388`, 1)
 	if whole == shellGolden {
 		t.Fatal("the golden no longer carries the Git fingerprint this test edits")
