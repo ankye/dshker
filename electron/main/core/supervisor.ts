@@ -183,7 +183,6 @@ export class CoreSupervisor {
         console.error('[p2p] core handshake rejected:', JSON.stringify(announcement))
         throw new PeerHelperError('p2p.protocol_mismatch')
       }
-      diagnose(`handshake-ok core.version=${JSON.stringify(version)}`)
       const socket = await authenticatePeer(socketPath, secret, budget).catch((error: unknown) => {
         diagnose(`authenticate-failed socket=${socketPath} ${String(error)}`)
         throw error
@@ -226,8 +225,11 @@ export class CoreSupervisor {
         typeof version !== 'object' ||
         version === null ||
         (version as { version?: unknown }).version !== 1
-      )
+      ) {
+        diagnose(`version-rejected ${JSON.stringify(version)}`)
         throw new PeerHelperError('p2p.protocol_mismatch')
+      }
+      diagnose(`ready core.version=${JSON.stringify(version)}`)
       return new CoreSupervisor(child, exit, directory, rpc, dispatch, options.onUnavailable)
     } catch (error) {
       rpc?.close()
