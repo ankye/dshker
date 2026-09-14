@@ -49,6 +49,15 @@ function confirmRemove(deviceId: string): void {
 const t = useTranslator()
 
 const rows = computed(() => props.devices ?? [])
+/**
+ * A network whose owner removed this very machine lists other devices but not
+ * this one. Saying so beats an unexplained absence: the device identity and its
+ * session survive an unbind, which is why the same machine can read as online
+ * elsewhere while it belongs to no network here.
+ */
+const missingLocal = computed(
+  () => rows.value.length > 0 && !rows.value.some((device) => device.isLocal)
+)
 /** The local device sorts first, then online before offline, then by name. */
 const ordered = computed(() =>
   [...rows.value].sort((left, right) => {
@@ -168,6 +177,13 @@ function build(device: P2PNetworkDeviceView): string {
         </span>
       </li>
     </ul>
+    <p
+      v-if="devices !== undefined && missingLocal"
+      class="p2p-devices__empty"
+      data-testid="p2p-devices-local-absent"
+    >
+      {{ t('p2p.devices.localAbsent') }}
+    </p>
   </section>
 </template>
 

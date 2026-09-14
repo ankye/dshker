@@ -11,6 +11,11 @@
 - A single pair can be **revoked** on its own, for when only that pairing should
   end and the device itself should stay. The warning is shown before the write,
   because revoking drops the session immediately and re-pairing never restores it.
+- When this machine is **no longer a member** of the network you are looking at,
+  the device list says so instead of leaving an unexplained gap. Removing a device
+  only removes it from that network: its identity and session remain, which is why
+  it can still read as online elsewhere. Revoking a device outright is a separate
+  action and is not offered yet.
 - The network you last chose is **remembered** (per account, on this machine
   only), so returning to the screen lands where you left instead of asking again.
   The memory never decides for you: it is used only while that network still

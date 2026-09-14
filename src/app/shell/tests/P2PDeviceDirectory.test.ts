@@ -164,6 +164,25 @@ describe('P2P device directory', () => {
     ).toBeDefined()
   })
 
+  it('says so when this machine is not in the network it is looking at', () => {
+    // It still has an identity and a session, which is why it can read as online
+    // elsewhere; the list must not leave the absence unexplained.
+    const absent = render({ devices: [device()] })
+    expect(absent.find('[data-testid="p2p-devices-local-absent"]').exists()).toBe(true)
+    expect(absent.get('[data-testid="p2p-devices-local-absent"]').text()).toContain(
+      enUS['p2p.devices.localAbsent'].slice(0, 20)
+    )
+    // A listed local device, and an empty network, are both not this case.
+    expect(
+      render({ devices: [device({ isLocal: true })] })
+        .find('[data-testid="p2p-devices-local-absent"]')
+        .exists()
+    ).toBe(false)
+    expect(render({ devices: [] }).find('[data-testid="p2p-devices-local-absent"]').exists()).toBe(
+      false
+    )
+  })
+
   it('offers no removal for this machine, nor without a signed-in owner', () => {
     const local = render({ devices: [device({ isLocal: true })] })
     expect(local.find('[data-testid^="p2p-devices-remove-"]').exists()).toBe(false)

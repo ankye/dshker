@@ -274,7 +274,8 @@ export const zhCN = {
   'p2p.devices.remove': '移除',
   'p2p.devices.removeAsk': '确认移除',
   'p2p.devices.removing': '移除中…',
-  'p2p.devices.removeFailed': '移除失败，请重试。',
+  'p2p.devices.localAbsent':
+    '本机不在这个网络：它已被移出该网络。设备身份与会话仍然保留，所以别处可能仍显示在线。要让它回来，请在下面「本机登记与恢复」里重新登记。',
   'p2p.devices.leaveRequiresLogin': '离开网络需要先登录，因为服务端不提供免登录移除。',
   'p2p.myNetwork.leaveError': '离开网络暂不可用：服务端尚未开放此接口。',
   'p2p.join.error.unavailable':

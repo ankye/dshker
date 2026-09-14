@@ -324,7 +324,7 @@ export const enUS: Record<MessageKey, string> = {
   'p2p.devices.remove': 'Remove',
   'p2p.devices.removeAsk': 'Remove this device?',
   'p2p.devices.removing': 'Removing…',
-  'p2p.devices.removeFailed': 'The device could not be removed. Try again.',
+  'p2p.devices.localAbsent': 'This machine is not in this network; enroll it again to return.',
   'p2p.devices.leaveRequiresLogin': 'Leaving needs a sign-in: there is no free removal.',
   'p2p.myNetwork.leaveError': 'Leaving is not available yet: the endpoint is closed.',
   'p2p.join.error.unavailable':
