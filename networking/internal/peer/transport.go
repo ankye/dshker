@@ -27,14 +27,19 @@ type TransportOptions struct {
 	TurnURL        string
 	TurnUsername   string
 	TurnCredential string
-	LocalDeviceID  string
-	PeerDeviceID   string
-	PrivateKey     ed25519.PrivateKey
-	PeerKey        ed25519.PublicKey
-	ServiceKey     ed25519.PublicKey
-	Scope          protocol.SignalScope
-	Revision       uint64
-	Lease          protocol.Lease
+	// RelayOnly pins ICE to relayed candidates, so a session can only complete
+	// through the TURN server. The product leaves it off — a direct UDP path is
+	// preferred and the relay is the fallback — and the relay invariant test turns
+	// it on to prove what the relay actually carries.
+	RelayOnly     bool
+	LocalDeviceID string
+	PeerDeviceID  string
+	PrivateKey    ed25519.PrivateKey
+	PeerKey       ed25519.PublicKey
+	ServiceKey    ed25519.PublicKey
+	Scope         protocol.SignalScope
+	Revision      uint64
+	Lease         protocol.Lease
 }
 
 // iceServersFor renders the ICE server list for the options: the self-hosted
@@ -124,7 +129,11 @@ func NewTransport(parent context.Context, options TransportOptions) (*Transport,
 	engine.SetICEMulticastDNSMode(ice.MulticastDNSModeDisabled)
 	engine.SetICETimeouts(5*time.Second, 25*time.Second, 2*time.Second)
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(engine))
-	pc, err := api.NewPeerConnection(webrtc.Configuration{ICEServers: iceServersFor(options)})
+	policy := webrtc.ICETransportPolicyAll
+	if options.RelayOnly {
+		policy = webrtc.ICETransportPolicyRelay
+	}
+	pc, err := api.NewPeerConnection(webrtc.Configuration{ICEServers: iceServersFor(options), ICETransportPolicy: policy})
 	if err != nil {
 		return nil, err
 	}
