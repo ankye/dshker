@@ -10,6 +10,10 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -213,6 +217,24 @@ func TestHeadlessCLIOperatesTheCore(t *testing.T) {
 		t.Fatalf("service configure without an origin = %q (%d)", stderr, code)
 	}
 
+	// A stand-in for the workbench the DSH web child serves. It listens where the
+	// fake launcher below says it does, so the endpoint a peer is handed is one
+	// that really answers.
+	workbench := httptest.NewUnstartedServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.URL.Query().Get("token") == "" {
+			writer.WriteHeader(http.StatusForbidden)
+			return
+		}
+		_, _ = writer.Write([]byte("<title>dsh-workbench</title>"))
+	}))
+	listener, listenErr := net.Listen("tcp", "127.0.0.1:3099")
+	if listenErr != nil {
+		t.Skipf("the workbench port is busy: %v", listenErr)
+	}
+	workbench.Listener = listener
+	workbench.Start()
+	defer workbench.Close()
+
 	// dsh start runs a real child through the daemon and dsh stop ends it.
 	worktree := t.TempDir()
 	executable, prefix := writeFakeLauncher(t, worktree)
@@ -256,6 +278,18 @@ func TestHeadlessCLIOperatesTheCore(t *testing.T) {
 	stdout, stderr, code = runCLICommand(t, binary, "proxy", "--state", state)
 	if code != 0 || !strings.Contains(stdout, "proxy generation 1:") {
 		t.Fatalf("proxy line = %q (%d) %s", stdout, code, stderr)
+	}
+	// The address is only useful if the hosted workbench answers there, so it is
+	// opened the way a desktop peer opens it: one loopback request carrying the
+	// token the host published. A 403 would mean the token never travelled.
+	answer, getErr := http.Get(binding.URL)
+	if getErr != nil {
+		t.Fatalf("the published endpoint did not answer: %v", getErr)
+	}
+	body, readErr := io.ReadAll(answer.Body)
+	answer.Body.Close()
+	if readErr != nil || answer.StatusCode != http.StatusOK || !strings.Contains(string(body), "dsh-workbench") {
+		t.Fatalf("workbench = %d %q (%v)", answer.StatusCode, body, readErr)
 	}
 
 	if stdout, stderr, code = runCLICommand(t, binary, "dsh", "stop", "--state", state); code != 0 {
