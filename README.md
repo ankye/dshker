@@ -17,6 +17,9 @@ One desktop home for your local and remote DeepSeek Harness sessions.
 - **Console and on-demand runtime tabs** — follow exact process output, stop the managed process, and keep Local available while creating a remote tab only when you choose a ready workspace from Run’s **+** picker.
 - **Token usage** — read session and daily model totals from native DSH logs without writing native DSH data.
 - **Safe ownership boundaries** — keep Harness, plugins, presets, settings, and native `~/.dsh` data in their declared roots without silently replacing them.
+- **Self-hosted remote workbench** — connect your own computers through a [coordinator you host](https://github.com/ankye/dshker-server): devices in the same network pair themselves, each computer gets an isolated browser session, and remote directories and projects are browsed over the authorized path.
+- **Device management that explains itself** — see which computers a network holds, remove one and the pairs it had there go with it, revoke a single pairing without touching the device, and let a new machine enrol itself when you sign in. The network you chose is remembered per account, a single network is selected for you, and a machine that is no longer in the network you are looking at says so instead of vanishing.
+- **One background core, also headless** — a single core process owns the private channel, the root registry, credentials and the whole peer protocol, so the app runs one background process rather than two. The same binary hosts without a desktop session: `dshkerd serve`, `dsh start|stop`, `status`, `pair`, `connect`, `proxy`, `service configure` and `call`.
 
 DSHKer Launcher is a desktop shell for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows.
 
@@ -44,7 +47,7 @@ To connect:
 
 The form's port is the **SSH port**, not the DSH Web port. DSHKer obtains the current DSH endpoint instead of assuming `3080`. If you see `remote.peer_unavailable`, check that remote DSHKer is running and can provide a DSH session; an accessible SSH server alone is not enough.
 
-### In development: self-hosted P2P workbench
+### Self-hosted P2P workbench
 
 Connect two of your own computers directly through a coordination server you
 host, without exposing DSH Web to the network and without an SSH tunnel. The
@@ -70,6 +73,13 @@ membership settings in separate expandable sections.
 Devices bound to the same network pair themselves with no invite code and no
 approval step: joining the network is the authorization. The invite-and-confirm
 flow remains for pairing a device that is not in one of your networks.
+
+The device list is that network's membership: each computer shows its liveness, last
+seen time and reported build. **Remove** takes a device out of the network and drops
+the pairs it had there — an unbind affects only that network, so the machine keeps its
+own identity and can enrol again — while **revoke** ends a single pairing and leaves
+the device in place. The network you selected is remembered for the account that chose
+it, and a machine that is no longer a member says so instead of going missing.
 
 **Two-machine acceptance has completed.** A real session between two
 machines — a Mac driving the DSH Web runtime on a Windows host through the
