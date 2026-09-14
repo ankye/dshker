@@ -13,6 +13,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -250,7 +251,14 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	go func() { <-ctx.Done(); listener.Close() }()
 	if err := localrpc.ServeEndpoint(ctx, listener, secretValue, func(callCtx context.Context, method string, payload json.RawMessage) (any, error) {
-		return server.Handle(callCtx, method, payload)
+		result, err := server.Handle(callCtx, method, payload)
+		if err != nil {
+			// A headless host has no shell to render a failure, and the wire
+			// carries only the public code, so the operator's only diagnostic is
+			// this line.
+			log.Printf("%s: %v", method, err)
+		}
+		return result, err
 	}); err != nil {
 		return fail(stderr, err)
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -199,7 +200,14 @@ func run(parsed options) error {
 	rpc := localrpc.New(ctx, conn, func(callCtx context.Context, method string, payload json.RawMessage) (any, error) {
 		select {
 		case <-bound:
-			return server.Handle(callCtx, method, payload)
+			result, err := server.Handle(callCtx, method, payload)
+			if err != nil {
+				// A headless host has no shell to render a failure, and the wire
+				// carries only the public code, so the operator's only diagnostic
+				// is this line.
+				log.Printf("%s: %v", method, err)
+			}
+			return result, err
 		case <-callCtx.Done():
 			return nil, callCtx.Err()
 		}

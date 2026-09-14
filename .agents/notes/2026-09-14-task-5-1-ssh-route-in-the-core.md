@@ -80,20 +80,39 @@ address, wrong path, wrong method, no bearer, a truncated bearer), the accepted
 IPv6 loopback case, an answer the client parser accepts, the 503 without a
 runtime, the busy second start, and the retracted descriptor after shutdown.
 
-## The cross-machine route, in progress
+## The cross-machine route, verified
 
-The route was exercised against the second machine and got as far as the host
-half running for real: `dshkerd serve` on the Windows box published the endpoint,
-`remote.broker_start` opened the broker and wrote
-`C:\Users\Administrator\.dshlauncher\remote-peer.json` with a real port and
-secret, and the box's own core answered the whole table including the three new
-broker methods. The client half then needs one more pass: the stand-in DSH the box
-launches for the test announced its URL but the core reported
-`runtime.spawn_failed` for that one executable, while the same core spawned a
-`cmd.exe` child without trouble — so the remaining work is a launch-path
-diagnostic, not a route defect. That end-to-end run, and the same route on a
-second platform, is what still stands between this task and its acceptance
-sentence.
+The route ran between two real machines, with **no Electron process on either
+side** — which is this task's acceptance sentence.
+
+- The Windows host ran `dshkerd serve` with the core's own broker:
+  `remote.broker_start` opened the endpoint, wrote
+  `C:\Users\Administrator\.dshlauncher\remote-peer.json` with a real port and
+  secret, and answered with the session the host was already running
+  (`http://127.0.0.1:20002/`, a stand-in DSH that serves a known body).
+- The macOS core then ran `remote.connect` for that account: it fetched the
+  descriptor with OpenSSH `scp`, forwarded to the broker, authenticated with the
+  bearer secret, read the session URL, opened the second forward, and answered
+  `http://127.0.0.1:63332/`.
+- `curl` on that address returned the stand-in DSH's body — the request really
+  travelled over SSH — `remote.status` reported the live generation, and
+  `remote.disconnect` stopped both forwards, after which the same address was
+  gone.
+
+Two things had to be fixed to get there, and both were worth fixing on their own
+merit:
+
+1. **A headless core has to be diagnosable.** The wire carries only the public
+   code, so a refusal on a host with no shell left the operator with nothing;
+   `cmd/dshkerd` now logs `method: error` on stderr in both modes. The first
+   failure it explained was a stale broker whose session had already been stopped
+   with the SSH session that started it — visible in one line instead of an
+   afternoon.
+2. **The verification had to keep the host alive.** A `serve` started in the
+   background of an SSH command dies with that command, which is what the first
+   attempts measured; the passing run started the host half as a scheduled task in
+   the interactive session, which is also where the Windows credential store
+   works.
 
 ## What is left of 5.1 and 5.2
 
