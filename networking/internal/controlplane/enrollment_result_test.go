@@ -12,7 +12,7 @@ import (
 
 func TestEnrollmentQueryProof(t *testing.T) {
 	private := ed25519.NewKeyFromSeed(bytes.Repeat([]byte{7}, 32))
-	requestID := strings.Repeat("a", 32)
+	requestID := strings.Repeat("a", 12)
 	query, err := newEnrollmentQuery(requestID, private, time.Unix(1800000000, 0))
 	if err != nil {
 		t.Fatal(err)
@@ -48,9 +48,9 @@ func TestEnrollmentQueryRejectsInvalidIdentity(t *testing.T) {
 	}{
 		{"missing-request", "", private},
 		{"invalid-request", strings.Repeat("g", 32), private},
-		{"missing-key", strings.Repeat("a", 32), nil},
-		{"seed-not-key", strings.Repeat("a", 32), private[:32]},
-		{"corrupt-key", strings.Repeat("a", 32), corrupted},
+		{"missing-key", strings.Repeat("a", 12), nil},
+		{"seed-not-key", strings.Repeat("a", 12), private[:32]},
+		{"corrupt-key", strings.Repeat("a", 12), corrupted},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			if _, err := newEnrollmentQuery(test.requestID, test.key, time.Now()); err == nil {

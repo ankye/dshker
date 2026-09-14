@@ -69,7 +69,7 @@ func TestDeviceDirectoryCarriesTelemetryAndNoCertificate(t *testing.T) {
 			t.Fatal("the directory must be read with the owner's session")
 		}
 		writer.Header().Set("Content-Type", "application/json")
-		_, _ = writer.Write([]byte(`[{"deviceId":"` + strings.Repeat("d", 32) + `","userId":"` + strings.Repeat("u", 32) + `","name":"Mac","presence":"online","lastSeen":1788000000,"version":"0.1.25","platform":"darwin","architecture":"arm64"}]`))
+		_, _ = writer.Write([]byte(`[{"deviceId":"` + strings.Repeat("d", 12) + `","userId":"` + strings.Repeat("u", 12) + `","name":"Mac","presence":"online","lastSeen":1788000000,"version":"0.1.25","platform":"darwin","architecture":"arm64"}]`))
 	}))
 	entries, err := client.NetworkDevices(context.Background(), "token-value", networkID)
 	if err != nil || len(entries) != 1 {

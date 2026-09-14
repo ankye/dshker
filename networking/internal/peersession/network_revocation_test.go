@@ -13,8 +13,8 @@ func TestNetworkRevocationScopesPinsAndWaitsForReservedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := pin
-	other.Pair.PairID = strings.Repeat("1", 32)
-	other.Pair.NetworkID = strings.Repeat("2", 32)
+	other.Pair.PairID = strings.Repeat("1", 12)
+	other.Pair.NetworkID = strings.Repeat("2", 12)
 	if err := manager.Pin(other); err != nil {
 		t.Fatal(err)
 	}

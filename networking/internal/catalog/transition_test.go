@@ -13,7 +13,7 @@ func transitionRecord(services []Service, computers []Computer, forgotten []stri
 	return Record{
 		Format:              recordFormat,
 		Version:             1,
-		CatalogID:           "00000000000000000000000000000000",
+		CatalogID:           "000000000000",
 		Services:            services,
 		Computers:           computers,
 		ForgottenServiceIDs: forgotten,
@@ -37,11 +37,11 @@ func transitionComputer(connectionID, serviceID, state string, revision int64) C
 		ConnectionID:    connectionID,
 		ServiceID:       serviceID,
 		DisplayName:     "Work computer",
-		PairID:          "11111111111111111111111111111111",
-		NetworkID:       "22222222222222222222222222222222",
-		LocalDeviceID:   "33333333333333333333333333333333",
-		RemoteDeviceID:  "44444444444444444444444444444444",
-		UserID:          "55555555555555555555555555555555",
+		PairID:          "111111111111",
+		NetworkID:       "222222222222",
+		LocalDeviceID:   "333333333333",
+		RemoteDeviceID:  "444444444444",
+		UserID:          "555555555555",
 		LocalPublicKey:  "local-key",
 		RemotePublicKey: "remote-key",
 		PairRevision:    revision,
@@ -52,7 +52,7 @@ func transitionComputer(connectionID, serviceID, state string, revision int64) C
 const (
 	firstService  = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 	secondService = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-	firstConn     = "cccccccccccccccccccccccccccccccc"
+	firstConn     = "cccccccccccc"
 )
 
 func TestTransitionAcceptsGrowth(t *testing.T) {
@@ -124,11 +124,11 @@ func TestTransitionRefusesAChangedComputerIdentity(t *testing.T) {
 
 	fields := map[string]func(*Computer){
 		"service":      func(c *Computer) { c.ServiceID = secondService },
-		"pair":         func(c *Computer) { c.PairID = "99999999999999999999999999999999" },
-		"network":      func(c *Computer) { c.NetworkID = "99999999999999999999999999999999" },
-		"local device": func(c *Computer) { c.LocalDeviceID = "99999999999999999999999999999999" },
-		"peer device":  func(c *Computer) { c.RemoteDeviceID = "99999999999999999999999999999999" },
-		"user":         func(c *Computer) { c.UserID = "99999999999999999999999999999999" },
+		"pair":         func(c *Computer) { c.PairID = "999999999999" },
+		"network":      func(c *Computer) { c.NetworkID = "999999999999" },
+		"local device": func(c *Computer) { c.LocalDeviceID = "999999999999" },
+		"peer device":  func(c *Computer) { c.RemoteDeviceID = "999999999999" },
+		"user":         func(c *Computer) { c.UserID = "999999999999" },
 		"local key":    func(c *Computer) { c.LocalPublicKey = "other" },
 		"peer key":     func(c *Computer) { c.RemotePublicKey = "other" },
 	}

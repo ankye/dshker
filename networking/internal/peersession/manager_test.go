@@ -10,19 +10,19 @@ import (
 )
 
 func pinFixture() (*Manager, controlplane.PairIdentity) {
-	local := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("a", 32), UserID: strings.Repeat("b", 32), PublicKey: bytes.Repeat([]byte{1}, 32)}
-	remote := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("c", 32), UserID: local.UserID, PublicKey: bytes.Repeat([]byte{2}, 32)}
-	pin := controlplane.PairIdentity{Pair: controlplane.Pair{PairID: strings.Repeat("d", 32), NetworkID: strings.Repeat("e", 32), Initiator: local.DeviceID, Target: remote.DeviceID, State: "active", Revision: 2}, Initiator: local, Target: remote}
+	local := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("a", 12), UserID: strings.Repeat("b", 12), PublicKey: bytes.Repeat([]byte{1}, 32)}
+	remote := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("c", 12), UserID: local.UserID, PublicKey: bytes.Repeat([]byte{2}, 32)}
+	pin := controlplane.PairIdentity{Pair: controlplane.Pair{PairID: strings.Repeat("d", 12), NetworkID: strings.Repeat("e", 12), Initiator: local.DeviceID, Target: remote.DeviceID, State: "active", Revision: 2}, Initiator: local, Target: remote}
 	manager := &Manager{config: Config{Device: controlplane.Device{DeviceID: local.DeviceID, UserID: local.UserID, PublicKey: append([]byte(nil), local.PublicKey...)}}, pins: make(map[string]controlplane.PairIdentity), endpoints: make(map[string]*runtimebridge.Endpoint)}
 	return manager, pin
 }
 
 func TestPinRejectsIdentityReplacement(t *testing.T) {
 	for name, mutate := range map[string]func(*controlplane.PairIdentity){
-		"network":  func(p *controlplane.PairIdentity) { p.Pair.NetworkID = strings.Repeat("f", 32) },
+		"network":  func(p *controlplane.PairIdentity) { p.Pair.NetworkID = strings.Repeat("f", 12) },
 		"revision": func(p *controlplane.PairIdentity) { p.Pair.Revision = 1 },
 		"user": func(p *controlplane.PairIdentity) {
-			p.Initiator.UserID = strings.Repeat("f", 32)
+			p.Initiator.UserID = strings.Repeat("f", 12)
 			p.Target.UserID = p.Initiator.UserID
 		},
 		"key":             func(p *controlplane.PairIdentity) { p.Target.PublicKey = bytes.Repeat([]byte{3}, 32) },
