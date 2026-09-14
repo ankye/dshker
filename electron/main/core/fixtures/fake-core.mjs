@@ -111,7 +111,9 @@ function serve(socket, secret, server) {
               version: 1,
               id: ++callbackSequence,
               method: 'runtime.connect',
-              payload: { serviceId: 'a'.repeat(64), pairId: 'b'.repeat(32) },
+              // Twelve characters, the shape every id the coordinator issues has,
+              // and the shape the core's own validation accepts.
+              payload: { serviceId: 'a'.repeat(12), pairId: 'b'.repeat(12) },
               error: ''
             }) + '\n'
           )
