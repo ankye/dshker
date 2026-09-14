@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.39 — 2026-09-15
 
 - Identifiers are twelve characters, the length and alphabet of a hardware
   address, so a device id can be read out, typed and compared by a person. A
