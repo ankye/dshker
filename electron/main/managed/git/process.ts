@@ -528,11 +528,14 @@ async function readExecutableFingerprint(path: string): Promise<GitExecutableFin
   if (process.platform !== 'win32' && (metadata.mode & 0o111) === 0) {
     throw new GitRuntimeError('git.executable_invalid', 'Git executable is not executable.')
   }
+  // Whole milliseconds, for the same reason the Node and pnpm fingerprints are
+  // whole milliseconds: the record contract stores a safe integer and the core
+  // decodes an integer.
   return {
     device: metadata.dev,
     inode: metadata.ino,
     size: metadata.size,
-    modifiedAtMilliseconds: metadata.mtimeMs
+    modifiedAtMilliseconds: Math.trunc(metadata.mtimeMs)
   }
 }
 

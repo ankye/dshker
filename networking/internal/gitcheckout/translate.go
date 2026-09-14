@@ -31,7 +31,7 @@ func RendererCode(err error) string {
 		return ""
 	case errors.Is(err, ErrRemoteInvalid):
 		return CodeRemoteInvalid
-	case errors.Is(err, ErrRevisionInvalid):
+	case errors.Is(err, ErrRefInvalid):
 		return CodeRevisionInvalid
 	default:
 		return CodeOperationFailed

@@ -161,4 +161,17 @@ describe('managed Git process runner', () => {
       })
     ).rejects.toMatchObject({ code: 'git.executable_changed' })
   })
+
+  it('pins a file identity the catalog record can store', async () => {
+    const pinned = await pinGitExecutable(process.execPath)
+
+    // Node reports a stat time as a fractional number of milliseconds wherever
+    // the filesystem keeps sub-millisecond timestamps. The record contract stores
+    // it as a safe integer and the core decodes an integer, so the pin has to
+    // round: a fraction here is a record the shell itself would refuse to read.
+    expect(Number.isSafeInteger(pinned.fingerprint.modifiedAtMilliseconds)).toBe(true)
+    await expect(
+      assertRegisteredGitExecutable({ ...pinned, version: parseGitVersion('git version 2.43.0\n') })
+    ).resolves.toBeUndefined()
+  })
 })

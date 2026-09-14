@@ -26,8 +26,8 @@ async function nodeRegistration(): Promise<NodeExecutableRegistration> {
       inode: metadata.ino,
       mode: metadata.mode,
       size: metadata.size,
-      modifiedAtMilliseconds: metadata.mtimeMs,
-      changedAtMilliseconds: metadata.ctimeMs
+      modifiedAtMilliseconds: Math.trunc(metadata.mtimeMs),
+      changedAtMilliseconds: Math.trunc(metadata.ctimeMs)
     },
     version: { major: 22, minor: 19, patch: 0, text: '22.19.0' }
   }

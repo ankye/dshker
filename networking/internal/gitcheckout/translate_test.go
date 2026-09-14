@@ -17,7 +17,7 @@ func TestRendererCodeTranslatesTheThreeCodes(t *testing.T) {
 	}{
 		{name: "remote input", err: ErrRemoteInvalid, want: CodeRemoteInvalid},
 		{name: "wrapped remote input", err: fmt.Errorf("%w: bad host", ErrRemoteInvalid), want: CodeRemoteInvalid},
-		{name: "revision input", err: ErrRevisionInvalid, want: CodeRevisionInvalid},
+		{name: "revision input", err: ErrRefInvalid, want: CodeRevisionInvalid},
 		{name: "a commit that moved", err: ErrRefNotCommit, want: CodeOperationFailed},
 		{name: "a rewritten reference", err: ErrRefRewritten, want: CodeOperationFailed},
 		{name: "an observed mismatch", err: ErrRemoteMismatch, want: CodeOperationFailed},

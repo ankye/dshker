@@ -38,6 +38,11 @@ describe('explicit Node and pnpm tool probes', () => {
 
     expect(registration.canonicalPath).toBe(await realpath(process.execPath))
     expect(registration.version.text).toBe(process.version.slice(1))
+    // The catalog record contract stores a fingerprint's two times as safe
+    // integers, and the core decodes them as integers. A fractional stat value
+    // would make the record unwritable here and unreadable there.
+    expect(Number.isSafeInteger(registration.fingerprint.modifiedAtMilliseconds)).toBe(true)
+    expect(Number.isSafeInteger(registration.fingerprint.changedAtMilliseconds)).toBe(true)
   })
 
   it('uses a direct Node executable with an empty explicit environment and no shell', async () => {
@@ -231,8 +236,8 @@ function fingerprintFromStat(metadata: Stats) {
     inode: metadata.ino,
     mode: metadata.mode,
     size: metadata.size,
-    modifiedAtMilliseconds: metadata.mtimeMs,
-    changedAtMilliseconds: metadata.ctimeMs
+    modifiedAtMilliseconds: Math.trunc(metadata.mtimeMs),
+    changedAtMilliseconds: Math.trunc(metadata.ctimeMs)
   }
 }
 

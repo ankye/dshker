@@ -465,13 +465,20 @@ async function readExecutableFingerprint(
       'Registered tool is not executable.'
     )
   }
+  // Node reports a stat time as a fractional number of milliseconds on any
+  // filesystem with sub-millisecond timestamps (APFS, ext4, NTFS), but the
+  // record contract stores these two fields as safe integers and the core
+  // decodes them as integers: a fraction makes the record unwritable and
+  // unreadable. Whole milliseconds are what the contract promises, and they are
+  // ample for spotting a replaced file, which the device, inode and size
+  // already pin.
   return {
     device: metadata.dev,
     inode: metadata.ino,
     mode: metadata.mode,
     size: metadata.size,
-    modifiedAtMilliseconds: metadata.mtimeMs,
-    changedAtMilliseconds: metadata.ctimeMs
+    modifiedAtMilliseconds: Math.trunc(metadata.mtimeMs),
+    changedAtMilliseconds: Math.trunc(metadata.ctimeMs)
   }
 }
 

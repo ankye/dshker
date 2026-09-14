@@ -25,14 +25,14 @@ func TestParseCommitSHA(t *testing.T) {
 		fullSHA + "^{commit}",
 		"refs/heads/main",
 	} {
-		if _, err := ParseCommitSHA(value); !errors.Is(err, ErrRevisionInvalid) {
+		if _, err := ParseCommitSHA(value); !errors.Is(err, ErrRefInvalid) {
 			t.Errorf("ParseCommitSHA(%q) = %v, want git.ref_invalid", value, err)
 		}
 	}
 	if _, err := SelectCommit(fullSHA); err != nil {
 		t.Fatalf("select commit: %v", err)
 	}
-	if _, err := SelectCommit("main"); !errors.Is(err, ErrRevisionInvalid) {
+	if _, err := SelectCommit("main"); !errors.Is(err, ErrRefInvalid) {
 		t.Fatalf("select branch as a commit = %v", err)
 	}
 }
@@ -74,7 +74,7 @@ func TestReferenceShortNames(t *testing.T) {
 		strings.Repeat("a", 1025),
 	}
 	for _, name := range refused {
-		if _, err := SelectBranch(name); !errors.Is(err, ErrRevisionInvalid) {
+		if _, err := SelectBranch(name); !errors.Is(err, ErrRefInvalid) {
 			t.Errorf("SelectBranch(%q) = %v, want git.ref_invalid", name, err)
 		}
 	}
@@ -112,7 +112,7 @@ func TestAssertSelectionChecksTheWholeRecord(t *testing.T) {
 		{Kind: "branch", Branch: "refs/heads/main"},
 	}
 	for _, selection := range refused {
-		if err := AssertSelection(selection); !errors.Is(err, ErrRevisionInvalid) {
+		if err := AssertSelection(selection); !errors.Is(err, ErrRefInvalid) {
 			t.Errorf("AssertSelection(%+v) = %v, want git.ref_invalid", selection, err)
 		}
 	}

@@ -65,7 +65,7 @@ func SelectCommit(commit string) (Selection, error) {
 // ParseCommitSHA checks one full lowercase SHA and returns it unchanged.
 func ParseCommitSHA(value string) (string, error) {
 	if !commitSHAPattern.MatchString(value) {
-		return "", fmt.Errorf("%w: Git commit must be a full lowercase SHA.", ErrRevisionInvalid)
+		return "", fmt.Errorf("%w: Git commit must be a full lowercase SHA.", ErrRefInvalid)
 	}
 	return value, nil
 }
@@ -76,22 +76,22 @@ func AssertSelection(selection Selection) error {
 	switch selection.Kind {
 	case SelectionBranch:
 		if selection.Tag != "" || selection.Commit != "" {
-			return fmt.Errorf("%w: Git revision selection is invalid.", ErrRevisionInvalid)
+			return fmt.Errorf("%w: Git revision selection is invalid.", ErrRefInvalid)
 		}
 		return AssertReferenceShortName(selection.Branch, "Branch")
 	case SelectionTag:
 		if selection.Branch != "" || selection.Commit != "" {
-			return fmt.Errorf("%w: Git revision selection is invalid.", ErrRevisionInvalid)
+			return fmt.Errorf("%w: Git revision selection is invalid.", ErrRefInvalid)
 		}
 		return AssertReferenceShortName(selection.Tag, "Tag")
 	case SelectionCommit:
 		if selection.Branch != "" || selection.Tag != "" {
-			return fmt.Errorf("%w: Git revision selection is invalid.", ErrRevisionInvalid)
+			return fmt.Errorf("%w: Git revision selection is invalid.", ErrRefInvalid)
 		}
 		_, err := ParseCommitSHA(selection.Commit)
 		return err
 	}
-	return fmt.Errorf("%w: Git revision selection is invalid.", ErrRevisionInvalid)
+	return fmt.Errorf("%w: Git revision selection is invalid.", ErrRefInvalid)
 }
 
 // SameSelection reports whether two selections name the same revision.
@@ -118,24 +118,24 @@ func SameSelection(left, right Selection) bool {
 func AssertReferenceShortName(value, subject string) error {
 	if value == "" || len(value) > 1024 ||
 		strings.HasPrefix(value, "refs/") || strings.HasPrefix(value, "/") || strings.HasSuffix(value, "/") {
-		return fmt.Errorf("%w: %s name is invalid.", ErrRevisionInvalid, subject)
+		return fmt.Errorf("%w: %s name is invalid.", ErrRefInvalid, subject)
 	}
 	if strings.Contains(value, "..") || strings.Contains(value, "@{") || strings.Contains(value, "//") {
-		return fmt.Errorf("%w: %s name is invalid.", ErrRevisionInvalid, subject)
+		return fmt.Errorf("%w: %s name is invalid.", ErrRefInvalid, subject)
 	}
 	for _, character := range value {
 		switch character {
 		case '~', '^', ':', '?', '*', '\\', '[', ' ':
-			return fmt.Errorf("%w: %s name is invalid.", ErrRevisionInvalid, subject)
+			return fmt.Errorf("%w: %s name is invalid.", ErrRefInvalid, subject)
 		}
 		if character <= 0x1f || unicode.IsSpace(character) {
-			return fmt.Errorf("%w: %s name is invalid.", ErrRevisionInvalid, subject)
+			return fmt.Errorf("%w: %s name is invalid.", ErrRefInvalid, subject)
 		}
 	}
 	for _, segment := range strings.Split(value, "/") {
 		if segment == "" || segment == "." || segment == ".." ||
 			strings.HasSuffix(segment, ".lock") || strings.HasSuffix(segment, ".") {
-			return fmt.Errorf("%w: %s name is invalid.", ErrRevisionInvalid, subject)
+			return fmt.Errorf("%w: %s name is invalid.", ErrRefInvalid, subject)
 		}
 	}
 	return nil
