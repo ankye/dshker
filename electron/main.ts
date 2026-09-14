@@ -39,12 +39,9 @@ import {
   LauncherUpdateService,
   scheduleLauncherUpdateCheckAfterWindowReady
 } from './main/launcher-update-service'
-import {
-  OpenSshRemoteConnector,
-  RemoteConnectionCatalog,
-  RemoteConnectionService,
-  RemotePeerBroker
-} from './main/remote'
+import { CoreRemoteRoute, type CoreRemoteRoutePort } from './main/core/remote-route'
+import { RemoteConnectionService } from './main/remote'
+import { LAUNCHER_HARNESS_SUBJECT } from './main/managed/launcher-harness-service'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -193,7 +190,7 @@ async function registerLauncherServices(
   readonly runtimeBrowserController: RuntimeBrowserController
   readonly launcherUpdateService: LauncherUpdateService
   readonly remoteConnectionService: RemoteConnectionService
-  readonly remotePeerBroker: RemotePeerBroker
+  readonly remotePeerBroker: Readonly<{ shutdown(): Promise<void> }>
   readonly peerManagement: PeerManagement
   readonly coreSupervisor: CoreSupervisor | undefined
 }> {
@@ -250,17 +247,27 @@ async function registerLauncherServices(
       await shell.openExternal(url)
     }
   })
+  // The core owns the remote route now, and it starts after this service is
+  // constructed, so the port is a getter: a shell without a core refuses every
+  // remote operation with its own typed failure rather than spawning ssh itself.
+  let coreRemoteRoute: CoreRemoteRoutePort | undefined
   const remoteConnectionService = new RemoteConnectionService(
-    new RemoteConnectionCatalog({
-      resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot()
-    }),
-    new OpenSshRemoteConnector({ platform: process.platform })
+    async () =>
+      path.join(
+        await managedWorkspaceService.resolveSettingsRoot(),
+        'dsh-launcher',
+        'remote-connections.json'
+      ),
+    () => coreRemoteRoute
   )
-  const remotePeerBroker = new RemotePeerBroker({
-    descriptorPath: path.join(launcherRoot, 'remote-peer.json'),
-    launcherHarnessService
-  })
-  await remotePeerBroker.start()
+  // The peer endpoint a remote machine reaches lives in the core as well. It
+  // answers with the session this shell already runs, so the broker is stopped by
+  // the core when the core exits; the shutdown path below only has to ask.
+  const remotePeerBroker = {
+    shutdown: async (): Promise<void> => {
+      await coreRemoteRoute?.stopBroker().catch(() => undefined)
+    }
+  }
   // The headless core owns the native secret store. A core that cannot start
   // (missing binary, bad data root) must not take the app down: the P2P
   // credential store degrades to its legacy safeStorage path, exactly as it
@@ -291,6 +298,16 @@ async function registerLauncherServices(
     coreSecrets = new CoreSecrets(coreSupervisor.rpc)
     coreCatalog = new CoreCatalog(coreSupervisor.rpc)
     coreRoots = new CoreRoots(coreSupervisor.rpc)
+    coreRemoteRoute = new CoreRemoteRoute(coreSupervisor.rpc)
+    // Publishing the endpoint is best effort: a host with no runtime yet still
+    // serves the page, and the broker refuses to hand out a session until one is
+    // running, which is a better answer than failing the boot.
+    await coreRemoteRoute
+      .startBroker({
+        descriptorPath: path.join(launcherRoot, 'remote-peer.json'),
+        subjectId: LAUNCHER_HARNESS_SUBJECT
+      })
+      .catch(() => undefined)
     coreHarnessRuntime = new CoreHarnessRuntime(coreSupervisor.rpc)
     coreInstallCatalog = new CoreInstallCatalog(coreSupervisor.rpc)
   } catch (error) {

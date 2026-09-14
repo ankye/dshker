@@ -1,144 +1,140 @@
-import { describe, expect, it, vi } from 'vitest'
-import type { RemoteComputerView } from '../../../src/shared/contracts'
+import { describe, expect, it } from 'vitest'
+import type { CoreRemoteConnection, CoreRemoteRoutePort } from '../core/remote-route'
+import { RemoteConnectionError } from './errors'
 import { RemoteConnectionService } from './service'
 
-const computer: RemoteComputerView = {
+const connection: CoreRemoteConnection = {
   connectionId: '11111111-1111-4111-8111-111111111111',
   displayName: 'Studio Mac',
   host: 'studio-mac',
   port: 22,
-  user: 'dev'
+  user: 'dev',
+  configRevision: 'revision-1'
 }
 
-function catalog(initial: readonly RemoteComputerView[] = [computer]) {
-  let records = [...initial]
-  return {
-    load: vi.fn(async () => records),
-    create: vi.fn(async () => records),
-    update: vi.fn(async () => records),
-    remove: vi.fn(async (connectionId: string) => {
-      records = records.filter((entry) => entry.connectionId !== connectionId)
+/** A core route whose operations the test drives. */
+function route(options: { readonly failConnect?: boolean } = {}) {
+  let records: CoreRemoteConnection[] = [connection]
+  let live = false
+  const port: CoreRemoteRoutePort = {
+    async inspectCatalog() {
       return records
-    })
+    },
+    async createConnection() {
+      return records
+    },
+    async updateConnection() {
+      return records
+    },
+    async removeConnection(request: Readonly<{ filePath: string; connectionId: string }>) {
+      records = records.filter((entry) => entry.connectionId !== request.connectionId)
+      return records
+    },
+    async connect() {
+      if (options.failConnect === true)
+        throw new RemoteConnectionError('remote.tunnel_failed', 'boom')
+      live = true
+      return { url: 'http://127.0.0.1:41000/?token=abc' }
+    },
+    async disconnect() {
+      if (!live) throw new RemoteConnectionError('remote.connection_not_found', 'not connected')
+      live = false
+    },
+    async status() {
+      return live ? { url: 'http://127.0.0.1:41000/?token=abc' } : undefined
+    },
+    async startBroker() {
+      return { port: 41001, instanceId: 'instance' }
+    },
+    async stopBroker() {
+      return undefined
+    }
   }
+  return { port, isLive: () => live }
+}
+
+function serviceFor(port: CoreRemoteRoutePort) {
+  return new RemoteConnectionService(
+    async () => '/settings/dsh-launcher/remote-connections.json',
+    () => port
+  )
 }
 
 describe('RemoteConnectionService', () => {
-  it('restores records disconnected and publishes ready without persisting the URL', async () => {
-    const store = catalog()
-    const stop = vi.fn(async () => undefined)
-    const connector = {
-      connect: vi.fn(async () => ({ url: 'http://127.0.0.1:41000/?token=abc', stop }))
-    }
-    const service = new RemoteConnectionService(store, connector)
+  it('restores records disconnected and publishes ready from the core', async () => {
+    const { port } = route()
+    const service = serviceFor(port)
     const events: string[] = []
     service.onStateChange((state) => events.push(state.connections[0]?.status.kind ?? 'empty'))
     expect((await service.getState()).connections[0]?.status.kind).toBe('disconnected')
     expect((await service.getState()).connections[0]?.testStatus.kind).toBe('untested')
-    expect((await service.connect(computer.connectionId)).connections[0]?.status.kind).toBe('ready')
-    expect((await service.getState()).connections[0]?.testStatus.kind).toBe('passed')
+    expect((await service.connect(connection.connectionId)).connections[0]?.status.kind).toBe(
+      'ready'
+    )
     expect(events).toEqual(['connecting', 'ready'])
-    expect(store.create).not.toHaveBeenCalled()
-    await service.disconnect(computer.connectionId)
-    expect(stop).toHaveBeenCalledOnce()
+    await service.disconnect(connection.connectionId)
+    expect((await service.getState()).connections[0]?.status.kind).toBe('disconnected')
   })
 
-  it('tests the complete connector path, stops it, and remains disconnected', async () => {
-    const stop = vi.fn(async () => undefined)
-    const connector = {
-      connect: vi.fn(async () => ({ url: 'http://127.0.0.1:41000/?token=abc', stop }))
-    }
-    const service = new RemoteConnectionService(catalog(), connector)
-    const testStates: string[] = []
-    service.onStateChange((state) =>
-      testStates.push(state.connections[0]?.testStatus.kind ?? 'empty')
-    )
-
-    const state = await service.test(computer.connectionId)
-
-    expect(connector.connect).toHaveBeenCalledOnce()
-    expect(stop).toHaveBeenCalledOnce()
+  it('tests through the core and stays disconnected', async () => {
+    const { port, isLive } = route()
+    const service = serviceFor(port)
+    const state = await service.test(connection.connectionId)
+    expect(isLive()).toBe(false)
     expect(state.connections[0]?.status.kind).toBe('disconnected')
     expect(state.connections[0]?.testStatus.kind).toBe('passed')
-    expect(testStates).toEqual(['testing', 'passed'])
   })
 
-  it('reports a typed failed test without leaving a live connection', async () => {
-    const service = new RemoteConnectionService(catalog(), {
-      connect: vi.fn(async () => {
-        throw new Error('boom')
-      })
-    })
-
-    await expect(service.test(computer.connectionId)).rejects.toThrow('boom')
-    const state = await service.getState()
-    expect(state.connections[0]?.status.kind).toBe('disconnected')
-    expect(state.connections[0]?.testStatus).toMatchObject({
-      kind: 'failed',
+  it('reports a typed failure without leaving a live connection', async () => {
+    const service = serviceFor(route({ failConnect: true }).port)
+    await expect(service.connect(connection.connectionId)).rejects.toMatchObject({
       code: 'remote.tunnel_failed'
     })
+    const state = await service.getState()
+    expect(state.connections[0]?.status).toMatchObject({ kind: 'failed' })
+    expect(state.connections[0]?.testStatus).toMatchObject({ kind: 'failed' })
   })
 
-  it('rejects connect while a connection test is still active', async () => {
-    let resolveTunnel: ((value: { url: string; stop(): Promise<void> }) => void) | undefined
-    const connector = {
-      connect: vi.fn(
-        () =>
-          new Promise<{ url: string; stop(): Promise<void> }>((resolve) => {
-            resolveTunnel = resolve
-          })
-      )
+  it('refuses a second connect while one is in flight', async () => {
+    let release: (() => void) | undefined
+    const { port } = route()
+    const slow: CoreRemoteRoutePort = {
+      ...port,
+      connect: () =>
+        new Promise((resolve) => {
+          release = () => resolve({ url: 'http://127.0.0.1:41000/' })
+        })
     }
-    const service = new RemoteConnectionService(catalog(), connector)
-    const testing = service.test(computer.connectionId)
-    await Promise.resolve()
-
-    await expect(service.connect(computer.connectionId)).rejects.toMatchObject({
+    const service = serviceFor(slow)
+    const connecting = service.connect(connection.connectionId)
+    // The service resolves the catalog before it reaches the port, so wait until
+    // the in-flight call is actually pending.
+    for (let attempt = 0; attempt < 50 && release === undefined; attempt += 1) {
+      await Promise.resolve()
+    }
+    await expect(service.connect(connection.connectionId)).rejects.toMatchObject({
       code: 'remote.connection_busy'
     })
-    resolveTunnel?.({
-      url: 'http://127.0.0.1:41000/',
-      stop: vi.fn(async () => undefined)
-    })
-    await testing
+    release?.()
+    await connecting
   })
 
-  it('retains a failed row and requires disconnect before removal', async () => {
-    const store = catalog()
-    const service = new RemoteConnectionService(store, {
-      connect: vi.fn(async () => {
-        throw new Error('boom')
-      })
-    })
-    await expect(service.connect(computer.connectionId)).rejects.toThrow('boom')
-    expect((await service.getState()).connections[0]?.status.kind).toBe('failed')
-    await expect(service.remove(computer.connectionId)).rejects.toMatchObject({
+  it('keeps a failed row and requires disconnect before removal', async () => {
+    const service = serviceFor(route({ failConnect: true }).port)
+    await expect(service.connect(connection.connectionId)).rejects.toThrow('boom')
+    await expect(service.remove(connection.connectionId)).rejects.toMatchObject({
       code: 'remote.connection_not_disconnected'
     })
-    await service.disconnect(computer.connectionId)
-    expect((await service.remove(computer.connectionId)).connections).toEqual([])
   })
 
-  it('fences a late connection after disconnect cancellation', async () => {
-    let resolveTunnel: ((value: { url: string; stop(): Promise<void> }) => void) | undefined
-    let connectionSignal: AbortSignal | undefined
-    const stop = vi.fn(async () => undefined)
-    const connector = {
-      connect: vi.fn(
-        (_computer: RemoteComputerView, _onExit: () => void, signal?: AbortSignal) =>
-          new Promise<{ url: string; stop(): Promise<void> }>((resolve) => {
-            connectionSignal = signal
-            resolveTunnel = resolve
-          })
-      )
-    }
-    const service = new RemoteConnectionService(catalog(), connector)
-    const connecting = service.connect(computer.connectionId)
-    await vi.waitFor(() => expect(connectionSignal).toBeDefined())
-    await service.disconnect(computer.connectionId)
-    expect(connectionSignal?.aborted).toBe(true)
-    resolveTunnel?.({ url: 'http://127.0.0.1:41000/', stop })
-    expect((await connecting).connections[0]?.status.kind).toBe('disconnected')
-    expect(stop).toHaveBeenCalledOnce()
+  it('refuses every operation when the shell has no core', async () => {
+    const service = new RemoteConnectionService(
+      async () => '/settings/dsh-launcher/remote-connections.json',
+      () => undefined
+    )
+    await expect(service.getState()).rejects.toMatchObject({ code: 'remote.persistence_failed' })
+    await expect(service.connect(connection.connectionId)).rejects.toMatchObject({
+      code: 'remote.persistence_failed'
+    })
   })
 })

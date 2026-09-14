@@ -1,11 +1,11 @@
 import type { LauncherHarnessService } from './managed/launcher-harness-service'
 import type { PeerManagement } from './p2p/management'
-import type { RemoteConnectionService, RemotePeerBroker } from './remote'
+import type { RemoteConnectionService } from './remote'
 
 export interface LauncherShutdownOwners {
   readonly launcherHarnessService: Pick<LauncherHarnessService, 'shutdown'>
   readonly remoteConnectionService: Pick<RemoteConnectionService, 'shutdown'>
-  readonly remotePeerBroker: Pick<RemotePeerBroker, 'shutdown'>
+  readonly remotePeerBroker: Readonly<{ shutdown(): Promise<void> }>
   readonly peerManagement: Pick<PeerManagement, 'close'>
   /** Present once the headless core is running; terminated with the shell. */
   readonly coreSupervisor?: { close(): Promise<void> }

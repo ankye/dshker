@@ -30,7 +30,7 @@ func TestCoreDaemonOwnsTheRemoteRoute(t *testing.T) {
 	}
 
 	// Disconnecting one is refused by name.
-	if _, err := parent.Call(ctx, "remote.disconnect", json.RawMessage(`{"connectionId":"connection_absent"}`)); err == nil || err.Error() != "remote.not_connected" {
+	if _, err := parent.Call(ctx, "remote.disconnect", json.RawMessage(`{"connectionId":"connection_absent"}`)); err == nil || err.Error() != "remote.connection_not_found" {
 		t.Fatalf("disconnect = %v", err)
 	}
 

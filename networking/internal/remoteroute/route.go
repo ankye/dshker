@@ -7,8 +7,11 @@ import (
 	"sync"
 )
 
-// ErrNotConnected is the refusal a disconnect for an unknown generation gets.
-var ErrNotConnected = errors.New("remote.not_connected")
+// ErrNotConnected is the refusal a disconnect for an unknown generation gets. It
+// reports the shell's own "no such remote connection" code: the renderer maps
+// every declared remote code to a message, and a new code would mean a renderer
+// change for a failure the page never shows.
+var ErrNotConnected = errors.New("remote.connection_not_found")
 
 // Route owns every live SSH generation the core started. It is the process
 // authority the shell used to hold, so a connection now survives a renderer

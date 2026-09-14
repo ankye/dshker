@@ -56,7 +56,7 @@ const PLUGIN_COMMAND_TIMEOUT_MILLISECONDS = 120_000
  * profile, so a second launch is refused by the core as an operation in
  * progress rather than by a shell-side flag.
  */
-const LAUNCHER_HARNESS_SUBJECT = 'launcher-harness'
+export const LAUNCHER_HARNESS_SUBJECT = 'launcher-harness'
 
 export {
   githubTreePluginUrl,
