@@ -38,7 +38,7 @@ func endpointIn(t *testing.T, directory string) string {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return `\\\\.\\pipe\\dshker-peer-` + secret[:32]
+		return `\\.\pipe\dshker-peer-` + secret[:32]
 	}
 	return filepath.Join(directory, "peer.sock")
 }

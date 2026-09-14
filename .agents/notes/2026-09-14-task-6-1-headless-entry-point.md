@@ -72,6 +72,28 @@ payload can come from stdin. The named commands are sugar over it.
   — the CLI reports an unreachable endpoint by name instead of hanging.
 - macOS: the package tests, `cmd/dshkerd` tests and the integration suite pass.
 
+## Windows
+
+The same commands run on the box, through the console session the credential store
+needs:
+
+- `serve` publishes a pipe endpoint (`\\.\pipe\dshker-peer-<32 hex>`) and reports
+  readiness;
+- `status` answers "core version 1, 55 methods";
+- `dsh start` starts a real child (pid recorded) and `status --json` reports it
+  `running` with the URL the child announced;
+- `dsh stop` reports the record as `stopped` — with `exitCode:1`, which is how
+  Windows reports a forced tree kill, and exactly why a requested stop has to be
+  recorded explicitly rather than inferred from the exit code;
+- `call nope.nope` exits 1;
+- the whole Go unit suite is green on that host.
+
+One test was wrong for Windows and only Windows could say so: the serving test
+built its pipe prefix with four backslashes, so `Listen` refused it with
+`p2p.invalid_socket` while the sibling assertion passed on Unix, where the
+endpoint is a path. The value is now written as a raw string, which is what the
+production `serve` path already did.
+
 ## Still to do in P5
 
 - `pair` and `proxy` have no named command yet; both are reachable through
