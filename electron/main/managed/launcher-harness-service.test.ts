@@ -5,10 +5,8 @@ import nodePath from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
 import {
-  LAUNCH_PREFERENCES_FORMAT,
   assertPortSetting,
   parseAnnouncedWebUrl,
-  parseLaunchPreferencesPort,
   parseManagedGitSource,
   githubTreePluginUrl,
   parseProfilePluginRecords,
@@ -16,9 +14,9 @@ import {
   localPathOf,
   gitUrlOf,
   formatLauncherLifecycleEvent,
-  classifyChildConsoleStream,
-  launcherWebStartArguments
+  classifyChildConsoleStream
 } from './launcher-harness-service'
+import { LAUNCH_PREFERENCES_FORMAT, parseLaunchPreferencesPort } from './launch-preferences'
 import {
   cleanLauncherHarnessCheckout,
   launcherProfilePluginArguments
@@ -47,25 +45,6 @@ describe('classifyChildConsoleStream', () => {
 
   it('keeps an actual stderr diagnostic in the error stream', () => {
     expect(classifyChildConsoleStream('stderr', 'Error: address already in use\n')).toBe('stderr')
-  })
-})
-
-describe('launcherWebStartArguments', () => {
-  it('mounts the Launcher-owned verbose overlay without changing the DSH home', () => {
-    expect(
-      launcherWebStartArguments('/launcher/settings/verbose.patch.yml', {
-        mode: 'fixed',
-        port: 3088
-      })
-    ).toEqual([
-      'dsh',
-      'web',
-      '--patch',
-      '/launcher/settings/verbose.patch.yml',
-      '--no-open',
-      '--port',
-      '3088'
-    ])
   })
 })
 

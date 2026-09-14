@@ -1,7 +1,4 @@
-import type {
-  LauncherHarnessConsoleEntry,
-  LauncherHarnessPortSetting
-} from '../../../src/shared/contracts'
+import type { LauncherHarnessConsoleEntry } from '../../../src/shared/contracts'
 import type { ManagedPluginInstallSource } from './managed-plugin-sources'
 
 /**
@@ -54,21 +51,6 @@ export function describePluginInstallSource(source: ManagedPluginInstallSource):
   if (source.kind === 'git') return `plugin from ${source.url}`
   if (source.kind === 'local') return `plugin from local directory ${source.path}`
   return `plugin archive ${source.path}`
-}
-
-/** Builds the exact DSH command, including Launcher-owned verbose logging for this child. */
-export function launcherWebStartArguments(
-  diagnosticsPatchPath: string,
-  port: LauncherHarnessPortSetting
-): readonly string[] {
-  return [
-    'dsh',
-    'web',
-    '--patch',
-    diagnosticsPatchPath,
-    '--no-open',
-    ...(port.mode === 'fixed' ? ['--port', String(port.port)] : [])
-  ]
 }
 
 /** Separates pnpm's one-line script echo from diagnostics written to standard error. */

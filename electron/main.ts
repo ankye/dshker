@@ -25,6 +25,7 @@ import { CoreSupervisor } from './main/core/supervisor'
 import { CoreSecrets, type CoreSecretPort } from './main/core/secrets'
 import { CoreCatalog, type CoreCatalogPort } from './main/core/catalog'
 import { CoreInstallCatalog, type CoreInstallCatalogPort } from './main/core/install-catalog'
+import { CoreHarnessRuntime, type CoreHarnessRuntimePort } from './main/core/harness-runtime'
 import { CoreRoots, type CoreRootsPort } from './main/core/roots'
 import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
@@ -220,6 +221,11 @@ async function registerLauncherServices(
       resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot()
     })
   )
+  // The DSH Web child belongs to the core now, so this service needs the core's
+  // runtime port. The getter keeps the same shape the registry uses: the service
+  // is constructed before the core starts, and refuses with a typed error if the
+  // core never arrives.
+  let coreHarnessRuntime: CoreHarnessRuntimePort | undefined
   const launcherHarnessService = new LauncherHarnessService({
     harnessDirectory: path.join(launcherRoot, 'harness'),
     versionsDirectory: path.join(launcherRoot, 'versions'),
@@ -233,7 +239,8 @@ async function registerLauncherServices(
       : path.join(app.getAppPath(), 'resources', 'dsh-launcher-verbose-logging.patch.yml'),
     gitExecutable: GIT_EXECUTABLE,
     pnpmExecutable: PNPM_LAUNCHER.executable,
-    pnpmLauncher: PNPM_LAUNCHER
+    pnpmLauncher: PNPM_LAUNCHER,
+    runtime: () => coreHarnessRuntime
   })
   const launcherUpdateService = new LauncherUpdateService({
     currentVersion: APP_METADATA.version,
@@ -284,6 +291,7 @@ async function registerLauncherServices(
     coreSecrets = new CoreSecrets(coreSupervisor.rpc)
     coreCatalog = new CoreCatalog(coreSupervisor.rpc)
     coreRoots = new CoreRoots(coreSupervisor.rpc)
+    coreHarnessRuntime = new CoreHarnessRuntime(coreSupervisor.rpc)
     coreInstallCatalog = new CoreInstallCatalog(coreSupervisor.rpc)
   } catch (error) {
     console.error('DSHKer Launcher could not start its headless core.', error)
