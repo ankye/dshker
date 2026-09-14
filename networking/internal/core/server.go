@@ -41,6 +41,10 @@ var served = map[string]bool{
 	"core.install_catalog_inspect": true,
 	"core.roots_commit":            true,
 	"core.roots_inspect":           true,
+	"managed.checkout_prepare":     true,
+	"managed.checkout_verify":      true,
+	"managed.git_register":         true,
+	"managed.repository_inspect":   true,
 	"core.secret_delete":           true,
 	"core.secret_get":              true,
 	"core.secret_set":              true,
@@ -747,6 +751,17 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, err
 		}
 		return installCatalogResult{Catalog: request.Catalog}, nil
+	// The checkout layer moved into the core in 4.2. The shell asks for one
+	// operation and receives a verified identity; the refusals are the three
+	// renderer codes the page already maps.
+	case "managed.checkout_prepare":
+		return server.handleCheckoutPrepare(ctx, payload)
+	case "managed.checkout_verify":
+		return server.handleCheckoutVerify(ctx, payload)
+	case "managed.git_register":
+		return server.handleGitRegister(ctx, payload)
+	case "managed.repository_inspect":
+		return server.handleRepositoryInspect(ctx, payload)
 	case "core.roots_inspect":
 		var request struct {
 			FilePath      string `json:"filePath"`

@@ -190,6 +190,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | group    | methods                                                                                                                                                                                                                                                                                                           | role   |
 | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.runtime_binding`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
+| managed  | `managed.checkout_prepare`, `managed.checkout_verify`, `managed.git_register`, `managed.repository_inspect`                                                                                                                                                                                                       | shell  |
 | device   | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                                                                                    | shell  |
 | devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                                                                                                                  | shell  |
 | network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                                                                                                             | shell  |
@@ -238,6 +239,18 @@ it, and an inbound parent-role method is refused the same way, because the core 
 than answers them. `device.createCSR` and `device.createKey` were called by the shell all along but
 missing from this table; they are published now, which is additive within version 1 and closes the
 gap between the table and the contract it describes.
+
+``managed.checkout_prepare`, `managed.checkout_verify`, `managed.git_register` and
+`managed.repository_inspect` are the checkout layer the core took over in 4.2. The
+shell asks for one operation and receives a verified identity it persists: the
+core pins and version-checks the git executable, derives and proves the managed
+paths itself, creates or refreshes the mirror (from the declared URL, or from a
+verified bundle), resolves the selection, materializes the detached worktree for
+that exact commit, and refuses an activation while the tree is dirty. Every
+refusal that leaves these methods is one of the three codes the page already maps
+— `managed.git_remote_invalid`, `managed.git_revision_invalid` and
+`managed.git_operation_failed` — because the shell's own `git.*` codes are
+internal to this composition and are not a refusal family.
 
 `core.runtime_binding` is the reverse-proxy half of hosting, published in 6.1 so a caller
 with no display can ask what this machine hands a peer. It answers

@@ -68,6 +68,13 @@ var Methods = []Method{
 	{"network.invalidate", RoleShell},
 	{"network.join", RoleShell},
 	{"network.leave", RoleShell},
+	// The checkout layer moved into the core in 4.2: the shell asks for one
+	// operation and receives a verified identity it persists. Additive within
+	// version 1, with the three managed.git_* codes the page already maps.
+	{"managed.checkout_prepare", RoleShell},
+	{"managed.checkout_verify", RoleShell},
+	{"managed.git_register", RoleShell},
+	{"managed.repository_inspect", RoleShell},
 	{"networks.create", RoleShell},
 	{"networks.delete", RoleShell},
 	{"networks.deletePair", RoleShell},
