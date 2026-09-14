@@ -140,7 +140,7 @@ export class CoreSupervisor {
       const secret = randomBytes(32).toString('hex')
       const ready = readPeerLine(child.stdout, budget)
       child.stdin.end(JSON.stringify({ version: 1, socket: socketPath, secret }))
-      let announcement: { version: number; ready: boolean }
+      let announcement: Record<string, unknown>
       try {
         announcement = exactPeerObject(await ready, ['version', 'ready'])
       } catch (error) {
