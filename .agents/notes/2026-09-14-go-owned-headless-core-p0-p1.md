@@ -95,8 +95,8 @@ Three details that would otherwise be rediscovered painfully:
 The Windows checkout runs Go 1.26.4 with `GOTOOLCHAIN=auto` while `go.mod`
 requires go 1.27.0, so the first Windows test run fetches the toolchain. The
 real tool paths on that host are
-`C:\Users\Administrator\scoop\apps\go\1.26.4\bin\go.exe` and
-`C:\Users\Administrator\scoop\apps\git\2.54.0\bin\git.exe`; the scoop
+the scoop-installed `go` and `git` (`scoop\apps\<tool>\<version>\bin\`), and
+the second line named the same shape for `git`; the scoop
 shims fail over SSH, and `scoop\apps\go\current` is a junction that cmd
 refuses to resolve from a non-interactive session.
 

@@ -36,6 +36,7 @@ const reads = new Set<Operation>([
   'currentUser',
   'networks',
   'networkDevices',
+  'accountDevices',
   'registration'
 ])
 

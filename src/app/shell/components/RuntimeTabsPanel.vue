@@ -19,7 +19,7 @@ import {
 import { isLoopbackAddress, runtimeBrowser, type RuntimeTabId } from '../runtimeBrowserState'
 import EmptyState from './EmptyState.vue'
 import RemoteRunActions from './RemoteRunActions.vue'
-import P2PRunActions from './P2PRunActions.vue'
+import RuntimePeerEmptyState from './RuntimePeerEmptyState.vue'
 import RuntimeTabAddMenu from './RuntimeTabAddMenu.vue'
 
 /** The Electron <webview> members this panel drives. */
@@ -584,6 +584,7 @@ onUnmounted(() => {
           :ref="(element: unknown) => registerFrame(tab.id, element)"
           class="browser-viewport"
           :src="tab.url"
+          :partition="tab.partition"
           :data-hidden="browser.activeTabId.value !== tab.id"
           :data-testid="`runtime-webview-${tab.id}`"
           @did-start-loading="loading = browser.activeTabId.value === tab.id"
@@ -613,23 +614,14 @@ onUnmounted(() => {
           </button>
         </template>
       </EmptyState>
-      <EmptyState
+      <RuntimePeerEmptyState
         v-if="
           browser.activeTab.value?.url === undefined && browser.activeTab.value?.source === 'peer'
         "
-        icon="plug"
-        fill
-        :title="t('runtime.remoteUnavailable')"
-        :description="t('runtime.remoteUnavailable.description')"
-      >
-        <template #actions>
-          <P2PRunActions
-            v-if="browser.activeTab.value?.connectionId"
-            :connection-id="browser.activeTab.value.connectionId"
-            @edit="emit('navigate', 'remote')"
-          />
-        </template>
-      </EmptyState>
+        :status="browser.activeTab.value?.status"
+        :connection-id="browser.activeTab.value?.connectionId"
+        @edit="emit('navigate', 'remote')"
+      />
       <EmptyState
         v-if="
           browser.activeTab.value?.url === undefined && browser.activeTab.value?.source === 'remote'

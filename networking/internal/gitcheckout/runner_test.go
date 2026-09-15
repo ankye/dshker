@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -106,14 +105,7 @@ func TestPinExecutablePinsAFileIdentity(t *testing.T) {
 // a command that succeeds, a command that fails, and the bounded observation the
 // caller gets back.
 func TestRunnerRunsGitWithoutAShell(t *testing.T) {
-	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		t.Skip("git is not installed on this machine")
-	}
-	gitPath, err = filepath.EvalSymlinks(gitPath)
-	if err != nil {
-		t.Fatal(err)
-	}
+	gitPath := machineGit(t)
 	directory := canonicalDirectory(t)
 	runner := NewRunner()
 

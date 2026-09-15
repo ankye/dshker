@@ -313,6 +313,30 @@ honestly instead of claiming full completion.
   may apply the change twice.
 - **Anything `_busy` means wait**, not click again.
 
+## The peer workbench address
+
+A connected peer's workbench is a loopback gateway on this machine: the core opens
+a listener that forwards, through the encrypted peer session, to the remote DSH
+Web, and the URL that opens it carries a token in its query. That URL reaches the
+renderer, because a peer workbench is shown in a `<webview>` and Electron can only
+mount a real `http` URL — a custom scheme handled in main cannot carry the page's
+own WebSocket upgrade, which DSH Web needs.
+
+What keeps one peer's session away from another is therefore the **guest partition**,
+not the secrecy of the address: main derives the partition from the pinned service
+and pair identity (`peerPartition`), the guest is mounted into it, and another
+peer's cookies and tokens are never in the same session. The same is true of the
+Local tab and of SSH remotes, which also hand a credential-bearing URL to the same
+renderer.
+
+The address is still not projected into tab state: it is fetched by the named
+`entry` operation for one named attempt (its `generation`), and refused when the
+attempt has been replaced, so a tab that has moved on is never handed a gateway its
+session no longer owns. Moving the guest itself into main (`WebContentsView`) would
+keep the token out of the renderer entirely; it is recorded as a follow-up rather
+than done here, because it changes how the Run page mounts, zooms and measures
+every guest.
+
 ## Server upgrades and backups
 
 The coordination server holds your accounts, networks, device registrations and

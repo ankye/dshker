@@ -8,7 +8,7 @@ Change: `go-owned-headless-core` (P6, task 6.2)
 Driving the product's own headless path on Windows — `dshkerd serve` plus
 `dshkerd dsh start` — crashed the child every time:
 
-    Error: dsh: failed to read overlay D:\...\state.json\no-overlay.yml: ENOENT
+    Error: dsh: failed to read overlay <state>\state.json\no-overlay.yml: ENOENT
 
 `runDshStart` names `no-overlay.yml` in the state directory as the child's
 `--patch` overlay when the caller names none, and **nothing ever created it**. DSH
@@ -37,7 +37,7 @@ a headless start leaves no overlay behind.
 
 With the fix, the same two commands on Windows produce a headless host that really
 serves: private channel `serving=true`, launch `launch-67de3a12…` running in
-`D:\work\deepseek-harness`, `status` and `proxy` both answering
+the Harness checkout, `status` and `proxy` both answering
 `http://127.0.0.1:3080/?token=…` from the DSH web the core supervises. No GUI or
 Electron process ran on that machine; every step was CLI. Evidence:
 `.run/cross-machine/host-product-path.txt`.

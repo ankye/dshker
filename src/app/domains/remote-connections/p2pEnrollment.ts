@@ -10,6 +10,15 @@ export interface P2PEnrollmentState {
   joinNameDraft: string
   resultUnconfirmed: boolean
   retryRevision: string | undefined
+  /**
+   * The device ids the signed-in account is bound to, or undefined while unread.
+   *
+   * A device id can be bound to more than one account, so whether this machine
+   * belongs to the account signed in here is a question only the coordinator can
+   * answer; `undefined` stays distinct from "not bound", because an unread list is
+   * not evidence that the machine is foreign.
+   */
+  accountDeviceIds: string[] | undefined
 }
 
 /** Public registration state only. Keys, CSR, certificates and grants remain in main. */
@@ -25,7 +34,8 @@ export class P2PEnrollmentDomain {
         joinNetworkIdDraft: '',
         joinNameDraft: '',
         resultUnconfirmed: false,
-        retryRevision: undefined
+        retryRevision: undefined,
+        accountDeviceIds: undefined
       }
     return this.#states[serviceId]
   }
@@ -39,6 +49,22 @@ export class P2PEnrollmentDomain {
       state.resultUnconfirmed = result.data.kind === 'pending'
     }
     // A missing/unreadable record is an error, never an inferred unregistered state.
+  }
+
+  /**
+   * Reads the device ids the signed-in account is bound to.
+   *
+   * This is what decides whether the machine's own identity belongs to the account
+   * signed in here. The account recorded in the local credential cannot answer it:
+   * that is the account the machine first enrolled under, and a device added to
+   * another account's network by hand keeps it — so a legitimate, bound machine
+   * looked like a foreign one. A failure leaves the list unread rather than
+   * claiming the machine is unbound.
+   */
+  async readAccountDevices(serviceId: string): Promise<void> {
+    const result = await this.management.runRead('accountDevices', { serviceId })
+    if (result.ok)
+      this.state(serviceId).accountDeviceIds = result.data.devices.map((d) => d.deviceId)
   }
 
   async register(serviceId: string, networkId: string): Promise<void> {

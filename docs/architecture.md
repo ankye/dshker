@@ -18,7 +18,7 @@ The first foundation API returns immutable bootstrap metadata. It is deliberatel
 
 Remote connections have two independent layers, and a surface must not answer one with data from the other. The **network session** (`p2pNetwork`) is this computer's session with a coordinator: it decides presence, discoverability and whether pairing is possible. A **pair connection** (`p2pConnections`) decides whether one specific remote workbench is reachable. Deriving network status from pair stages made a single enrolled computer report itself offline for a stage it could never reach.
 
-Both layers distinguish "not read yet" from a confirmed negative state, and neither is derived per surface: the shell seeds both at start and main pushes session changes. A peer tab's status is projected without an address, because the DSH entry point stays in main. See [P2P connection state](handover-p2p-connection-state.md).
+Both layers distinguish "not read yet" from a confirmed negative state, and neither is derived per surface: the shell seeds both at start and main pushes session changes. A peer tab's status is projected without an address: the address is asked for separately, for one named attempt, and is only ever used to mount that attempt's guest. See [P2P connection state](handover-p2p-connection-state.md).
 
 ## Extension rules
 

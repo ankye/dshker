@@ -109,6 +109,12 @@ export function registerPeerManagementIpc(
     const { devices, localDeviceId } = await owner.networkDevices(r.serviceId, r.networkId, s)
     return projectPeerNetworkDevices(devices, localDeviceId)
   })
+  // Read-only: the account's own device bindings, which is what decides whether
+  // this machine belongs to the account signed in here.
+  register('accountDevices', false, async (r, s) => {
+    const { devices, localDeviceId } = await owner.accountDevices(r.serviceId, s)
+    return { devices: projectPeerNetworkDevices(devices, localDeviceId), localDeviceId }
+  })
   register('createNetwork', true, async (r, s) =>
     projectPeerNetwork(await owner.createNetwork(r.serviceId, r.name, s))
   )
@@ -188,7 +194,11 @@ export function registerPeerManagementIpc(
     projectPeerConnection(r.serviceId, await owner.connect(r.serviceId, r.pairId, s))
   )
   register('disconnect', true, (r, s) => owner.disconnect(r.serviceId, r.pairId, s))
-  register('localDevice', false, async () => owner.localDevice())
+  // Read-only: it answers with the address main already holds, and never starts a
+  // connection of its own.
+  register('entry', false, async (r) => owner.entry(r.serviceId, r.pairId, r.generation))
+  // Read-only: it answers with this machine's own key id, read from the core.
+  register('localDevice', false, async (_r, s) => owner.localDevice(s))
   register('updateServiceConfig', true, async (r, s) =>
     projectPeerCatalog(
       await owner.updateServiceConfig(

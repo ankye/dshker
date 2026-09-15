@@ -13,7 +13,7 @@
 先在独立服务仓库构建，保留当前 Go workspace；`-mod=readonly` 仅处理当前工作区 vendor 不匹配，不改变服务依赖边界：
 
 ```bash
-cd /Users/a1021500932/workspace/go_workspace/dshker-server
+cd <coordinator-checkout>
 go build -mod=readonly -trimpath -o bin/dshker-server ./cmd/dshker-server
 go test -mod=readonly -race ./...
 go vet -mod=readonly ./...
@@ -23,8 +23,8 @@ go run -mod=readonly ./tools/check-boundaries
 再从客户端模块执行；服务器路径必须指向上一步真实制品，缺失时测试失败，不跳过：
 
 ```bash
-cd /Users/a1021500932/workspace/desktop_workspace/apps/dsh-launcher/networking
-export DSHKER_SERVER_BINARY=/Users/a1021500932/workspace/go_workspace/dshker-server/bin/dshker-server
+cd <launcher-checkout>/networking
+export DSHKER_SERVER_BINARY=<coordinator-checkout>/bin/dshker-server
 mkdir -p .run/p2p-stability
 set -o pipefail
 go test -race ./... -count=1 -timeout=6m -json | tee .run/p2p-stability/go-test.jsonl

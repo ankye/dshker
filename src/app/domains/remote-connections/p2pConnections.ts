@@ -17,8 +17,8 @@ export interface P2PConnectionsState {
  *
  * `ready` is the only stage that means a workbench is usable, and it is
  * reported by main only when a real direct path and runtime generation exist.
- * Nothing here holds a DSH URL, cookie or token: the local entry point stays in
- * main and reaches only the restricted Run guest.
+ * Nothing here holds a DSH URL, cookie or token: an address is asked for
+ * separately, by `entry`, for one named attempt.
  */
 export class P2PConnectionsDomain {
   readonly #state = reactive<P2PConnectionsState>({
@@ -98,6 +98,24 @@ export class P2PConnectionsDomain {
     const result = await this.management.run('disconnect', { serviceId, pairId })
     if (result.ok) await this.read()
     else this.#recordWriteOutcome(result.code)
+  }
+
+  /**
+   * The workbench address of a connected peer, for the tab that renders it.
+   *
+   * Main owns the address — it is a loopback gateway with a token — and answers
+   * only for the attempt the caller names, so a tab that has moved on cannot be
+   * handed a gateway its session no longer owns. A refusal is returned rather
+   * than thrown: an address that is not available yet is an ordinary state of a
+   * tab, not a failure of the run page.
+   */
+  async entry(
+    serviceId: string,
+    pairId: string,
+    generation: number
+  ): Promise<{ url: string; partition: string } | undefined> {
+    const result = await this.management.run('entry', { serviceId, pairId, generation })
+    return result.ok ? { url: result.data.url, partition: result.data.partition } : undefined
   }
 
   #canWrite(serviceId: string): boolean {

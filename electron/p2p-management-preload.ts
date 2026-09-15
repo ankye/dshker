@@ -42,6 +42,7 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
   remoteDirectory: (request) => ipcRenderer.invoke(channels.remoteDirectory, request),
   connect: (request) => ipcRenderer.invoke(channels.connect, request),
   disconnect: (request) => ipcRenderer.invoke(channels.disconnect, request),
+  entry: (request) => ipcRenderer.invoke(channels.entry, request),
   localDevice: (request) => ipcRenderer.invoke(channels.localDevice, request),
   serviceSessions: (request) => ipcRenderer.invoke(channels.serviceSessions, request),
   onServiceSessionsChange: (listener: () => void): (() => void) => {
@@ -52,5 +53,6 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
     }
   },
   networkDevices: (request) => ipcRenderer.invoke(channels.networkDevices, request),
+  accountDevices: (request) => ipcRenderer.invoke(channels.accountDevices, request),
   cancel: (request) => ipcRenderer.invoke(channels.cancel, request)
 })

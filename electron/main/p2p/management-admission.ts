@@ -41,8 +41,10 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   connections: [],
   connect: ['serviceId', 'pairId'],
   disconnect: ['serviceId', 'pairId'],
+  entry: ['serviceId', 'pairId', 'generation'],
   localDevice: [],
   serviceSessions: [],
+  accountDevices: ['serviceId'],
   updateServiceConfig: [
     'serviceId',
     'revision',
@@ -90,6 +92,14 @@ function validateField(field: string, value: unknown): void {
       throw new PeerHelperError('p2p.invalid_request')
     return
   }
+  if (field === 'generation') {
+    // A connection attempt is numbered from one; the main process refuses an
+    // address that belongs to a different attempt, so the field only has to be a
+    // positive safe integer here.
+    if (!Number.isSafeInteger(value) || (value as number) <= 0)
+      throw new PeerHelperError('p2p.invalid_request')
+    return
+  }
   if (field === 'rootId') {
     if (typeof value !== 'string' || value === '' || value.length > 128)
       throw new PeerHelperError('p2p.invalid_request')
@@ -112,8 +122,10 @@ function validateField(field: string, value: unknown): void {
     return
   }
   if (field === 'fingerprint') {
-    // Exactly the grouped-hex form the UI displayed, so confirmation is comparable.
-    if (typeof value !== 'string' || !/^([a-f0-9]{4} ){7}[a-f0-9]{4}$/.test(value))
+    // Exactly the grouped-hex form the UI displayed, so confirmation is
+    // comparable: three groups, because a fingerprint is the coordinator's
+    // twelve-character key id.
+    if (typeof value !== 'string' || !/^([a-f0-9]{4} ){2}[a-f0-9]{4}$/.test(value))
       throw new PeerHelperError('p2p.pair_fingerprint_mismatch')
     return
   }

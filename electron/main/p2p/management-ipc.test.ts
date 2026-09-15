@@ -32,7 +32,7 @@ const networkId = 'b'.repeat(12)
 const revision = 'c'.repeat(64)
 const pairId = '9'.repeat(12)
 /** Grouped-hex form the UI displays and the user confirms. */
-const fingerprint = ['1111', '2222', '3333', '4444', '5555', '6666', '7777', '8888'].join(' ')
+const fingerprint = ['1111', '2222', '3333'].join(' ')
 const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   enable: {},
   catalog: {},
@@ -49,6 +49,7 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   logout: { serviceId },
   networks: { serviceId },
   networkDevices: { serviceId, networkId },
+  accountDevices: { serviceId },
   createNetwork: { serviceId, name: 'Office' },
   renameNetwork: { serviceId, networkId, name: 'Office' },
   updateNetworkLimit: { serviceId, networkId, maxDevices: 20 },
@@ -72,6 +73,7 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   connections: {},
   connect: { serviceId, pairId },
   disconnect: { serviceId, pairId },
+  entry: { serviceId, pairId, generation: 1 },
   localDevice: {},
   serviceSessions: {},
   updateServiceConfig: {
@@ -162,6 +164,7 @@ function fixture() {
     logout: vi.fn(async () => undefined),
     networks: vi.fn(async () => [network]),
     networkDevices: vi.fn(async () => ({ devices: [], localDeviceId: '' })),
+    accountDevices: vi.fn(async () => ({ devices: [], localDeviceId: '' })),
     createNetwork: vi.fn(async () => network),
     renameNetwork: vi.fn(async () => network),
     updateNetworkLimit: vi.fn(async () => ({ ...network, maxDevices: 20 })),
@@ -181,6 +184,7 @@ function fixture() {
     connections: vi.fn(() => ({ error: '', peers: [{ serviceId, state: helperState }] })),
     connect: vi.fn(async () => helperState),
     disconnect: vi.fn(async () => undefined),
+    entry: vi.fn(() => ({ url: 'http://127.0.0.1:9/?token=unit-test-only' })),
     localDevice: vi.fn(async () => ({ deviceId: 'a'.repeat(12), name: 'host' })),
     serviceSessions: vi.fn(async () => []),
     updateServiceConfig: vi.fn(async () => snapshot),

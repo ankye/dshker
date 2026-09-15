@@ -94,11 +94,14 @@ Helper 接入进展（2026-09-07）：新增 Go helper、私有 RPC、runtime HT
 - [ ] 4.1 接入受管 runtime 的 start/state/invalidate，绑定实际启动 URL 和 runtime generation。Owner: Electron runtime/p2p；依赖: 3.5；验证: macOS/Windows 上运行中改设置仍用旧端口，重启后旧 Token/stream 失效；缺根/profile/工具、未知版本及脏状态沿用具体本地错误。
 - [ ] 4.2 实现只指向当前受管 DSH 的 loopback HTTP/WS adapter。Owner: Electron p2p + peer；依赖: 3.4、4.1；验证: 真实 DSH 认证 HTTP、Cookie、重定向及 WebSocket 通过，Host/Origin/CONNECT/任意目标注入失败；保留路径和查询语义。
 - [ ] 4.3 为 Local 与每个 peer 隔离 browser session partition，通过 main 将本地入口交给受限 Run guest。Owner: Electron browser；依赖: 4.2；验证: 至少 Local + 两个 peer 的 Cookie/Token 互不串用，普通 renderer projection 无原始远端 URL，断开后旧入口不可用。
+
+  实施边界（2026-09-15）：入口地址按 attempt（generation）经命名操作 `entry` 单独交给渲染进程，projection/status 仍不含地址；渲染进程确实会拿到带 token 的 loopback 网关 URL，因为 `<webview>` 只能挂真实 http URL，而主进程自建 scheme 无法承载 DSH Web 自身的 WebSocket 升级。隔离由该 pair 的 guest partition 保证，理由与取舍见 `docs/p2p-connections.md` 的 “The peer workbench address”。把 guest 搬进主进程（`WebContentsView`）可让 token 完全不进渲染进程，见 4.9。
 - [ ] 4.4 实现阶段化连接状态、超时/取消、testStatus 与 live 状态分离及统一 generation 清理。Owner: Electron p2p；依赖: 4.2、4.3；验证: 测试包含真实 HTTP/WS 后销毁临时链路，Connect 才保留 ready；重复、旧回调、撤销、崩溃和退出均不污染其他连接。
 - [ ] 4.5 实现远端用户授权根的选择/持久化/读回/撤销，以及绑定配对的命名根列表/目录分页能力。Owner: Electron/remote-projects；依赖: 1.3、1.4、3.5、5.1；验证: 无隐含整盘授权，真实目录列表精确匹配；缺授权/权限/目录错误分别反馈，撤销拒绝旧引用，控制面不承载工程数据。
 - [ ] 4.6 实现目标系统路径规范化、实际根包含关系验证、不透明引用和操作时重检。Owner: Electron/remote-projects；依赖: 4.5；验证: Windows 盘符/大小写/保留名、Unicode、symlink/junction、遍历、目录替换、未授权 UNC、跨 peer/root/generation 注入逐项拒绝或准确读回，不扩大文件访问能力。
 - [ ] 4.7 经已验证 DSH 原生契约完成工程打开、结果查询及工程/会话身份映射。Owner: Electron/runtime + domain；依赖: 1.4、4.2、4.6；验证: 真正打开远端工程后再成功，丢回复读回原请求，不重复创建，不替换成本机同名目录；原生权限审批不绕过。
 - [ ] 4.8 接通真实 DSH 工作与断线任务核对，区分连接丢失/任务停止/结果未知。Owner: runtime/browser/domain；依赖: 4.3、4.4、4.7；验证: 经公开 UI 读取、修改隔离远端文件并执行验证任务，独立远端内容/任务读回一致、本机不变；断线/重连/重启均不自动重放操作，不伪造任务状态。
+- [ ] 4.9 把 peer 与 Local guest 改为主进程持有的 `WebContentsView`，使入口 URL（含 token）完全不进入渲染进程；渲染进程只上报占位区域并接收构造/缩放/销毁指令。Owner: Electron browser；依赖: 4.3；验证: 渲染进程内存中不存在带 token 的地址，Run 页的后退/前进/刷新/缩放/渲染指标与视觉冒烟与当前 `<webview>` 实现等价；每对设备仍使用各自 partition。
 
 ## 5. 多电脑界面与持久记录
 

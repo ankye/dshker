@@ -68,7 +68,7 @@ which are not absolute on Windows, so they asserted the wrong refusal there:
 `managed.dsh_runtime_overlap`. The implementation was right and the tests were
 wrong. Both now build their paths from a temporary directory, so they validate the
 platform's own spelling — including the filesystem root, which is `/` on Unix and
-`C:\` on Windows. The daemon round trip passed on Windows from the start, which is
+a bare volume root on Windows. The daemon round trip passed on Windows from the start, which is
 what made the distinction clear.
 
 ## Deliberate fidelity note

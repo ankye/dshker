@@ -6,9 +6,11 @@ import { P2PRemoteProjectsDomain, REMOTE_PAGE_SIZE } from './p2pRemoteProjects'
 const serviceId = 'service-a'
 const pairId = 'pair-a'
 const rootId = 'root-a'
+// Roots the other computer authorized. The paths are that machine's, so no
+// account name of this machine belongs in them.
 const roots = [
-  { rootId, name: 'Work', path: '/Users/remote/work' },
-  { rootId: 'root-b', name: 'Games', path: '/Users/remote/games' }
+  { rootId, name: 'Work', path: '/srv/remote/work' },
+  { rootId: 'root-b', name: 'Games', path: '/srv/remote/games' }
 ]
 const dir = (ref: string, name: string): P2PRemoteEntryView => ({
   ref,

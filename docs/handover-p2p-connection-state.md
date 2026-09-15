@@ -59,7 +59,9 @@ type RuntimeTabStatus =
 
 ## 四、硬约束
 
-**P2P tab 的 `status` 里绝不能含地址。** DSH 入口留在主进程，由主进程直接交给 guest。这是为什么没有复用 `RemoteConnectionStatus`(它的 `ready` 带 `url`)。SSH 侧也经 `withoutAddress()` 投影，两边同形。
+**P2P tab 的 `status` 里绝不能含地址。** 地址只在需要挂载 guest 时,由 `entry` 这一次命名操作按 attempt（generation）单独交付;`status` 复用 `RemoteConnectionStatus`(它的 `ready` 带 `url`)会把"可以打开"和"这是打开它的凭据"混为一谈。SSH 侧也经 `withoutAddress()` 投影，两边同形。
+
+地址确实会到达渲染进程——`<webview>` 只能挂真实 http URL，Electron 的自定义 scheme 无法代理 WebSocket 升级,所以没有把它们挡在渲染进程之外的实现路径。隔离靠的是主进程为该 pair 指定的 guest partition，不是地址的保密性;什么时候把 guest 搬进主进程(`WebContentsView`)见 `docs/p2p-connections.md` 的 "The peer workbench address"。本地 tab 与 SSH remote tab 早就是把带凭据的 URL 交给同一个渲染进程。
 
 已有测试断言 ready 状态不含地址。改动这块时别绕过它。
 

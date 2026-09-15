@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "change": "Self-hosted P2P DSH connections: pairing, connection, isolation, remote projects, shared config, reconciliation",
-  "acceptance_stage": "planning",
+  "acceptance_stage": "diagnostic",
   "implementation_complete": false,
   "threshold_baseline": "initial",
   "experience_profile": "generic",

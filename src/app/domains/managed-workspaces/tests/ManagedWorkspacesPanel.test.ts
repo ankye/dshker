@@ -224,6 +224,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
     p2pManagement: {
       enable: unusedP2P,
       networkDevices: unusedP2P,
+      accountDevices: unusedP2P,
       accountSelection: unusedP2P,
       rememberAccountSelection: unusedP2P,
       catalog: unusedP2P,
@@ -254,6 +255,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       connections: unusedP2P,
       connect: unusedP2P,
       disconnect: unusedP2P,
+      entry: unusedP2P,
       localDevice: unusedP2P,
       serviceSessions: unusedP2P,
       onServiceSessionsChange: () => () => undefined,

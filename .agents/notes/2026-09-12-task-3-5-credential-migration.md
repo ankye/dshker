@@ -17,7 +17,7 @@ Fix in `networking/internal/secret/store_darwin.go`: values are base64-encoded a
 ## Verification
 
 - mac: full TS suite 1231 tests; type/architecture/format gates; `secrets-core.test.ts` runs the real `dshkerd` (rebuilt with the fix) through migrate → core restart → provider-persisted load; Go `internal/secret` incl. the new large-value cases.
-- win: Go suites via `D:\work\dshker\win35.bat`; TS evidence from the CI windows runner on push.
+- win: Go suites via the Windows batch runner; TS evidence from the CI windows runner on push.
 
 ## Files
 

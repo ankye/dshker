@@ -40,11 +40,15 @@ export const P2P_MANAGEMENT_CHANNELS = {
   remoteDirectory: 'dsh-launcher:p2p:remote-directory',
   connect: 'dsh-launcher:p2p:connect',
   disconnect: 'dsh-launcher:p2p:disconnect',
+  /** The connected peer workbench address, held by main and handed to the Run guest. */
+  entry: 'dsh-launcher:p2p:entry',
   localDevice: 'dsh-launcher:p2p:local-device',
   /** This computer's session with each coordinator: the network layer, not a pair. */
   serviceSessions: 'dsh-launcher:p2p:service-sessions',
   /** Devices enrolled in one owned network, with liveness and reported build. */
   networkDevices: 'dsh-launcher:p2p:network-devices',
+  /** Every device bound to the signed-in account, whichever network it is in. */
+  accountDevices: 'dsh-launcher:p2p:account-devices',
   cancel: 'dsh-launcher:p2p:cancel'
 } as const
 
@@ -223,10 +227,10 @@ export interface P2PInviteView {
 /**
  * Live connection stage for one paired computer.
  *
- * This projection deliberately cannot carry a DSH URL, cookie or token: the
- * local entry point stays in main and is handed only to the restricted Run
- * guest. `ready` is the sole stage that means the workbench is usable, and it
- * is reported only when a real direct path and runtime generation exist.
+ * This projection cannot carry a DSH URL, cookie or token: an address is handed
+ * over only by the named `entry` operation, for one attempt. `ready` is the sole
+ * stage that means the workbench is usable, and it is reported only when a real
+ * direct path and runtime generation exist.
  */
 /**
  * One directory the remote user authorized.
@@ -370,9 +374,30 @@ export interface P2PManagementInputs {
   }
   connect: ServiceRequest & { pairId: string }
   disconnect: ServiceRequest & { pairId: string }
+  /**
+   * The connected peer's own workbench address.
+   *
+   * Main holds the address — a loopback gateway for one attempt, whose query
+   * carries the token that opens it — and answers only for the attempt the caller
+   * names, so a tab that has moved on cannot be handed a gateway its session no
+   * longer owns. The address does reach the renderer, because a `<webview>` can only
+   * be pointed at a real http URL: the isolation that keeps one peer's cookies away
+   * from another is the guest partition main names for the pair, not the secrecy of
+   * the address. See docs/p2p-connections.md, "The peer workbench address".
+   */
+  entry: ServiceRequest & { pairId: string; generation: number }
   localDevice: Record<never, never>
   serviceSessions: Record<never, never>
   networkDevices: NetworkRequest
+  /**
+   * The devices the signed-in account is bound to.
+   *
+   * Distinct from `networkDevices`, which lists one network's members: a machine
+   * can be bound to an account without being in the network being displayed, and
+   * that is exactly the case where a locally remembered account gets the answer
+   * wrong.
+   */
+  accountDevices: ServiceRequest
   cancel: { targetRequestId: number }
 }
 export interface P2PManagementResults {
@@ -417,9 +442,11 @@ export interface P2PManagementResults {
   /** Starting a connection returns the accepted attempt, never a ready state. */
   connect: P2PConnectionView
   disconnect: void
+  entry: { url: string; partition: string }
   localDevice: P2PLocalDeviceView
   serviceSessions: P2PServiceSessionView[]
   networkDevices: P2PNetworkDeviceView[]
+  accountDevices: { devices: P2PNetworkDeviceView[]; localDeviceId: string }
   /** Accepted means cancellation requested, never that a server write was undone. */
   cancel: { accepted: boolean }
 }

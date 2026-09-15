@@ -24,28 +24,55 @@ func gitFixture(t *testing.T) (string, string) {
 	return directory, strings.TrimSpace(runGit(t, directory, "rev-parse", "HEAD"))
 }
 
+// machineGit returns this machine's own git for a test that has to use one.
+//
+// A git that cannot be resolved is a property of the machine, not a product
+// failure: a Scoop install whose `current` junction points into a directory that
+// no longer exists leaves a shim on PATH that exec.LookPath finds and no process
+// can start. Reporting that as a test failure read as "the product is broken" on
+// exactly such a machine, so the reason is stated through the skip instead; the
+// refusal itself is covered deliberately by the tests that register a broken path.
+func machineGit(t *testing.T) string {
+	t.Helper()
+	found, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git is not installed on this machine")
+	}
+	resolved, err := filepath.EvalSymlinks(found)
+	if err != nil {
+		t.Skipf("git at %s cannot be resolved on this machine: %v", found, err)
+	}
+	return resolved
+}
+
 func runGit(t *testing.T, directory string, arguments ...string) string {
 	t.Helper()
 	command := exec.Command("git", append([]string{"-C", directory}, arguments...)...)
 	command.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=0")
 	output, err := command.CombinedOutput()
 	if err != nil {
+		if isMissingGit(err) {
+			t.Skipf("git cannot be started on this machine: %v", err)
+		}
 		t.Fatalf("git %s: %v\n%s", strings.Join(arguments, " "), err, output)
 	}
 	return string(output)
 }
 
+// isMissingGit separates "this machine has no runnable git" from a git that ran
+// and refused, which is a real failure of the call under test.
+func isMissingGit(err error) bool {
+	var execError *exec.Error
+	if errors.As(err, &execError) {
+		return true
+	}
+	var pathError *os.PathError
+	return errors.As(err, &pathError)
+}
+
 func inspect(t *testing.T, directory string, remote NamedRemote) (RepositoryInspection, error) {
 	t.Helper()
-	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		t.Skip("git is not installed on this machine")
-	}
-	gitPath, err = filepath.EvalSymlinks(gitPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	executable, err := PinExecutable(gitPath)
+	executable, err := PinExecutable(machineGit(t))
 	if err != nil {
 		t.Fatal(err)
 	}

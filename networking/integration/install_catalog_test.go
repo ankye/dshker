@@ -11,6 +11,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ankye/dshker/networking/internal/installcatalog"
@@ -104,7 +105,13 @@ func TestCoreDaemonReadsTheShellCatalog(t *testing.T) {
 	}
 	base := t.TempDir()
 	filePath := filepath.Join(base, installcatalog.CatalogFileName)
-	if err := os.WriteFile(filePath, golden, 0o600); err != nil {
+	// The golden catalog was captured from the shell on a POSIX host, and an
+	// executable path is host-absolute by definition: this machine's validator
+	// refuses `/usr/bin/git` exactly as it should. The document is therefore
+	// re-rooted onto this host before it is handed over, and everything else about
+	// it stays the shell's own bytes. The refusal itself is covered above, by the
+	// records that are deliberately broken.
+	if err := os.WriteFile(filePath, rehostedGolden(t, golden, base), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	inspected, err := parent.Call(context.Background(), "core.install_catalog_inspect", installCatalogPayload(filePath))
@@ -130,6 +137,47 @@ func installCatalogPayload(filePath string) any {
 	return struct {
 		FilePath string `json:"filePath"`
 	}{FilePath: filePath}
+}
+
+// rehostedGolden rewrites the golden catalog's POSIX tool paths onto this host.
+//
+// Only the paths change: every other field, and the shape of the document, stays
+// exactly what the TypeScript shell persisted, which is what this test is about.
+// A path that is not absolute on this host is refused by the core by design, so a
+// fixture captured on Linux cannot be handed over verbatim on Windows.
+func rehostedGolden(t *testing.T, golden []byte, base string) []byte {
+	t.Helper()
+	var document any
+	if err := json.Unmarshal(golden, &document); err != nil {
+		t.Fatal(err)
+	}
+	rehosted, err := json.Marshal(hostAbsolutePaths(document, base))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return rehosted
+}
+
+func hostAbsolutePaths(value any, base string) any {
+	switch typed := value.(type) {
+	case string:
+		if strings.HasPrefix(typed, "/") {
+			return filepath.Join(base, filepath.FromSlash(strings.TrimPrefix(typed, "/")))
+		}
+		return typed
+	case []any:
+		for index := range typed {
+			typed[index] = hostAbsolutePaths(typed[index], base)
+		}
+		return typed
+	case map[string]any:
+		for key, item := range typed {
+			typed[key] = hostAbsolutePaths(item, base)
+		}
+		return typed
+	default:
+		return value
+	}
 }
 
 func installCatalogCommitPayload(filePath string, catalog installcatalog.Catalog) any {

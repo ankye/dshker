@@ -1,11 +1,9 @@
-import { randomBytes } from 'node:crypto'
-import { appendFile, readFile, writeFile, mkdir } from 'node:fs/promises'
 import { hostname } from 'node:os'
-import { isAbsolute, join } from 'node:path'
 import type { LauncherHarnessService } from '../managed/launcher-harness-service'
 import { assertAccountId } from './account-records'
 import { PeerAccounts } from './accounts'
 import { PeerCatalog } from './catalog'
+import { peerPartition } from './partitions'
 import { PeerConnections } from './connections'
 import { PeerCredentialStore, type PeerCredential } from './credentials'
 import { PeerEnrollment } from './enrollment'
@@ -15,6 +13,7 @@ import type { PeerPairMember } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
 import { recordMembers, remoteSide } from './member-catalog'
+import { diagnoseShellFailure, PeerSessionRegistry } from './session-registry'
 
 /** Refusals that mean this machine holds no authorized pair for the service. */
 const UNAUTHORIZED_MEMBER_CODES = new Set(['p2p.pair_unauthorized', 'p2p.device_unauthorized'])
@@ -55,14 +54,13 @@ export class PeerManagement {
   /** Services whose enrolled device has been restored into the live helper. */
   readonly #restored = new Set<string>()
   /**
-   * This computer's session with each coordinator, keyed by serviceId.
+   * This computer's session with each coordinator.
    *
-   * A missing entry means never attempted, which the projection reports as
-   * offline with no code rather than inventing a reason. This is the network
-   * layer: a pair connection is tracked separately by the runtime host.
+   * The network layer, kept separate from a pair connection, which the runtime host
+   * tracks: this is "am I online with the coordinator?", not "is one peer's
+   * workbench reachable?".
    */
-  readonly #sessions = new Map<string, { state: 'online' | 'offline'; code: string }>()
-  readonly #sessionListeners = new Set<() => void>()
+  readonly #sessions = new PeerSessionRegistry()
   #sessionSweep: ReturnType<typeof setInterval> | undefined
   readonly #autoConnect: PeerAutoConnect
   readonly #resolveSettingsRoot: () => Promise<string>
@@ -169,7 +167,7 @@ export class PeerManagement {
           this.#lifetime.signal
         )
         const session = await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
-        this.#setSession(service.serviceId, 'online', '')
+        this.#sessions.record(service.serviceId, 'online', '')
         // Devices in the same network are already authorized to reach each other,
         // so pair them without an invite. Joining a network would otherwise grant
         // nothing on its own. A refusal here still leaves the service online.
@@ -180,7 +178,7 @@ export class PeerManagement {
         // The refusal is retained rather than discarded: without it the surface
         // could only say "offline" and never why, which left the cause of a
         // down session undiscoverable from the product.
-        this.#setSession(service.serviceId, 'offline', code)
+        this.#sessions.record(service.serviceId, 'offline', code)
         results.push({ serviceId: service.serviceId, online: false, code })
       }
     }
@@ -191,16 +189,10 @@ export class PeerManagement {
   }
 
   /**
-   * Notifies when a session changes.
-   *
-   * goOnline runs after the window exists so an unreachable coordinator cannot
-   * delay startup. Without a change notification the renderer's first read
-   * therefore observed "not attempted yet" and nothing ever corrected it, so the
-   * status stayed offline for a computer that had since come online.
+   * Notifies when a session changes. See `PeerSessionRegistry`.
    */
   onSessionChange(listener: () => void): () => void {
-    this.#sessionListeners.add(listener)
-    return () => this.#sessionListeners.delete(listener)
+    return this.#sessions.onSessionChange(listener)
   }
 
   /**
@@ -246,7 +238,7 @@ export class PeerManagement {
     if (!snapshot) return
     for (const service of snapshot.record.services) {
       if (this.#lifetime.signal.aborted) return
-      if (this.#sessions.get(service.serviceId)?.state === 'online') {
+      if (this.#sessions.find(service.serviceId)?.state === 'online') {
         // The session staying up does not mean membership stood still: a machine
         // can join the network while this one is already online. Refresh the
         // catalog the Run tabs read so the list converges without a restart.
@@ -256,9 +248,9 @@ export class PeerManagement {
       }
       try {
         await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
-        this.#setSession(service.serviceId, 'online', '')
+        this.#sessions.record(service.serviceId, 'online', '')
       } catch (error) {
-        this.#setSession(service.serviceId, 'offline', this.#refusalCode(error))
+        this.#sessions.record(service.serviceId, 'offline', this.#refusalCode(error))
       }
     }
     // The same sweep repairs pair connections: a drop that happened while the
@@ -269,34 +261,16 @@ export class PeerManagement {
   /**
    * Maps a failure to its typed code, recording anything it cannot explain.
    *
-   * The surface only shows codes, so a failure that is not a PeerHelperError used
-   * to collapse into `p2p.internal_error` and the original exception was lost --
-   * which left a failing join undiagnosable from the product. It is written next to
-   * the records this shell owns instead.
+   * The surface only shows codes, so a failure that is not a PeerHelperError would
+   * collapse into `p2p.internal_error` and the original exception would be lost,
+   * leaving a failing join undiagnosable from the product.
    */
   #refusalCode(error: unknown): string {
     if (error instanceof PeerHelperError) return error.code
-    void this.#diagnose(error)
+    void this.#resolveSettingsRoot()
+      .catch(() => undefined)
+      .then((root) => diagnoseShellFailure(root, error))
     return 'p2p.internal_error'
-  }
-
-  async #diagnose(error: unknown): Promise<void> {
-    const root = await this.#resolveSettingsRoot().catch(() => undefined)
-    if (root === undefined) return
-    const described = error instanceof Error ? `${error.name}: ${error.message}` : String(error)
-    await appendFile(
-      join(root, 'dsh-launcher', 'shell-diagnostics.log'),
-      `${new Date().toISOString()} ${described}\n`,
-      'utf8'
-    ).catch(() => undefined)
-  }
-
-  /** Records one session and notifies only on an actual change. */
-  #setSession(serviceId: string, state: 'online' | 'offline', code: string): void {
-    const previous = this.#sessions.get(serviceId)
-    if (previous?.state === state && previous.code === code) return
-    this.#sessions.set(serviceId, { state, code })
-    for (const listener of this.#sessionListeners) listener()
   }
 
   /**
@@ -312,14 +286,11 @@ export class PeerManagement {
     this.#admit()
     const snapshot = await this.#catalog.inspect().catch(() => undefined)
     if (!snapshot) return []
-    return snapshot.record.services.map((service) => {
-      const session = this.#sessions.get(service.serviceId)
-      return {
-        serviceId: service.serviceId,
-        state: session?.state ?? 'offline',
-        code: session?.code ?? ''
-      }
-    })
+    return snapshot.record.services.map((service) => ({
+      serviceId: service.serviceId,
+      state: this.#sessions.find(service.serviceId)?.state ?? 'offline',
+      code: this.#sessions.find(service.serviceId)?.code ?? ''
+    }))
   }
 
   async enable() {
@@ -335,37 +306,22 @@ export class PeerManagement {
   }
 
   /**
-   * This machine's local device identity. The device id is a stable random
-   * value persisted once under the settings root (independent of any
-   * coordinator registration), and the name defaults to the OS hostname. The
-   * UI always has a real device name and identifier to show, even before any
-   * network join.
+   * This machine's local device identity.
+   *
+   * The device id is the machine's own key id: the core keeps one device key
+   * beside its data root, and every registration, member list and pair on every
+   * account refers to this machine by that key's id. It is therefore read from
+   * the key rather than minted here — an id invented for display looked like an
+   * identifier but named a device the coordinator, the network and every peer had
+   * never seen, so it could not be copied into a member list or compared with
+   * anything. The name defaults to the OS hostname so the identity is readable
+   * before any network is joined.
    */
-  async localDevice() {
+  async localDevice(signal: AbortSignal) {
     this.#admit()
-    const root = await this.#settingsRoot()
-    const file = join(root, 'p2p-local-device.json')
-    let deviceId: string | undefined
-    try {
-      const raw = await readFile(file, 'utf8')
-      const parsed = JSON.parse(raw) as { deviceId?: unknown }
-      if (typeof parsed.deviceId === 'string' && /^[0-9a-f]{32}$/.test(parsed.deviceId))
-        deviceId = parsed.deviceId
-    } catch {
-      deviceId = undefined // First run or unreadable preset: generate below.
-    }
-    if (!deviceId) {
-      deviceId = randomBytes(6).toString('hex')
-      await mkdir(root, { recursive: true })
-      await writeFile(file, JSON.stringify({ deviceId, name: hostname() }) + '\n', 'utf8')
-    }
-    return { deviceId, name: hostname() }
-  }
-
-  async #settingsRoot(): Promise<string> {
-    const root = await this.#resolveSettingsRoot()
-    if (!isAbsolute(root)) throw new PeerHelperError('p2p.settings_root_required')
-    return root
+    const session = await this.#ready(signal)
+    const identity = await session.enrollment.identity(this.#signal(signal))
+    return { deviceId: identity.deviceId, name: hostname() }
   }
 
   async addService(revision: string, input: PeerServiceInput, signal: AbortSignal) {
@@ -438,6 +394,22 @@ export class PeerManagement {
       accounts.listNetworkDevices(serviceId, networkId, active)
     )
     // A service with no registration yet simply has no local device in the list.
+    const saved = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
+    const localDeviceId = saved?.kind === 'registered' ? saved.credential.deviceId : ''
+    return { devices, localDeviceId }
+  }
+  /**
+   * The devices the signed-in account is bound to, plus this machine's own id.
+   *
+   * The list is what decides whether this machine belongs to the account signed in
+   * here: a device id can be bound to several accounts, so a locally stored
+   * "account this credential was issued for" cannot answer it, and the coordinator
+   * is the only side that knows.
+   */
+  async accountDevices(serviceId: string, signal: AbortSignal) {
+    const devices = await this.#account(serviceId, signal, (accounts, active) =>
+      accounts.listDevices(serviceId, active)
+    )
     const saved = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
     const localDeviceId = saved?.kind === 'registered' ? saved.credential.deviceId : ''
     return { devices, localDeviceId }
@@ -530,10 +502,10 @@ export class PeerManagement {
   /**
    * Ready session with the enrolled device restored into the helper.
    *
-   * Pairing, connections and remote browsing all speak as the enrolled device,
-   * but nothing restored the saved credential into the helper after enrollment,
-   * so every pairs.* call failed with device_unregistered. Restoring is
-   * idempotent: the helper refusing a second restore counts as restored.
+   * Pairing, connections and remote browsing all speak as the enrolled device, but
+   * nothing restored the saved credential after enrollment, so every pairs.* call
+   * failed with device_unregistered. Restoring is idempotent: the helper refusing
+   * a second restore counts as restored.
    */
   async #readyAsDevice(serviceId: string, signal: AbortSignal): Promise<Session> {
     const session = await this.#ready(signal)
@@ -543,6 +515,10 @@ export class PeerManagement {
     const saved = await this.#credentials.load(serviceId).catch(() => undefined)
     if (!saved || saved.credential.serviceId !== serviceId)
       throw new PeerHelperError('p2p.device_unregistered')
+    // Presence is reported for one account, and it has to be the account signed in
+    // here: a machine bound to two accounts that kept reporting the one its
+    // credential was first issued for stayed invisible to the account using it.
+    const reportedUser = await this.#reportedAccount(serviceId, session, saved.credential, signal)
     try {
       exactPeerObject(
         await session.rpc.call(
@@ -552,7 +528,7 @@ export class PeerManagement {
             data: {
               device: {
                 deviceId: saved.credential.deviceId,
-                userId: saved.credential.userId,
+                userId: reportedUser,
                 name: saved.credential.name,
                 publicKey: saved.credential.publicKey,
                 certificate: saved.credential.certificate
@@ -574,6 +550,27 @@ export class PeerManagement {
     this.#restored.add(serviceId)
     await this.#refreshMembers(serviceId, session, this.#signal(signal), saved.credential)
     return session
+  }
+
+  /**
+   * The account this machine reports presence for, out of the ones it belongs to.
+   * Read after the persisted login is adopted; with nobody signed in, the
+   * credential's own account stands. The coordinator admits only a linked account,
+   * so the switch waits for its list to confirm the link.
+   */
+  async #reportedAccount(
+    serviceId: string,
+    session: Session,
+    credential: { deviceId: string; userId: string },
+    signal: AbortSignal
+  ): Promise<string> {
+    const signedIn = session.accounts.currentUserId(serviceId)
+    if (signedIn === undefined || signedIn === credential.userId) return credential.userId
+    const linked = await session.accounts
+      .listDevices(serviceId, this.#signal(signal))
+      .then((devices) => devices.some((device) => device.deviceId === credential.deviceId))
+      .catch(() => false)
+    return linked ? signedIn : credential.userId
   }
 
   /**
@@ -605,13 +602,10 @@ export class PeerManagement {
    * Re-records the coordinator's current network members into the catalog.
    *
    * Membership is the trust source the Run tabs and the member list read, and it
-   * changes while this computer stays online: another machine can join a network,
-   * or the first sync can run before the login that authorises the listing. The
-   * sync is therefore repeatable rather than a side effect of the first device
-   * restore — otherwise a late-joining computer never reaches the catalog until
-   * the helper restarts. Best-effort by design: a coordinator refusal must not
-   * fail the read that triggered it, and without an enrolled credential there is
-   * no identity to speak as.
+   * changes while this computer stays online — another machine can join, or the
+   * first sync can run before the login that authorises the listing — so the sync
+   * is repeatable rather than a side effect of one device restore. Best effort: a
+   * refusal must not fail the read that triggered it.
    */
   async #refreshMembers(
     serviceId: string,
@@ -814,6 +808,29 @@ export class PeerManagement {
     return session.connections.disconnect(serviceId, pairId, this.#signal(signal))
   }
 
+  /**
+   * Hands the connected peer's workbench address to the caller that renders it.
+   *
+   * The address lives in main because it is a loopback gateway with a token in it:
+   * the renderer is told where to point a guest, never how the gateway is reached.
+   * The named attempt is the admission rule — an address from an attempt the peer
+   * has already replaced is refused, so a tab cannot load a gateway its session no
+   * longer owns.
+   *
+   * It is synchronous on purpose: no device restore, no connection attempt, no
+   * retry. A tab asking for an address must never be the reason one is started.
+   */
+  entry(serviceId: string, pairId: string, generation: number) {
+    const session = this.#session
+    if (!session) throw new PeerHelperError('p2p.device_unregistered')
+    // The guest is isolated per pair, and the partition name is derived here so the
+    // renderer never has to know how it is built.
+    return {
+      url: session.connections.entry(serviceId, pairId, generation),
+      partition: peerPartition(serviceId, pairId)
+    }
+  }
+
   async remoteRoots(serviceId: string, pairId: string, signal: AbortSignal) {
     const session = await this.#readyAsDevice(serviceId, signal)
     return session.projects.roots(serviceId, pairId, this.#signal(signal))
@@ -960,13 +977,7 @@ export class PeerManagement {
   }
 
   #clearSession(): void {
-    // Losing the runtime ends every coordinator session it carried. Without this
-    // the recorded state stayed 'online' after the helper became unavailable,
-    // which is worse than reporting nothing: the surface would assert reach the
-    // computer no longer had.
-    for (const [serviceId, session] of this.#sessions)
-      if (session.state === 'online')
-        this.#setSession(serviceId, 'offline', 'p2p.helper_unavailable')
+    this.#sessions.clear('p2p.helper_unavailable')
     this.#restored.clear()
     this.#session?.projects.close()
     this.#session?.connections.close()

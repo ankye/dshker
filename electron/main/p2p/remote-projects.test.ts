@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { win32 } from 'node:path'
 import { PeerRemoteProjects, MAX_REMOTE_ENTRIES } from './remote-projects'
 
 const serviceId = 'a'.repeat(12)
@@ -6,7 +7,9 @@ const pairId = '1'.repeat(12)
 const rootId = 'root-a'
 const signal = () => AbortSignal.timeout(5000)
 
-const root = { rootId, name: 'Work', path: '/Users/remote/work' }
+// A remote authorized root, as the other computer reports it. No account name
+// appears in the fixture: the path belongs to that machine, not to this one.
+const root = { rootId, name: 'Work', path: '/srv/remote/work' }
 const entry = (ref: string, name: string, isProject = false) => ({
   ref,
   name,
@@ -45,7 +48,7 @@ describe('main-owned remote projects', () => {
 
   it('refuses a reference that is not an opaque token', async () => {
     const f = fixture()
-    for (const ref of ['/etc/passwd', '../escape', 'C:\\Windows', 'a b'])
+    for (const ref of ['/etc/passwd', '../escape', win32.join('C:', 'Windows'), 'a b'])
       await expect(
         f.projects.directory(serviceId, pairId, rootId, ref, 0, 50, signal())
       ).rejects.toMatchObject({ code: 'p2p.remote_reference_invalid' })

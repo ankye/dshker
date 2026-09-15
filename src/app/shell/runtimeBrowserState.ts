@@ -13,10 +13,12 @@ export type RuntimeRemoteTabId = Exclude<RuntimeTabId, 'local'>
 /**
  * Connection state a tab can report, with no address in it.
  *
- * A peer tab must never hold a DSH URL: the entry point stays in main and is
- * supplied to the guest there. `RemoteConnectionStatus` carries a `url` on
- * `ready`, so peer state is projected to this address-free shape instead of
- * reusing it. `failed` keeps only a code, never helper-supplied text.
+ * A peer tab is reported as a stage, never as an address: the address arrives
+ * separately, from the one operation that hands it over for a named attempt, so a
+ * tab's status can never be mistaken for permission to open a gateway.
+ * `RemoteConnectionStatus` carries a `url` on `ready`, so peer state is projected
+ * to this address-free shape instead of reusing it. `failed` keeps only a code,
+ * never helper-supplied text.
  */
 export type RuntimeTabStatus =
   | { readonly kind: 'disconnected' }
@@ -30,6 +32,12 @@ export interface RuntimeTab {
   readonly source: 'local' | 'remote' | 'peer'
   readonly connectionId?: string
   url: string | undefined
+  /**
+   * The guest partition a peer tab must mount in, named by main.
+   *
+   * Absent for the local tab and for SSH remotes, which use the default session.
+   */
+  readonly partition?: string
   title: string
   readonly status: RuntimeTabStatus | undefined
 }
@@ -126,9 +134,9 @@ function isOpenedRemoteTab(tab: RuntimeTab): boolean {
  * Tabs for paired computers.
  *
  * A revoked pair keeps its tab so the user can see why it stopped working, but
- * it can never carry a URL. The DSH entry point itself stays in the main
- * process: a peer tab is `ready` only as a stage, and the actual address is
- * supplied to the guest by main rather than held here.
+ * it can never carry a URL. A ready peer's address is fetched per attempt and
+ * keyed by generation; it is a loopback gateway for one guest, isolated by the
+ * partition main names for the pair.
  */
 function peerTabs(): RuntimeTab[] {
   const computers = p2pManagement.catalog.value?.computers ?? []
@@ -140,12 +148,91 @@ function peerTabs(): RuntimeTab[] {
       id,
       source: 'peer',
       connectionId: computer.connectionId,
-      url: status?.kind === 'ready' ? current?.url : undefined,
+      // The address main handed over for this attempt is what lets the guest mount
+      // at all: the catalog never carries it, and without it a ready peer rendered
+      // the empty state forever.
+      url: status?.kind === 'ready' ? (current?.url ?? peerEntries[id]?.url) : undefined,
+      // The guest for a peer is isolated by main's own partition for this pair.
+      partition: status?.kind === 'ready' ? peerEntries[id]?.partition : undefined,
       title: current?.title ?? computer.displayName,
       status
     }
   })
 }
+
+/**
+ * Workbench addresses main has handed over for connected peers.
+ *
+ * Each address is a loopback gateway with a token, valid for one attempt: main
+ * answers only for the attempt it is asked about, so an entry is keyed by
+ * generation and dropped the moment the peer or the attempt changes. It reaches
+ * the renderer because only a real http URL can be mounted; what keeps one peer's
+ * session away from another is the guest partition, not the address.
+ */
+const peerEntries = reactive<
+  Record<string, { generation: number; url: string; partition: string }>
+>({})
+
+/** The fetch in flight per tab, so one attempt is asked about once. */
+const peerEntryFetches = new Map<string, Promise<void>>()
+
+/**
+ * Asks main for the address of every ready peer.
+ *
+ * A peer becomes `ready` before its address has been asked for, so one fetch per
+ * attempt is what closes the loop: the stage says the workbench is up, and this
+ * turns that into the URL the tab mounts. A missing address is not an error — the
+ * tab keeps its empty state, and the next stage change tries again.
+ *
+ * Two rules keep a stale answer out of a live tab: the fetch is remembered, so a
+ * second stage change while one is in flight does not stack requests, and the
+ * generation is re-read after the await, so an answer that belongs to an attempt
+ * the peer has already replaced is dropped instead of overwriting the newer one.
+ */
+async function loadPeerEntries(): Promise<void> {
+  for (const computer of p2pManagement.catalog.value?.computers ?? []) {
+    const id = `peer:${computer.connectionId}`
+    const view = p2pConnections.find(computer.serviceId, computer.pairId)
+    if (computer.pairState !== 'active' || view?.stage !== 'ready') {
+      delete peerEntries[id]
+      continue
+    }
+    // Already holding the address of the attempt the tab is showing.
+    if (peerEntries[id]?.generation === view.generation) continue
+    // One question per attempt: a second stage change while main is answering
+    // must not open a second request, or answers could arrive out of order.
+    if (peerEntryFetches.has(id)) continue
+    const { serviceId, pairId } = computer
+    const generation = view.generation
+    const fetch = p2pConnections.entry(serviceId, pairId, generation).then((entry) => {
+      peerEntryFetches.delete(id)
+      // The attempt this answer describes may have been replaced while we
+      // waited. Storing it would put the previous attempt's address in a tab
+      // that is already showing the next one, so drop it — and ask about the
+      // attempt that is actually current, since the change that replaced it
+      // found this fetch in flight and left it alone.
+      if (p2pConnections.find(serviceId, pairId)?.generation !== generation) {
+        void loadPeerEntries()
+        return
+      }
+      if (entry === undefined) delete peerEntries[id]
+      else peerEntries[id] = { generation, ...entry }
+    })
+    peerEntryFetches.set(id, fetch)
+    await fetch
+  }
+}
+
+// Both inputs matter: the stage decides whether a peer is ready, and the catalog
+// decides whether the tab exists at all. Watching only the stage meant a computer
+// that appeared already ready never had its address asked for.
+watch(
+  [() => p2pConnections.state.peers, () => p2pManagement.catalog.value?.computers],
+  () => {
+    void loadPeerEntries()
+  },
+  { deep: true }
+)
 
 /** Creates and focuses exactly one remote workspace after an explicit user action. */
 function openRemoteTab(id: RuntimeRemoteTabId): boolean {

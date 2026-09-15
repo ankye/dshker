@@ -77,13 +77,21 @@ export function peerNetwork(value: unknown, userId: string): PeerNetwork {
 }
 
 /**
- * One row of a network's device directory.
+ * One row of a device directory: a network's members, or the account's own.
  *
  * Telemetry is self-declared, so it is validated for shape but never trusted for
  * meaning: an over-long or control-character value is dropped to empty rather
  * than refusing the whole directory, because a cosmetic field must not hide the
  * device list. Presence follows the pair rule: stale is not usable, so it reads
  * as offline.
+ *
+ * The row's own `userId` is deliberately not compared with the account this list
+ * was read for. That column is the account that first enrolled the machine, while
+ * the list itself is already scoped to the reader's account by the coordinator; a
+ * machine bound to two accounts — enrolled under one and added to the other's
+ * network by hand — would otherwise make the whole directory unreadable with a
+ * scope mismatch. The account a row is reported for is the caller's, since that is
+ * the only scope the request could have had.
  */
 export function peerNetworkDevice(value: unknown, userId: string): PeerNetworkDevice {
   const record = exactPeerObject(value, [
@@ -97,8 +105,8 @@ export function peerNetworkDevice(value: unknown, userId: string): PeerNetworkDe
     'architecture'
   ])
   assertAccountId(record.deviceId)
+  assertAccountId(record.userId)
   assertAccountText(record.name)
-  if (record.userId !== userId) throw new PeerHelperError('p2p.user_scope_mismatch')
   if (!['online', 'stale', 'offline'].includes(record.presence as string))
     throw new PeerHelperError('p2p.invalid_device_state')
   if (!Number.isSafeInteger(record.lastSeen) || (record.lastSeen as number) < 0)

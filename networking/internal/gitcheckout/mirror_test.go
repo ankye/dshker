@@ -29,6 +29,9 @@ func runGitRaw(t *testing.T, arguments ...string) string {
 	command.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=0")
 	output, err := command.CombinedOutput()
 	if err != nil {
+		if isMissingGit(err) {
+			t.Skipf("git cannot be started on this machine: %v", err)
+		}
 		t.Fatalf("git %s: %v\n%s", strings.Join(arguments, " "), err, output)
 	}
 	return string(output)
@@ -38,15 +41,7 @@ func runGitRaw(t *testing.T, arguments ...string) string {
 // every mirror operation runs under.
 func mirrorHarness(t *testing.T) (*Runner, Executable, ExecutionContext, InstallationPaths) {
 	t.Helper()
-	gitPath, err := exec.LookPath("git")
-	if err != nil {
-		t.Skip("git is not installed on this machine")
-	}
-	gitPath, err = filepath.EvalSymlinks(gitPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	executable, err := PinExecutable(gitPath)
+	executable, err := PinExecutable(machineGit(t))
 	if err != nil {
 		t.Fatal(err)
 	}

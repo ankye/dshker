@@ -168,9 +168,8 @@ describe('main-owned P2P accounts', () => {
     })
   })
 
-  it('refuses a directory row that belongs to another user or reports an impossible state', async () => {
+  it('refuses a directory row that reports an impossible state', async () => {
     for (const bad of [
-      { userId: '9'.repeat(12), presence: 'online', lastSeen: 0 },
       { userId: user.userId, presence: 'connected', lastSeen: 0 },
       { userId: user.userId, presence: 'online', lastSeen: -1 }
     ]) {
@@ -189,6 +188,94 @@ describe('main-owned P2P accounts', () => {
         f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
       ).rejects.toThrow()
     }
+  })
+
+  /**
+   * A row's own `userId` is the account that first enrolled the machine, while the
+   * directory is already scoped to the reader by the coordinator. A machine bound
+   * to two accounts keeps the first account's name, so treating that column as a
+   * scope violation made the entire directory unreadable exactly in the case this
+   * product now supports.
+   */
+  it('reads a machine that another account enrolled first', async () => {
+    const f = await loggedIn()
+    f.call.mockResolvedValueOnce([network]).mockResolvedValueOnce([
+      {
+        deviceId: 'a'.repeat(12),
+        userId: '9'.repeat(12),
+        name: 'Shared laptop',
+        presence: 'online',
+        lastSeen: 1788000000,
+        version: '',
+        platform: '',
+        architecture: ''
+      }
+    ])
+
+    const devices = await f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
+
+    expect(devices).toEqual([
+      {
+        deviceId: 'a'.repeat(12),
+        // The account this list was read for, which is the only scope it has.
+        userId: user.userId,
+        name: 'Shared laptop',
+        presence: 'online',
+        lastSeen: 1788000000,
+        version: '',
+        platform: '',
+        architecture: ''
+      }
+    ])
+  })
+
+  /**
+   * The account's own device list is how the app answers "does this machine belong
+   * to the account signed in here?" — a device id can be bound to several accounts,
+   * so nothing stored locally can answer it.
+   */
+  it('lists the devices bound to the signed-in account', async () => {
+    const f = await loggedIn()
+    f.call.mockResolvedValueOnce([
+      {
+        deviceId: 'c'.repeat(12),
+        userId: '9'.repeat(12),
+        name: 'This machine',
+        presence: 'online',
+        lastSeen: 1788000001,
+        version: '',
+        platform: '',
+        architecture: ''
+      }
+    ])
+
+    const devices = await f.accounts.listDevices(serviceId, signal())
+
+    expect(f.call).toHaveBeenCalledWith(
+      'devices.list',
+      { serviceId, data: { token: session().token } },
+      expect.any(AbortSignal)
+    )
+    expect(devices.map((device) => device.deviceId)).toEqual(['c'.repeat(12)])
+  })
+
+  it('refuses a device list that is not a list', async () => {
+    const f = await loggedIn()
+    f.call.mockResolvedValueOnce({ devices: [] })
+
+    await expect(f.accounts.listDevices(serviceId, signal())).rejects.toMatchObject({
+      code: 'p2p.invalid_server_response'
+    })
+  })
+
+  it('reports the signed-in account for the device identity', async () => {
+    const f = await loggedIn()
+    f.call.mockResolvedValueOnce({})
+
+    expect(f.accounts.currentUserId(serviceId)).toBe(user.userId)
+    await f.accounts.logout(serviceId, signal())
+    // The device identity has no account to report once nobody is signed in.
+    expect(f.accounts.currentUserId(serviceId)).toBeUndefined()
   })
 
   it('raises an owned network capacity and confirms it through readback', async () => {

@@ -171,6 +171,8 @@ async function loggedIn() {
 describe('bringing enrolled services online at startup', () => {
   const deviceId = '3'.repeat(12)
   const publicKey = Buffer.alloc(32, 1).toString('base64')
+  /** A second account the same machine can be bound to. */
+  const secondAccount = { userId: 'f'.repeat(12), username: 'second@test.local' }
   /** Makes this machine look like it completed enrollment for the saved service. */
   function enrolled() {
     vi.spyOn(PeerCredentialStore.prototype, 'load').mockResolvedValue({
@@ -222,6 +224,80 @@ describe('bringing enrolled services online at startup', () => {
       { serviceId, online: false, code: 'p2p.device_unregistered' }
     ])
   })
+
+  /**
+   * Presence is reported for one account, and a machine can be bound to several.
+   * Reporting the account the credential was first issued for left a machine that
+   * had been added to a second account invisible there while it was running, which
+   * is the opposite of "the account you sign in on is the account it reports to".
+   */
+  it('reports presence to the account signed in here when the machine is bound to it', async () => {
+    const f = fixture()
+    enrolled()
+    await signedInAsSecondAccount(f, [
+      { deviceId, userId: secondAccount.userId, presence: 'online' }
+    ])
+
+    expect(deviceRestoreUser(f)).toBe(secondAccount.userId)
+  })
+
+  /**
+   * The coordinator admits only an account the device is linked to, so naming one
+   * it is not linked to would end the session. When the account's own list does
+   * not carry this machine, the enrolled account stays in use.
+   */
+  it('keeps speaking as the enrolled account when the signed-in one has no such device', async () => {
+    const f = fixture()
+    enrolled()
+    await signedInAsSecondAccount(f, [])
+
+    expect(deviceRestoreUser(f)).toBe(user.userId)
+  })
+
+  /** The account named in the device identity handed to the core. */
+  function deviceRestoreUser(f: ReturnType<typeof fixture>): string | undefined {
+    const call = f.call.mock.calls.find(([method]) => method === 'device.restore')
+    const payload = call?.[1] as { data?: { device?: { userId?: string } } } | undefined
+    return payload?.data?.device?.userId
+  }
+
+  /**
+   * Signs in as an account other than the one the credential was issued for, with
+   * the coordinator's device list for that account stubbed.
+   */
+  async function signedInAsSecondAccount(
+    f: ReturnType<typeof fixture>,
+    listed: { deviceId: string; userId: string; presence: string }[]
+  ): Promise<void> {
+    const base = f.call.getMockImplementation()
+    f.call.mockImplementation(async (method: string, payload: unknown, signal: AbortSignal) => {
+      if (method === 'user.login')
+        return { user: secondAccount, token: '8'.repeat(64), expiresAt: futureExpiry() }
+      if (method === 'user.current') return secondAccount
+      if (method === 'devices.list')
+        return listed.map((device) => ({
+          name: 'This machine',
+          lastSeen: 0,
+          version: '',
+          platform: '',
+          architecture: '',
+          ...device
+        }))
+      if (base === undefined) throw new PeerHelperError('p2p.invalid_operation')
+      return base(method, payload, signal)
+    })
+    await f.owner.login(
+      serviceId,
+      secondAccount.username,
+      'test-password',
+      new AbortController().signal
+    )
+    await f.owner.goOnline()
+  }
+
+  function futureExpiry(): number {
+    return Math.floor(Date.now() / 1000) + 3600
+  }
 
   it('retains why a session is down so the surface can explain it', async () => {
     // The refusal used to be discarded, so the product could only say "offline"

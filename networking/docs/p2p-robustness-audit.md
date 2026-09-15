@@ -4,7 +4,7 @@ Scope: `networking/internal/peersession`, `internal/peer/transport.go`, `interna
 `internal/controlplane/signals.go` (+ rest of controlplane), `internal/helper` (account lifecycle),
 `internal/runtimebridge` (session↔endpoint), `cmd/dshkerd`. Investigation only, no file modified.
 
-Repo: `D:\workspace\desktop_workspace\apps\dsh-launcher` · module root `networking/` (`github.com/ankye/dshker/networking`)
+Repo: the DSHKer Launcher app repository · module root `networking/` (`github.com/ankye/dshker/networking`)
 
 Notation: `M:line` = `networking/internal/peersession/manager.go`, `T:line` = `internal/peer/transport.go`,
 `N:line` = `internal/peer/negotiation.go`, `S:line` = `internal/controlplane/signals.go`,

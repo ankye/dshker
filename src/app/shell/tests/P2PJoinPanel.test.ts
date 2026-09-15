@@ -74,8 +74,11 @@ async function render(api: Partial<P2PManagementApi>) {
     ok: true,
     data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
   })
+  const accountDevices = vi
+    .fn<P2PManagementApi['accountDevices']>()
+    .mockResolvedValue({ ok: true, data: { devices: [], localDeviceId: '' } })
   window.dshLauncher = {
-    p2pManagement: { serviceSessions: sessionReader(), ...api, localDevice }
+    p2pManagement: { serviceSessions: sessionReader(), localDevice, accountDevices, ...api }
   } as unknown as DesktopApi
   const domain = await import('@/app/domains/remote-connections')
   domain.p2pManagement.catalog.value = saved
@@ -327,5 +330,70 @@ describe('P2P 「我的网络」 card', () => {
     await flushPromises()
     expect(ui.get('[data-testid="p2p-builtin-removed"]').text()).toContain('官方服务器已被移除')
     expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
+  })
+
+  /**
+   * A device id can be bound to more than one account, and the account stored in
+   * the local credential is only the one the machine first enrolled under. So the
+   * coordinator's own list for the signed-in account decides whether the machine
+   * belongs there: a machine added to another account's network by hand is bound,
+   * not foreign, and saying otherwise sent the user to re-enroll a machine that was
+   * already working. Before that list is read, nothing is claimed.
+   */
+  it('says when the signed-in account has no such device, and only then', async () => {
+    const bound = vi
+      .fn<P2PManagementApi['accountDevices']>()
+      .mockResolvedValue({ ok: true, data: { devices: [], localDeviceId: '' } })
+    const ui = await render({ accountDevices: bound })
+    const domain = await import('@/app/domains/remote-connections')
+
+    // Signed in as somebody else, but the account's device list has not been read.
+    domain.p2pAccounts.state(serviceId).user = {
+      userId: 'user-b',
+      username: 'other@test.local'
+    } as never
+    await flushPromises()
+    expect(bound).not.toHaveBeenCalled()
+    expect(ui.find('[data-testid="p2p-identity-conflict"]').exists()).toBe(false)
+
+    domain.p2pEnrollment.state(serviceId).registration = registered
+    await flushPromises()
+    // Read, and this machine is not among the account's devices: that is a conflict.
+    expect(bound).toHaveBeenCalledWith(expect.objectContaining({ serviceId }))
+    expect(ui.get('[data-testid="p2p-identity-conflict"]').text()).toContain('没有这台电脑')
+
+    // The same machine, now bound to the account: nothing to report.
+    bound.mockResolvedValue({
+      ok: true,
+      data: {
+        devices: [
+          {
+            deviceId: registered.deviceId,
+            name: 'This machine',
+            presence: 'online',
+            lastSeen: 0,
+            version: '',
+            platform: '',
+            architecture: '',
+            isLocal: true
+          }
+        ],
+        localDeviceId: registered.deviceId
+      }
+    })
+    domain.p2pAccounts.state(serviceId).user = {
+      userId: 'user-c',
+      username: 'third@test.local'
+    } as never
+    await flushPromises()
+    expect(ui.find('[data-testid="p2p-identity-conflict"]').exists()).toBe(false)
+
+    // The account the machine was enrolled by is not a conflict either.
+    domain.p2pAccounts.state(serviceId).user = {
+      userId: registered.userId,
+      username: 'owner@test.local'
+    } as never
+    await flushPromises()
+    expect(ui.find('[data-testid="p2p-identity-conflict"]').exists()).toBe(false)
   })
 })

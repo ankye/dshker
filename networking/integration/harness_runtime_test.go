@@ -25,7 +25,10 @@ func writeFakeLauncher(t *testing.T, base string) (string, []string) {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		script := filepath.Join(base, "fake-pnpm.bat")
-		body := "@echo off\r\necho dsh web: http://127.0.0.1:3099/?token=fake\r\nping -n 30 127.0.0.1 > nul\r\n"
+		// The announced token is the same on both platforms: the assertions below
+		// name one value, and a fixture that announced a different one failed on
+		// Windows for a reason that had nothing to do with the daemon.
+		body := "@echo off\r\necho dsh web: http://127.0.0.1:3099/?token=daemon\r\nping -n 30 127.0.0.1 > nul\r\n"
 		if err := os.WriteFile(script, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}

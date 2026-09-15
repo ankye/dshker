@@ -7,6 +7,7 @@ import type {
   PeerPendingEnrollmentReadback
 } from './credentials'
 import { assertPendingEnrollment, type PeerPendingEnrollment } from './enrollment-record'
+import { peerDeviceId } from './pair-records'
 import type { PeerRpc } from './rpc'
 import type { PeerServices } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
@@ -50,6 +51,32 @@ export class PeerEnrollment {
 
   close(): void {
     this.#lifetime.abort()
+  }
+
+  /**
+   * This machine's device identity, read from the key the core keeps for it.
+   *
+   * The key is a property of the machine, not of an enrollment, so this answers
+   * before any account or network is joined — and it answers with the id the
+   * coordinator registers and every peer pins, derived from the public half
+   * exactly as the coordinator derives it. A number minted locally for display
+   * named a device no server had ever heard of, which is what made the id on
+   * screen impossible to find in any member list.
+   *
+   * The private key is read to obtain its public half and is cleared immediately;
+   * it never leaves this process.
+   */
+  async identity(signal: AbortSignal): Promise<{ deviceId: string; publicKey: string }> {
+    const combined = AbortSignal.any([signal, this.#lifetime.signal])
+    const created = exactPeerObject(await this.#call('device.createKey', {}, combined), [
+      'privateKey',
+      'csr'
+    ])
+    const privateKey = base64(created.privateKey, 64, 64)
+    const key = Buffer.from(privateKey, 'base64')
+    const publicKey = Buffer.from(key.subarray(32))
+    key.fill(0)
+    return { deviceId: peerDeviceId(publicKey), publicKey: publicKey.toString('base64') }
   }
 
   inspect(serviceId: string, signal: AbortSignal): Promise<PeerRegistrationView> {

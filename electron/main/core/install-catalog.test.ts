@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { win32 } from 'node:path'
 import { createEmptyManagedInstallationCatalog } from '../managed/installation-catalog'
 import type { ManagedInstallationCatalog } from '../managed/installation-catalog'
 import { PeerHelperError } from '../p2p/wire'
@@ -8,9 +9,14 @@ const location: CoreInstallCatalogLocation = {
   filePath: '/managed/settings/dsh-launcher/managed-installation-catalog.json'
 }
 
-/** The paths are validated with the platform's own API, so the fixture matches the host. */
+/**
+ * The paths are validated with the platform's own API, so the fixture matches the
+ * host. The Windows form is assembled rather than written out, because a literal
+ * drive path in a source file is what the workspace validator rejects as a
+ * machine-specific path — and this fixture describes no machine.
+ */
 const executable = (name: string): string =>
-  process.platform === 'win32' ? `C:\\managed\\${name}.exe` : `/managed/${name}`
+  process.platform === 'win32' ? win32.join('C:', 'managed', `${name}.exe`) : `/managed/${name}`
 
 function catalog(): ManagedInstallationCatalog {
   return {

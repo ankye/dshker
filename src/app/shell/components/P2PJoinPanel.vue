@@ -95,6 +95,29 @@ const signedIn = computed(() => {
   return id ? !!accounts.state(id).user : false
 })
 
+/**
+ * Whether this computer's identity belongs to a different account than the one
+ * signed in here.
+ *
+ * The account held in the local credential is the one this machine first enrolled
+ * under, and a device id can be bound to several accounts: a machine added to
+ * another account's network by hand keeps the first account's name while working
+ * perfectly for the second. The credential alone therefore cannot prove a foreign
+ * identity, and this only reports one when the coordinator's own list for the
+ * signed-in account is read and does not contain this machine. An unread list
+ * raises nothing, because "not looked yet" is not evidence.
+ */
+const foreignIdentity = computed(() => {
+  const registered = registration.value
+  const id = serviceId.value
+  if (registered?.kind !== 'registered' || !id) return undefined
+  const user = accounts.state(id).user
+  if (!user || user.userId === registered.userId) return undefined
+  const bound = enrollmentState.value?.accountDeviceIds
+  if (bound === undefined) return undefined
+  return bound.includes(registered.deviceId) ? undefined : registered.userId
+})
+
 const leaveError = computed(() =>
   operation.value?.method === 'leaveNetwork' && operation.value?.phase === 'failed'
     ? operation.value.error
@@ -179,6 +202,32 @@ onMounted(async () => {
     void p2pNetwork.read()
   }
 })
+
+/**
+ * The signed-in account's own device list, read whenever the two facts it needs
+ * are both present: an account to ask about and a registered device to look for.
+ *
+ * It cannot be read on mount alone, because this panel mounts while the account
+ * card is still signing in. It is deliberately not read after a join or a leave
+ * either: the card keeps one operation slot per service, so a read issued right
+ * behind a write would overwrite the failure that write just recorded, and a
+ * refused join or leave would show nothing.
+ */
+watch(
+  () => {
+    const id = serviceId.value
+    const registered = registration.value
+    const user = id === undefined ? undefined : accounts.state(id).user?.userId
+    if (id === undefined || user === undefined || registered?.kind !== 'registered')
+      return undefined
+    return `${user}:${registered.deviceId}`
+  },
+  (key) => {
+    const id = serviceId.value
+    if (id !== undefined && key !== undefined) void enrollment.readAccountDevices(id)
+  },
+  { immediate: true }
+)
 
 // Re-read when a service is selected after provisioning completed.
 watch(serviceId, (id, previous) => {
@@ -285,6 +334,16 @@ async function leave(): Promise<void> {
           {{ t(STATUS_KEYS[networkStatus]) }}
         </p>
       </div>
+      <!-- Said out loud, with the identity that is the cause: the alternative is a
+           machine that fails every pairing for no stated reason. -->
+      <p
+        v-if="foreignIdentity"
+        class="p2p-identity-conflict"
+        role="alert"
+        data-testid="p2p-identity-conflict"
+      >
+        {{ t('p2p.myNetwork.foreignIdentity') }}
+      </p>
       <details class="connect-device-details">
         <summary>{{ t('remote.connectLayout.deviceDetails') }}</summary>
         <p>{{ t('remote.connectLayout.deviceIdHint') }}</p>

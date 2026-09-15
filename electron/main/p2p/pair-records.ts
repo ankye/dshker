@@ -61,6 +61,18 @@ export interface PeerInvite {
 }
 
 /**
+ * Derives a device id from the actual device public key.
+ *
+ * It is the coordinator's own key id — the first six bytes of the SHA-256 digest,
+ * hex encoded — so a value this machine computes for itself is the value the
+ * coordinator registers, the network member list shows and every pair pins. The
+ * coordinator derives it the same way from the same key (`protocol.KeyID`).
+ */
+export function peerDeviceId(publicKey: Buffer): string {
+  return createHash('sha256').update(publicKey).digest('hex').slice(0, 12)
+}
+
+/**
  * Derives the user-facing fingerprint from the actual device public key.
  *
  * It is the coordinator's own key id — the first six bytes of the SHA-256 digest,
@@ -69,8 +81,7 @@ export interface PeerInvite {
  * same shape as a device id, so both can be read and typed by a person.
  */
 export function peerFingerprint(publicKey: Buffer): string {
-  const digest = createHash('sha256').update(publicKey).digest('hex')
-  return (digest.slice(0, 12).match(/.{4}/g) ?? []).join(' ')
+  return (peerDeviceId(publicKey).match(/.{4}/g) ?? []).join(' ')
 }
 
 function peerPublicKey(value: unknown): Buffer {

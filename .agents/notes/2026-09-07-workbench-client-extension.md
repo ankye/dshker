@@ -14,7 +14,7 @@ The user explicitly approved adding the missing DSH client extension and continu
 
 ## Checks and limits
 
-- `node tools/build-workbench-client.mjs --harness-root /Users/a1021500932/.dshlauncher/versions/a66e4702047846cdaa10c66c9d3df3951f5ea70d` checks against the selected Harness's real exported declarations, then bundles production entries with a dependency-input scan. Output under package `lib/` is ignored generated content.
+- `node tools/build-workbench-client.mjs --harness-root <launcher-data>/versions/<revision>` checks against the selected Harness's real exported declarations, then bundles production entries with a dependency-input scan. Output under package `lib/` is ignored generated content.
 - Focused Vitest tests cover navigation, exact identity/path results, membership waiting, replay/concurrency, timeout/unload, named cancellation and main guest admission. Test-side service/Electron doubles are diagnostic unit tests, not a running DSH client proof.
 - Root `npm run type-check` and `npm run build:electron` were run; preload output imports only Electron, without sandbox-incompatible relative chunk imports.
 - No complete desktop or one-hour/physical-platform acceptance is claimed. Full quality-engineering verify remains blocked by incomplete scope/evidence.

@@ -5,7 +5,7 @@
 ## 实际版本
 
 - 本机 Launcher 的 `harness-current.json` 明确选择提交 `a66e4702047846cdaa10c66c9d3df3951f5ea70d`，对应版本目录的 Git HEAD 已核对一致。
-- 参考开发仓库 `/Users/a1021500932/work/deepseek-harness` HEAD 为 `76fda729799fe9b3848dbe2c211d4b231032b81e`，不等于选定运行版本。未修改两个 Harness checkout，也未改变当前版本指针。
+- 参考开发仓库（另一份 Harness checkout）HEAD 为 `76fda729799fe9b3848dbe2c211d4b231032b81e`，不等于选定运行版本。未修改两个 Harness checkout，也未改变当前版本指针。
 - 下列协议在实际选定版本源码核对；不能据此宣称任意 master 或旧版本兼容。
 
 ## 已核实能力与限制

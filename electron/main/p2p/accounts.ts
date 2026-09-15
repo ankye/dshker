@@ -244,6 +244,39 @@ export class PeerAccounts {
   }
 
   /**
+   * The devices the signed-in account sees, with the coordinator's presence.
+   *
+   * This is the account's own binding list (`device_users`), not a device's owner
+   * column: a machine may be bound to several accounts, so "is this machine part
+   * of the account signed in here?" is a question only the coordinator can
+   * answer. Every other way of asking it locally compares against the account the
+   * credential was first issued for, which reports a machine that was bound to
+   * this account by hand as belonging to somebody else.
+   */
+  listDevices(serviceId: string, signal: AbortSignal): Promise<PeerNetworkDevice[]> {
+    return this.#operation(serviceId, signal, async () => {
+      const session = this.#session(serviceId)
+      const reply = await this.#call(serviceId, 'devices.list', { token: session.token }, signal)
+      if (!Array.isArray(reply)) throw new PeerHelperError('p2p.invalid_server_response')
+      return reply.map((value) => peerNetworkDevice(value, session.user.userId))
+    })
+  }
+
+  /**
+   * The user this computer is signed in as, or undefined when it is not.
+   *
+   * Synchronous and local: the device identity reported to the coordinator has to
+   * name an account at the moment the device is restored, and asking the server
+   * again there would be a second round trip for a fact already held.
+   */
+  currentUserId(serviceId: string): string | undefined {
+    const session = this.#sessions.get(serviceId)
+    return session === undefined || session.expiresAt * 1000 <= Date.now()
+      ? undefined
+      : session.user.userId
+  }
+
+  /**
    * Removes one device from a network this user owns.
    *
    * Distinct from leaving: this is the owner evicting a device that need not be

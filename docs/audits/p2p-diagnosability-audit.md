@@ -1,6 +1,6 @@
 # DSHKer Launcher — P2P pairing/connection diagnosability audit
 
-Scope: read-only investigation of `D:\workspace\desktop_workspace\apps\dsh-launcher`.
+Scope: read-only investigation of the DSHKer Launcher app repository.
 No file was modified. Every claim below cites a path and line number.
 
 Conclusion in one line: the app already knows every fact needed to explain a P2P

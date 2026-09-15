@@ -87,7 +87,7 @@ side** — which is this task's acceptance sentence.
 
 - The Windows host ran `dshkerd serve` with the core's own broker:
   `remote.broker_start` opened the endpoint, wrote
-  `C:\Users\Administrator\.dshlauncher\remote-peer.json` with a real port and
+  `<launcher-data>\.dshlauncher\remote-peer.json` with a real port and
   secret, and answered with the session the host was already running
   (`http://127.0.0.1:20002/`, a stand-in DSH that serves a known body).
 - The macOS core then ran `remote.connect` for that account: it fetched the

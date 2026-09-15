@@ -14,7 +14,7 @@
 
 ```bash
 cd networking
-DSHKER_SERVER_BINARY=/Users/a1021500932/workspace/go_workspace/dshker-server/bin/dshker-server go test -race ./... -count=1 -timeout=6m -json
+DSHKER_SERVER_BINARY=<coordinator-checkout>/bin/dshker-server go test -race ./... -count=1 -timeout=6m -json
 go vet ./...
 ```
 
