@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.43 — 2026-09-15
+
+- **The device list no longer reports a failure it does not have.** Opening the
+  account page could show "the device list could not be read" over a list that was
+  already on screen: the page asks the core to read when it opens, and that call
+  could be the one that lost a race for the private channel's sixteen concurrent
+  calls and came back as "busy". The page now queues its P2P calls instead of
+  firing them all at once, treats a busy answer as "a read is already in flight"
+  rather than as a failure, and — if a read does fail — keeps showing the rows it
+  has and says so beside them, instead of replacing a list the user can see with an
+  error. Opening the page also reads immediately, so the list is there without
+  waiting for the next announcement or pressing anything.
+- A device list that is empty in one response can no longer arrive as a null list,
+  which the shell refuses as malformed.
+
 ## 0.1.42 — 2026-09-15
 
 - **The device list now has one owner, and it keeps itself current.** A network's

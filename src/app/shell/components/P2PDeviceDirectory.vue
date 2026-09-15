@@ -116,10 +116,28 @@ function build(device: P2PNetworkDeviceView): string {
       </button>
     </header>
 
-    <p v-if="failed" role="alert" class="remote-error" data-testid="p2p-devices-error">
+    <!-- A failed read only replaces the list when there is nothing to show. A list
+         that is already there keeps its rows and says the last read failed beside
+         them: hiding rows the user can see is how "the list never comes out"
+         happens, and it was exactly what a busy refusal did to a page that had
+         already fetched the devices. -->
+    <p
+      v-if="failed && devices !== undefined"
+      role="status"
+      class="p2p-devices__stale"
+      data-testid="p2p-devices-stale"
+    >
+      {{ t('p2p.devices.stale') }}
+    </p>
+    <p
+      v-if="failed && devices === undefined"
+      role="alert"
+      class="remote-error"
+      data-testid="p2p-devices-error"
+    >
       {{ t('p2p.devices.readFailed') }}
     </p>
-    <p v-else-if="loading" role="status" data-testid="p2p-devices-loading">
+    <p v-else-if="loading && devices === undefined" role="status" data-testid="p2p-devices-loading">
       {{ t('p2p.devices.loading') }}
     </p>
     <p
@@ -220,6 +238,13 @@ function build(device: P2PNetworkDeviceView): string {
 }
 .p2p-devices__summary,
 .p2p-devices__empty {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+/* A failed refresh beside a list that is still shown: it is a note about how
+ * current the rows are, not an error that replaces them. */
+.p2p-devices__stale {
   margin: 0;
   color: var(--color-text-muted);
   font-size: var(--type-caption);

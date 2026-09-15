@@ -97,6 +97,43 @@ describe('P2P management renderer owner', () => {
     expect(after.requestId).toBeGreaterThan(before.requestId)
   })
 
+  /**
+   * The private channel admits sixteen concurrent calls and refuses the rest with
+   * p2p.helper_busy, so a burst has to be queued here. It used to be refused, and
+   * the refusal landed on whichever read lost the race — which is how a device list
+   * that had already been fetched came to be reported as unreadable.
+   */
+  it('queues a burst instead of letting the channel refuse part of it', async () => {
+    let active = 0
+    let peak = 0
+    const pending: (() => void)[] = []
+    const currentUser = vi.fn(async () => {
+      active += 1
+      peak = Math.max(peak, active)
+      await new Promise<void>((resolve) => pending.push(resolve))
+      active -= 1
+      return { ok: true as const, data: { userId: 'user', username: 'alice' } }
+    })
+    const { domain } = setup({ currentUser })
+    // One scope per call: the point of this test is the channel, not the lock.
+    const calls = Array.from({ length: 20 }, (_, index) =>
+      domain.run('currentUser', { serviceId: `service-${index}` })
+    )
+    await Promise.resolve()
+    expect(peak).toBeLessThanOrEqual(6)
+    // Let one call finish at a time: each freed slot admits the next waiting call,
+    // so the peak stays bounded while all twenty eventually run.
+    for (let released = 0; released < 20; released += 1) {
+      for (let spin = 0; spin < 50 && pending.length === 0; spin += 1) await Promise.resolve()
+      pending.shift()?.()
+      await Promise.resolve()
+    }
+    const results = await Promise.all(calls)
+    expect(peak).toBeLessThanOrEqual(6)
+    expect(results.every((result) => result.ok)).toBe(true)
+    expect(currentUser).toHaveBeenCalledTimes(20)
+  })
+
   it('locks only the same service and never stores login credentials in state', async () => {
     const wait = deferred<{ ok: true; data: { userId: string; username: string } }>()
     const login = vi.fn(() => wait.promise)

@@ -103,7 +103,9 @@ func copyDirectoryView(view DirectoryView, serviceID string) DirectoryView {
 		Revision:  view.Revision,
 		FetchedAt: view.FetchedAt,
 		Networks:  make([]DirectoryNetwork, 0, len(view.Networks)),
-		Devices:   append([]controlplane.DeviceEntry(nil), view.Devices...),
+		// An empty list is encoded as an empty array, never as null: the shell
+		// validates these fields as arrays, and null is not one.
+		Devices: entriesOrEmpty(view.Devices),
 	}
 	for _, network := range view.Networks {
 		copied.Networks = append(copied.Networks, DirectoryNetwork{
@@ -111,10 +113,18 @@ func copyDirectoryView(view DirectoryView, serviceID string) DirectoryView {
 			UserID:     network.UserID,
 			Name:       network.Name,
 			MaxDevices: network.MaxDevices,
-			Devices:    append([]controlplane.DeviceEntry(nil), network.Devices...),
+			Devices:    entriesOrEmpty(network.Devices),
 		})
 	}
 	return copied
+}
+
+// entriesOrEmpty returns a slice that encodes as an array even when it is empty.
+func entriesOrEmpty(entries []controlplane.DeviceEntry) []controlplane.DeviceEntry {
+	if entries == nil {
+		return []controlplane.DeviceEntry{}
+	}
+	return append([]controlplane.DeviceEntry(nil), entries...)
 }
 
 // readDirectory reads the whole directory with the session this account holds.
@@ -139,6 +149,7 @@ func (account *account) readDirectory(ctx context.Context) (DirectoryView, error
 		Known:     true,
 		FetchedAt: time.Now().Unix(),
 		Networks:  make([]DirectoryNetwork, 0, len(networks)),
+		Devices:   []controlplane.DeviceEntry{},
 	}
 	for _, network := range networks {
 		devices, err := account.base.NetworkDevices(ctx, token, network.NetworkID)
@@ -150,14 +161,14 @@ func (account *account) readDirectory(ctx context.Context) (DirectoryView, error
 			UserID:     network.UserID,
 			Name:       network.Name,
 			MaxDevices: network.MaxDevices,
-			Devices:    devices,
+			Devices:    entriesOrEmpty(devices),
 		})
 	}
 	devices, err := account.base.UserDevices(ctx, token)
 	if err != nil {
 		return DirectoryView{}, err
 	}
-	view.Devices = devices
+	view.Devices = entriesOrEmpty(devices)
 	return view, nil
 }
 
@@ -214,14 +225,14 @@ func sameDirectoryContent(left, right DirectoryView) bool {
 	leftBytes, err := json.Marshal(struct {
 		Networks []DirectoryNetwork
 		Devices  []controlplane.DeviceEntry
-	}{left.Networks, left.Devices})
+	}{copyDirectoryView(left, "").Networks, entriesOrEmpty(left.Devices)})
 	if err != nil {
 		return false
 	}
 	rightBytes, err := json.Marshal(struct {
 		Networks []DirectoryNetwork
 		Devices  []controlplane.DeviceEntry
-	}{right.Networks, right.Devices})
+	}{copyDirectoryView(right, "").Networks, entriesOrEmpty(right.Devices)})
 	if err != nil {
 		return false
 	}

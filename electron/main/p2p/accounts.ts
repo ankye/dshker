@@ -235,7 +235,7 @@ export class PeerAccounts {
     signal: AbortSignal
   ): Promise<PeerNetworkDevice[]> {
     assertAccountId(networkId)
-    return this.#operation(serviceId, signal, async () => {
+    return this.#readOperation(serviceId, signal, async () => {
       const session = this.#session(serviceId)
       const directory = await this.#readDirectory(serviceId, session, 'directory.inspect', signal)
       const network = directory.networks.find((value) => value.networkId === networkId)
@@ -258,7 +258,7 @@ export class PeerAccounts {
    * this account by hand as belonging to somebody else.
    */
   listDevices(serviceId: string, signal: AbortSignal): Promise<PeerNetworkDevice[]> {
-    return this.#operation(serviceId, signal, async () => {
+    return this.#readOperation(serviceId, signal, async () => {
       const session = this.#session(serviceId)
       return (await this.#readDirectory(serviceId, session, 'directory.inspect', signal)).devices
     })
@@ -273,7 +273,7 @@ export class PeerAccounts {
    * been read yet" is a state the renderer states rather than an error.
    */
   directory(serviceId: string, signal: AbortSignal): Promise<PeerDirectory> {
-    return this.#operation(serviceId, signal, async () =>
+    return this.#readOperation(serviceId, signal, async () =>
       this.#readDirectory(serviceId, this.#session(serviceId), 'directory.inspect', signal)
     )
   }
@@ -537,6 +537,28 @@ export class PeerAccounts {
     } finally {
       this.#busy.delete(serviceId)
     }
+  }
+
+  /**
+   * Runs one read as the signed-in account, without the duplicate-submission guard.
+   *
+   * The guard exists so the same write cannot be dispatched twice, and a read has
+   * nothing to duplicate. Taking it for reads made two legitimate reads of one
+   * service refuse each other: main keys the guard by service alone, while the
+   * renderer queues reads per operation scope, so the two sides disagreed about
+   * what "in flight" meant — the account page read the directory while its own
+   * network read was still settling and was told p2p.service_busy, which the page
+   * showed as "the device list could not be read" over a list it already had.
+   */
+  async #readOperation<T>(
+    serviceId: string,
+    signal: AbortSignal,
+    operation: () => Promise<T>
+  ): Promise<T> {
+    assertAccountId(serviceId, 12)
+    this.#assertOpen()
+    if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
+    return operation()
   }
 
   #assertOpen(): void {

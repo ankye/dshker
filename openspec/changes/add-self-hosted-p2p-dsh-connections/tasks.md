@@ -1,5 +1,19 @@
 ## 1. 协议与构建边界
 
+设备列表不再谎报读取失败（2026-09-15，0.1.43 热修）：0.1.42 上线后账号页出现「设备列表读取失败，
+请重试」，而列表其实已经拿到。两个原因：一是 main 的重复提交判重只按 `serviceId`，而读也走这道
+闸，于是渲染进程按 scope（`directory` 与 `networkDevices`）分开排队的两个读在 main 侧撞车，后者
+被打回 `p2p.service_busy`——现在读不再走写闸，写仍走；二是 shell 与 core 私有通道只允许 16 个并发
+调用（`internal/localrpc` 由 `rpc_test.go`/`stress_test.go` 钉住的契约），启动时多个面板同时各读
+一次会挤爆它并返回 `p2p.helper_busy`，落在谁头上谁就显示读取失败——现在
+`P2PManagementDomain` 最多同时放行 6 个调用，其余排队，账号域把 `p2p.service_busy`/
+`p2p.helper_busy` 视为「已有读取在飞」而非失败。展示规则也随之固定：**失败不覆盖已有数据**——
+只有在没有任何数据时失败才占据列表位置，已有行时它只是旁边的一行提示。证据：
+`p2pManagement.test.ts` 的「20 个并发调用峰值不超过 6 且全部成功」、`accounts.test.ts` 的
+「重叠的目录读取不得互相判忙」、`P2PDeviceDirectory.test.ts` 的「有行时保留列表并显示提示、无行时
+才显示错误」、`p2pAccounts.test.ts` 的「busy 不算读取失败」，以及真机复验（重启后打开账号页
+65 秒内 `failed:false`，末次操作为 `refreshDirectory`/`directory` 且均成功）。
+
 设备目录由 core 唯一持有并主动推送（2026-09-15）：网络设备列表此前没有 owner——协调器是权威，
 但应用内每一层各留一份快照（main 每次按需去读、渲染进程按 (service, network) 缓存、组件再各读
 一次），所以同一网络的两台机器各自冻结在不同时刻的回答上（一台只看到对方、另一台只看到自己，

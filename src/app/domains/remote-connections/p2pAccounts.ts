@@ -203,6 +203,11 @@ export class P2PAccountsDomain {
     this.subscribe()
     const result = await this.management.run('refreshDirectory', { serviceId })
     if (!result.ok) {
+      // A read that is already in flight answers this request too, so a busy
+      // refusal is not a failure: reporting it would put a warning over a list
+      // that is being refreshed right now. p2p.helper_busy is the channel saying
+      // the same thing, one layer down.
+      if (result.code === 'p2p.service_busy' || result.code === 'p2p.helper_busy') return
       const state = this.state(serviceId)
       for (const networkId of Object.keys(state.devices)) state.devicesFailed[networkId] = true
       return
@@ -250,12 +255,14 @@ export class P2PAccountsDomain {
    * Removes one device from a network and reads the directory again.
    *
    * The coordinator owns the binding, so the list is re-read rather than edited
-   * locally: what the owner sees afterwards is what the server still holds.
+   * locally: what the owner sees afterwards is what the server still holds. The
+   * read is the core's, and it is asked for explicitly because the removal just
+   * changed the answer.
    */
   async removeDevice(serviceId: string, networkId: string, deviceId: string): Promise<boolean> {
     const result = await this.management.run('leaveNetwork', { serviceId, networkId, deviceId })
     if (!result.ok) return false
-    await this.networkDevices(serviceId, networkId)
+    await this.refreshDirectory(serviceId)
     return true
   }
 

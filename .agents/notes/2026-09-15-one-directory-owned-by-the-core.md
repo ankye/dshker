@@ -68,6 +68,32 @@ projection, no page-level cache.
   coordinator; they project the core's directory, so there is exactly one place
   that reads it.
 
+## What the first release of this got wrong
+
+0.1.42 shipped the ownership change and two mistakes that produced a visible
+regression: the account page reported "the device list could not be read" over a
+list it had already fetched.
+
+1. **Main's duplicate-submission guard is keyed by service, and reads took it.**
+   The renderer queues reads per operation scope, so its two directory reads
+   (`directory` and the per-network `networkDevices`) were different to the
+   renderer and the same to main: the second was refused as `p2p.service_busy`.
+   Reads no longer take that guard; writes still do.
+2. **The document could exceed the private channel's concurrency.** The channel
+   admits sixteen concurrent calls and refuses the rest with `p2p.helper_busy` —
+   the contract `internal/localrpc/rpc_test.go` and `stress_test.go` pin. Several
+   panels mount at once and each reads on entry, on top of the shell's own startup
+   reads, so the burst overflowed and the refusal landed on whichever feature lost
+   the race. `P2PManagementDomain` now admits at most `MAX_CONCURRENT_CALLS` (6) at
+   a time and queues the rest, and the account domain treats a busy answer
+   (`p2p.service_busy` or `p2p.helper_busy`) as "another read is already in flight",
+   not as a failed read.
+
+The presentation rule that follows from it: **a failure never hides data.** A failed
+read replaces the list only when there is nothing to show; when rows are already
+there, the failure is a note beside them. Hiding rows the user can see is what made
+a healthy list look empty.
+
 ## Verified end to end
 
 Against the live deployment, on the Windows machine whose list was reported

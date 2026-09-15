@@ -157,6 +157,27 @@ describe('P2P user and network domain', () => {
     expect(state.devices['net-a']?.[0]?.name).toBe('Mac')
   })
 
+  /**
+   * A busy refusal is another read already in flight, not a failure.
+   *
+   * The page asks the core for a read when it opens, and the core's own read may
+   * still be running; reporting that as a failure put "the last read failed" over a
+   * list that was being refreshed at that moment.
+   */
+  it('does not report a busy directory refresh as a failed read', async () => {
+    const { accounts, api } = setup({
+      refreshDirectory: vi.fn(async () => ({
+        ok: false as const,
+        code: 'p2p.service_busy' as const,
+        message: 'busy'
+      }))
+    })
+    accounts.state('service-a').devices['net-a'] = []
+    await accounts.refreshDirectory('service-a')
+    expect(api.refreshDirectory).toHaveBeenCalled()
+    expect(accounts.state('service-a').devicesFailed['net-a']).toBeFalsy()
+  })
+
   it('does not claim a sign-out when the refusal says nothing about the session', async () => {
     // A missing helper is not evidence the user was signed out. Reporting it as
     // one would discard authority the coordinator still honours.

@@ -243,6 +243,44 @@ describe('main-owned P2P accounts', () => {
     ).rejects.toMatchObject({ code: 'p2p.network_unavailable' })
   })
 
+  /**
+   * Two legitimate reads of one service must not refuse each other.
+   *
+   * The duplicate-submission guard is keyed by service alone, so taking it for
+   * reads made the account page's first look at a network collide with the page's
+   * own account and network reads and come back as p2p.service_busy — which the
+   * page then reported as "the device list could not be read" over a list it had
+   * already fetched. Reads take no such guard; writes still do.
+   */
+  it('answers overlapping directory reads instead of refusing one as busy', async () => {
+    const f = await loggedIn()
+    let release: (() => void) | undefined
+    const held = new Promise<void>((resolve) => {
+      release = () => resolve()
+    })
+    f.call.mockImplementationOnce(async () => {
+      await held
+      return directoryReply([
+        {
+          userId: user.userId,
+          presence: 'online',
+          lastSeen: 1788000000,
+          deviceId: 'a'.repeat(12),
+          name: 'Mac',
+          version: '0.1.42',
+          platform: 'darwin',
+          architecture: 'arm64'
+        }
+      ])
+    })
+    f.call.mockResolvedValueOnce(directoryReply([]))
+    const members = f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
+    const directory = f.accounts.directory(serviceId, signal())
+    release?.()
+    await expect(members).resolves.toHaveLength(1)
+    await expect(directory).resolves.toMatchObject({ known: true, revision: 3 })
+  })
+
   it('answers the two directory operations from the core without a per-page read', async () => {
     const f = await loggedIn()
     f.call

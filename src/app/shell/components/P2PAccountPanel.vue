@@ -36,13 +36,17 @@ const clock = setInterval(() => (now.value = Math.floor(Date.now() / 1000)), 30_
 onBeforeUnmount(() => clearInterval(clock))
 
 // Reading the directory follows the selection: an unselected network is never
-// fetched, and re-selecting the same network does not re-read it.
+// fetched, and re-selecting the same network does not read it again.
 watch(
   () => state.selectedNetworkId,
   (networkId) => {
     if (!networkId || management.busy(props.serviceId)) return
     if (state.devices[networkId] !== undefined) return
-    void accounts.networkDevices(props.serviceId, networkId)
+    // The first look at a network asks the core to read now, rather than showing
+    // "not read yet" until the next announcement arrives: a list that only appears
+    // when something else happens to refresh it reads as a list that never comes
+    // out.
+    void accounts.refreshDirectory(props.serviceId)
   },
   { immediate: true }
 )
@@ -147,12 +151,10 @@ watch(
 
 onMounted(() => {
   void accounts.currentUser(props.serviceId)
-  // The list is the core's snapshot, so opening the page reads that snapshot
-  // rather than asking the coordinator for one of its own: the pane is unmounted
-  // while another tab is shown, and a returning user must not be shown what was
-  // true when they left. Changes that arrive while the pane is open are announced
-  // by the core and projected by the account domain.
-  void accounts.readDirectory(props.serviceId)
+  // Opening the page asks for a read now. The core maintains the list on its own,
+  // but a user who opens the page is asking to see it: waiting for the next
+  // announcement made a list that was already known look like it never arrived.
+  void accounts.refreshDirectory(props.serviceId)
 })
 async function login(username: string, password: string) {
   await accounts.login(props.serviceId, username, password)

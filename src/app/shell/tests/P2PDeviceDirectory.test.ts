@@ -100,6 +100,26 @@ describe('P2P device directory', () => {
    * for a machine the coordinator already recorded. The list therefore has to be
    * refreshable, and the panel owns the fetch this asks for.
    */
+  /**
+   * A failed read must not hide a list that is already there.
+   *
+   * The page had fetched the devices and then lost a race with its own sibling
+   * read; the failure flag replaced the rows with "the device list could not be
+   * read", so a list the user could see was reported as missing. A failure only
+   * replaces the list when there is nothing to show.
+   */
+  it('keeps showing rows beside a failed read, and only replaces an empty list with the error', () => {
+    const withRows = render({ devices: [device()], failed: true })
+    expect(withRows.find('[data-testid="p2p-devices-list"]').exists()).toBe(true)
+    expect(withRows.get('[data-testid="p2p-devices-stale"]').text()).toBe(enUS['p2p.devices.stale'])
+
+    const withoutRows = render({ devices: undefined, failed: true })
+    expect(withoutRows.find('[data-testid="p2p-devices-list"]').exists()).toBe(false)
+    expect(withoutRows.get('[data-testid="p2p-devices-error"]').text()).toBe(
+      enUS['p2p.devices.readFailed']
+    )
+  })
+
   it('asks for a fresh read when the refresh control is used', async () => {
     const view = render()
     await view.get('[data-testid="p2p-devices-refresh"]').trigger('click')

@@ -50,6 +50,16 @@ const reads = new Set<Operation>([
  */
 const MACHINE_SCOPED = new Set<Operation>(['localDevice', 'connections', 'serviceSessions'])
 
+/**
+ * How many of the document's P2P calls may be in flight at once.
+ *
+ * The private channel admits sixteen concurrent calls and refuses the rest with
+ * p2p.helper_busy — a contract the core pins with a stress test, not a fault. The
+ * shell also has its own traffic (runtime, remote, managed) on the same channel,
+ * so the P2P layer keeps well below the limit rather than using it up.
+ */
+const MAX_CONCURRENT_CALLS = 6
+
 /** Domain owner survives route changes. No password, token or request body enters state. */
 export class P2PManagementDomain {
   /**
@@ -63,6 +73,18 @@ export class P2PManagementDomain {
    * what it exists for.
    */
   readonly #readQueues = new Map<string, Promise<unknown>>()
+  /**
+   * Calls in flight, and the callers waiting for a slot.
+   *
+   * Several panels mount at once and each reads on entry, on top of the reads the
+   * shell makes at startup. Without a gate that burst can exceed the channel's
+   * sixteen concurrent calls and the refusal lands on whichever feature happened to
+   * lose the race — which is how a device list that had already been fetched came
+   * to be reported as unreadable, with the failure naming no cause the user could
+   * act on.
+   */
+  #inFlight = 0
+  readonly #waiting: (() => void)[] = []
   readonly #operations = reactive<Record<string, P2POperationState>>({})
   readonly operations = readonly(this.#operations)
   readonly catalog = ref<P2PCatalogView | null>()
@@ -144,6 +166,7 @@ export class P2PManagementDomain {
     this.#operations[scope] = state
     const api = this.bridge()
     if (!api || typeof api[method] !== 'function') return this.#fail(scope, requestId, 'bridge')
+    const release = this.#inFlight < MAX_CONCURRENT_CALLS ? this.#takeSlot() : await this.#admit()
     try {
       const request = {
         ...fields,
@@ -162,7 +185,32 @@ export class P2PManagementDomain {
       return result
     } catch {
       return this.#fail(scope, requestId, reads.has(method) ? 'bridge' : 'unconfirmed')
+    } finally {
+      release()
     }
+  }
+
+  /**
+   * Takes a slot without waiting.
+   *
+   * A call that fits is dispatched in the same turn it was made: the scope's lock
+   * is taken synchronously, which is what makes a duplicate submission refuse
+   * rather than queue, and it keeps a read's dispatch where the caller put it.
+   */
+  #takeSlot(): () => void {
+    this.#inFlight += 1
+    let released = false
+    return () => {
+      if (released) return
+      released = true
+      this.#inFlight -= 1
+      this.#waiting.shift()?.()
+    }
+  }
+
+  /** Waits for room on the channel, then takes the slot that freed up. */
+  #admit(): Promise<() => void> {
+    return new Promise((resolve) => this.#waiting.push(() => resolve(this.#takeSlot())))
   }
 
   async cancel(scope: string): Promise<void> {

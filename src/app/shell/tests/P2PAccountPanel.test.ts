@@ -59,13 +59,13 @@ function emptyDirectory(net: typeof network, userId: string): P2PDirectoryView {
 
 describe('P2P account public controls (component diagnostics)', () => {
   /**
-   * The directory has one owner — the core — and the panel reads that snapshot on
-   * open rather than asking the coordinator for one of its own. A cached answer
-   * kept from a previous visit is exactly what made the list look frozen with a
-   * row that still said "never reported".
+   * The directory has one owner — the core — and the panel reads it on open: the
+   * snapshot it asks for is the core's, never a coordinator read of its own. A
+   * cached answer kept from a previous visit is exactly what made the list look
+   * frozen with a row that still said "never reported".
    */
-  it('reads the core directory on open instead of reusing a cached snapshot', async () => {
-    const directory = vi.fn<P2PManagementApi['directory']>().mockResolvedValue({
+  it('asks the core for the directory on open instead of reusing a cached snapshot', async () => {
+    const refreshDirectory = vi.fn<P2PManagementApi['refreshDirectory']>().mockResolvedValue({
       ok: true,
       data: {
         known: true,
@@ -98,14 +98,14 @@ describe('P2P account public controls (component diagnostics)', () => {
       p2pManagement: {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: true, data: [network] }),
-        directory
+        refreshDirectory
       }
     } as unknown as DesktopApi
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pAccounts.state('service-a').selectedNetworkId = network.networkId
     // A stale row from a previous visit is what the pane used to show again.
     domain.p2pAccounts.state('service-a').devices[network.networkId] = []
-    expect(directory).not.toHaveBeenCalled()
+    expect(refreshDirectory).not.toHaveBeenCalled()
 
     const panel = (await import('../components/P2PAccountPanel.vue')).default
     container = document.createElement('div')
@@ -116,11 +116,30 @@ describe('P2P account public controls (component diagnostics)', () => {
     })
     await flushPromises()
 
-    expect(directory).toHaveBeenCalledTimes(1)
+    expect(refreshDirectory).toHaveBeenCalledTimes(1)
     expect(domain.p2pAccounts.state('service-a').devices[network.networkId]?.[0]?.name).toBe(
       'USER-20260612LO'
     )
     expect(wrapper?.text()).toContain('USER-20260612LO')
+  })
+
+  /**
+   * Opening the page asks the core to read now.
+   *
+   * Waiting for the next announcement meant a list that was already known looked
+   * like it never arrived: the page has to be the thing that asks, not a timer.
+   */
+  it('refreshes the directory as soon as the pane opens', async () => {
+    const refreshDirectory = vi
+      .fn<P2PManagementApi['refreshDirectory']>()
+      .mockResolvedValue({ ok: true, data: emptyDirectory(network, user.userId) })
+    await render({
+      currentUser: async () => ({ ok: true, data: user }),
+      networks: async () => ({ ok: true, data: [network] }),
+      refreshDirectory
+    })
+    expect(refreshDirectory).toHaveBeenCalledTimes(1)
+    expect(refreshDirectory.mock.calls[0]?.[0]).toMatchObject({ serviceId: 'service-a' })
   })
 
   it('asks the core to read the coordinator again from the refresh control', async () => {
@@ -132,10 +151,11 @@ describe('P2P account public controls (component diagnostics)', () => {
       networks: async () => ({ ok: true, data: [network] }),
       refreshDirectory
     })
-    expect(refreshDirectory).not.toHaveBeenCalled()
+    // Opening the pane already asked once; the control asks again on demand.
+    expect(refreshDirectory).toHaveBeenCalledTimes(1)
     await ui.get('[data-testid="p2p-devices-refresh"]').trigger('click')
     await flushPromises()
-    expect(refreshDirectory).toHaveBeenCalledTimes(1)
+    expect(refreshDirectory).toHaveBeenCalledTimes(2)
   })
 
   it('keeps identity and editing details collapsed while exposing a scannable network row', async () => {
