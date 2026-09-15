@@ -107,22 +107,33 @@ against a running document: **never inject a request id**, because the replay gu
 poisons that document's own sequence (`p2p.request_replayed`) for every later call
 the page makes.
 
-## Open follow-up (deliberate)
+## The follow-up, done in 0.1.45
 
-The shell still exposes two renderer-facing ops that project the same snapshot: the
-`directory` / `refreshDirectory` contract this change adds, and the older
-per-network `networkDevices` / `accountDevices`. Both now read the core, so there is
-one source, but `accountDevices` had to keep a forced read (`directory.refresh`)
-because its result type has no way to say "not read yet" and the Connect page reads
-an empty list as "this machine belongs to another account". Once
-`p2pEnrollment.readAccountDevices` is migrated to the directory contract and honours
-`known: false`, the legacy ops can go back to the cached snapshot or be retired.
+Two renderer-facing ops still projected the snapshot after 0.1.42 — the per-network
+`networkDevices` and an `accountDevices` that forced a coordinator read — and the
+second one existed only because the Connect page's bound-device check had no way to
+say "not read yet". That check now reads the directory contract and treats
+`known: false` as "not looked yet" instead of as the claim "this machine is not
+bound", which is what it had been able to turn an unread snapshot into (a bound
+machine reported as belonging to another account). The enrollment domain follows
+the core's announcements for the service it is showing, so the answer arrives when
+the first read lands. Both legacy ops, their main-side methods and their preload
+surface are gone: the directory has one path, and nothing can read the same list a
+second way and disagree with the first.
 
 ## What this still does not do
 
 Presence is not instant: the coordinator answers it from its live session table and
-persists last-seen at most once a minute, so a row can lag by that much. The
-catalog of _paired_ computers is a separate list and is still synced on the shell
-side (a `pairs` read), because a network membership and a pairing authorization are
-not the same thing; a push there would need its own announcement and is not part of
-this change.
+persists last-seen at most once a minute, so a row can lag by that much.
+
+The catalog of _paired_ computers is a separate list and is still synced on the
+shell side: `PeerMemberSync` reads `pairs.list`, re-pins every active pair into the
+helper, and rewrites the catalog, triggered by a page (the Run tab's add menu on
+open, and the shell's own startup). That is the last "a page triggers a coordinator
+read" path in this area, and the same reasoning that produced this change applies to
+it: the core already owns the catalog store and the peer session's pin table, so it
+can do the whole read-pin-record cycle on its own schedule and announce the result.
+The migration is recorded in the OpenSpec tasks; it is not part of this change
+because `recordMembers`' rules (retire a revoked row before recording its
+replacement, identity continuity) have to be reproduced in Go with their own tests
+first.

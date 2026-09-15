@@ -218,36 +218,6 @@ export class PeerAccounts {
   }
 
   /**
-   * Reads the device directory of one owned network.
-   *
-   * The members come from the core's cached directory, not from a coordinator
-   * read per page: the core is now the directory's only owner and holds one
-   * snapshot for the whole account, while a per-page `networks.devices` read is
-   * exactly what let two machines keep private, stale copies of the same list
-   * that the next page never saw. The ownership pre-check `networks.list` used to
-   * perform here is gone with that read — the core's directory contains exactly
-   * the networks the signed-in account owns — and a network it does not contain
-   * is refused below rather than reported as empty.
-   */
-  listNetworkDevices(
-    serviceId: string,
-    networkId: string,
-    signal: AbortSignal
-  ): Promise<PeerNetworkDevice[]> {
-    assertAccountId(networkId)
-    return this.#readOperation(serviceId, signal, async () => {
-      const session = this.#session(serviceId)
-      const directory = await this.#readDirectory(serviceId, session, 'directory.inspect', signal)
-      const network = directory.networks.find((value) => value.networkId === networkId)
-      // An unread directory is refused the same way as an unknown network: an
-      // empty list would claim the network has no devices, which is a different
-      // and misleading statement.
-      if (!network) throw new PeerHelperError('p2p.network_unavailable')
-      return network.devices
-    })
-  }
-
-  /**
    * The devices the signed-in account sees, with the coordinator's presence.
    *
    * This is the account's own binding list (`device_users`), not a device's owner

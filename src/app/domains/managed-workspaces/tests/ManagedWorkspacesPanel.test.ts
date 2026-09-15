@@ -223,8 +223,6 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
     apiVersion: 1,
     p2pManagement: {
       enable: unusedP2P,
-      networkDevices: unusedP2P,
-      accountDevices: unusedP2P,
       accountSelection: unusedP2P,
       rememberAccountSelection: unusedP2P,
       catalog: unusedP2P,

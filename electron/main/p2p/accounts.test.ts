@@ -175,7 +175,8 @@ describe('main-owned P2P accounts', () => {
         }
       ])
     )
-    const devices = await f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
+    const directory = await f.accounts.directory(serviceId, signal())
+    const devices = directory.networks[0]?.devices ?? []
     expect(devices[0]).toEqual({
       deviceId: 'a'.repeat(12),
       userId: user.userId,
@@ -217,17 +218,21 @@ describe('main-owned P2P accounts', () => {
           }
         ])
       )
-      await expect(
-        f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
-      ).rejects.toMatchObject({ code: 'p2p.invalid_server_response' })
+      await expect(f.accounts.directory(serviceId, signal())).rejects.toMatchObject({
+        code: 'p2p.invalid_server_response'
+      })
     }
   })
 
-  it('reports an unread directory as a state and refuses an unknown network instead of an empty list', async () => {
+  it('reports an unread directory as a state instead of an empty network', async () => {
     const f = await loggedIn()
     const unread = { serviceId, known: false, revision: 0, fetchedAt: 0, networks: [], devices: [] }
     f.call.mockResolvedValueOnce(unread)
     // `known:false` is the core saying it has not read yet, which is not an error.
+    // The renderer states it rather than reading the empty list as "no devices".
+    // The old per-network read refused `p2p.network_unavailable` here; that op is
+    // gone, and its network-absence refusal went with it, because no reader could
+    // tell "network absent" apart from "directory not read" any more.
     expect(await f.accounts.directory(serviceId, signal())).toEqual({
       known: false,
       revision: 0,
@@ -235,12 +240,6 @@ describe('main-owned P2P accounts', () => {
       networks: [],
       devices: []
     })
-    f.call.mockResolvedValueOnce(unread)
-    // An empty list would claim the network has no devices, which is a different
-    // and misleading statement, so an absent network stays a refusal.
-    await expect(
-      f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
-    ).rejects.toMatchObject({ code: 'p2p.network_unavailable' })
   })
 
   /**
@@ -274,11 +273,11 @@ describe('main-owned P2P accounts', () => {
       ])
     })
     f.call.mockResolvedValueOnce(directoryReply([]))
-    const members = f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
-    const directory = f.accounts.directory(serviceId, signal())
+    const first = f.accounts.directory(serviceId, signal())
+    const second = f.accounts.directory(serviceId, signal())
     release?.()
-    await expect(members).resolves.toHaveLength(1)
-    await expect(directory).resolves.toMatchObject({ known: true, revision: 3 })
+    await expect(first).resolves.toMatchObject({ known: true, revision: 3 })
+    await expect(second).resolves.toMatchObject({ known: true, revision: 3 })
   })
 
   it('answers the two directory operations from the core without a per-page read', async () => {
@@ -334,7 +333,8 @@ describe('main-owned P2P accounts', () => {
       ])
     )
 
-    const devices = await f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
+    const directory = await f.accounts.directory(serviceId, signal())
+    const devices = directory.networks[0]?.devices ?? []
 
     expect(devices).toEqual([
       {

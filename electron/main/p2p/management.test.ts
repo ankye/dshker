@@ -585,13 +585,14 @@ describe('formal P2P management composition', () => {
     expect(seen).toEqual([serviceId])
   })
 
-  it('answers the account device list from the core directory, asking it to read first', async () => {
-    // The account's own bindings decide whether a machine belongs to the account
-    // signed in here. That answer is a bare list with no way to say "not read
-    // yet", and an empty one is read as the positive claim "not bound" — which is
-    // how a legitimately bound machine gets reported as a foreign one. The core is
-    // therefore asked to read the coordinator, exactly as this op did before the
-    // directory moved into the core.
+  it('projects the core directory and marks this machine from the registered credential', async () => {
+    // `isLocal` is the one part of the view the core cannot supply: it comes from
+    // the credential main registered, so the renderer can refuse to let a user
+    // remove the machine they are sitting at. The cached read answers from the
+    // snapshot the core already holds; the refresh is the one read that makes the
+    // core ask the coordinator again. The old account-devices op forced that read
+    // on every Connect-page mount, which reported a bound machine as foreign when
+    // the directory had not been read yet; that op is gone with the forced read.
     const f = await loggedIn()
     const deviceId = '3'.repeat(12)
     const base = f.call.getMockImplementation()
@@ -632,11 +633,18 @@ describe('formal P2P management composition', () => {
       if (base === undefined) throw new PeerHelperError('p2p.invalid_operation')
       return base(method, payload, signal)
     })
-    const result = await f.owner.accountDevices(serviceId, new AbortController().signal)
-    expect(result.localDeviceId).toBe(deviceId)
-    expect(result.devices.map((device) => device.deviceId)).toEqual([deviceId])
-    expect(f.call.mock.calls.map(([method]) => method)).toContain('directory.refresh')
-    expect(f.call.mock.calls.map(([method]) => method)).not.toContain('devices.list')
+    const cached = await f.owner.directory(serviceId, new AbortController().signal)
+    expect(cached.devices.map((device) => device.deviceId)).toEqual([deviceId])
+    // The credential, not the reply, decides which row is this computer.
+    expect(cached.devices[0]?.isLocal).toBe(true)
+    const refreshed = await f.owner.refreshDirectory(serviceId, new AbortController().signal)
+    expect(refreshed.known).toBe(true)
+    const methods = f.call.mock.calls.map(([method]) => method)
+    expect(methods.filter((method) => method.startsWith('directory.'))).toEqual([
+      'directory.inspect',
+      'directory.refresh'
+    ])
+    expect(methods).not.toContain('devices.list')
   })
 
   describe('removing a configured service', () => {

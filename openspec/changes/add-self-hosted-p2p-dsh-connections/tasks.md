@@ -1,5 +1,14 @@
 ## 1. 协议与构建边界
 
+下一步（记录，尚未实施）：目录已归 core，但**catalog 里的 computers（已配对电脑）仍由 shell 同步**
+——`PeerMemberSync` 在读 `pairs.list`、给每个 active pair 重新 pin，再改写 catalog；触发点是页面
+（运行页添加菜单打开时、shell 启动时）而不是 core 自己。这留下了同类的最后一个「页面触发协调器读取」
+路径。收尾方案：把「读 pairs → pin → 记录 catalog computers」整段搬进 core（它已经拥有 catalog store
+与 peer session 的 pin 表），按 core 自己的维护节奏执行并在内容变化时发一个 `catalog.changed` 回调；
+届时 `p2pPairing.read` 的同步副作用与 `member-sync.ts`/`member-catalog.ts` 一并删除，运行页添加菜单
+只读 catalog 快照，任何页面都不再触发协调器读取。难点是 `recordMembers` 的迁移规则（revoked 行先
+retire 再记录、身份连续性守卫）必须在 Go 侧逐条对齐，并有对应测试。
+
 固定端口不再被自己的遗留工作台卡死（2026-09-15，0.1.44）：端口预检本来就是「认出是自己上次启动的
 DSH Web 就停掉旧的再启新的」（`PreparePortForLaunch` → `PortCleared`），但它依赖的命令行识别规则
 只匹配 Unix 的渲染形式：Windows 会把 spawn 的每个参数都加引号，实际占用者是

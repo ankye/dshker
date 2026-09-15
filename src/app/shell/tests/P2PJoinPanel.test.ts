@@ -69,16 +69,42 @@ function sessionReader(sessions: P2PServiceSessionView[] = []) {
     .mockResolvedValue({ ok: true, data: sessions })
 }
 
+/** One projected directory row, so a case only states which machine it carries. */
+function boundDevice(deviceId: string) {
+  return {
+    deviceId,
+    name: 'This machine',
+    presence: 'online' as const,
+    lastSeen: 0,
+    version: '',
+    platform: '',
+    architecture: '',
+    isLocal: true
+  }
+}
+
+/** A known directory, empty unless a case names the machines it carries. */
+function directoryReader(deviceIds: readonly string[] = []) {
+  return vi.fn<P2PManagementApi['directory']>().mockResolvedValue({
+    ok: true,
+    data: {
+      known: true,
+      revision: 1,
+      fetchedAt: 1_789_445_714,
+      networks: [],
+      devices: deviceIds.map(boundDevice)
+    }
+  })
+}
+
 async function render(api: Partial<P2PManagementApi>) {
   const localDevice = vi.fn<P2PManagementApi['localDevice']>().mockResolvedValue({
     ok: true,
     data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
   })
-  const accountDevices = vi
-    .fn<P2PManagementApi['accountDevices']>()
-    .mockResolvedValue({ ok: true, data: { devices: [], localDeviceId: '' } })
+  const directory = directoryReader()
   window.dshLauncher = {
-    p2pManagement: { serviceSessions: sessionReader(), localDevice, accountDevices, ...api }
+    p2pManagement: { serviceSessions: sessionReader(), localDevice, directory, ...api }
   } as unknown as DesktopApi
   const domain = await import('@/app/domains/remote-connections')
   domain.p2pManagement.catalog.value = saved
@@ -402,10 +428,8 @@ describe('P2P 「我的网络」 card', () => {
    * already working. Before that list is read, nothing is claimed.
    */
   it('says when the signed-in account has no such device, and only then', async () => {
-    const bound = vi
-      .fn<P2PManagementApi['accountDevices']>()
-      .mockResolvedValue({ ok: true, data: { devices: [], localDeviceId: '' } })
-    const ui = await render({ accountDevices: bound })
+    const bound = directoryReader()
+    const ui = await render({ directory: bound })
     const domain = await import('@/app/domains/remote-connections')
 
     // Signed in as somebody else, but the account's device list has not been read.
@@ -427,19 +451,11 @@ describe('P2P 「我的网络」 card', () => {
     bound.mockResolvedValue({
       ok: true,
       data: {
-        devices: [
-          {
-            deviceId: registered.deviceId,
-            name: 'This machine',
-            presence: 'online',
-            lastSeen: 0,
-            version: '',
-            platform: '',
-            architecture: '',
-            isLocal: true
-          }
-        ],
-        localDeviceId: registered.deviceId
+        known: true,
+        revision: 2,
+        fetchedAt: 1_789_445_714,
+        networks: [],
+        devices: [boundDevice(registered.deviceId)]
       }
     })
     domain.p2pAccounts.state(serviceId).user = {
@@ -455,6 +471,33 @@ describe('P2P 「我的网络」 card', () => {
       username: 'owner@test.local'
     } as never
     await flushPromises()
+    expect(ui.find('[data-testid="p2p-identity-conflict"]').exists()).toBe(false)
+  })
+
+  /**
+   * An unread directory is not evidence about the account.
+   *
+   * The read answers from the core's snapshot, which the core may not have read
+   * yet — and it starts that read on its own. Treating the resulting empty list as
+   * "this machine is not bound" reported a perfectly bound computer as foreign, so
+   * the card stays silent until the directory is actually known.
+   */
+  it('reports no foreign identity while the directory has not been read', async () => {
+    const unread = vi.fn<P2PManagementApi['directory']>().mockResolvedValue({
+      ok: true,
+      data: { known: false, revision: 0, fetchedAt: 0, networks: [], devices: [] }
+    })
+    const ui = await render({ directory: unread })
+    const domain = await import('@/app/domains/remote-connections')
+
+    domain.p2pAccounts.state(serviceId).user = {
+      userId: 'user-b',
+      username: 'other@test.local'
+    } as never
+    domain.p2pEnrollment.state(serviceId).registration = registered
+    await flushPromises()
+    // The read happened; its `known:false` answer is simply not a claim.
+    expect(unread).toHaveBeenCalledWith(expect.objectContaining({ serviceId }))
     expect(ui.find('[data-testid="p2p-identity-conflict"]').exists()).toBe(false)
   })
 })

@@ -427,19 +427,6 @@ export class PeerManagement {
     )
   }
   /**
-   * Reads a network's device directory together with the local device id.
-   *
-   * Delegated to `PeerDeviceViews`, which owns every device directory the
-   * renderer reads so the local marker has one source.
-   */
-  networkDevices(serviceId: string, networkId: string, signal: AbortSignal) {
-    return this.#devices.networkDevices(serviceId, networkId, signal)
-  }
-  /** The devices the signed-in account is bound to, plus this machine's own id. */
-  accountDevices(serviceId: string, signal: AbortSignal) {
-    return this.#devices.accountDevices(serviceId, signal)
-  }
-  /**
    * The core's cached directory for one coordinator.
    *
    * A read: it never makes the core read the coordinator again, so opening a

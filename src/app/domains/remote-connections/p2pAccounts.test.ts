@@ -1,13 +1,45 @@
 import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import type { DesktopApi } from '@/shared/contracts'
-import type { P2PManagementApi } from '@/shared/p2p-management'
+import type {
+  P2PDirectoryView,
+  P2PManagementApi,
+  P2PNetworkDirectoryView
+} from '@/shared/p2p-management'
 import { P2P_BUILTIN_SERVICE } from '@/shared/p2p-management'
 import { P2PManagementDomain } from './p2pManagement'
 import { P2PAccountsDomain } from './p2pAccounts'
 
 const user = { userId: 'user-a', username: 'alice' }
 const network = { userId: user.userId, networkId: 'net-a', name: 'Office', maxDevices: 10 }
+/** A projected directory row, so a case only has to state the device it cares about. */
+function deviceRow(name: string): P2PDirectoryView['devices'][number] {
+  return {
+    deviceId: 'a'.repeat(12),
+    name,
+    presence: 'online',
+    lastSeen: 1_789_445_714,
+    version: '0.1.42',
+    platform: 'darwin',
+    architecture: 'arm64',
+    isLocal: false
+  }
+}
+function networkEntry(networkId: string, name: string): P2PNetworkDirectoryView {
+  return {
+    networkId,
+    userId: user.userId,
+    name: 'Office',
+    maxDevices: 10,
+    devices: [deviceRow(name)]
+  }
+}
+function directoryAnswer(networks: readonly P2PNetworkDirectoryView[]) {
+  return {
+    ok: true as const,
+    data: { known: true, revision: 1, fetchedAt: 1_789_445_714, networks, devices: [] }
+  }
+}
 function setup(overrides: Partial<P2PManagementApi> = {}) {
   const api = {
     currentUser: vi.fn(async () => ({ ok: true as const, data: user })),
@@ -89,7 +121,7 @@ describe('P2P user and network domain', () => {
     } as unknown as DesktopApi
     try {
       const { accounts } = setup({ directory })
-      await accounts.networkDevices('service-a', 'net-a')
+      await accounts.readDirectory('service-a')
       expect(listener).toBeDefined()
       // The core reads on its own schedule; the announcement is the only signal
       // the renderer needs, and nobody had to click anything.
@@ -100,6 +132,49 @@ describe('P2P user and network domain', () => {
     } finally {
       window.dshLauncher = previous
     }
+  })
+
+  /**
+   * A refused read is a fact about the rows on the page, not about the account.
+   *
+   * Every network the domain already holds is marked failed, so the panel puts the
+   * warning where its list is instead of silently keeping rows that may be stale.
+   */
+  it('surfaces a refused directory read on every network it already holds', async () => {
+    const { accounts } = setup({
+      directory: vi.fn(async () => ({
+        ok: false as const,
+        code: 'p2p.user_login_required' as const,
+        message: 'no session'
+      }))
+    })
+    const state = accounts.state('service-a')
+    state.devices['net-a'] = []
+    state.devices['net-b'] = []
+    await accounts.readDirectory('service-a')
+    expect(state.devicesFailed['net-a']).toBe(true)
+    expect(state.devicesFailed['net-b']).toBe(true)
+  })
+
+  /**
+   * A projection replaces what the page held rather than merging into it.
+   *
+   * A network the answer no longer carries was deleted or is no longer this
+   * account's, so keeping its rows would show devices of a network that is gone.
+   */
+  it('replaces the projected rows and drops a network the answer no longer carries', async () => {
+    const directory = vi
+      .fn<P2PManagementApi['directory']>()
+      .mockResolvedValueOnce(
+        directoryAnswer([networkEntry('net-a', 'Old'), networkEntry('net-b', 'Gone')])
+      )
+      .mockResolvedValueOnce(directoryAnswer([networkEntry('net-a', 'New')]))
+    const { accounts } = setup({ directory })
+    await accounts.readDirectory('service-a')
+    expect(accounts.state('service-a').devices['net-b']?.[0]?.name).toBe('Gone')
+    await accounts.readDirectory('service-a')
+    expect(accounts.state('service-a').devices['net-a']?.[0]?.name).toBe('New')
+    expect(accounts.state('service-a').devices['net-b']).toBeUndefined()
   })
 
   /**

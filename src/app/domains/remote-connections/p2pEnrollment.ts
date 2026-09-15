@@ -24,6 +24,9 @@ export interface P2PEnrollmentState {
 /** Public registration state only. Keys, CSR, certificates and grants remain in main. */
 export class P2PEnrollmentDomain {
   readonly #states = reactive<Record<string, P2PEnrollmentState>>({})
+  #unsubscribe: (() => void) | undefined
+  /** The coordinator whose announcements this domain currently follows. */
+  #serviceId: string | undefined
   constructor(private readonly management: P2PManagementDomain) {}
 
   state(serviceId: string): P2PEnrollmentState {
@@ -58,13 +61,49 @@ export class P2PEnrollmentDomain {
    * signed in here. The account recorded in the local credential cannot answer it:
    * that is the account the machine first enrolled under, and a device added to
    * another account's network by hand keeps it — so a legitimate, bound machine
-   * looked like a foreign one. A failure leaves the list unread rather than
-   * claiming the machine is unbound.
+   * looked like a foreign one.
+   *
+   * The read answers from the core's cached directory, because a forced coordinator
+   * read here made the Connect page ask the server on every mount and turned a
+   * directory the core had not read yet into an empty list — which the card read as
+   * the positive claim "this machine is not bound" and reported a foreign identity
+   * for a perfectly bound computer. A refusal and an unread snapshot therefore both
+   * leave the list as it is: neither is evidence about the account, and the card
+   * already treats `undefined` as "not looked yet".
    */
   async readAccountDevices(serviceId: string): Promise<void> {
-    const result = await this.management.runRead('accountDevices', { serviceId })
-    if (result.ok)
-      this.state(serviceId).accountDeviceIds = result.data.devices.map((d) => d.deviceId)
+    this.subscribe(serviceId)
+    const result = await this.management.runRead('directory', { serviceId })
+    if (!result.ok || !result.data.known) return
+    this.state(serviceId).accountDeviceIds = result.data.devices.map((device) => device.deviceId)
+  }
+
+  /**
+   * Follows the directory changes the core announces.
+   *
+   * The snapshot can legitimately be unread when the Connect page mounts: the core
+   * begins its own read at startup, after it first sees a session. Without the
+   * subscription the identity check would stay unanswered until something else
+   * happened to move, which is exactly the state this read exists to resolve.
+   */
+  subscribe(serviceId: string): void {
+    // The page can switch coordinators. Only an announcement for the one it now
+    // shows is worth re-reading; an announcement for a stale one is ignored rather
+    // than answered with a read nobody asked for.
+    this.#serviceId = serviceId
+    if (this.#unsubscribe !== undefined) return
+    const api = window.dshLauncher?.p2pManagement
+    if (api?.onDirectoryChange === undefined) return
+    this.#unsubscribe = api.onDirectoryChange((event) => {
+      if (event.serviceId !== this.#serviceId) return
+      void this.readAccountDevices(event.serviceId)
+    })
+  }
+
+  /** Releases the subscription; used by tests and any future shell teardown. */
+  stop(): void {
+    this.#unsubscribe?.()
+    this.#unsubscribe = undefined
   }
 
   async register(serviceId: string, networkId: string): Promise<void> {

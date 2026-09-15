@@ -17,7 +17,6 @@ import {
   projectPeerCatalog,
   projectPeerUser,
   projectPeerNetwork,
-  projectPeerNetworkDevices,
   projectPeerRegistration,
   projectPeerPair,
   projectPeerPairs,
@@ -108,16 +107,6 @@ export function registerPeerManagementIpc(
   register('networks', false, async (r, s) =>
     (await owner.networks(r.serviceId, s)).map(projectPeerNetwork)
   )
-  register('networkDevices', false, async (r, s) => {
-    const { devices, localDeviceId } = await owner.networkDevices(r.serviceId, r.networkId, s)
-    return projectPeerNetworkDevices(devices, localDeviceId)
-  })
-  // Read-only: the account's own device bindings, which is what decides whether
-  // this machine belongs to the account signed in here.
-  register('accountDevices', false, async (r, s) => {
-    const { devices, localDeviceId } = await owner.accountDevices(r.serviceId, s)
-    return { devices: projectPeerNetworkDevices(devices, localDeviceId), localDeviceId }
-  })
   // Read-only: the owner call answers with the core's snapshot already projected,
   // because `isLocal` comes from main's own credential rather than the reply, and
   // reading it never makes the core read the coordinator.

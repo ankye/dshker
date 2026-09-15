@@ -148,28 +148,6 @@ export class P2PAccountsDomain {
   }
 
   /**
-   * Reads one network's device directory; a failure is surfaced, never silent.
-   *
-   * Queued as a read: the directory is read on panel entry beside the account and
-   * network reads, and the three share one service scope — issuing it directly
-   * meant an entry that raced a sibling read was refused as busy and the list
-   * silently stayed as it was. The answer comes from the core's own snapshot (see
-   * readDirectory): this projects it, and no longer reads the coordinator, which
-   * is what let two pages hold two different answers.
-   */
-  async networkDevices(serviceId: string, networkId: string): Promise<void> {
-    this.subscribe()
-    const result = await this.management.runRead('networkDevices', { serviceId, networkId })
-    const state = this.state(serviceId)
-    if (!result.ok) {
-      state.devicesFailed[networkId] = true
-      return
-    }
-    state.devices[networkId] = result.data
-    state.devicesFailed[networkId] = false
-  }
-
-  /**
    * Projects the core's whole directory into this domain's per-network state.
    *
    * The coordinator's directory has one owner in the application — the core — and

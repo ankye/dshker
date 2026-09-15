@@ -55,8 +55,6 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
       ipcRenderer.removeListener(P2P_SERVICE_SESSIONS_CHANGED_CHANNEL, onChanged)
     }
   },
-  networkDevices: (request) => ipcRenderer.invoke(channels.networkDevices, request),
-  accountDevices: (request) => ipcRenderer.invoke(channels.accountDevices, request),
   directory: (request) => ipcRenderer.invoke(channels.directory, request),
   refreshDirectory: (request) => ipcRenderer.invoke(channels.refreshDirectory, request),
   onDirectoryChange: (listener: (payload: P2PDirectoryChangedPayload) => void): (() => void) => {

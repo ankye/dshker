@@ -1,5 +1,11 @@
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import type { P2PManagementApi, P2PRegistrationView } from '@/shared/p2p-management'
+import type { DesktopApi } from '@/shared/contracts'
+import type {
+  P2PDirectoryView,
+  P2PManagementApi,
+  P2PRegistrationView
+} from '@/shared/p2p-management'
 import { P2PManagementDomain } from './p2pManagement'
 import { P2PEnrollmentDomain } from './p2pEnrollment'
 
@@ -27,6 +33,11 @@ function setup() {
     registration: vi
       .fn<P2PManagementApi['registration']>()
       .mockResolvedValue({ ok: true, data: pending }),
+    // An account with no bound devices unless a case says otherwise: the identity
+    // check reads this, so it must answer rather than fall through to the bridge.
+    directory: vi
+      .fn<P2PManagementApi['directory']>()
+      .mockResolvedValue({ ok: true, data: knownDirectory([]) }),
     recoverEnrollment: vi.fn<P2PManagementApi['recoverEnrollment']>().mockResolvedValue({
       ok: false,
       code: 'p2p.enrollment_not_found',
@@ -41,6 +52,26 @@ function setup() {
   }
   const management = new P2PManagementDomain(() => api as unknown as P2PManagementApi)
   return { api, management, enrollment: new P2PEnrollmentDomain(management) }
+}
+
+/** A known directory carrying exactly the bound devices a case names. */
+function knownDirectory(deviceIds: readonly string[]): P2PDirectoryView {
+  return {
+    known: true,
+    revision: 1,
+    fetchedAt: 1_789_445_714,
+    networks: [],
+    devices: deviceIds.map((deviceId) => ({
+      deviceId,
+      name: `device-${deviceId}`,
+      presence: 'online',
+      lastSeen: 1_789_445_714,
+      version: '',
+      platform: '',
+      architecture: '',
+      isLocal: false
+    }))
+  }
 }
 
 describe('P2P enrollment reconciliation', () => {
@@ -324,6 +355,84 @@ describe('P2P enrollment reconciliation', () => {
       await enrollment.join('service-a', 'network-a', 'My computer')
       await enrollment.leave('service-a', '', issued.deviceId)
       expect(api.leaveNetwork).not.toHaveBeenCalled()
+    })
+  })
+
+  /**
+   * The bound-device check behind the Connect page's foreign-identity warning.
+   *
+   * An unread directory must leave the list undefined: `undefined` is the card's
+   * "not looked yet", while an empty list is the positive claim that this machine
+   * belongs to no part of the account — which is how a bound machine was reported
+   * as a foreign one.
+   */
+  describe('P2P account device directory', () => {
+    it('leaves the bound device list unread while the core has no snapshot', async () => {
+      const { enrollment, api } = setup()
+      api.directory.mockResolvedValueOnce({
+        ok: true,
+        data: { known: false, revision: 0, fetchedAt: 0, networks: [], devices: [] }
+      })
+      await enrollment.readAccountDevices('service-a')
+      expect(enrollment.state('service-a').accountDeviceIds).toBeUndefined()
+    })
+
+    it('leaves the bound device list unread when the directory read fails', async () => {
+      const { enrollment, api } = setup()
+      api.directory.mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.user_login_required',
+        message: 'no session'
+      })
+      await enrollment.readAccountDevices('service-a')
+      expect(enrollment.state('service-a').accountDeviceIds).toBeUndefined()
+    })
+
+    it('records the account device ids from a known directory', async () => {
+      const { enrollment, api } = setup()
+      api.directory.mockResolvedValueOnce({
+        ok: true,
+        data: knownDirectory(['device-a', 'device-b'])
+      })
+      await enrollment.readAccountDevices('service-a')
+      expect(enrollment.state('service-a').accountDeviceIds).toEqual(['device-a', 'device-b'])
+    })
+
+    /**
+     * The snapshot can be unread when the page mounts, so the announcement is what
+     * turns an unread directory into a read one. An announcement for another
+     * coordinator is stale for this page and is ignored rather than answered.
+     */
+    it('re-reads the directory when the core announces the shown service', async () => {
+      const { enrollment, api } = setup()
+      let listener: ((event: { serviceId: string }) => void) | undefined
+      const previous = window.dshLauncher
+      window.dshLauncher = {
+        p2pManagement: {
+          onDirectoryChange: (next: (event: { serviceId: string }) => void) => {
+            listener = next
+            return () => {
+              listener = undefined
+            }
+          }
+        }
+      } as unknown as DesktopApi
+      try {
+        await enrollment.readAccountDevices('service-a')
+        expect(api.directory).toHaveBeenCalledTimes(1)
+        listener?.({ serviceId: 'service-b' })
+        await flushPromises()
+        expect(api.directory).toHaveBeenCalledTimes(1)
+        listener?.({ serviceId: 'service-a' })
+        await flushPromises()
+        expect(api.directory).toHaveBeenCalledTimes(2)
+        expect(api.directory).toHaveBeenLastCalledWith(
+          expect.objectContaining({ serviceId: 'service-a' })
+        )
+      } finally {
+        enrollment.stop()
+        window.dshLauncher = previous
+      }
     })
   })
 })

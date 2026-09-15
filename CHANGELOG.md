@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.45 — 2026-09-15
+
+- **The Connect page stops asking the server a question it already has an answer
+  for, and stops guessing when it does not.** Whether this machine belongs to the
+  account signed in here was decided by a read that always went to the server, and
+  a directory the core had not read yet came back empty — which the page read as
+  the positive claim "this machine is not bound" and reported a perfectly bound
+  computer as belonging to another account. It now reads the same directory every
+  other page reads, and an unread snapshot is left as "not looked yet" rather than
+  turned into a verdict. The page follows the core's change announcements, so the
+  answer appears by itself as soon as the first read lands.
+- The device-directory contract now has exactly one path: the two leftovers from
+  before the core owned the directory (a per-network read and an account read that
+  forced a coordinator fetch) are gone, so nothing in the interface can read the
+  same list a second way and disagree with the first.
+
 ## 0.1.44 — 2026-09-15
 
 - **A leftover workbench no longer blocks the next launch.** With a fixed port, a

@@ -46,10 +46,6 @@ export const P2P_MANAGEMENT_CHANNELS = {
   localDevice: 'dsh-launcher:p2p:local-device',
   /** This computer's session with each coordinator: the network layer, not a pair. */
   serviceSessions: 'dsh-launcher:p2p:service-sessions',
-  /** Devices enrolled in one owned network, with liveness and reported build. */
-  networkDevices: 'dsh-launcher:p2p:network-devices',
-  /** Every device bound to the signed-in account, whichever network it is in. */
-  accountDevices: 'dsh-launcher:p2p:account-devices',
   /** The coordinator's device directory as the core caches it, one snapshot per service. */
   directory: 'dsh-launcher:p2p:directory',
   /** Reads the coordinator again, then answers with the core's refreshed snapshot. */
@@ -427,16 +423,6 @@ export interface P2PManagementInputs {
   entry: ServiceRequest & { pairId: string; generation: number }
   localDevice: Record<never, never>
   serviceSessions: Record<never, never>
-  networkDevices: NetworkRequest
-  /**
-   * The devices the signed-in account is bound to.
-   *
-   * Distinct from `networkDevices`, which lists one network's members: a machine
-   * can be bound to an account without being in the network being displayed, and
-   * that is exactly the case where a locally remembered account gets the answer
-   * wrong.
-   */
-  accountDevices: ServiceRequest
   /**
    * The core's cached directory for one coordinator.
    *
@@ -500,8 +486,6 @@ export interface P2PManagementResults {
   entry: { url: string; partition: string }
   localDevice: P2PLocalDeviceView
   serviceSessions: P2PServiceSessionView[]
-  networkDevices: P2PNetworkDeviceView[]
-  accountDevices: { devices: P2PNetworkDeviceView[]; localDeviceId: string }
   directory: P2PDirectoryView
   refreshDirectory: P2PDirectoryView
   /** Accepted means cancellation requested, never that a server write was undone. */
