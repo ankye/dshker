@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.41 — 2026-09-15
+
+- A first install reaches the official server. The handshake asks the coordinator
+  a challenge and the shell accepts only the thirty-two character challenge shape,
+  but the core had been minting that value from the id generator — which the
+  twelve-character id change shortened to twelve. The shell then refused its own
+  core's answer, so a new machine showed an empty server list, could not sign in,
+  and was told nothing about why. The core now mints a real challenge, and the
+  coordinator accepts both shapes, so a machine that has not updated yet still
+  reaches it.
+- A stored configuration this build cannot read is repairable from the page that
+  reports it. A machine that upgraded from a release using the older identity
+  scheme (ids of another length) kept a record every operation re-validates —
+  including the removal of a single service — so the Connect card could neither
+  read it, use it, nor drop it: it showed `p2p.catalog_invalid` beside a retry
+  that could never succeed, the account page then had no server to sign in to,
+  and the only way out was deleting files by hand. The card now says the record
+  comes from an older release, offers to discard it, keeps both files beside the
+  new one as `p2p-devices.json.legacy-<stamp>`, leaves the device key and the
+  saved sign-ins alone, and provisions the built-in server again.
+- The card no longer loses the failure it is reporting. The status line and the
+  connections panel mount beside it, and their reads carry no service, so they
+  landed in the catalog's own operation slot and overwrote a failed read with
+  their success: the card then claimed nothing had been read, with no code at all.
+
 ## 0.1.40 — 2026-09-15
 
 - A connected computer's workbench now opens. A paired computer that had
