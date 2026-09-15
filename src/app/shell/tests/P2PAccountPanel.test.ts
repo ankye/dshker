@@ -1,7 +1,7 @@
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { DesktopApi } from '@/shared/contracts'
-import type { P2PManagementApi } from '@/shared/p2p-management'
+import type { P2PDirectoryView, P2PManagementApi } from '@/shared/p2p-management'
 import { zhCN } from '@/app/shared/i18n/messages.zh-CN'
 
 const user = { userId: 'user-a', username: 'alice' }
@@ -38,7 +38,106 @@ function button(ui: VueWrapper, text: string) {
   return found
 }
 
+/** The answer a core gives for an account whose only network has no members yet. */
+function emptyDirectory(net: typeof network, userId: string): P2PDirectoryView {
+  return {
+    known: true,
+    revision: 1,
+    fetchedAt: 1_789_000_000,
+    networks: [
+      {
+        networkId: net.networkId,
+        userId,
+        name: net.name,
+        maxDevices: net.maxDevices,
+        devices: []
+      }
+    ],
+    devices: []
+  }
+}
+
 describe('P2P account public controls (component diagnostics)', () => {
+  /**
+   * The directory has one owner — the core — and the panel reads that snapshot on
+   * open rather than asking the coordinator for one of its own. A cached answer
+   * kept from a previous visit is exactly what made the list look frozen with a
+   * row that still said "never reported".
+   */
+  it('reads the core directory on open instead of reusing a cached snapshot', async () => {
+    const directory = vi.fn<P2PManagementApi['directory']>().mockResolvedValue({
+      ok: true,
+      data: {
+        known: true,
+        revision: 4,
+        fetchedAt: 1_789_000_000,
+        networks: [
+          {
+            networkId: network.networkId,
+            userId: user.userId,
+            name: network.name,
+            maxDevices: network.maxDevices,
+            devices: [
+              {
+                deviceId: 'a'.repeat(12),
+                name: 'USER-20260612LO',
+                presence: 'online',
+                lastSeen: 1_789_000_000,
+                version: '0.1.42',
+                platform: 'win32',
+                architecture: 'x64',
+                isLocal: true
+              }
+            ]
+          }
+        ],
+        devices: []
+      }
+    })
+    window.dshLauncher = {
+      p2pManagement: {
+        currentUser: async () => ({ ok: true, data: user }),
+        networks: async () => ({ ok: true, data: [network] }),
+        directory
+      }
+    } as unknown as DesktopApi
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pAccounts.state('service-a').selectedNetworkId = network.networkId
+    // A stale row from a previous visit is what the pane used to show again.
+    domain.p2pAccounts.state('service-a').devices[network.networkId] = []
+    expect(directory).not.toHaveBeenCalled()
+
+    const panel = (await import('../components/P2PAccountPanel.vue')).default
+    container = document.createElement('div')
+    document.body.append(container)
+    wrapper = mount(panel, {
+      attachTo: container,
+      props: { serviceId: 'service-a', displayName: 'Home' }
+    })
+    await flushPromises()
+
+    expect(directory).toHaveBeenCalledTimes(1)
+    expect(domain.p2pAccounts.state('service-a').devices[network.networkId]?.[0]?.name).toBe(
+      'USER-20260612LO'
+    )
+    expect(wrapper?.text()).toContain('USER-20260612LO')
+  })
+
+  it('asks the core to read the coordinator again from the refresh control', async () => {
+    const refreshDirectory = vi
+      .fn<P2PManagementApi['refreshDirectory']>()
+      .mockResolvedValue({ ok: true, data: emptyDirectory(network, user.userId) })
+    const ui = await render({
+      currentUser: async () => ({ ok: true, data: user }),
+      networks: async () => ({ ok: true, data: [network] }),
+      refreshDirectory
+    })
+    expect(refreshDirectory).not.toHaveBeenCalled()
+    await ui.get('[data-testid="p2p-devices-refresh"]').trigger('click')
+    await flushPromises()
+    expect(refreshDirectory).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps identity and editing details collapsed while exposing a scannable network row', async () => {
     const ui = await render({
       currentUser: async () => ({ ok: true, data: user }),

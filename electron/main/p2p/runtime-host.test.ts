@@ -78,9 +78,11 @@ function fixture() {
       }
     }
   }
+  const directories: string[] = []
   const host = new PeerRuntimeHost({
     channel,
     catalog,
+    onDirectoryChange: (changedServiceId) => directories.push(changedServiceId),
     runtime: {
       getRuntimeState: () => launch,
       onRuntimeState: (listener) => {
@@ -102,11 +104,13 @@ function fixture() {
     call,
     start,
     listeners,
+    directories,
     set: (value: LauncherHarnessLaunchView) => {
       launch = value
       for (const listener of listeners) listener(value)
     },
     emit: (value: unknown) => handler!('peer.state', { serviceId, state: value }, signal()),
+    directoryChanged: (payload: unknown) => handler!('directory.changed', payload, signal()),
     connect: (payload: unknown = { serviceId, pairId }, requestSignal = signal()) =>
       handler!('runtime.connect', payload, requestSignal),
     unavailable: (error: PeerHelperError) => {
@@ -285,5 +289,30 @@ describe('formal main P2P runtime ownership', () => {
     await f.host.start(signal())
     await expect(f.emit(value)).rejects.toThrow()
     expect(f.host.snapshot().peers).toEqual([])
+  })
+
+  it('routes a well-formed directory change and refuses a malformed one', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    expect(await f.directoryChanged({ serviceId, revision: 0 })).toEqual({})
+    expect(f.directories).toEqual([serviceId])
+    // The directory is the account's, not a pair's: a service with no active
+    // computer still has a device list worth re-reading.
+    f.record.computers.length = 0
+    await f.directoryChanged({ serviceId, revision: 1 })
+    expect(f.directories).toEqual([serviceId, serviceId])
+    // A payload outside the core's vocabulary is refused rather than coerced:
+    // an unknown id shape, a revision that could not have been counted, a
+    // missing field or an extra one.
+    for (const payload of [
+      { serviceId: 'A'.repeat(12), revision: 1 },
+      { serviceId: serviceId.slice(0, 11), revision: 1 },
+      { serviceId, revision: -1 },
+      { serviceId, revision: 1.5 },
+      { serviceId },
+      { serviceId, revision: 1, extra: true }
+    ])
+      await expect(f.directoryChanged(payload)).rejects.toThrow()
+    expect(f.directories).toEqual([serviceId, serviceId])
   })
 })

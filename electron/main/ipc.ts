@@ -76,9 +76,9 @@ export function registerIpc(options: LauncherIpcOptions): void {
   registerRuntimeBrowserIpc(options.runtimeBrowserController)
   registerLauncherUpdateIpc(options.launcherUpdateService)
   registerRemoteConnectionIpc(options.remoteConnectionService)
-  // The same object supplies both, but the subscription is passed separately so
-  // it is not mistaken for a dispatched operation.
-  registerPeerManagementIpc(options.peerManagement, options.peerManagement)
+  // The same object supplies the owner and both subscriptions, but they are passed
+  // separately so neither is mistaken for a dispatched operation.
+  registerPeerManagementIpc(options.peerManagement, options.peerManagement, options.peerManagement)
   // The console push channel sends appended records to every launcher window,
   // so operation and launch output do not wait for a periodic state read.
   options.launcherHarnessService.onConsoleAppend((entry) => {

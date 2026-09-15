@@ -16,7 +16,7 @@ import { exactPeerObject, PeerHelperError } from './wire'
  */
 export interface PeerChannel {
   call(method: string, payload: unknown, signal: AbortSignal): Promise<unknown>
-  /** Serves the two parent-role callbacks; returns the detach function. */
+  /** Serves the parent-role callbacks; returns the detach function. */
   serve(handler: PeerMainHandler): () => void
   /** Observes the channel's death; returns the detach function. */
   observe(listener: (error: PeerHelperError) => void): () => void
@@ -36,6 +36,13 @@ interface Options {
    * a one second network change.
    */
   onPeerStage?(serviceId: string, pairId: string, stage: string): void
+  /**
+   * Reports a new revision of the core's directory snapshot for one service.
+   *
+   * The core owns the snapshot and announces its changes, so this is the only
+   * way a device list the renderer already read learns that it moved.
+   */
+  onDirectoryChange?(serviceId: string): void
 }
 
 /** Main composition owner. Nothing is started until an explicit P2P operation. */
@@ -118,6 +125,19 @@ export class PeerRuntimeHost {
 
   readonly #handle: PeerMainHandler = async (method, payload, signal) => {
     this.#admit(signal)
+    // A directory revision is announced, not rediscovered: the core owns the
+    // snapshot, and a list main already handed to a page would otherwise stay
+    // stale until something happened to read it again.
+    if (method === 'directory.changed') {
+      const changed = exactPeerObject(payload, ['serviceId', 'revision'])
+      assertAccountId(changed.serviceId, 12)
+      // A revision is counted from zero by the core, and anything else is a
+      // callback this shell cannot route.
+      if (!Number.isSafeInteger(changed.revision) || (changed.revision as number) < 0)
+        throw new PeerHelperError('p2p.invalid_payload')
+      this.options.onDirectoryChange?.(changed.serviceId)
+      return {}
+    }
     const fields = exactPeerObject(
       payload,
       method === 'runtime.connect' ? ['serviceId', 'pairId'] : ['serviceId', 'state']

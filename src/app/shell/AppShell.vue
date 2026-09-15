@@ -2,7 +2,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
 import { useLauncherUpdates } from '../domains/launcher-updates'
-import { p2pManagement, p2pNetwork, useRemoteConnections } from '../domains/remote-connections'
+import {
+  p2pAccounts,
+  p2pManagement,
+  p2pNetwork,
+  useRemoteConnections
+} from '../domains/remote-connections'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
 import ConsoleDrawer from './components/ConsoleDrawer.vue'
 import ControllerPanel from './components/ControllerPanel.vue'
@@ -37,6 +42,10 @@ onMounted(() => {
   // Network reach is shown in the status bar on every route, so it is read at
   // shell start rather than when a particular tab happens to mount.
   void p2pNetwork.start()
+  // The account's networks and their devices are the same kind of fact: a machine
+  // that is already signed in shows them on first launch, with no tab to open and
+  // nothing to refresh.
+  void p2pAccounts.start()
 })
 
 const shell = useLauncherShell()

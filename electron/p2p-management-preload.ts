@@ -1,7 +1,9 @@
 import { ipcRenderer } from 'electron'
 import {
+  P2P_DIRECTORY_CHANGED_CHANNEL,
   P2P_MANAGEMENT_CHANNELS as channels,
   P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
+  type P2PDirectoryChangedPayload,
   type P2PManagementApi
 } from '../src/shared/p2p-management'
 
@@ -55,5 +57,15 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
   },
   networkDevices: (request) => ipcRenderer.invoke(channels.networkDevices, request),
   accountDevices: (request) => ipcRenderer.invoke(channels.accountDevices, request),
+  directory: (request) => ipcRenderer.invoke(channels.directory, request),
+  refreshDirectory: (request) => ipcRenderer.invoke(channels.refreshDirectory, request),
+  onDirectoryChange: (listener: (payload: P2PDirectoryChangedPayload) => void): (() => void) => {
+    const onChanged = (_event: unknown, payload: P2PDirectoryChangedPayload): void =>
+      listener(payload)
+    ipcRenderer.on(P2P_DIRECTORY_CHANGED_CHANNEL, onChanged)
+    return () => {
+      ipcRenderer.removeListener(P2P_DIRECTORY_CHANGED_CHANNEL, onChanged)
+    }
+  },
   cancel: (request) => ipcRenderer.invoke(channels.cancel, request)
 })

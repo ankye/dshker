@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 import { apiFail, apiOk } from '../../../src/shared/contracts'
 import {
+  P2P_DIRECTORY_CHANGED_CHANNEL,
   P2P_MANAGEMENT_CHANNELS,
   P2P_MANAGEMENT_ERROR_CODES,
   P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
@@ -39,13 +40,14 @@ export type PeerManagementOwner = Pick<PeerManagement, Exclude<P2PManagementOper
 /**
  * No raw RPC dispatch, paths, keys or tokens cross this boundary.
  *
- * `sessions` is separate from `owner` because it is a subscription, not a
- * dispatched operation: it is registered once at startup, whereas every member
- * of `owner` must stay untouched until a request is admitted.
+ * `sessions` and `directory` are separate from `owner` because they are
+ * subscriptions, not dispatched operations: each is registered once at startup,
+ * whereas every member of `owner` must stay untouched until a request is admitted.
  */
 export function registerPeerManagementIpc(
   owner: PeerManagementOwner,
-  sessions?: { onSessionChange(listener: () => void): () => void }
+  sessions?: { onSessionChange(listener: () => void): () => void },
+  directory?: { onDirectoryChange(listener: (serviceId: string) => void): () => void }
 ): void {
   const requests = new PeerManagementRequests()
   function register<K extends Exclude<P2PManagementOperation, 'cancel'>>(
@@ -116,6 +118,12 @@ export function registerPeerManagementIpc(
     const { devices, localDeviceId } = await owner.accountDevices(r.serviceId, s)
     return { devices: projectPeerNetworkDevices(devices, localDeviceId), localDeviceId }
   })
+  // Read-only: the owner call answers with the core's snapshot already projected,
+  // because `isLocal` comes from main's own credential rather than the reply, and
+  // reading it never makes the core read the coordinator.
+  register('directory', false, async (r, s) => owner.directory(r.serviceId, s))
+  // A write even though it returns the same shape: it reads the coordinator again.
+  register('refreshDirectory', true, async (r, s) => owner.refreshDirectory(r.serviceId, s))
   register('createNetwork', true, async (r, s) =>
     projectPeerNetwork(await owner.createNetwork(r.serviceId, r.name, s))
   )
@@ -189,6 +197,14 @@ export function registerPeerManagementIpc(
   sessions?.onSessionChange(() => {
     for (const window of BrowserWindow.getAllWindows())
       if (!window.isDestroyed()) window.webContents.send(P2P_SERVICE_SESSIONS_CHANGED_CHANNEL)
+  })
+  // The core owns the directory snapshot and announces a new revision when the
+  // content moves, so a list the renderer already read is re-read rather than
+  // left showing the copy the core has replaced.
+  directory?.onDirectoryChange((serviceId) => {
+    for (const window of BrowserWindow.getAllWindows())
+      if (!window.isDestroyed())
+        window.webContents.send(P2P_DIRECTORY_CHANGED_CHANNEL, { serviceId })
   })
   // Starting a connection is a write: it consumes an attempt and a generation.
   register('connect', true, async (r, s) =>

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.1.42 — 2026-09-15
+
+- **The device list now has one owner, and it keeps itself current.** A network's
+  device directory is read and held by the core instead of by whichever page
+  happened to open it. Each page used to read the server for itself and keep its
+  own copy, so two computers in one network could show two different member lists
+  and neither ever caught up — one listed only the other computer, the other only
+  itself, its own row still reading "never reported", and only quitting and
+  restarting the app produced the current list. Now, if this computer is already
+  signed in when the app starts, its networks and their devices are **there on
+  first launch** — no tab to open and nothing to refresh. The core reads the
+  directory when the session is restored, after anything that changes who belongs
+  to a network (registering, binding, leaving, creating or deleting a network,
+  pairing), and every thirty seconds while a sign-in is active; when the content
+  changes it tells the window, and every list on screen updates by itself. The new
+  **Refresh list** control asks for a read right now if you would rather not wait.
+- The Run tab finds paired computers by itself. The add-workbench menu reads the
+  paired computers main keeps in its catalog, and only a P2P page had ever asked
+  for them, so opening the Run tab first — or after a restart — showed "choose a
+  LAN or SSH computer" with an empty LAN section even though the server held an
+  active pair. The menu now asks for the pairs when it mounts and again every
+  time it opens, so a computer paired after the app started appears without
+  visiting another tab first.
+- A device list read no longer loses the race with the page's other reads, and a
+  directory that could not be read keeps the last rows instead of silently
+  showing an empty network.
+
 ## 0.1.41 — 2026-09-15
 
 - A first install reaches the official server. The handshake asks the coordinator

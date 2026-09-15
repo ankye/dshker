@@ -6,17 +6,14 @@ import { PeerCatalog } from './catalog'
 import { peerPartition } from './partitions'
 import { PeerConnections } from './connections'
 import { PeerCredentialStore, type PeerCredential } from './credentials'
+import { PeerDeviceViews } from './device-views'
 import { PeerEnrollment } from './enrollment'
 import { enrollWhenMissing } from './enrollment-bootstrap'
+import { PeerMemberSync } from './member-sync'
 import { PeerPairing } from './pairing'
-import type { PeerPairMember } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
-import { recordMembers, remoteSide } from './member-catalog'
 import { diagnoseShellFailure, PeerSessionRegistry, restoreUserSession } from './session-registry'
-
-/** Refusals that mean this machine holds no authorized pair for the service. */
-const UNAUTHORIZED_MEMBER_CODES = new Set(['p2p.pair_unauthorized', 'p2p.device_unauthorized'])
 import { P2PSelectionStore } from './selection-preferences'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
@@ -65,14 +62,32 @@ export class PeerManagement {
   readonly #autoConnect: PeerAutoConnect
   readonly #resolveSettingsRoot: () => Promise<string>
   readonly #selection: P2PSelectionStore
-  /** Last member-sync refusal that means "no authorized pair", so it logs once. */
-  #memberRefusal: string | undefined
+  /** The device directories the renderer reads, so the local marker has one source. */
+  readonly #devices: PeerDeviceViews
+  /** The repeatable catalog rewrite of the coordinator's network members. */
+  readonly #members: PeerMemberSync
+  /**
+   * Listeners told when the core announces a new directory revision.
+   *
+   * The core owns the snapshot and reads the coordinator on its own, so a page
+   * that already rendered a list has to be told rather than left to poll.
+   */
+  readonly #directoryListeners = new Set<(serviceId: string) => void>()
 
   constructor(options: Options) {
     this.#resolveSettingsRoot = options.resolveSettingsRoot
     this.#selection = new P2PSelectionStore({ resolveSettingsRoot: options.resolveSettingsRoot })
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot, options.catalog)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot, options.secrets)
+    this.#members = new PeerMemberSync(this.#catalog, this.#credentials, this.#lifetime.signal)
+    this.#devices = new PeerDeviceViews(
+      (serviceId, signal, operation) => this.#account(serviceId, signal, operation),
+      async (serviceId) => {
+        // A service with no registration yet simply has no local device in the list.
+        const saved = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
+        return saved?.kind === 'registered' ? saved.credential.deviceId : ''
+      }
+    )
     this.#host = new PeerRuntimeHost({
       channel: options.channel,
       catalog: this.#catalog,
@@ -83,6 +98,12 @@ export class PeerManagement {
       // user may switch back to at any moment must not sit dead in between.
       onPeerStage: (_serviceId, _pairId, stage) => {
         if (stage === 'disconnected' || stage === 'failed') void this.#autoConnect.reconcile()
+      },
+      // The core announces a directory revision instead of the shell discovering
+      // one: the snapshot is the core's, and a page that already read it cannot
+      // see a new device list otherwise.
+      onDirectoryChange: (serviceId) => {
+        for (const listener of this.#directoryListeners) listener(serviceId)
       }
     })
     // An active pair is meant to be connected. Nothing about which tab the user
@@ -193,6 +214,21 @@ export class PeerManagement {
    */
   onSessionChange(listener: () => void): () => void {
     return this.#sessions.onSessionChange(listener)
+  }
+
+  /**
+   * Notifies when the core's directory snapshot for a service moves.
+   *
+   * Separate from `onSessionChange` because the two answer different questions:
+   * a session says whether this computer is online with the coordinator, while a
+   * directory revision says whether the device list it already rendered is still
+   * the core's.
+   */
+  onDirectoryChange(listener: (serviceId: string) => void): () => void {
+    this.#directoryListeners.add(listener)
+    return () => {
+      this.#directoryListeners.delete(listener)
+    }
   }
 
   /**
@@ -393,34 +429,28 @@ export class PeerManagement {
   /**
    * Reads a network's device directory together with the local device id.
    *
-   * Both come from one owner call so the IPC layer never has to combine two
-   * operations, which would make a single read look like two to any caller
-   * counting dispatches.
+   * Delegated to `PeerDeviceViews`, which owns every device directory the
+   * renderer reads so the local marker has one source.
    */
-  async networkDevices(serviceId: string, networkId: string, signal: AbortSignal) {
-    const devices = await this.#account(serviceId, signal, (accounts, active) =>
-      accounts.listNetworkDevices(serviceId, networkId, active)
-    )
-    // A service with no registration yet simply has no local device in the list.
-    const saved = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
-    const localDeviceId = saved?.kind === 'registered' ? saved.credential.deviceId : ''
-    return { devices, localDeviceId }
+  networkDevices(serviceId: string, networkId: string, signal: AbortSignal) {
+    return this.#devices.networkDevices(serviceId, networkId, signal)
+  }
+  /** The devices the signed-in account is bound to, plus this machine's own id. */
+  accountDevices(serviceId: string, signal: AbortSignal) {
+    return this.#devices.accountDevices(serviceId, signal)
   }
   /**
-   * The devices the signed-in account is bound to, plus this machine's own id.
+   * The core's cached directory for one coordinator.
    *
-   * The list is what decides whether this machine belongs to the account signed in
-   * here: a device id can be bound to several accounts, so a locally stored
-   * "account this credential was issued for" cannot answer it, and the coordinator
-   * is the only side that knows.
+   * A read: it never makes the core read the coordinator again, so opening a
+   * device list is not a network round trip of its own.
    */
-  async accountDevices(serviceId: string, signal: AbortSignal) {
-    const devices = await this.#account(serviceId, signal, (accounts, active) =>
-      accounts.listDevices(serviceId, active)
-    )
-    const saved = await this.#credentials.loadRegistration(serviceId).catch(() => undefined)
-    const localDeviceId = saved?.kind === 'registered' ? saved.credential.deviceId : ''
-    return { devices, localDeviceId }
+  directory(serviceId: string, signal: AbortSignal) {
+    return this.#devices.directory(serviceId, signal)
+  }
+  /** The core's directory after one more coordinator read. */
+  refreshDirectory(serviceId: string, signal: AbortSignal) {
+    return this.#devices.refreshDirectory(serviceId, signal)
   }
   createNetwork(serviceId: string, name: string, signal: AbortSignal) {
     return this.#account(serviceId, signal, (accounts, active) =>
@@ -565,6 +595,14 @@ export class PeerManagement {
    * Read after the persisted login is adopted; with nobody signed in, the
    * credential's own account stands. The coordinator admits only a linked account,
    * so the switch waits for its list to confirm the link.
+   *
+   * This one read asks the core to read the coordinator instead of answering from
+   * its snapshot, because the snapshot is not necessarily read yet at restore
+   * time — the core starts reading when it first sees the session token, which is
+   * this same startup path — and a "nothing read yet" answer here would report the
+   * credential's account and make the machine invisible to the account using it,
+   * which is the bug this check exists to fix. It is the same single coordinator
+   * read the old per-account `devices.list` performed.
    */
   async #reportedAccount(
     serviceId: string,
@@ -575,8 +613,10 @@ export class PeerManagement {
     const signedIn = session.accounts.currentUserId(serviceId)
     if (signedIn === undefined || signedIn === credential.userId) return credential.userId
     const linked = await session.accounts
-      .listDevices(serviceId, this.#signal(signal))
-      .then((devices) => devices.some((device) => device.deviceId === credential.deviceId))
+      .refreshDirectory(serviceId, this.#signal(signal))
+      .then((directory) =>
+        directory.devices.some((device) => device.deviceId === credential.deviceId)
+      )
       .catch(() => false)
     return linked ? signedIn : credential.userId
   }
@@ -597,91 +637,16 @@ export class PeerManagement {
   /**
    * Re-records the coordinator's current network members into the catalog.
    *
-   * Membership is the trust source the Run tabs and the member list read, and it
-   * changes while this computer stays online — another machine can join, or the
-   * first sync can run before the login that authorises the listing — so the sync
-   * is repeatable rather than a side effect of one device restore. Best effort: a
-   * refusal must not fail the read that triggered it.
+   * Delegated to `PeerMemberSync`, which owns the repeatable sync and its
+   * best-effort refusal handling.
    */
-  async #refreshMembers(
+  #refreshMembers(
     serviceId: string,
     session: Session,
     signal: AbortSignal,
     credential?: PeerCredential
   ): Promise<void> {
-    const enrollee =
-      credential ?? (await this.#credentials.load(serviceId).catch(() => undefined))?.credential
-    if (!enrollee || enrollee.serviceId !== serviceId) return
-    const sync = (): Promise<void> => this.#syncMembers(serviceId, session, enrollee, signal)
-    await sync()
-      .then(() => {
-        this.#memberRefusal = undefined
-      })
-      .catch(async (error) => {
-        // A refusal that means this machine holds no authorized pair is an answer
-        // rather than a failure: keeping rows the coordinator will not authorize is
-        // what leaves dead computers on screen. The catalog is rewritten empty, and
-        // the code is logged once per service so it is never swallowed.
-        if (error instanceof PeerHelperError && UNAUTHORIZED_MEMBER_CODES.has(error.code)) {
-          if (this.#memberRefusal !== error.code) {
-            this.#memberRefusal = error.code
-            console.error('[p2p] this machine holds no authorized pair:', error.code)
-          }
-          await recordMembers(this.#catalog, serviceId, enrollee, []).catch((writeError) =>
-            console.error('[p2p] network member prune failed:', writeError)
-          )
-          return
-        }
-        // This sync prunes pairs the coordinator no longer has: a lock collision
-        // must not drop it.
-        if (!(error instanceof PeerHelperError) || error.code !== 'p2p.service_busy') {
-          console.error('[p2p] network member sync failed:', error)
-          return
-        }
-        await new Promise((resolve) => setTimeout(resolve, 250))
-        await sync().catch((retried) => console.error('[p2p] network member sync failed:', retried))
-      })
-  }
-
-  /**
-   * Re-records the coordinator's pairs as the catalog the Run route renders.
-   *
-   * The network device directory withholds credential material, so this is the
-   * only read that carries the peer's real public key.
-   */
-  async #syncMembers(
-    serviceId: string,
-    session: Session,
-    credential: { deviceId: string; userId: string; name: string; publicKey: string },
-    signal: AbortSignal
-  ): Promise<void> {
-    const members = await session.pairing.members(serviceId, signal)
-    // Re-pin every active pair: a restored device is handed an empty pin list,
-    // and the helper admits a connection only for a pair it has pinned. Pinning
-    // is best-effort per pair so one refusal cannot block the catalog.
-    for (const member of members) {
-      if (member.state !== 'active') continue
-      const remote = remoteSide(member, credential.deviceId)
-      if (remote === undefined) continue
-      // The helper's pin map is keyed by the connection id, which is the remote
-      // device id — the same value the coordinator authorizes an attempt by.
-      // A pin refusal must not block the catalog: the computer still belongs in
-      // the list. The refusal is logged rather than dropped, because a silent
-      // failure here is invisible from every user surface.
-      await session.pairing
-        .pin(serviceId, member, remote.deviceId, this.#lifetime.signal)
-        .catch((error) => console.error('[p2p] pair pin failed:', error))
-    }
-    await this.#recordMembers(serviceId, credential, members)
-  }
-
-  /** Persists the current pairs as computer records so tabs and lists survive restarts. */
-  async #recordMembers(
-    serviceId: string,
-    credential: { deviceId: string; userId: string; publicKey: string },
-    members: readonly PeerPairMember[]
-  ): Promise<void> {
-    return recordMembers(this.#catalog, serviceId, credential, members)
+    return this.#members.refresh(serviceId, session.pairing, signal, credential)
   }
 
   /**

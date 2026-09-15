@@ -6,11 +6,12 @@ import {
   assertAccountId,
   assertAccountText,
   assertAccountUsername,
+  peerDirectory,
   peerNetwork,
-  peerNetworkDevice,
   peerNetworks,
   peerUser,
   peerUserSession,
+  type PeerDirectory,
   type PeerNetwork,
   type PeerNetworkDevice,
   type PeerUser,
@@ -219,8 +220,14 @@ export class PeerAccounts {
   /**
    * Reads the device directory of one owned network.
    *
-   * Ownership is re-checked server side by the same session, so this cannot be
-   * used to enumerate a network the user does not own.
+   * The members come from the core's cached directory, not from a coordinator
+   * read per page: the core is now the directory's only owner and holds one
+   * snapshot for the whole account, while a per-page `networks.devices` read is
+   * exactly what let two machines keep private, stale copies of the same list
+   * that the next page never saw. The ownership pre-check `networks.list` used to
+   * perform here is gone with that read — the core's directory contains exactly
+   * the networks the signed-in account owns — and a network it does not contain
+   * is refused below rather than reported as empty.
    */
   listNetworkDevices(
     serviceId: string,
@@ -230,16 +237,13 @@ export class PeerAccounts {
     assertAccountId(networkId)
     return this.#operation(serviceId, signal, async () => {
       const session = this.#session(serviceId)
-      // Confirm the network is one this user owns before reading its members.
-      await this.#ownedNetwork(serviceId, session, networkId, signal)
-      const reply = await this.#call(
-        serviceId,
-        'networks.devices',
-        { token: session.token, networkId },
-        signal
-      )
-      if (!Array.isArray(reply)) throw new PeerHelperError('p2p.invalid_server_response')
-      return reply.map((value) => peerNetworkDevice(value, session.user.userId))
+      const directory = await this.#readDirectory(serviceId, session, 'directory.inspect', signal)
+      const network = directory.networks.find((value) => value.networkId === networkId)
+      // An unread directory is refused the same way as an unknown network: an
+      // empty list would claim the network has no devices, which is a different
+      // and misleading statement.
+      if (!network) throw new PeerHelperError('p2p.network_unavailable')
+      return network.devices
     })
   }
 
@@ -256,10 +260,49 @@ export class PeerAccounts {
   listDevices(serviceId: string, signal: AbortSignal): Promise<PeerNetworkDevice[]> {
     return this.#operation(serviceId, signal, async () => {
       const session = this.#session(serviceId)
-      const reply = await this.#call(serviceId, 'devices.list', { token: session.token }, signal)
-      if (!Array.isArray(reply)) throw new PeerHelperError('p2p.invalid_server_response')
-      return reply.map((value) => peerNetworkDevice(value, session.user.userId))
+      return (await this.#readDirectory(serviceId, session, 'directory.inspect', signal)).devices
     })
+  }
+
+  /**
+   * The core's cached directory for one coordinator.
+   *
+   * A read with no coordinator traffic of its own: `directory.inspect` answers
+   * with the snapshot the core already holds, so a page render cannot become a
+   * network round trip. `known:false` is returned as it is, because "nothing has
+   * been read yet" is a state the renderer states rather than an error.
+   */
+  directory(serviceId: string, signal: AbortSignal): Promise<PeerDirectory> {
+    return this.#operation(serviceId, signal, async () =>
+      this.#readDirectory(serviceId, this.#session(serviceId), 'directory.inspect', signal)
+    )
+  }
+
+  /**
+   * Reads the coordinator again, then answers with the core's new snapshot.
+   *
+   * The core refuses with p2p.user_login_required when it knows no account
+   * session, and otherwise with the coordinator's own refusal; both reach the
+   * caller unchanged, because only the user can act on either.
+   */
+  refreshDirectory(serviceId: string, signal: AbortSignal): Promise<PeerDirectory> {
+    return this.#operation(serviceId, signal, async () =>
+      this.#readDirectory(serviceId, this.#session(serviceId), 'directory.refresh', signal)
+    )
+  }
+
+  /** Reads one directory snapshot and validates it against this account's scope. */
+  async #readDirectory(
+    serviceId: string,
+    session: PeerUserSession,
+    method: 'directory.inspect' | 'directory.refresh',
+    signal: AbortSignal
+  ): Promise<PeerDirectory> {
+    return peerDirectory(
+      await this.#call(serviceId, method, {}, signal),
+      serviceId,
+      session.user.userId
+    )
   }
 
   /**

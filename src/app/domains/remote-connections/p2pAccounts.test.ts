@@ -1,5 +1,8 @@
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import type { DesktopApi } from '@/shared/contracts'
 import type { P2PManagementApi } from '@/shared/p2p-management'
+import { P2P_BUILTIN_SERVICE } from '@/shared/p2p-management'
 import { P2PManagementDomain } from './p2pManagement'
 import { P2PAccountsDomain } from './p2pAccounts'
 
@@ -33,6 +36,125 @@ describe('P2P user and network domain', () => {
     })
     await accounts.currentUser('service-a')
     expect(accounts.state('service-a').user).toBeNull()
+  })
+
+  /**
+   * The core owns the directory and announces changes; the renderer projects them.
+   *
+   * Two machines in one network used to keep a snapshot each and disagree about
+   * who was in it, because nothing re-read the list while it was open. A push is
+   * what makes the list current without anyone clicking or polling.
+   */
+  it('projects the directory the core announces', async () => {
+    const directory = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        known: true,
+        revision: 2,
+        fetchedAt: 1_789_445_714,
+        networks: [
+          {
+            networkId: 'net-a',
+            userId: user.userId,
+            name: 'Office',
+            maxDevices: 10,
+            devices: [
+              {
+                deviceId: 'a'.repeat(12),
+                name: 'Mac',
+                presence: 'online' as const,
+                lastSeen: 1_789_445_714,
+                version: '0.1.42',
+                platform: 'darwin',
+                architecture: 'arm64',
+                isLocal: false
+              }
+            ]
+          }
+        ],
+        devices: []
+      }
+    }))
+    let listener: ((event: { serviceId: string }) => void) | undefined
+    const previous = window.dshLauncher
+    window.dshLauncher = {
+      p2pManagement: {
+        onDirectoryChange: (next: (event: { serviceId: string }) => void) => {
+          listener = next
+          return () => {
+            listener = undefined
+          }
+        }
+      }
+    } as unknown as DesktopApi
+    try {
+      const { accounts } = setup({ directory })
+      await accounts.networkDevices('service-a', 'net-a')
+      expect(listener).toBeDefined()
+      // The core reads on its own schedule; the announcement is the only signal
+      // the renderer needs, and nobody had to click anything.
+      listener?.({ serviceId: 'service-a' })
+      await flushPromises()
+      expect(directory).toHaveBeenCalled()
+      expect(accounts.state('service-a').devices['net-a']?.[0]?.name).toBe('Mac')
+    } finally {
+      window.dshLauncher = previous
+    }
+  })
+
+  /**
+   * First launch, already signed in: the account's networks and their devices are
+   * there without opening a tab or pressing refresh. Reading them only when the
+   * account pane mounted made the list a property of where the read lived rather
+   * than of the account — which is what "the list is empty until I click something"
+   * looked like on a machine the server already knew.
+   */
+  it('reads the account and its directory at shell start', async () => {
+    const directory = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        known: true,
+        revision: 1,
+        fetchedAt: 1_789_445_714,
+        networks: [
+          {
+            networkId: 'net-a',
+            userId: user.userId,
+            name: 'Office',
+            maxDevices: 10,
+            devices: [
+              {
+                deviceId: 'a'.repeat(12),
+                name: 'Mac',
+                presence: 'online' as const,
+                lastSeen: 1_789_445_714,
+                version: '0.1.42',
+                platform: 'darwin',
+                architecture: 'arm64',
+                isLocal: false
+              }
+            ]
+          }
+        ],
+        devices: []
+      }
+    }))
+    const catalog = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        revision: 'a'.repeat(64),
+        catalogId: 'b'.repeat(12),
+        services: [{ ...P2P_BUILTIN_SERVICE, serviceId: 'service-a', publicKey: 'pinned-key' }],
+        computers: [],
+        forgottenServiceIds: []
+      }
+    }))
+    const { accounts } = setup({ catalog, directory })
+    await accounts.start()
+    const state = accounts.state('service-a')
+    expect(state.user).toEqual(user)
+    expect(state.networks?.[0]?.networkId).toBe('net-a')
+    expect(state.devices['net-a']?.[0]?.name).toBe('Mac')
   })
 
   it('does not claim a sign-out when the refusal says nothing about the session', async () => {

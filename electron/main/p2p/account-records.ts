@@ -39,6 +39,28 @@ export interface PeerUserSession {
   expiresAt: number
 }
 
+/** One owned network's members, as a single directory snapshot reports them. */
+export interface PeerNetworkDirectory extends PeerNetwork {
+  devices: PeerNetworkDevice[]
+}
+
+/**
+ * The core's whole directory snapshot for one service.
+ *
+ * One value, because the directory now has one owner: the account's own bound
+ * devices and every owned network's members are read together and cached
+ * together, so two pages can no longer hold different answers. `known:false`
+ * with empty lists is "this process has not read yet", which the shell reports
+ * as a state rather than as a failure.
+ */
+export interface PeerDirectory {
+  known: boolean
+  revision: number
+  fetchedAt: number
+  networks: PeerNetworkDirectory[]
+  devices: PeerNetworkDevice[]
+}
+
 export function peerUser(value: unknown): PeerUser {
   const record = exactPeerObject(value, ['userId', 'username'])
   assertAccountId(record.userId)
@@ -127,6 +149,74 @@ export function peerNetworkDevice(value: unknown, userId: string): PeerNetworkDe
 function displayable(value: unknown): string {
   if (typeof value !== 'string' || value.length > 64) return ''
   return /[\r\n\u0000]/.test(value) || value !== value.trim() ? '' : value
+}
+
+/**
+ * Validates the core's directory reply for one service and one account.
+ *
+ * Rows go through `peerNetwork` and `peerNetworkDevice`, so the row vocabulary is
+ * validated in one place instead of being re-stated per reader. Anything those
+ * projections or this envelope refuse becomes p2p.invalid_server_response: the
+ * core relays what the coordinator said, and a directory that is only half
+ * readable would show a list silently missing devices, which is worse than
+ * refusing it. `known:false` with empty lists is a legitimate answer and is not
+ * an error — it means the core has not read the coordinator yet.
+ */
+export function peerDirectory(value: unknown, serviceId: string, userId: string): PeerDirectory {
+  try {
+    const record = exactPeerObject(value, [
+      'serviceId',
+      'known',
+      'revision',
+      'fetchedAt',
+      'networks',
+      'devices'
+    ])
+    const known = record.known
+    const revision = record.revision
+    const fetchedAt = record.fetchedAt
+    const networks = record.networks
+    const devices = record.devices
+    // A reply about another service is not this service's directory, whatever it
+    // contains, so the echo is checked rather than ignored.
+    if (record.serviceId !== serviceId || typeof known !== 'boolean')
+      throw new PeerHelperError('p2p.invalid_server_response')
+    if (!isCount(revision) || !isCount(fetchedAt))
+      throw new PeerHelperError('p2p.invalid_server_response')
+    if (!Array.isArray(networks) || !Array.isArray(devices))
+      throw new PeerHelperError('p2p.invalid_server_response')
+    return {
+      known,
+      revision,
+      fetchedAt,
+      networks: networks.map((network) => peerDirectoryNetwork(network, userId)),
+      devices: devices.map((device) => peerNetworkDevice(device, userId))
+    }
+  } catch {
+    throw new PeerHelperError('p2p.invalid_server_response')
+  }
+}
+
+function peerDirectoryNetwork(value: unknown, userId: string): PeerNetworkDirectory {
+  const record = exactPeerObject(value, ['networkId', 'userId', 'name', 'maxDevices', 'devices'])
+  if (!Array.isArray(record.devices)) throw new PeerHelperError('p2p.invalid_server_response')
+  return {
+    ...peerNetwork(
+      {
+        networkId: record.networkId,
+        userId: record.userId,
+        name: record.name,
+        maxDevices: record.maxDevices
+      },
+      userId
+    ),
+    devices: record.devices.map((device) => peerNetworkDevice(device, userId))
+  }
+}
+
+/** A counter the core could have produced: zero or a positive safe integer. */
+function isCount(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0
 }
 
 export function peerNetworks(value: unknown, userId: string): PeerNetwork[] {

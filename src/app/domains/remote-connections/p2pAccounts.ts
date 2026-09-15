@@ -1,6 +1,11 @@
 import { reactive } from 'vue'
 import { p2pRefusalKind } from '@/shared/p2p-refusal'
-import type { P2PNetworkDeviceView, P2PNetworkView, P2PUserView } from '@/shared/p2p-management'
+import type {
+  P2PDirectoryView,
+  P2PNetworkDeviceView,
+  P2PNetworkView,
+  P2PUserView
+} from '@/shared/p2p-management'
 import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
 
 export interface P2PAccountState {
@@ -24,6 +29,7 @@ export interface P2PAccountState {
 /** Account state is partitioned by the pinned service identity, never by its name. */
 export class P2PAccountsDomain {
   readonly #states = reactive<Record<string, P2PAccountState>>({})
+  #unsubscribe: (() => void) | undefined
   constructor(private readonly management: P2PManagementDomain) {}
 
   state(serviceId: string): P2PAccountState {
@@ -40,6 +46,30 @@ export class P2PAccountsDomain {
         devicesFailed: {}
       }
     return this.#states[serviceId]
+  }
+
+  /**
+   * Establishes the account and its device directory once, independent of any
+   * route.
+   *
+   * A machine that is already signed in has its networks and their devices the
+   * moment the app opens. Reading them only when the account pane mounted — or
+   * when someone pressed refresh — made the list a property of where the read
+   * lived rather than of the account, which is exactly what a first launch looked
+   * like when the answer was already known. Subscribing first means a change the
+   * core announces while nobody is looking is still applied.
+   *
+   * Idempotent: provisioning returns early once done, and reads queue per scope,
+   * so a panel that also reads on entry costs one extra read rather than
+   * colliding.
+   */
+  async start(): Promise<void> {
+    this.subscribe()
+    await this.management.ensureBuiltinService()
+    const serviceId = this.management.selectedServiceId.value
+    if (serviceId === undefined) return
+    await this.currentUser(serviceId)
+    await this.readDirectory(serviceId)
   }
 
   async currentUser(serviceId: string): Promise<void> {
@@ -117,9 +147,19 @@ export class P2PAccountsDomain {
     if (result.data.length === 1) state.selectedNetworkId = result.data[0].networkId
   }
 
-  /** Reads one network's device directory; a failure is surfaced, never silent. */
+  /**
+   * Reads one network's device directory; a failure is surfaced, never silent.
+   *
+   * Queued as a read: the directory is read on panel entry beside the account and
+   * network reads, and the three share one service scope — issuing it directly
+   * meant an entry that raced a sibling read was refused as busy and the list
+   * silently stayed as it was. The answer comes from the core's own snapshot (see
+   * readDirectory): this projects it, and no longer reads the coordinator, which
+   * is what let two pages hold two different answers.
+   */
   async networkDevices(serviceId: string, networkId: string): Promise<void> {
-    const result = await this.management.run('networkDevices', { serviceId, networkId })
+    this.subscribe()
+    const result = await this.management.runRead('networkDevices', { serviceId, networkId })
     const state = this.state(serviceId)
     if (!result.ok) {
       state.devicesFailed[networkId] = true
@@ -127,6 +167,83 @@ export class P2PAccountsDomain {
     }
     state.devices[networkId] = result.data
     state.devicesFailed[networkId] = false
+  }
+
+  /**
+   * Projects the core's whole directory into this domain's per-network state.
+   *
+   * The coordinator's directory has one owner in the application — the core — and
+   * one snapshot per service. This is a view of it, not another copy: every
+   * network the account owns and the account's own devices are filled from the
+   * same answer, so a list that is correct on one page cannot be stale on
+   * another.
+   */
+  async readDirectory(serviceId: string): Promise<void> {
+    this.subscribe()
+    const result = await this.management.runRead('directory', { serviceId })
+    if (!result.ok) {
+      // A directory that could not be read keeps what was last projected: the
+      // failure belongs to the page that asked, not to every row on it.
+      const failed = this.state(serviceId)
+      for (const networkId of Object.keys(failed.devices)) failed.devicesFailed[networkId] = true
+      return
+    }
+    this.#acceptDirectory(serviceId, result.data)
+  }
+
+  /**
+   * Asks the core to read the coordinator again, then projects the result.
+   *
+   * The core maintains the directory on its own; this is the explicit "now"
+   * behind the refresh control, and the only path that makes a page ask the
+   * coordinator for anything. A refusal is shown where the list is, not as an
+   * account failure: the account card is about the sign-in, not about one read.
+   */
+  async refreshDirectory(serviceId: string): Promise<void> {
+    this.subscribe()
+    const result = await this.management.run('refreshDirectory', { serviceId })
+    if (!result.ok) {
+      const state = this.state(serviceId)
+      for (const networkId of Object.keys(state.devices)) state.devicesFailed[networkId] = true
+      return
+    }
+    this.#acceptDirectory(serviceId, result.data)
+  }
+
+  #acceptDirectory(serviceId: string, directory: P2PDirectoryView): void {
+    const state = this.state(serviceId)
+    if (!directory.known) return
+    for (const network of directory.networks) {
+      state.devices[network.networkId] = [...network.devices]
+      state.devicesFailed[network.networkId] = false
+    }
+    // A network the answer no longer carries was deleted or is no longer this
+    // account's: keeping its rows would show devices of a network that is gone.
+    const known = new Set(directory.networks.map((network) => network.networkId))
+    for (const networkId of Object.keys(state.devices))
+      if (!known.has(networkId)) delete state.devices[networkId]
+  }
+
+  /**
+   * Follows the directory changes the core announces.
+   *
+   * Subscribing is what makes a list current without anyone clicking: the core
+   * reads at startup, after a membership change and on its own interval, and
+   * announces only real changes. Polling would also arrive eventually, but only
+   * after showing the wrong answer for a while — which is exactly how two machines
+   * ended up disagreeing about who was in the same network.
+   */
+  subscribe(): void {
+    if (this.#unsubscribe !== undefined) return
+    const api = window.dshLauncher?.p2pManagement
+    if (api?.onDirectoryChange === undefined) return
+    this.#unsubscribe = api.onDirectoryChange((event) => void this.readDirectory(event.serviceId))
+  }
+
+  /** Releases the subscription; used by tests and any future shell teardown. */
+  stop(): void {
+    this.#unsubscribe?.()
+    this.#unsubscribe = undefined
   }
 
   /**

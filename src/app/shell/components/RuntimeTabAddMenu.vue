@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import {
   p2pConnections,
   p2pManagement,
+  p2pPairing,
   remoteConnectionsState
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
@@ -182,11 +183,34 @@ function close(): void {
 function toggle(): void {
   if (open.value) close()
   else {
+    // Paired computers are main's catalog, which main syncs from the coordinator.
+    // The Run tab is reachable without ever opening a P2P page, and relying on one
+    // of those pages to have read it left this menu claiming there was nothing to
+    // add while the coordinator already held an active pair. Asking for the pairs
+    // both re-syncs main's catalog and re-reads it here, on every open.
+    void refreshPeers()
     updateMenuPosition()
     open.value = true
     addGlobalListeners()
   }
 }
+
+/**
+ * Reads what can be added: the built-in server first, so a machine that has never
+ * opened a P2P page still has a catalog and a selected service to read pairs for.
+ */
+async function refreshPeers(): Promise<void> {
+  await p2pManagement.ensureBuiltinService()
+  const serviceId =
+    p2pManagement.selectedServiceId.value ?? p2pManagement.catalog.value?.services[0]?.serviceId
+  if (serviceId !== undefined) await p2pPairing.read(serviceId)
+}
+
+onMounted(() => {
+  // The list is what the trigger's own label summarises, so it is read before the
+  // menu is opened rather than only when it is.
+  void refreshPeers()
+})
 
 function select(id: RuntimeRemoteTabId): void {
   if (id.startsWith('peer:')) {

@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import type { IpcMainInvokeEvent } from 'electron'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  P2P_DIRECTORY_CHANGED_CHANNEL,
   P2P_MANAGEMENT_CHANNELS as channels,
   P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
   type P2PManagementOperation
@@ -51,6 +52,8 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   networks: { serviceId },
   networkDevices: { serviceId, networkId },
   accountDevices: { serviceId },
+  directory: { serviceId },
+  refreshDirectory: { serviceId },
   createNetwork: { serviceId, name: 'Office' },
   renameNetwork: { serviceId, networkId, name: 'Office' },
   updateNetworkLimit: { serviceId, networkId, maxDevices: 20 },
@@ -146,6 +149,32 @@ function fixture() {
     localIsInitiator: true
   }
   const invite = { code: 'ABCDEFGHIJKLMNOP', networkId, expiresAt: 1_800_000_000 }
+  const directory = {
+    known: true,
+    revision: 3,
+    fetchedAt: 1_789_445_714,
+    networks: [
+      {
+        networkId,
+        userId: user.userId,
+        name: 'Office',
+        maxDevices: 10,
+        devices: [
+          {
+            deviceId: 'e'.repeat(12),
+            name: 'Mac',
+            presence: 'online' as const,
+            lastSeen: 1_788_000_000,
+            version: '0.1.42',
+            platform: 'win32',
+            architecture: 'x64',
+            isLocal: true
+          }
+        ]
+      }
+    ],
+    devices: []
+  }
   const helperState = {
     pairId,
     attemptId: '7'.repeat(12),
@@ -167,6 +196,8 @@ function fixture() {
     networks: vi.fn(async () => [network]),
     networkDevices: vi.fn(async () => ({ devices: [], localDeviceId: '' })),
     accountDevices: vi.fn(async () => ({ devices: [], localDeviceId: '' })),
+    directory: vi.fn(async () => directory),
+    refreshDirectory: vi.fn(async () => directory),
     createNetwork: vi.fn(async () => network),
     renameNetwork: vi.fn(async () => network),
     updateNetworkLimit: vi.fn(async () => ({ ...network, maxDevices: 20 })),
@@ -205,7 +236,7 @@ function fixture() {
     value: unknown,
     ...extra: unknown[]
   ) => mocks.handlers.get(channels[method])!(event, value, ...extra)
-  return { owner, invoke, user, network, registration }
+  return { owner, invoke, user, network, registration, directory }
 }
 
 beforeEach(() => {
@@ -281,6 +312,33 @@ describe('P2P named management admission', () => {
     mocks.windows = []
   })
 
+  it('pushes a directory change with its service to every live window only', async () => {
+    const { owner } = fixture()
+    const listeners: ((serviceId: string) => void)[] = []
+    registerPeerManagementIpc(owner as unknown as PeerManagementOwner, undefined, {
+      onDirectoryChange: (listener) => {
+        listeners.push(listener)
+        return () => undefined
+      }
+    })
+    expect(listeners).toHaveLength(1)
+    // Like the session subscription, this one is registered at startup and must
+    // never look like a dispatched operation.
+    for (const handler of Object.values(owner)) expect(handler).not.toHaveBeenCalled()
+    const live = vi.fn()
+    const destroyed = vi.fn()
+    mocks.windows = [
+      { isDestroyed: () => false, webContents: { send: live } },
+      { isDestroyed: () => true, webContents: { send: destroyed } }
+    ]
+    listeners[0]?.(serviceId)
+    // Only the service travels: the renderer re-reads the rows through the
+    // admitted operation rather than trusting a pushed projection.
+    expect(live).toHaveBeenCalledWith(P2P_DIRECTORY_CHANGED_CHANNEL, { serviceId })
+    expect(destroyed).not.toHaveBeenCalled()
+    mocks.windows = []
+  })
+
   it.each(Object.keys(channels) as P2PManagementOperation[])(
     '%s rejects foreign windows, subframes and origins using production sender policy',
     async (method) => {
@@ -305,7 +363,7 @@ describe('P2P named management admission', () => {
   )
 
   it('routes every management operation to its named owner with precise primitive arguments', async () => {
-    const { owner, invoke, user, network, registration } = fixture()
+    const { owner, invoke, user, network, registration, directory } = fixture()
     const { event } = page()
     let sequence = 0
     for (const method of Object.keys(owner) as Exclude<
@@ -321,6 +379,8 @@ describe('P2P named management admission', () => {
       if (method === 'createNetwork' || method === 'renameNetwork')
         expect(result.data).toEqual(network)
       if (method === 'networks') expect(result.data).toEqual([network])
+      if (method === 'directory' || method === 'refreshDirectory')
+        expect(result.data).toEqual(directory)
       if (
         ['registration', 'registerDevice', 'submitEnrollment', 'recoverEnrollment'].includes(method)
       )

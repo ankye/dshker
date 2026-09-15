@@ -79,7 +79,7 @@ export class CoreSupervisor {
   }
 
   /**
-   * Serves the two parent-role callbacks the core sends. The channel outlives
+   * Serves the parent-role callbacks the core sends. The channel outlives
    * the caller, so the returned function detaches the handler rather than
    * closing anything.
    */
@@ -188,7 +188,8 @@ export class CoreSupervisor {
         throw error
       })
       // The core calls back once a device is restored: runtime.connect for the
-      // runtime owner and peer.state for every connection stage. Until the peer
+      // runtime owner, peer.state for every connection stage, and
+      // directory.changed for every new directory revision. Until the peer
       // state machine attaches, every inbound method is a typed not-implemented
       // rather than a silent hang.
       const dispatch: Dispatch = { listeners: new Set() }

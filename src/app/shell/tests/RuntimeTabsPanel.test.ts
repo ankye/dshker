@@ -66,6 +66,7 @@ function runningState(): LauncherHarnessState {
 function installRuntimeApi(options: {
   readonly getPreferences?: DesktopApi['runtimeBrowser']['getPreferences']
   readonly setZoom?: DesktopApi['runtimeBrowser']['setZoom']
+  readonly p2pManagement?: Record<string, unknown>
 }) {
   let zoomListener: Parameters<DesktopApi['runtimeBrowser']['onZoomChange']>[0] | undefined
   const runtimeApi: DesktopApi['runtimeBrowser'] = {
@@ -94,7 +95,10 @@ function installRuntimeApi(options: {
       }
     }
   }
-  window.dshLauncher = { runtimeBrowser: runtimeApi } as DesktopApi
+  window.dshLauncher = {
+    runtimeBrowser: runtimeApi,
+    ...(options.p2pManagement === undefined ? {} : { p2pManagement: options.p2pManagement })
+  } as unknown as DesktopApi
   return runtimeApi
 }
 
@@ -209,6 +213,60 @@ describe('RuntimeTabsPanel rendering controls', () => {
     expect(wrapper.find('[data-testid="runtime-add-tab"]').exists()).toBe(true)
     expect(wrapper.find('.browser-tab-close').exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  /**
+   * The Run tab is reachable without ever opening a P2P page, and the paired
+   * computers live in main's catalog. Relying on another screen to have read it
+   * left this menu saying there was nothing to add while the coordinator already
+   * held an active pair — so the menu asks for the pairs itself.
+   */
+  it('lists a paired computer without any P2P page having been opened', async () => {
+    const pairs = vi.fn(async () => ({
+      ok: true as const,
+      data: [
+        {
+          pairId: peerComputer.pairId,
+          networkId: peerComputer.networkId,
+          state: 'active' as const,
+          revision: 1
+        }
+      ]
+    }))
+    const catalog = vi.fn(async () => ({
+      ok: true as const,
+      data: {
+        revision: 'b'.repeat(64),
+        catalogId: 'd'.repeat(12),
+        services: [
+          {
+            serviceId: 'aaaaaaaaaaaa',
+            displayName: 'DSHKer 服务器',
+            httpsOrigin: 'https://my.ffkey.com:8443',
+            wssUrl: 'wss://my.ffkey.com:8443/v1/signals',
+            stunAddress: 'my.ffkey.com:8443',
+            publicKey: 'pinned-key',
+            certificate: 'certificate'
+          }
+        ],
+        computers: [peerComputer],
+        forgottenServiceIds: []
+      }
+    }))
+    installRuntimeApi({ p2pManagement: { pairs, catalog, addService: vi.fn() } })
+    // The Run tab can be the very first P2P-aware screen: nothing has read the
+    // catalog yet, which is the state this test exists for.
+    p2pManagement.catalog.value = undefined
+    const wrapper = await mountRunningPanel()
+    await wrapper.get('[data-testid="runtime-add-tab"]').trigger('click')
+    await flushPromises()
+
+    expect(pairs).toHaveBeenCalled()
+    expect(
+      getAddMenu().querySelector(
+        '[data-testid="runtime-add-peer-cccccccc-cccc-4ccc-8ccc-cccccccccccc"]'
+      )
+    ).not.toBeNull()
   })
 
   it('lists unopened LAN and SSH computers, then creates only the chosen tab', async () => {

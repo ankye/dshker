@@ -50,6 +50,10 @@ export const P2P_MANAGEMENT_CHANNELS = {
   networkDevices: 'dsh-launcher:p2p:network-devices',
   /** Every device bound to the signed-in account, whichever network it is in. */
   accountDevices: 'dsh-launcher:p2p:account-devices',
+  /** The coordinator's device directory as the core caches it, one snapshot per service. */
+  directory: 'dsh-launcher:p2p:directory',
+  /** Reads the coordinator again, then answers with the core's refreshed snapshot. */
+  refreshDirectory: 'dsh-launcher:p2p:directory-refresh',
   cancel: 'dsh-launcher:p2p:cancel'
 } as const
 
@@ -127,6 +131,38 @@ export interface P2PNetworkView {
   userId: string
   name: string
   maxDevices: number
+}
+
+/**
+ * One owned network with its members, as a single directory snapshot reports them.
+ *
+ * The network header repeats the fields `P2PNetworkView` carries so a directory
+ * reader does not have to join two lists that the core already read together.
+ */
+export interface P2PNetworkDirectoryView {
+  networkId: string
+  userId: string
+  name: string
+  maxDevices: number
+  devices: readonly P2PNetworkDeviceView[]
+}
+
+/**
+ * The coordinator's whole device directory for one service, as the core caches it.
+ *
+ * One value per service: the account's own bound devices and every owned
+ * network's members come from one read by one owner, instead of each page
+ * keeping a private copy that the next page never sees. `known` is false with
+ * empty arrays when this process has no snapshot yet, which is a state the
+ * renderer states rather than an error, and `revision` moves only when the
+ * content does, so a change push is worth re-reading for.
+ */
+export interface P2PDirectoryView {
+  known: boolean
+  revision: number
+  fetchedAt: number
+  networks: readonly P2PNetworkDirectoryView[]
+  devices: readonly P2PNetworkDeviceView[]
 }
 
 /**
@@ -401,6 +437,21 @@ export interface P2PManagementInputs {
    * wrong.
    */
   accountDevices: ServiceRequest
+  /**
+   * The core's cached directory for one coordinator.
+   *
+   * A read: it answers with the snapshot the core already holds, so rendering a
+   * device list is never a coordinator round trip of its own.
+   */
+  directory: ServiceRequest
+  /**
+   * Reads the coordinator again before answering.
+   *
+   * A write even though it returns the shape `directory` does: it consumes a
+   * coordinator read. It fails with p2p.user_login_required when no account
+   * session is known, and otherwise with the coordinator's own refusal.
+   */
+  refreshDirectory: ServiceRequest
   cancel: { targetRequestId: number }
 }
 export interface P2PManagementResults {
@@ -451,6 +502,8 @@ export interface P2PManagementResults {
   serviceSessions: P2PServiceSessionView[]
   networkDevices: P2PNetworkDeviceView[]
   accountDevices: { devices: P2PNetworkDeviceView[]; localDeviceId: string }
+  directory: P2PDirectoryView
+  refreshDirectory: P2PDirectoryView
   /** Accepted means cancellation requested, never that a server write was undone. */
   cancel: { accepted: boolean }
 }
@@ -470,6 +523,21 @@ export type P2PManagementRequest<K extends P2PManagementOperation> = {
 export const P2P_SERVICE_SESSIONS_CHANGED_CHANNEL =
   'dsh-launcher:p2p:service-sessions-changed' as const
 
+/**
+ * Push channel for directory changes.
+ *
+ * Not an operation: it carries no request and is never admitted as one. The core
+ * owns the one directory snapshot and announces a revision when the content
+ * moves, so a list the renderer already read is not left silently stale. Only the
+ * serviceId travels — the renderer re-reads through `directory`, which stays the
+ * single place the rows are projected and validated.
+ */
+export const P2P_DIRECTORY_CHANGED_CHANNEL = 'dsh-launcher:p2p:directory-changed' as const
+
+export interface P2PDirectoryChangedPayload {
+  serviceId: string
+}
+
 export type P2PManagementApi = Readonly<
   {
     [K in P2PManagementOperation]: (
@@ -478,6 +546,8 @@ export type P2PManagementApi = Readonly<
   } & {
     /** Subscribes to session changes; returns an unsubscribe function. */
     onServiceSessionsChange(listener: () => void): () => void
+    /** Subscribes to directory changes; returns an unsubscribe function. */
+    onDirectoryChange(listener: (payload: P2PDirectoryChangedPayload) => void): () => void
   }
 >
 

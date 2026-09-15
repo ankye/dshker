@@ -46,6 +46,8 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   localDevice: [],
   serviceSessions: [],
   accountDevices: ['serviceId'],
+  directory: ['serviceId'],
+  refreshDirectory: ['serviceId'],
   updateServiceConfig: [
     'serviceId',
     'revision',

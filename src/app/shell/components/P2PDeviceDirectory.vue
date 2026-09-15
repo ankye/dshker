@@ -28,9 +28,10 @@ const props = defineProps<{
 
 /**
  * Removing belongs to the panel that owns the read: this component only asks for
- * it, and asks twice, because a device cannot be put back by clicking again.
+ * it, and asks twice, because a device cannot be put back by clicking again. The
+ * refresh is the same shape: the panel owns the fetch, this only asks for one.
  */
-const emit = defineEmits<{ remove: [deviceId: string] }>()
+const emit = defineEmits<{ remove: [deviceId: string]; refresh: [] }>()
 const confirming = ref('')
 watch(
   () => props.devices,
@@ -101,6 +102,18 @@ function build(device: P2PNetworkDeviceView): string {
         {{ rows.length }} {{ t('p2p.devices.summaryUnit') }} · {{ t('p2p.devices.summaryLimit') }}
         {{ maxDevices }}
       </p>
+      <!-- The list is live server state: a device reports presence and its build
+           after the session comes up, so a list read once at selection time is a
+           snapshot that can outlive what it describes. -->
+      <button
+        type="button"
+        class="prototype-button"
+        data-testid="p2p-devices-refresh"
+        :disabled="loading"
+        @click="emit('refresh')"
+      >
+        {{ t('p2p.devices.refresh') }}
+      </button>
     </header>
 
     <p v-if="failed" role="alert" class="remote-error" data-testid="p2p-devices-error">

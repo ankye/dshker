@@ -41,6 +41,13 @@ type account struct {
 	endpoints controlplane.Endpoints
 	device    controlplane.Device
 	manager   *peersession.Manager
+	// host is the process this account belongs to: the directory announces its
+	// changes through the host's parent channel, and the host's lifetime is the
+	// one the maintenance loop follows.
+	host *Host
+	// directory is this account's single snapshot of the coordinator's device
+	// directory. See directory.go.
+	directory directory
 }
 type scopedRequest struct {
 	ServiceID string          `json:"serviceId"`
@@ -203,12 +210,70 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	if method == "peer.connect" || method == "peer.disconnect" || method == "runtime.invalidate" || method == "network.invalidate" || method == "remote.roots" || method == "remote.directory" {
 		return account.connection(ctx, method, request.Data)
 	}
+	// A read of the maintained directory never waits for account work: the
+	// snapshot is a value the shell renders while the next read is in flight.
+	if method == "directory.inspect" || method == "directory.refresh" {
+		return account.directoryOperation(ctx, method, request.Data)
+	}
 	account.mu.Lock()
 	defer account.mu.Unlock()
 	if method == "device.restore" {
 		return host.restore(ctx, account, request.Data)
 	}
-	return account.management(ctx, method, request.Data)
+	return host.manage(ctx, account, method, request.Data)
+}
+
+// manage answers one account operation and keeps the maintained directory in step
+// with it.
+//
+// Every operation that names a user session carries its token, which is how the
+// core learns which session this account is being used with: the first such call
+// after a restart — the shell's own session restore reads the account — is enough
+// to bring the directory up to date and announce it, with no separate handshake
+// and no page needing to be opened first.
+func (host *Host) manage(ctx context.Context, account *account, method string, data json.RawMessage) (any, error) {
+	var probe struct {
+		Token string `json:"token"`
+	}
+	if protocol.Decode(data, &probe) == nil && account.rememberToken(probe.Token) {
+		account.refreshAfterWrite()
+	}
+	result, err := account.management(ctx, method, data)
+	if err != nil {
+		return result, err
+	}
+	if method == "user.logout" {
+		account.forgetToken()
+		account.host.announceDirectory(account.identity.ServiceID, account.snapshot(account.identity.ServiceID).Revision)
+		return result, nil
+	}
+	if directoryChangesOn(method) {
+		account.refreshAfterWrite()
+	}
+	return result, nil
+}
+
+// directoryChangesOn reports whether a successful operation can change who is in
+// the directory: a binding, a membership, or a network of its own.
+func directoryChangesOn(method string) bool {
+	switch method {
+	case "devices.bind", "devices.unbind", "network.leave", "network.join",
+		"networks.create", "networks.delete", "pairs.adopt":
+		return true
+	}
+	return false
+}
+
+// directoryOperation answers the two directory methods the shell calls directly.
+func (account *account) directoryOperation(ctx context.Context, method string, data json.RawMessage) (any, error) {
+	var empty struct{}
+	if protocol.Decode(data, &empty) != nil {
+		return nil, errors.New("p2p.invalid_request")
+	}
+	if method == "directory.refresh" {
+		return account.refreshDirectory(ctx)
+	}
+	return account.snapshot(account.identity.ServiceID), nil
 }
 
 func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, error) {
@@ -252,7 +317,11 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 		}
 		return identity, nil
 	}
-	host.accounts[identity.ServiceID] = &account{base: base, identity: identity, endpoints: request.Endpoints}
+	host.accounts[identity.ServiceID] = &account{base: base, identity: identity, endpoints: request.Endpoints, host: host}
+	// The directory is maintained for as long as the account exists: once the
+	// shell hands over a user session, the core keeps the list current on its own
+	// instead of waiting for a page to be opened.
+	go host.accounts[identity.ServiceID].maintainDirectory(host.ctx)
 	return identity, nil
 }
 

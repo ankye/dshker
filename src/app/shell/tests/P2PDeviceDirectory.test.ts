@@ -94,6 +94,23 @@ describe('P2P device directory', () => {
     expect(view.text()).toContain('Mac Studio')
   })
 
+  /**
+   * A device reports presence and its build only after its session comes up, so a
+   * list read once can outlive what it describes: the row said "never reported"
+   * for a machine the coordinator already recorded. The list therefore has to be
+   * refreshable, and the panel owns the fetch this asks for.
+   */
+  it('asks for a fresh read when the refresh control is used', async () => {
+    const view = render()
+    await view.get('[data-testid="p2p-devices-refresh"]').trigger('click')
+    expect(view.emitted('refresh')).toHaveLength(1)
+  })
+
+  it('disables the refresh while a read is already in flight', () => {
+    const view = render({ loading: true })
+    expect(view.get('[data-testid="p2p-devices-refresh"]').attributes('disabled')).toBeDefined()
+  })
+
   it('marks the local device and sorts it first, then online before offline', () => {
     const view = render({
       devices: [

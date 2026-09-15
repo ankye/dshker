@@ -2,7 +2,7 @@ import { createServer, connect, type Socket } from 'node:net'
 import { once } from 'node:events'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { PeerRpc, type PeerMainHandler } from './rpc'
-import { decodePeerFrame } from './wire'
+import { decodePeerFrame, PeerHelperError } from './wire'
 
 const cleanup: Array<() => Promise<void>> = []
 afterEach(async () => {
@@ -98,5 +98,63 @@ describe('private helper RPC lifecycle', () => {
       error: 'p2p.invalid_operation'
     })
     expect(handler).toHaveBeenCalledTimes(1)
+  })
+
+  it('admits the directory callback and answers a malformed payload with its typed code', async () => {
+    // The strict payload rules live in the composed handler (runtime-host); this
+    // asserts the transport carries directory.changed on the same terms as the
+    // other parent callbacks and turns the handler's refusal into a typed reply
+    // instead of an operation_failed or a closed channel.
+    const handler = vi.fn(async (_method, payload) => {
+      const fields = payload as { serviceId?: unknown; revision?: unknown }
+      if (
+        typeof fields.serviceId !== 'string' ||
+        !/^[a-f0-9]{12}$/.test(fields.serviceId) ||
+        !Number.isSafeInteger(fields.revision) ||
+        (fields.revision as number) < 0
+      )
+        throw new PeerHelperError('p2p.invalid_payload')
+      return {}
+    })
+    const { remote } = await channel(handler)
+    const accepted = once(remote, 'data')
+    remote.write(
+      JSON.stringify({
+        version: 1,
+        id: 5,
+        method: 'directory.changed',
+        payload: { serviceId: 'a'.repeat(12), revision: 0 },
+        error: ''
+      }) + '\n'
+    )
+    const [answer] = await accepted
+    expect(decodePeerFrame(answer.toString().trim())).toMatchObject({
+      id: 5,
+      method: '',
+      payload: {},
+      error: ''
+    })
+    expect(handler).toHaveBeenCalledWith(
+      'directory.changed',
+      { serviceId: 'a'.repeat(12), revision: 0 },
+      expect.any(AbortSignal)
+    )
+
+    const refused = once(remote, 'data')
+    remote.write(
+      JSON.stringify({
+        version: 1,
+        id: 6,
+        method: 'directory.changed',
+        payload: { serviceId: 'NOT-HEX', revision: 0 },
+        error: ''
+      }) + '\n'
+    )
+    const [malformed] = await refused
+    expect(decodePeerFrame(malformed.toString().trim())).toMatchObject({
+      id: 6,
+      error: 'p2p.invalid_payload'
+    })
+    expect(handler).toHaveBeenCalledTimes(2)
   })
 })

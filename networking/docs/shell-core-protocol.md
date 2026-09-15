@@ -187,21 +187,22 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 - **parent** - the core sends the request and the shell answers. These are the
   callbacks the core cannot serve itself.
 
-| group    | methods                                                                                                                                                                                                                                                                                                           | role   |
-| -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| core     | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.runtime_binding`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
-| managed  | `managed.checkout_prepare`, `managed.checkout_verify`, `managed.git_register`, `managed.repository_inspect`                                                                                                                                                                                                       | shell  |
-| device   | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                                                                                    | shell  |
-| devices  | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                                                                                                                  | shell  |
-| network  | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                                                                                                             | shell  |
-| networks | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename`                                                                                                                                                           | shell  |
-| pairs    | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                                                                                                                                                                                         | shell  |
-| peer     | `peer.connect`, `peer.disconnect`                                                                                                                                                                                                                                                                                 | shell  |
-| remote   | `remote.connect`, `remote.directory`, `remote.disconnect`, `remote.roots`, `remote.status`                                                                                                                                                                                                                        | shell  |
-| runtime  | `runtime.console`, `runtime.invalidate`, `runtime.port_get`, `runtime.port_set`, `runtime.start`, `runtime.status`, `runtime.stop`                                                                                                                                                                                | shell  |
-| service  | `service.configure`                                                                                                                                                                                                                                                                                               | shell  |
-| user     | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                                                                                                                      | shell  |
-| callback | `runtime.connect`, `peer.state`                                                                                                                                                                                                                                                                                   | parent |
+| group     | methods                                                                                                                                                                                                                                                                                                           | role   |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| core      | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.runtime_binding`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
+| managed   | `managed.checkout_prepare`, `managed.checkout_verify`, `managed.git_register`, `managed.repository_inspect`                                                                                                                                                                                                       | shell  |
+| device    | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                                                                                    | shell  |
+| directory | `directory.inspect`, `directory.refresh`                                                                                                                                                                                                                                                                          | shell  |
+| devices   | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                                                                                                                  | shell  |
+| network   | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                                                                                                             | shell  |
+| networks  | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename`                                                                                                                                                           | shell  |
+| pairs     | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                                                                                                                                                                                         | shell  |
+| peer      | `peer.connect`, `peer.disconnect`                                                                                                                                                                                                                                                                                 | shell  |
+| remote    | `remote.connect`, `remote.directory`, `remote.disconnect`, `remote.roots`, `remote.status`                                                                                                                                                                                                                        | shell  |
+| runtime   | `runtime.console`, `runtime.invalidate`, `runtime.port_get`, `runtime.port_set`, `runtime.start`, `runtime.status`, `runtime.stop`                                                                                                                                                                                | shell  |
+| service   | `service.configure`                                                                                                                                                                                                                                                                                               | shell  |
+| user      | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                                                                                                                      | shell  |
+| callback  | `runtime.connect`, `peer.state`, `directory.changed`                                                                                                                                                                                                                                                              | parent |
 
 The `core.*` group is the local state the core owns outright: its version, the
 device credential store, the device catalog, the managed-root registry (4.1) and
@@ -210,6 +211,41 @@ and the machine's Harness home explicitly, because the core is told where things
 are rather than guessing: it owns exactly one file name below the Settings root,
 validates the whole topology before writing, publishes atomically, and proves the
 published bytes by reading them back. The catalog methods carry the same revision the file has always had — the sha256 of the stored bytes — so the token the shell passes back is the one it computed while it still owned the file. The shell starts the core with `--catalog <settings root>/dsh-launcher`, the exact directory it used to write `p2p-devices.json` itself, so an existing record is adopted in place and the shell stops writing it; on a shell that could not start a core at all, the file path remains the degraded writer. `core.catalog_inspect` answers `{"enabled":false}` for a directory that was never enabled, which is a state the shell renders as an invitation, never as a failure, and a core started without a catalog directory refuses these four methods rather than reporting an empty one.
+
+`directory.inspect` and `directory.refresh` answer the coordinator's device
+directory as **one** value per service: the account's own bound devices, and every
+network the signed-in account owns with its members. The core is its only owner in
+the application. Before this, every page read the coordinator for itself and kept
+its own copy, so two machines in one network could each show a snapshot taken at a
+different moment and neither ever caught up — a list that says a device "never
+reported" is usually a copy that was read before the device reported anything.
+
+`directory.inspect` answers the held snapshot and never touches the network.
+`directory.refresh` reads the coordinator first and answers the result. Both answer
+`{ "serviceId", "known", "revision", "fetchedAt", "networks": [ { "networkId",
+"userId", "name", "maxDevices", "devices": [ ... ] } ], "devices": [ ... ] }`,
+where each device row is the coordinator's own `DeviceEntry` (id, account, name,
+presence, last seen, reported version, platform and architecture) and `known:
+false` with a zero revision means this core holds no snapshot yet — a state the
+shell renders as "not read" rather than as an account with no devices. `refresh`
+without a user session is `p2p.user_login_required`; any other refusal is the
+coordinator's own code.
+
+The snapshot is maintained rather than only read on demand. The core learns the
+session from the token the shell already sends with every user and network
+operation, so the first such call after a restart brings the list up to date
+without a separate handshake; a successful operation that can change who belongs
+to a network (`devices.bind`, `devices.unbind`, `network.leave`, `network.join`,
+`networks.create`, `networks.delete`, `pairs.adopt`) reads again; and while a
+session is known the whole directory is re-read every
+`helper.DirectoryMaintenanceInterval` (30s, the coordinator's own last-seen
+granularity), keeping the last good snapshot when a read fails. Whenever the
+content changes the revision moves and the core sends the parent-role
+`directory.changed` callback with `{ "serviceId", "revision" }`, which the shell
+forwards to its renderer; a read that found the same devices sends nothing, so a
+list that did not change is not re-rendered. Signing out drops the session and the
+snapshot together, because one account's devices must never be shown under
+another's session.
 
 `core.install_catalog_inspect` and `core.install_catalog_commit` own the other
 document below that same `dsh-launcher` directory,
@@ -268,8 +304,9 @@ Because a whole record now travels in one frame, its own cap is deliberately sma
 Two findings from writing this table down, both deliberate:
 
 1. The plan for task 1.2 expected **four** parent-role methods. The shipped
-   dispatch admits **two** (`runtime.connect` and `peer.state`, the exact
-   `PeerMainMethod` union in `electron/main/p2p/rpc.ts`). `runtime.invalidate`,
+   dispatch admits **three** (`runtime.connect`, `peer.state` and
+   `directory.changed`, the exact `PeerMainMethod` union in
+   `electron/main/p2p/rpc.ts`). `runtime.invalidate`,
    `remote.roots` and `remote.directory` travel the other way, from the shell
    into the core. Design decision D7 still holds, because D7 is about which
    process answers them, not about who initiates.

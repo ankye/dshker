@@ -6,6 +6,7 @@ import { PeerCredentialStore } from './credentials'
 import type { PeerCatalogRecord } from './catalog-schema'
 import { PeerEnrollment } from './enrollment'
 import { PeerManagement } from './management'
+import type { PeerMainHandler } from './rpc'
 import type { PeerChannel } from './runtime-host'
 import { PeerServices } from './services'
 import { PeerHelperError } from './wire'
@@ -120,11 +121,16 @@ function fixture() {
     }
   )
   // The core's channel, shared with the catalog and the secret store.
+  let handler: PeerMainHandler | undefined
   const channel: PeerChannel = {
     call,
-    serve: () => {
+    serve: (value) => {
       attach()
-      return () => detach()
+      handler = value
+      return () => {
+        detach()
+        if (handler === value) handler = undefined
+      }
     },
     observe: (observer: (error: PeerHelperError) => void) => {
       unavailable = () => observer(new PeerHelperError('p2p.helper_unavailable'))
@@ -156,7 +162,9 @@ function fixture() {
     clearEnrollment,
     runtimeStart,
     record: () => record,
-    unavailable: () => unavailable()
+    unavailable: () => unavailable(),
+    directoryChanged: (payload: unknown) =>
+      handler!('directory.changed', payload, new AbortController().signal)
   }
 }
 
@@ -263,7 +271,7 @@ describe('bringing enrolled services online at startup', () => {
 
   /**
    * Signs in as an account other than the one the credential was issued for, with
-   * the coordinator's device list for that account stubbed.
+   * the core's directory for that account stubbed.
    */
   async function signedInAsSecondAccount(
     f: ReturnType<typeof fixture>,
@@ -274,15 +282,25 @@ describe('bringing enrolled services online at startup', () => {
       if (method === 'user.login')
         return { user: secondAccount, token: '8'.repeat(64), expiresAt: futureExpiry() }
       if (method === 'user.current') return secondAccount
-      if (method === 'devices.list')
-        return listed.map((device) => ({
-          name: 'This machine',
-          lastSeen: 0,
-          version: '',
-          platform: '',
-          architecture: '',
-          ...device
-        }))
+      // Which machines an account is bound to comes from the core's directory
+      // now, and the presence decision asks the core to read the coordinator
+      // rather than trust a snapshot that may not have been read yet.
+      if (method === 'directory.inspect' || method === 'directory.refresh')
+        return {
+          serviceId,
+          known: true,
+          revision: 1,
+          fetchedAt: 1789445714,
+          networks: [],
+          devices: listed.map((device) => ({
+            name: 'This machine',
+            lastSeen: 0,
+            version: '',
+            platform: '',
+            architecture: '',
+            ...device
+          }))
+        }
       if (base === undefined) throw new PeerHelperError('p2p.invalid_operation')
       return base(method, payload, signal)
     })
@@ -552,6 +570,73 @@ describe('formal P2P management composition', () => {
       f.owner.currentUser(serviceId, new AbortController().signal)
     ).rejects.toMatchObject({ code: 'p2p.helper_unavailable' })
     expect(f.attach).toHaveBeenCalledTimes(1)
+  })
+
+  it('announces the core directory revision to subscribers and stops when released', async () => {
+    const f = await loggedIn()
+    const seen: string[] = []
+    const unsubscribe = f.owner.onDirectoryChange((changed) => seen.push(changed))
+    expect(await f.directoryChanged({ serviceId, revision: 4 })).toEqual({})
+    expect(seen).toEqual([serviceId])
+    // A released subscriber is not told again: the push channel is the renderer's
+    // only signal that a list it read is now stale.
+    unsubscribe()
+    await f.directoryChanged({ serviceId, revision: 5 })
+    expect(seen).toEqual([serviceId])
+  })
+
+  it('answers the account device list from the core directory, asking it to read first', async () => {
+    // The account's own bindings decide whether a machine belongs to the account
+    // signed in here. That answer is a bare list with no way to say "not read
+    // yet", and an empty one is read as the positive claim "not bound" — which is
+    // how a legitimately bound machine gets reported as a foreign one. The core is
+    // therefore asked to read the coordinator, exactly as this op did before the
+    // directory moved into the core.
+    const f = await loggedIn()
+    const deviceId = '3'.repeat(12)
+    const base = f.call.getMockImplementation()
+    vi.spyOn(PeerCredentialStore.prototype, 'loadRegistration').mockResolvedValue({
+      kind: 'registered',
+      revision: 'a'.repeat(64),
+      credential: {
+        serviceId,
+        deviceId,
+        userId: user.userId,
+        name: 'This machine',
+        publicKey: Buffer.alloc(32, 1).toString('base64'),
+        certificate: 'test-only-credential-boundary',
+        privateKey: Buffer.alloc(32, 9).toString('base64')
+      }
+    } as Awaited<ReturnType<PeerCredentialStore['loadRegistration']>>)
+    f.call.mockImplementation(async (method: string, payload: unknown, signal: AbortSignal) => {
+      if (method === 'directory.refresh' || method === 'directory.inspect')
+        return {
+          serviceId,
+          known: true,
+          revision: 2,
+          fetchedAt: 1789445714,
+          networks: [],
+          devices: [
+            {
+              deviceId,
+              userId: user.userId,
+              name: 'This machine',
+              presence: 'online',
+              lastSeen: 0,
+              version: '',
+              platform: '',
+              architecture: ''
+            }
+          ]
+        }
+      if (base === undefined) throw new PeerHelperError('p2p.invalid_operation')
+      return base(method, payload, signal)
+    })
+    const result = await f.owner.accountDevices(serviceId, new AbortController().signal)
+    expect(result.localDeviceId).toBe(deviceId)
+    expect(result.devices.map((device) => device.deviceId)).toEqual([deviceId])
+    expect(f.call.mock.calls.map(([method]) => method)).toContain('directory.refresh')
+    expect(f.call.mock.calls.map(([method]) => method)).not.toContain('devices.list')
   })
 
   describe('removing a configured service', () => {

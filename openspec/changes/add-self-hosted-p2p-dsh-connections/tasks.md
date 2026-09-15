@@ -1,5 +1,37 @@
 ## 1. 协议与构建边界
 
+设备目录由 core 唯一持有并主动推送（2026-09-15）：网络设备列表此前没有 owner——协调器是权威，
+但应用内每一层各留一份快照（main 每次按需去读、渲染进程按 (service, network) 缓存、组件再各读
+一次），所以同一网络的两台机器各自冻结在不同时刻的回答上（一台只看到对方、另一台只看到自己，
+自己那行还写着「从未上报」），刷新无效，只有退出重启才能拿到当前列表。按 `go-owned-headless-core`
+既有规则（core 单一持有；每个持久化 store 只有一个 writer），目录现在归 core：
+`networking/internal/helper/directory.go` 按 (service, account) 保存唯一快照，并在下列时机重读——
+shell 每次带 token 的调用（core 由此得知当前会话，重启后持久会话的 `user.current` 就足以让列表
+在启动时就是最新的，无需额外握手、也无需先打开任何页面）、任何可能改变成员的成功写操作
+（`devices.bind/unbind`、`network.leave/join`、`networks.create/delete`、`pairs.adopt`）、以及
+登录期间的 `DirectoryMaintenanceInterval`（30s，等于协调器 last_seen 的落盘粒度；读到失败时保留
+上一份好快照）。内容变化才推进 revision 并发出 parent-role 回调 `directory.changed`，shell 转发给
+窗口，账号 domain 只做一份投影；登出同时丢弃会话与快照，避免把一个账号的设备显示在另一个账号下。
+新增 `directory.inspect`（只读快照，不访问网络）与 `directory.refresh`（先读协调器），shell 侧
+`networkDevices` / `accounts.listDevices` 不再直接读协调器，只投影 core 的目录，因此“读协调器”
+在应用内只剩一处。面板不再有 30 秒 tick，打开页面只读 core 的快照；“刷新列表”按钮保留并改为请
+core 立刻重读。运行页方面，添加菜单读取的是 main 由 pairs 同步维护的 catalog，而只有 P2P 页面
+才会触发该同步；现在菜单在挂载时与每次打开时自行 `p2pPairing.read`（既重新同步 catalog 又把它
+读回渲染进程），因此先打开运行页（或重启后未访问过 P2P 页面）也能看到已配对的局域网电脑。凭据
+表单另拆出 `P2PAccountAuthForm.vue`（草稿与其清理归持有秘密的组件），使 `P2PAccountPanel.vue`
+回到行数预算内。证据：`networking/internal/helper/directory_test.go` 五例（快照读取与 revision
+只在内容变化时推进、无会话时拒绝、带 token 的调用即开始维护、登出清空、成员写操作后重读）、
+`p2pAccounts.test.ts` 的“按 core 的推送投影”、`P2PAccountPanel.test.ts` 的“打开时读 core 目录 /
+刷新按钮请求 core 重读”、`P2PDeviceDirectory.test.ts` 的刷新控件两例、
+`RuntimeTabsPanel.test.ts` 的“未打开任何 P2P 页面也能列出已配对电脑”，以及各自回退即变红。
+实际环境已验证：在报告列表冻结的那台 Windows 上，core 的快照里两台成员都在线，100 秒内渲染进程
+收到三次 `directory.changed`（每次内容真的变了才发），revision 从 3 走到 6；打开账号页无需点击
+刷新即显示两行、`2 台设备 · 上限 10`、本机一行显示「刚刚」，无错误码。待办（有意保留）：
+`accountDevices` / `networkDevices` 这两个旧操作现在也投影同一份 core 目录，但
+`accountDevices` 仍先用 `directory.refresh` 强制读一次，因为它的返回类型无法表达「尚未读到」，
+而连接卡片会把空列表当成「本机属于别的账号」；等 `p2pEnrollment.readAccountDevices` 迁到
+`directory` 并处理 `known:false` 之后，这两个旧操作即可退回缓存读或直接下线。
+
 首次安装能连服务器、旧配置可丢弃（2026-09-15）：协调器身份握手的 challenge 由 core
 用 `protocol.NewID()` 生成，而十二字符 id 改造把 `NewID` 缩短成 12 字符，shell 只接受
 32 字符（`assertAccountId(nonce, 32)`，注释明确 challenge 不是 id）——core 自己的回答

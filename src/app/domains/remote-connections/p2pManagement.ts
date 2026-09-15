@@ -36,6 +36,7 @@ const reads = new Set<Operation>([
   'currentUser',
   'networks',
   'networkDevices',
+  'directory',
   'accountDevices',
   'registration'
 ])
@@ -107,11 +108,26 @@ export class P2PManagementDomain {
     }
   }
 
-  /** Mirrors the scope `run` derives, so a queued read waits on the right one. */
+  /**
+   * Mirrors the scope `run` derives, so a queued read waits on the right one.
+   *
+   * Most operations are scoped by the service they act on. The machine-wide ones
+   * own their own slot because they mount beside the catalog card and would
+   * otherwise erase its failure. The directory owns one too, for the same reason
+   * in the other direction: being unable to read the device list is a fact about
+   * the list, and it must not paint the account card red.
+   */
   #scopeOf<K extends Operation>(method: K, input: P2PManagementInputs[K]): string {
     const fields = { ...input }
     if (MACHINE_SCOPED.has(method)) return method
-    return 'serviceId' in fields ? String(fields.serviceId) : 'catalog'
+    const service = 'serviceId' in fields ? String(fields.serviceId) : 'catalog'
+    if (method === 'directory' || method === 'refreshDirectory') return `directory:${service}`
+    return service
+  }
+
+  /** True while this service's directory read or refresh is in flight. */
+  directoryBusy(serviceId: string): boolean {
+    return this.busy(`directory:${serviceId}`)
   }
 
   async run<K extends Operation>(
@@ -120,17 +136,7 @@ export class P2PManagementDomain {
   ): Promise<P2PDomainResult<K>> {
     // These contracts contain primitives only. Preserve exactly what was submitted.
     const fields = { ...input }
-    // Reads about this machine as a whole carry no service and must not land in
-    // the catalog's slot: serviceSessions and connections are read by a status
-    // line and a panel that mount beside the catalog card, and a successful one
-    // overwrote the catalog's failure with its own state — which is how a failed
-    // read came to be shown as "nothing read yet", with no code and no retry that
-    // could ever succeed.
-    const scope = MACHINE_SCOPED.has(method)
-      ? method
-      : 'serviceId' in fields
-        ? String(fields.serviceId)
-        : 'catalog'
+    const scope = this.#scopeOf(method, input)
     if (this.busy(scope))
       return { ok: false, code: 'p2p.service_busy', message: 'p2p.service_busy' }
     const requestId = nextRequestId()

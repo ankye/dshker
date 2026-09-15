@@ -300,6 +300,29 @@ device key and the saved sign-ins are left alone, and the built-in server is
 provisioned again — so this computer registers once more instead of becoming a
 different device.
 
+### The device list on a network
+
+The list of computers in a network is **one list with one owner**. The core keeps
+it, reads it from the server when this computer signs in, after anything that
+changes who belongs to a network (registering, binding, leaving, creating or
+deleting a network, pairing), and every 30 seconds while a sign-in is active —
+which is the coarsest interval that tells the truth, because the server records a
+computer's last-seen at most once a minute. When the content changes the core
+tells the window, and every screen showing the list updates by itself.
+
+That is why a computer can appear or go offline on one page without you
+refreshing anything, and why two computers in the same network can no longer
+disagree about who is in it: they read the same kind of snapshot from their own
+core instead of each page reading the server and keeping its own copy. **Refresh
+list** beside the list asks the core to read the server again right now, which is
+only needed if you do not want to wait for the next read.
+
+| Code                                            | Meaning and what to do                                                                                                                                 |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `p2p.user_login_required`                       | Nothing is signed in on this server, so there is nothing to maintain or show. Sign in; the list follows the account that is signed in here.            |
+| A row reads "never reported" and stays that way | The computer is registered and bound but has not reported since. It appears as offline until it runs and signs in again.                               |
+| A row is missing entirely                       | The network's owner may have removed it, or that computer is signed in to another account. Re-read with **Refresh list**; the server is the authority. |
+
 ### Storage and internal errors
 
 These usually indicate an environment problem or a defect. Send the full error:

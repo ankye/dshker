@@ -4,12 +4,13 @@ import type {
   P2PUserView,
   P2PNetworkView,
   P2PNetworkDeviceView,
+  P2PDirectoryView,
   P2PRegistrationView,
   P2PPairView,
   P2PInviteView,
   P2PConnectionView
 } from '../../../src/shared/p2p-management'
-import type { PeerNetworkDevice } from './account-records'
+import type { PeerDirectory, PeerNetworkDevice } from './account-records'
 import type { PeerCatalogSnapshot } from './catalog'
 import type { PeerHelperState } from './helper-state'
 import type { PeerPair, PeerInvite } from './pair-records'
@@ -47,6 +48,32 @@ export function projectPeerNetworkDevices(
     architecture: device.architecture,
     isLocal: device.deviceId === localDeviceId
   }))
+}
+
+/**
+ * Projects the core's whole directory for the renderer.
+ *
+ * Every device list in it is projected by the one function above, so `isLocal` is
+ * derived the same way for a network's members and for the account's own bound
+ * devices. The renderer never sees a row main did not validate.
+ */
+export function projectPeerDirectory(
+  value: PeerDirectory,
+  localDeviceId: string
+): P2PDirectoryView {
+  return {
+    known: value.known,
+    revision: value.revision,
+    fetchedAt: value.fetchedAt,
+    networks: value.networks.map((network) => ({
+      networkId: network.networkId,
+      userId: network.userId,
+      name: network.name,
+      maxDevices: network.maxDevices,
+      devices: projectPeerNetworkDevices(network.devices, localDeviceId)
+    })),
+    devices: projectPeerNetworkDevices(value.devices, localDeviceId)
+  }
 }
 
 export function projectPeerRegistration(value: P2PRegistrationView): P2PRegistrationView {

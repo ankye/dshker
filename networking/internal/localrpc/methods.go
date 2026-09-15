@@ -62,6 +62,11 @@ var Methods = []Method{
 	{"device.enrollmentResult", RoleShell},
 	{"device.enrollmentToken", RoleShell},
 	{"device.restore", RoleShell},
+	// The network directory moved into the core: it holds one snapshot per
+	// service and announces changes, where every page used to read and cache its
+	// own copy. Additive within version 1.
+	{"directory.inspect", RoleShell},
+	{"directory.refresh", RoleShell},
 	{"devices.bind", RoleShell},
 	{"devices.list", RoleShell},
 	{"devices.unbind", RoleShell},
@@ -123,6 +128,9 @@ var Methods = []Method{
 	{"user.register", RoleShell},
 	{"peer.state", RoleParent},
 	{"runtime.connect", RoleParent},
+	// Sent when the core's directory snapshot for a service changes, so a shell
+	// mirrors one maintained list instead of polling every list it renders.
+	{"directory.changed", RoleParent},
 }
 
 // Lookup reports the table entry for a method name.

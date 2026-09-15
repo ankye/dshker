@@ -8,12 +8,9 @@ import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
 import P2PDeviceDirectory from './P2PDeviceDirectory.vue'
+import P2PAccountAuthForm from './P2PAccountAuthForm.vue'
 import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
-import {
-  P2P_ACCOUNT_PASSWORD_MIN,
-  P2P_NETWORK_DEVICE_LIMITS,
-  type P2PNetworkView
-} from '@/shared/p2p-management'
+import { P2P_NETWORK_DEVICE_LIMITS, type P2PNetworkView } from '@/shared/p2p-management'
 import { p2pRefusalKind } from '@/shared/p2p-refusal'
 
 const props = defineProps<{ serviceId: string; displayName: string }>()
@@ -24,14 +21,15 @@ const expandedNetworks = reactive<Record<string, boolean>>({})
 const selectedNetwork = computed(() =>
   state.networks?.find((network) => network.networkId === state.selectedNetworkId)
 )
-const directoryLoading = computed(
-  () =>
-    management.operations[props.serviceId]?.method === 'networkDevices' &&
-    management.operations[props.serviceId]?.phase === 'pending'
-)
+const directoryLoading = computed(() => management.directoryBusy(props.serviceId))
 /**
  * Clock for relative times, ticked rather than read per render so every row in a
  * list agrees on "now" and the values refresh without a user action.
+ *
+ * The list itself is not polled: the core owns the directory, reads it at
+ * startup, after a membership change and on its own interval, and announces real
+ * changes, which the account domain projects. A second timer here would only
+ * re-ask a question that already has one owner.
  */
 const now = ref(Math.floor(Date.now() / 1000))
 const clock = setInterval(() => (now.value = Math.floor(Date.now() / 1000)), 30_000)
@@ -48,14 +46,16 @@ watch(
   },
   { immediate: true }
 )
-const password = ref('')
-/** Registration drafts stay local to the panel, including its own email field:
- * sharing one draft let typing in one form silently rewrite the other. */
-const registerEmail = ref('')
-const registerPassword = ref('')
-const registerConfirm = ref('')
-/** Signed out shows one form at a time; the other is one link away. */
-const mode = ref<'login' | 'register'>('login')
+
+/**
+ * Asks the core to read the coordinator again.
+ *
+ * The directory is maintained by the core, which announces changes; this control
+ * is the explicit "now" for a user who does not want to wait for the next read.
+ */
+async function refreshDirectory(): Promise<void> {
+  await accounts.refreshDirectory(props.serviceId)
+}
 const pending = computed(() => management.busy(props.serviceId))
 const operation = computed(() => management.operations[props.serviceId])
 const uncertain = computed(
@@ -65,25 +65,6 @@ const uncertain = computed(
     operation.value?.error === 'p2p.management_result_unconfirmed' ||
     operation.value?.error === 'p2p.authorization_cleanup_failed'
 )
-/** Optional confirmation must match before a register submit is allowed. */
-const registerMismatch = computed(
-  () => registerConfirm.value !== '' && registerConfirm.value !== registerPassword.value
-)
-/**
- * The coordinator refuses a short password with p2p.invalid_user_credentials.
- * Checking it here turns that refusal into an inline requirement, and the
- * server stays authoritative: this only avoids a round trip that must fail.
- */
-const registerTooShort = computed(
-  () => registerPassword.value !== '' && registerPassword.value.length < P2P_ACCOUNT_PASSWORD_MIN
-)
-const registerBlocked = computed(
-  () =>
-    registerMismatch.value ||
-    registerTooShort.value ||
-    registerPassword.value.length < P2P_ACCOUNT_PASSWORD_MIN
-)
-
 /** Account-operation refusals get a readable line instead of only the raw code. */
 const ACCOUNT_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
   'p2p.network_limit_reached': 'p2p.account.networkLimit',
@@ -147,11 +128,8 @@ watch(
   () => state.user?.userId,
   () => {
     deletion.value = undefined
-    password.value = ''
-    registerEmail.value = ''
-    registerPassword.value = ''
-    registerConfirm.value = ''
-    mode.value = 'login'
+    // The credential form is keyed by the account, so a change destroys its
+    // drafts along with it; only the network rows are reset here.
     for (const id of Object.keys(expandedNetworks)) delete expandedNetworks[id]
   }
 )
@@ -169,33 +147,20 @@ watch(
 
 onMounted(() => {
   void accounts.currentUser(props.serviceId)
+  // The list is the core's snapshot, so opening the page reads that snapshot
+  // rather than asking the coordinator for one of its own: the pane is unmounted
+  // while another tab is shown, and a returning user must not be shown what was
+  // true when they left. Changes that arrive while the pane is open are announced
+  // by the core and projected by the account domain.
+  void accounts.readDirectory(props.serviceId)
 })
-onBeforeUnmount(() => {
-  password.value = ''
-  registerEmail.value = ''
-  registerPassword.value = ''
-  registerConfirm.value = ''
-})
-async function login() {
-  const supplied = password.value
-  password.value = ''
-  await accounts.login(props.serviceId, state.usernameDraft, supplied)
+async function login(username: string, password: string) {
+  await accounts.login(props.serviceId, username, password)
 }
-async function register() {
-  if (registerBlocked.value) return
-  const supplied = registerPassword.value
-  registerPassword.value = ''
-  registerConfirm.value = ''
-  await accounts.register(props.serviceId, registerEmail.value, supplied)
+async function register(email: string, password: string) {
+  await accounts.register(props.serviceId, email, password)
 }
 
-/** Switching forms discards only the secrets typed into the abandoned one. */
-function switchMode(next: 'login' | 'register'): void {
-  mode.value = next
-  password.value = ''
-  registerPassword.value = ''
-  registerConfirm.value = ''
-}
 async function askDelete(network: P2PNetworkView, event: Event) {
   invoker = event.currentTarget as HTMLElement
   deletion.value = { ...network }
@@ -339,111 +304,18 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
          is not a sign-out: showing a password field there asked for a secret the
          app could not yet use, and did it while claiming the state was unknown. -->
     <template v-if="state.user === null">
-      <form v-if="mode === 'login'" data-testid="p2p-login-form" @submit.prevent="login">
-        <fieldset
-          :disabled="pending || uncertain"
-          class="p2p-account-fields p2p-account-fields--stacked"
-        >
-          <legend>{{ t('p2p.account.login') }}</legend>
-          <label
-            ><span>{{ t('p2p.account.email') }}</span
-            ><input
-              :id="`p2p-login-email-${serviceId}`"
-              v-model="state.usernameDraft"
-              type="email"
-              required
-              autocomplete="username"
-              spellcheck="false"
-          /></label>
-          <label
-            ><span>{{ t('p2p.account.password') }}</span
-            ><input v-model="password" type="password" required autocomplete="current-password"
-          /></label>
-          <button type="submit" class="prototype-button prototype-button--primary">
-            {{ t('p2p.account.login') }}
-          </button>
-        </fieldset>
-        <p>{{ t('p2p.account.passwordHint') }}</p>
-        <p class="p2p-account-switch">
-          <span>{{ t('p2p.account.noAccount') }}</span>
-          <button
-            type="button"
-            class="p2p-account-switch-link"
-            data-testid="p2p-account-switch-register"
-            @click="switchMode('register')"
-          >
-            {{ t('p2p.account.register') }}
-          </button>
-        </p>
-      </form>
-      <form v-else data-testid="p2p-register-form" @submit.prevent="register">
-        <fieldset
-          :disabled="pending || uncertain"
-          class="p2p-account-fields p2p-account-fields--stacked"
-        >
-          <legend>{{ t('p2p.account.register') }}</legend>
-          <label
-            ><span>{{ t('p2p.account.email') }}</span
-            ><input
-              :id="`p2p-register-email-${serviceId}`"
-              v-model="registerEmail"
-              type="email"
-              required
-              autocomplete="email"
-              spellcheck="false"
-              data-testid="p2p-register-email"
-          /></label>
-          <label
-            ><span>{{ t('p2p.account.password') }}</span
-            ><input
-              v-model="registerPassword"
-              type="password"
-              required
-              autocomplete="new-password"
-              :minlength="P2P_ACCOUNT_PASSWORD_MIN"
-              :aria-describedby="`p2p-password-rule-${serviceId}`"
-              data-testid="p2p-register-password"
-          /></label>
-          <p :id="`p2p-password-rule-${serviceId}`" class="p2p-account-rule">
-            {{ t('p2p.account.passwordRule') }}
-          </p>
-          <p
-            v-if="registerTooShort"
-            class="remote-error"
-            role="alert"
-            data-testid="p2p-register-too-short"
-          >
-            {{ t('p2p.account.passwordTooShort') }}
-          </p>
-          <label
-            ><span>{{ t('p2p.account.confirmPassword') }}</span
-            ><input
-              v-model="registerConfirm"
-              type="password"
-              autocomplete="new-password"
-              data-testid="p2p-register-confirm"
-          /></label>
-          <button
-            type="submit"
-            class="prototype-button prototype-button--primary"
-            :disabled="registerBlocked"
-          >
-            {{ t('p2p.account.register') }}
-          </button>
-        </fieldset>
-        <p>{{ t('p2p.account.registerHint') }}</p>
-        <p class="p2p-account-switch">
-          <span>{{ t('p2p.account.haveAccount') }}</span>
-          <button
-            type="button"
-            class="p2p-account-switch-link"
-            data-testid="p2p-account-switch-login"
-            @click="switchMode('login')"
-          >
-            {{ t('p2p.account.login') }}
-          </button>
-        </p>
-      </form>
+      <!-- Only a confirmed sign-out offers the credential forms. An unknown
+           state is not a sign-out, and the form owns its drafts: signing in
+           unmounts it, which destroys them rather than clearing them by hand. -->
+      <P2PAccountAuthForm
+        :service-id="serviceId"
+        :username="state.usernameDraft"
+        :busy="pending"
+        :uncertain="uncertain"
+        @login="login"
+        @register="register"
+        @update:username="state.usernameDraft = $event"
+      />
     </template>
     <!-- Signed in is its own state, distinct from unknown: an unknown state has
          no identity to display and must not claim one. -->
@@ -628,6 +500,7 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
           :removing="removing"
           :can-remove="canRemoveDevice"
           @remove="removeDevice"
+          @refresh="refreshDirectory"
         />
         <details class="p2p-network-create" :open="state.networks.length === 0">
           <summary>{{ t('p2p.account.create') }}</summary>

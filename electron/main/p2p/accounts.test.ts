@@ -29,6 +29,34 @@ async function loggedIn() {
   return f
 }
 
+/**
+ * The core's directory reply for one network.
+ *
+ * The core is the directory's only owner now, so every device read in this suite
+ * answers with this shape rather than a per-network member list.
+ */
+function directoryReply(
+  devices: Record<string, unknown>[],
+  options: { known?: boolean; bound?: Record<string, unknown>[]; networkId?: string } = {}
+) {
+  return {
+    serviceId,
+    known: options.known ?? true,
+    revision: 3,
+    fetchedAt: 1789445714,
+    networks: [
+      {
+        networkId: options.networkId ?? network.networkId,
+        userId: user.userId,
+        name: network.name,
+        maxDevices: network.maxDevices,
+        devices
+      }
+    ],
+    devices: options.bound ?? []
+  }
+}
+
 describe('main-owned P2P accounts', () => {
   const email = 'alice@example.com'
   const registered = { userId: user.userId, username: email }
@@ -121,13 +149,11 @@ describe('main-owned P2P accounts', () => {
     expect(f.accounts.hasSession(serviceId)).toBe(false)
   })
 
-  it('reads the device directory and keeps self-declared telemetry only when displayable', async () => {
+  it('reads the device directory from the core and keeps self-declared telemetry only when displayable', async () => {
     const f = await loggedIn()
     const base = { userId: user.userId, presence: 'online', lastSeen: 1788000000 }
-    f.call
-      // The ownership check runs first, then the directory read.
-      .mockResolvedValueOnce([network])
-      .mockResolvedValueOnce([
+    f.call.mockResolvedValueOnce(
+      directoryReply([
         {
           ...base,
           deviceId: 'a'.repeat(12),
@@ -148,6 +174,7 @@ describe('main-owned P2P accounts', () => {
           architecture: ' arm64'
         }
       ])
+    )
     const devices = await f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
     expect(devices[0]).toEqual({
       deviceId: 'a'.repeat(12),
@@ -166,6 +193,10 @@ describe('main-owned P2P accounts', () => {
       platform: '',
       architecture: ''
     })
+    // The core owns one snapshot, so this read never becomes a per-network
+    // coordinator round trip that a second machine could answer differently.
+    expect(f.call.mock.calls.map(([method]) => method)).toEqual(['directory.inspect'])
+    expect(f.call.mock.calls[0][1]).toEqual({ serviceId, data: {} })
   })
 
   it('refuses a directory row that reports an impossible state', async () => {
@@ -174,20 +205,71 @@ describe('main-owned P2P accounts', () => {
       { userId: user.userId, presence: 'online', lastSeen: -1 }
     ]) {
       const f = await loggedIn()
-      f.call.mockResolvedValueOnce([network]).mockResolvedValueOnce([
-        {
-          ...bad,
-          deviceId: 'a'.repeat(12),
-          name: 'Mac',
-          version: '',
-          platform: '',
-          architecture: ''
-        }
-      ])
+      f.call.mockResolvedValueOnce(
+        directoryReply([
+          {
+            ...bad,
+            deviceId: 'a'.repeat(12),
+            name: 'Mac',
+            version: '',
+            platform: '',
+            architecture: ''
+          }
+        ])
+      )
       await expect(
         f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
-      ).rejects.toThrow()
+      ).rejects.toMatchObject({ code: 'p2p.invalid_server_response' })
     }
+  })
+
+  it('reports an unread directory as a state and refuses an unknown network instead of an empty list', async () => {
+    const f = await loggedIn()
+    const unread = { serviceId, known: false, revision: 0, fetchedAt: 0, networks: [], devices: [] }
+    f.call.mockResolvedValueOnce(unread)
+    // `known:false` is the core saying it has not read yet, which is not an error.
+    expect(await f.accounts.directory(serviceId, signal())).toEqual({
+      known: false,
+      revision: 0,
+      fetchedAt: 0,
+      networks: [],
+      devices: []
+    })
+    f.call.mockResolvedValueOnce(unread)
+    // An empty list would claim the network has no devices, which is a different
+    // and misleading statement, so an absent network stays a refusal.
+    await expect(
+      f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
+    ).rejects.toMatchObject({ code: 'p2p.network_unavailable' })
+  })
+
+  it('answers the two directory operations from the core without a per-page read', async () => {
+    const f = await loggedIn()
+    f.call
+      .mockResolvedValueOnce(directoryReply([], { bound: [] }))
+      .mockResolvedValueOnce(directoryReply([], { bound: [] }))
+    expect(await f.accounts.directory(serviceId, signal())).toEqual({
+      known: true,
+      revision: 3,
+      fetchedAt: 1789445714,
+      networks: [
+        {
+          networkId: network.networkId,
+          userId: user.userId,
+          name: network.name,
+          maxDevices: network.maxDevices,
+          devices: []
+        }
+      ],
+      devices: []
+    })
+    expect((await f.accounts.refreshDirectory(serviceId, signal())).known).toBe(true)
+    // inspect reads the snapshot, refresh reads the coordinator first: neither
+    // reaches for networks.devices or devices.list.
+    expect(f.call.mock.calls.map(([method]) => method)).toEqual([
+      'directory.inspect',
+      'directory.refresh'
+    ])
   })
 
   /**
@@ -199,18 +281,20 @@ describe('main-owned P2P accounts', () => {
    */
   it('reads a machine that another account enrolled first', async () => {
     const f = await loggedIn()
-    f.call.mockResolvedValueOnce([network]).mockResolvedValueOnce([
-      {
-        deviceId: 'a'.repeat(12),
-        userId: '9'.repeat(12),
-        name: 'Shared laptop',
-        presence: 'online',
-        lastSeen: 1788000000,
-        version: '',
-        platform: '',
-        architecture: ''
-      }
-    ])
+    f.call.mockResolvedValueOnce(
+      directoryReply([
+        {
+          deviceId: 'a'.repeat(12),
+          userId: '9'.repeat(12),
+          name: 'Shared laptop',
+          presence: 'online',
+          lastSeen: 1788000000,
+          version: '',
+          platform: '',
+          architecture: ''
+        }
+      ])
+    )
 
     const devices = await f.accounts.listNetworkDevices(serviceId, network.networkId, signal())
 
@@ -236,30 +320,38 @@ describe('main-owned P2P accounts', () => {
    */
   it('lists the devices bound to the signed-in account', async () => {
     const f = await loggedIn()
-    f.call.mockResolvedValueOnce([
-      {
-        deviceId: 'c'.repeat(12),
-        userId: '9'.repeat(12),
-        name: 'This machine',
-        presence: 'online',
-        lastSeen: 1788000001,
-        version: '',
-        platform: '',
-        architecture: ''
-      }
-    ])
+    f.call.mockResolvedValueOnce(
+      directoryReply([], {
+        bound: [
+          {
+            deviceId: 'c'.repeat(12),
+            userId: '9'.repeat(12),
+            name: 'This machine',
+            presence: 'online',
+            lastSeen: 1788000001,
+            version: '',
+            platform: '',
+            architecture: ''
+          }
+        ]
+      })
+    )
 
     const devices = await f.accounts.listDevices(serviceId, signal())
 
     expect(f.call).toHaveBeenCalledWith(
-      'devices.list',
-      { serviceId, data: { token: session().token } },
+      'directory.inspect',
+      { serviceId, data: {} },
       expect.any(AbortSignal)
     )
+    // The account's own bindings come from the core's snapshot too: devices.list
+    // was the other per-page coordinator read a second machine could answer
+    // differently.
+    expect(f.call.mock.calls.map(([method]) => method)).not.toContain('devices.list')
     expect(devices.map((device) => device.deviceId)).toEqual(['c'.repeat(12)])
   })
 
-  it('refuses a device list that is not a list', async () => {
+  it('refuses a directory reply that is not a directory', async () => {
     const f = await loggedIn()
     f.call.mockResolvedValueOnce({ devices: [] })
 
