@@ -106,10 +106,18 @@ export function parseNetstatListenPid(netstat: string, port: number): number | u
 /**
  * Recognizes a DSH Web process, so the Launcher can adopt a leftover instance
  * of itself instead of refusing to start forever.
+ *
+ * The quotes are part of the rule because the command line is read back in the
+ * form the platform renders it, and Windows renders every argument of a spawn
+ * with quotes: `bin.ts "web" "--patch" "…"`. Without them a leftover instance the
+ * Launcher itself started is classified as a foreign holder and the launch is
+ * refused with runtime.port_in_use forever.
  */
+const RESIDUAL_DSH_WEB = /(?:\bdsh\b|bin\.(?:j|t)s)["']?\s+["']?web\b/u
+
 export function isResidualDshWebCommand(commandLine: string | undefined): boolean {
   if (commandLine === undefined) return false
-  return /\bdsh web\b/u.test(commandLine) || /\bbin\.(?:j|t)s web\b/u.test(commandLine)
+  return RESIDUAL_DSH_WEB.test(commandLine)
 }
 
 /** Signals a leftover DSH tree and waits for it to actually disappear. */

@@ -150,4 +150,11 @@ func IsResidualDshWebCommand(commandLine string) bool {
 
 // residualDshWebPattern is the shell's own recognition rule: a direct `dsh web`
 // invocation or the built entry point it runs.
-var residualDshWebPattern = regexp.MustCompile(`\bdsh web\b|\bbin\.(?:j|t)s web\b`)
+//
+// The quotes are part of the rule because the command line is read back in the
+// form the platform renders it, and Windows renders every argument of a spawn
+// with quotes: `bin.ts "web" "--patch" "…"`. Without them a leftover instance the
+// launcher itself started is classified as a foreign holder, and the launch is
+// refused with runtime.port_in_use forever — the one case this rule exists to
+// prevent.
+var residualDshWebPattern = regexp.MustCompile(`(?:\bdsh\b|bin\.(?:j|t)s)["']?\s+["']?web\b`)

@@ -1,5 +1,20 @@
 ## 1. 协议与构建边界
 
+固定端口不再被自己的遗留工作台卡死（2026-09-15，0.1.44）：端口预检本来就是「认出是自己上次启动的
+DSH Web 就停掉旧的再启新的」（`PreparePortForLaunch` → `PortCleared`），但它依赖的命令行识别规则
+只匹配 Unix 的渲染形式：Windows 会把 spawn 的每个参数都加引号，实际占用者是
+`… apps/cli/src/bin.ts "web" "--patch" "…\verbose.patch.yml" "--no-open" "--port" "31888"`，
+`bin.ts "web"` 匹配不上 `bin\.(?:j|t)s web`，于是自己被判成「外来进程」并返回
+`runtime.port_in_use`；而跨私有通道只传公开 code，pid 与命令行留在 core 日志里，用户既看不到原因也
+无法处理。现在两处同源规则（`networking/internal/harnessruntime/preferences.go` 与
+`electron/main/managed/port-occupancy.ts`）都接受可选引号
+（`(?:\bdsh\b|bin\.(?:j|t)s)["']?\s+["']?web\b`），末尾的 `\b` 保证近似名（`bin.js webhook`）
+仍被判为外来而非被误杀；`electron/main/managed/launch-failure.ts` 另为 `runtime.port_in_use`
+等「光看名字不知道怎么办」的 code 在启动日志里补上一句处置建议。证据：`harnessruntime_test.go`
+的 `TestIsResidualDshWebCommandMatchesTheShellRule` 与 `port-occupancy.test.ts` 的
+「recognizes the quoted forms the platform renders」，两者都用了事发机器上的真实命令行，以及
+`launch-failure.test.ts` 三例。
+
 设备列表不再谎报读取失败（2026-09-15，0.1.43 热修）：0.1.42 上线后账号页出现「设备列表读取失败，
 请重试」，而列表其实已经拿到。两个原因：一是 main 的重复提交判重只按 `serviceId`，而读也走这道
 闸，于是渲染进程按 scope（`directory` 与 `networkDevices`）分开排队的两个读在 main 侧撞车，后者

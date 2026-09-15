@@ -14,6 +14,7 @@ import type {
   CoreHarnessState
 } from '../core/harness-runtime'
 import { LauncherRuntimeFeed } from './launcher-runtime-feed'
+import { launchFailureEventText } from './launch-failure'
 import { ManagedHarnessRuntimeError } from './runtime-errors'
 import {
   launcherProfilePluginArguments,
@@ -776,9 +777,9 @@ export class LauncherHarnessService {
     try {
       view = await (await this.#runtime()).start(request)
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown error'
       this.#appendLauncherEvent(
-        'DSH Web process could not be created: ' +
-          (error instanceof Error ? error.message : 'unknown error')
+        'DSH Web process could not be created: ' + launchFailureEventText(message)
       )
       this.#launch = {
         kind: 'failed',

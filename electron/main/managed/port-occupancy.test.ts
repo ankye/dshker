@@ -64,10 +64,34 @@ describe('isResidualDshWebCommand', () => {
     )
   })
 
+  /**
+   * Windows renders every argument of a spawn with quotes. A rule that only
+   * matched the unquoted form called the launcher's own leftover a foreign holder,
+   * so the launch was refused with runtime.port_in_use — the exact case this rule
+   * exists to recover from.
+   */
+  it('recognizes the quoted forms the platform renders', () => {
+    expect(
+      isResidualDshWebCommand(
+        'node  --import tsx/esm apps/cli/src/bin.ts "web" "--patch" "C:\\Program Files\\DSHKer Launcher\\resources\\verbose.patch.yml" "--no-open" "--port" "31888"'
+      )
+    ).toBe(true)
+    expect(isResidualDshWebCommand('node  --import tsx/esm apps/cli/src/bin.ts "web"')).toBe(true)
+    expect(
+      isResidualDshWebCommand(
+        'node "C:\\pnpm\\bin\\pnpm.mjs" "dsh" "web" "--patch" "C:\\verbose.patch.yml"'
+      )
+    ).toBe(true)
+  })
+
   it('does not mistake unrelated node processes for DSH Web', () => {
     expect(isResidualDshWebCommand('node /srv/api/server.js')).toBe(false)
     expect(isResidualDshWebCommand('node --import tsx/esm apps/cli/src/bin.ts check')).toBe(false)
     expect(isResidualDshWebCommand(undefined)).toBe(false)
+    // Near misses stay foreign: adopting one would stop a process that is not a
+    // DSH Web at all.
+    expect(isResidualDshWebCommand('node apps/cli/lib/bin.js webhook --no-open')).toBe(false)
+    expect(isResidualDshWebCommand('dsh --help web')).toBe(false)
   })
 })
 

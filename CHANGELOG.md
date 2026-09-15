@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.44 — 2026-09-15
+
+- **A leftover workbench no longer blocks the next launch.** With a fixed port, a
+  DSH Web left behind by an earlier run is supposed to be stopped and replaced —
+  but the check that recognizes "this is one of ours" only matched the command
+  line the way Unix renders it, and Windows renders every argument of a spawn in
+  quotes. The launcher's own leftover was therefore judged a foreign program and
+  the launch was refused with `runtime.port_in_use`, naming nothing the user could
+  act on. Quoted and unquoted forms are now recognized alike, and a name that only
+  looks similar (`…bin.js webhook`) is still refused rather than killed.
+- The launcher log for that failure says what to do: the port is held by another
+  process, that is usually a leftover workbench, and it can be stopped or another
+  port chosen in Settings.
+
 ## 0.1.43 — 2026-09-15
 
 - **The device list no longer reports a failure it does not have.** Opening the

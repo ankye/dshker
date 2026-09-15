@@ -274,12 +274,28 @@ func TestIsResidualDshWebCommandMatchesTheShellRule(t *testing.T) {
 		"node /opt/dsh/apps/cli/lib/bin.js web --no-open",
 		"pnpm dsh web --patch /x --no-open",
 		"/usr/local/bin/dsh web",
+		// Windows renders every argument of a spawn with quotes, and a rule that
+		// only matched the unquoted form classified the launcher's own leftover as
+		// a foreign holder — which is the launch this rule exists to recover.
+		`node  --import tsx/esm apps/cli/src/bin.ts "web" "--patch" "C:\Program Files\DSHKer Launcher\resources\verbose.patch.yml" "--no-open" "--port" "31888"`,
+		`node  --import tsx/esm apps/cli/src/bin.ts "web"`,
+		`node "C:\pnpm\bin\pnpm.mjs" "dsh" "web" "--patch" "C:\verbose.patch.yml"`,
 	} {
 		if !IsResidualDshWebCommand(command) {
 			t.Errorf("%q was not adopted", command)
 		}
 	}
-	for _, command := range []string{"", "   ", "node /srv/api/server.js", "postgres -D /data"} {
+	for _, command := range []string{
+		"",
+		"   ",
+		"node /srv/api/server.js",
+		"postgres -D /data",
+		// A near miss must stay foreign: adopting it would stop a process that is
+		// not a DSH Web at all.
+		"node /opt/dsh/apps/cli/lib/bin.js webhook --no-open",
+		"node /opt/dsh/apps/cli/lib/bin.tsx web",
+		"dsh --help web",
+	} {
 		if IsResidualDshWebCommand(command) {
 			t.Errorf("%q was adopted", command)
 		}
