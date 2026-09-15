@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.1.40 — 2026-09-15
+
+- A connected computer's workbench now opens. A paired computer that had
+  connected successfully showed a green state and an empty page with a "connect
+  first" message, because the address main held was never handed to the page that
+  mounts it: the tab was waiting for a value that nothing supplied. The address is
+  now asked for per connection attempt, and a tab whose attempt has been replaced
+  is never handed the previous one.
+- A failed connection says which side is wrong, and keeps the error code on
+  screen. Every failure used to read the same, with copy that told you to retry
+  the other computer's SSH tunnel — there is no tunnel between paired computers.
+  The tab now distinguishes this computer not being set up, an unreachable
+  coordination server, the other computer being offline, a network that cannot be
+  reached, a workbench that did not start, and an authorization that is gone.
+- The device id on the Connect card is this machine's real device id — the one the
+  coordinator registers, the member list shows and every paired computer pins. The
+  card used to show a locally generated number that identified nothing anywhere
+  else, so copying it into a member list did not work. It is the same value the
+  server reports for this machine, and it is available before any account is
+  bound.
+- A computer bound to more than one account reports its presence to the account
+  signed in on it. The device identity kept naming the account the machine first
+  enrolled under, so a machine that had since been added to a second account
+  looked offline there while it was running, and "this computer's identity belongs
+  to another account" was reported for a machine that belonged to both. The
+  warning now appears only when the signed-in account's own device list — read
+  from the coordinator — does not contain this machine.
+- A device directory that includes a computer another account enrolled first no
+  longer fails to read. The row's owning account was compared with the reader's,
+  and a machine bound to two accounts carries the first one's name, so the whole
+  member list was refused as a scope mismatch.
+
 ## 0.1.39 — 2026-09-15
 
 - Identifiers are twelve characters, the length and alphabet of a hardware
