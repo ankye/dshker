@@ -43,6 +43,8 @@ The Launcher also performs the same fixed-repository check after startup without
 
 Console separates Launcher lifecycle messages, the launch command, standard output, and standard error. Use its bottom action to start or stop the exact process Launcher created. The log file is stored in `~/.dshlauncher/logs/dsh-web.log`; you can reveal or export it from Console.
 
+If a window, a renderer, or a child process disappears unexpectedly, the reason is written to `~/.dshlauncher/logs/main-faults.log`: a crashed renderer, a GPU process that exited, and an uncaught exception in the main process each record one line with the reason and the exit code. It is not a crash reporter — a normal exit or a process you stopped is not recorded, so an empty file is the normal state.
+
 Run contains browser-like tabs for the DSH Web address announced by the managed process. Closing a Run tab never stops DSH. Stopping DSH withdraws its Run pages because a later process must announce a new address.
 
 ## Troubleshooting

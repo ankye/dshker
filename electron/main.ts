@@ -4,6 +4,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { registerIpc } from './main/ipc'
+import { appendFaultLine, installFaultTrace } from './main/main-faults'
 import {
   DirectorySelectionCapabilities,
   ElectronDirectoryPicker,
@@ -209,6 +210,14 @@ async function registerLauncherServices(
   // core starts, while the shell's own files below this directory — the remote
   // peer descriptor, launch preferences, logs — are written independently of it.
   await mkdir(launcherRoot, { recursive: true })
+  // From the first moment there is a directory to write to: a window that vanishes
+  // before the services below exist is exactly the case that used to leave no
+  // evidence at all.
+  installFaultTrace({
+    app,
+    faults: process,
+    write: (message) => appendFaultLine(path.join(launcherRoot, 'logs', 'main-faults.log'), message)
+  })
   const managedWorkspaceService = await createManagedWorkspaceService(
     launcherRoot,
     locatorFilePath,

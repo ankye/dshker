@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.47 — 2026-09-15
+
+- **A window that vanishes now says why.** When a renderer, a GPU or utility
+  process, or the main process itself dies, the reason and exit code are written
+  to `~/.dshlauncher/logs/main-faults.log` before the process goes. Until now the
+  application had no such record at all: a crashed renderer and a window someone
+  had closed looked identical from the outside, so "it just closed" could not be
+  answered from the machine. An uncaught exception in the main process is recorded
+  and then ends the process deliberately, with the exit code the default would have
+  produced; a renderer or child process that dies is recorded and left for Electron
+  to recover, because exiting there would turn a recoverable loss into a shutdown.
+- This is a record of unexpected deaths, not crash reporting: a normal exit, a
+  window you closed, and a process you stopped write nothing, so an empty file is
+  the normal state.
+
 ## 0.1.46 — 2026-09-15
 
 - **The network ID is shown outright.** It sat behind a "network technical

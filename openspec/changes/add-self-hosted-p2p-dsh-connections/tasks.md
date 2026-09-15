@@ -1,5 +1,17 @@
 ## 1. 协议与构建边界
 
+窗口消失要留下原因（2026-09-15，0.1.47）：一次「点远程连接就闪退」的报告在机器上查不到任何证据——
+Application 日志无错误/无挂起、无崩溃转储、启动日志在窗口消失处断掉。原因是主进程**根本没有**这类
+处理器：渲染进程崩溃、子进程退出、主进程未捕获异常三种情况都没有记录，而「被强制结束」又不会产生
+崩溃报告，于是从外部看「崩了」和「被人关了」完全一样。现在 `electron/main/main-faults.ts` 在
+launcher root 就绪时立即安装，把每次意外死亡写进 `logs/main-faults.log`：
+`render-process-gone`（原因、退出码、当时页面）、`child-process-gone`（类型/名称、原因、退出码）、
+`uncaughtException`（记录后按默认行为的退出码 `app.exit(1)`）、`unhandledRejection`（只记录，不终止）。
+事件源与写入端都是参数，因此四个注册与三种行格式在 `main-faults.test.ts` 里用假 EventEmitter 覆盖
+（含「未导航的渲染进程用类型代替 URL」「不可序列化的失败值」两例）。这不是崩溃上报：正常退出、用户
+关闭、被停止的进程都不写，**空文件即正常状态**，已在 `docs/usage.zh-CN.md` / `docs/usage.en.md`
+写明。
+
 下一步（记录，尚未实施）：目录已归 core，但**catalog 里的 computers（已配对电脑）仍由 shell 同步**
 ——`PeerMemberSync` 在读 `pairs.list`、给每个 active pair 重新 pin，再改写 catalog；触发点是页面
 （运行页添加菜单打开时、shell 启动时）而不是 core 自己。这留下了同类的最后一个「页面触发协调器读取」
