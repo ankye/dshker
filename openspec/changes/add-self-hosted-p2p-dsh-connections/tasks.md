@@ -1,5 +1,30 @@
 ## 1. 协议与构建边界
 
+首次安装能连服务器、旧配置可丢弃（2026-09-15）：协调器身份握手的 challenge 由 core
+用 `protocol.NewID()` 生成，而十二字符 id 改造把 `NewID` 缩短成 12 字符，shell 只接受
+32 字符（`assertAccountId(nonce, 32)`，注释明确 challenge 不是 id）——core 自己的回答
+被 shell 判为 `p2p.invalid_request`，于是全新安装会先启用空 catalog、再加不进内置服务器，
+账号页没有服务器可登录且不给原因。现在 core 用独立的 `protocol.NewNonce()`（16 字节熵）
+生成 challenge，协调器对 `/v1/identity` 同时接受 32 字符与 0.1.39 仍在发出的 12 字符形式
+（challenge 只被回显并签名，从不作为标识符解释）。
+
+同一报告的第二处：旧版本写入的 catalog（32 字符 `catalogId`／64 字符 `serviceId`）在当前
+版本既读不了也删不掉——inspect、commit 连 `removeService` 都会重新校验落盘记录，所以升级
+上来的机器卡在既不能用也不能丢的状态，卡片只有永远失败的重试。新增显式 `resetCatalog`
+（IPC `dsh-launcher:p2p:catalog-reset`）：只在记录确实读不出来或只剩一个文件时允许，把
+两个文件改名为 `.legacy-<时间戳>` 后经 core 重新 enable，并把内置服务器重新写入；对能正常
+读取的 catalog 以 `p2p.catalog_intact` 拒绝，因此它不可能变成静默清空。丢弃不是自动行为：
+仓库规则是缺失/不可用的记录给 typed 拒绝而不是替默认值，且读不出的记录仍是用户唯一的一份。
+
+另修一处会掩盖该失败的缺陷：`serviceSessions` 不带 `serviceId`，作用域落到了 catalog，
+成功状态覆盖了 catalog 的读失败，卡片于是显示成“尚未读到配置”（无错误码）。`localDevice`、
+`connections`、`serviceSessions` 现在各自拥有作用域，`#scopeOf` 同步。
+
+证据：Go 侧断言 challenge 形状的新用例、`catalog.test.ts` 的丢弃/拒绝/首次启用三例、domain
+作用域回归用例，以及在真实旧配置上经 CDP 点击丢弃：`catalogId` 变为 12 字符、`services=1`、
+`p2p-devices.json.legacy-20260915-030655` 保留；线上服务器 32 字符 challenge 返回 200、12
+字符仍 200、非法 400。
+
 运行页回归修复（2026-09-10）：Electron 42 将未设置的 WebView `partition` 传入
 `will-attach-webview` 时序列化为空字符串；P2P 隔离准入最初只接受 `undefined`，
 因此 Local/SSH guest 在加载前被拒绝并显示白屏。现仅将该精确平台表示视为“未设置”，

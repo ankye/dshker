@@ -11,6 +11,7 @@ import { exactPeerObject, PeerHelperError } from './wire'
 const fields: Record<P2PManagementOperation, readonly string[]> = {
   enable: [],
   catalog: [],
+  resetCatalog: [],
   addService: ['revision', 'displayName', 'httpsOrigin', 'wssUrl', 'stunAddress'],
   login: ['serviceId', 'username', 'password'],
   register: ['serviceId', 'email', 'password'],

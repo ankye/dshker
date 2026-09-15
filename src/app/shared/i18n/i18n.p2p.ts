@@ -235,6 +235,9 @@ export const zhCNP2P = {
     '当前登录的账号里没有这台电脑，用它做的配对会被拒绝。请改用登记这台电脑的账号登录，或让当前账号的拥有者把下面的设备 ID 加进来。',
   'p2p.myNetwork.deviceNameDefault': '我的电脑',
   'p2p.myNetwork.catalogReadFailed': 'P2P 配置读取失败，不代表没有配置；请重试。',
+  'p2p.myNetwork.catalogUnreadable':
+    '本机保存的 P2P 配置当前版本读不了（通常是旧版本写入的）。它不会被自动删除：丢弃后旧文件留在同一目录，设备密钥和已保存的登录不受影响，之后需要重新登记这台电脑。',
+  'p2p.myNetwork.catalogDiscard': '丢弃无法读取的配置并重新开始',
   'p2p.myNetwork.catalogLoading': '正在读取 P2P 配置…',
   'p2p.myNetwork.retry': '重试',
   'p2p.myNetwork.networkIdLabel': '输入网络 ID',
@@ -582,6 +585,9 @@ export const enUSP2P: Record<keyof typeof zhCNP2P, string> = {
   'p2p.myNetwork.deviceNameDefault': 'My computer',
   'p2p.myNetwork.catalogReadFailed':
     'Could not read the P2P configuration; this does not mean none exists. Retry.',
+  'p2p.myNetwork.catalogUnreadable':
+    'This build cannot read the P2P configuration stored on this machine — it was usually written by an older release. Nothing is deleted automatically: discarding keeps the old files in the same directory, leaves the device key and saved sign-ins alone, and this computer then registers again.',
+  'p2p.myNetwork.catalogDiscard': 'Discard the unreadable configuration and start over',
   'p2p.myNetwork.catalogLoading': 'Reading P2P configuration…',
   'p2p.myNetwork.retry': 'Retry',
   'p2p.myNetwork.networkIdLabel': 'Network ID',

@@ -1,5 +1,15 @@
 import { createHash } from 'node:crypto'
-import { mkdtemp, mkdir, readFile, rm, stat, symlink, unlink, writeFile } from 'node:fs/promises'
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  readdir,
+  rm,
+  stat,
+  symlink,
+  unlink,
+  writeFile
+} from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -247,6 +257,73 @@ describe('registered P2P catalog', () => {
     const enabled = await catalog.enable()
     expect(() => parsePeerCatalog(JSON.stringify({ ...enabled.record, ...patch }))).toThrow()
     expect(await catalog.inspect()).toEqual(enabled)
+  })
+
+  /**
+   * A record written by an older identity scheme is a machine the user cannot
+   * repair: every operation re-validates, so the catalog can be neither read nor
+   * emptied. Discarding is the way out, and the file it could not read is kept.
+   */
+  it('discards a record this build cannot read, keeping it beside the new one', async () => {
+    const { parent, catalog } = await fixture()
+    const legacyId = 'c'.repeat(32)
+    const legacyRecord = {
+      format: 'dshker.p2p-devices',
+      version: 1,
+      catalogId: legacyId,
+      services: [
+        {
+          serviceId: 'd'.repeat(64),
+          displayName: 'DSHKer 服务器',
+          httpsOrigin: 'https://my.ffkey.com:8443',
+          wssUrl: 'wss://my.ffkey.com:8443/v1/signals',
+          stunAddress: 'my.ffkey.com:8443',
+          publicKey: 'dkqr/6uPC3xduT+vo12XY5kmreQ7So8jibpB2bIEeHw=',
+          certificate: serviceCertificate
+        }
+      ],
+      computers: [],
+      forgottenServiceIds: []
+    }
+    await writeFile(join(parent, 'p2p-devices.json'), JSON.stringify(legacyRecord))
+    await writeFile(
+      join(parent, 'p2p-enabled.json'),
+      JSON.stringify({ version: 1, catalogId: legacyId })
+    )
+    await expect(catalog.inspect()).rejects.toMatchObject({ code: 'p2p.catalog_invalid' })
+
+    const fresh = await catalog.reset()
+
+    expect(fresh.record.services).toEqual([])
+    expect(fresh.record.catalogId).not.toBe(legacyId)
+    expect(await catalog.inspect()).toEqual(fresh)
+    const entries = await readdir(parent)
+    const kept = entries.filter((entry) => entry.includes('.legacy-'))
+    expect(kept.sort()).toEqual([
+      expect.stringContaining('p2p-devices.json.legacy-'),
+      expect.stringContaining('p2p-enabled.json.legacy-')
+    ])
+    const preserved = kept.find((entry) => entry.startsWith('p2p-devices.json'))
+    expect(JSON.parse(await readFile(join(parent, preserved as string), 'utf8'))).toEqual(
+      legacyRecord
+    )
+  })
+
+  /** The reset is never a quiet way to erase a catalog that still works. */
+  it('refuses to discard a catalog this build can read', async () => {
+    const { parent, catalog } = await fixture()
+    const enabled = await catalog.enable()
+    const saved = await catalog.commit(enabled.revision, paired(enabled.record))
+    await expect(catalog.reset()).rejects.toMatchObject({ code: 'p2p.catalog_intact' })
+    expect(await catalog.inspect()).toEqual(saved)
+    expect((await readdir(parent)).filter((entry) => entry.includes('.legacy-'))).toEqual([])
+  })
+
+  it('enables a first catalog when there is nothing to discard', async () => {
+    const { catalog } = await fixture()
+    const created = await catalog.reset()
+    expect(created.record.services).toEqual([])
+    expect(await catalog.inspect()).toEqual(created)
   })
 
   it.each([

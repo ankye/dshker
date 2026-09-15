@@ -35,6 +35,38 @@ function setup(overrides: Partial<P2PManagementApi> = {}) {
 }
 
 describe('P2P management renderer owner', () => {
+  /**
+   * A whole-machine read that carries no service must not land in the catalog's
+   * operation slot. The status line and the connections panel mount beside the
+   * catalog card, and a successful serviceSessions call used to overwrite the
+   * catalog's failure: the card then showed "nothing read yet" with no code, so a
+   * stored configuration this build cannot read looked like an empty one and the
+   * offered retry could never succeed.
+   */
+  it('keeps a machine-wide read out of the catalog operation slot', async () => {
+    const { domain } = setup({
+      catalog: vi.fn(async () => ({
+        ok: false as const,
+        code: 'p2p.catalog_invalid' as const,
+        message: 'p2p.catalog_invalid'
+      })),
+      serviceSessions: vi.fn(async () => ({ ok: true as const, data: [] }))
+    })
+    await domain.readCatalog()
+    expect(domain.operations.catalog).toMatchObject({
+      method: 'catalog',
+      phase: 'failed',
+      error: 'p2p.catalog_invalid'
+    })
+    await domain.run('serviceSessions', {})
+    expect(domain.operations.catalog).toMatchObject({
+      method: 'catalog',
+      phase: 'failed',
+      error: 'p2p.catalog_invalid'
+    })
+    expect(domain.operations.serviceSessions).toMatchObject({ method: 'serviceSessions' })
+  })
+
   it('keeps missing bridge, failed reads and explicitly not enabled distinct', async () => {
     const missing = new P2PManagementDomain(() => undefined)
     await missing.readCatalog()
@@ -280,6 +312,48 @@ describe('built-in official server provisioning', () => {
     expect(addService).not.toHaveBeenCalled()
     expect(domain.selectedServiceId.value).toBe(builtin.serviceId)
     expect(domain.builtinProvisioned.value).toBe(true)
+  })
+
+  /**
+   * A record this build cannot read leaves the page with no catalog at all, and
+   * discarding it is the only way forward — so the reset must hand the user a
+   * working page, not a fresh "nothing read yet" that asks for the same act again.
+   */
+  it('discards an unreadable catalog and provisions the built-in service again', async () => {
+    const resetCatalog = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, revision: 'reset' }
+    }))
+    const addService = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, revision: 'added', services: [builtin] }
+    }))
+    const { domain } = setup({ resetCatalog, addService })
+    domain.catalog.value = undefined
+    domain.builtinProvisioned.value = false
+    await domain.resetCatalog()
+    expect(resetCatalog).toHaveBeenCalledTimes(1)
+    expect(addService).toHaveBeenCalledWith(expect.objectContaining({ revision: 'reset' }))
+    expect(domain.selectedServiceId.value).toBe(builtin.serviceId)
+    expect(domain.builtinProvisioned.value).toBe(true)
+  })
+
+  it('keeps the catalogue untouched when the discard itself is refused', async () => {
+    const resetCatalog = vi.fn(async () => ({
+      ok: false as const,
+      code: 'p2p.catalog_intact' as const,
+      message: 'p2p.catalog_intact'
+    }))
+    const addService = vi.fn()
+    const { domain } = setup({ resetCatalog, addService })
+    domain.catalog.value = saved
+    await domain.resetCatalog()
+    expect(addService).not.toHaveBeenCalled()
+    expect(domain.catalog.value).toEqual(saved)
+    expect(domain.operations.catalog).toMatchObject({
+      phase: 'failed',
+      error: 'p2p.catalog_intact'
+    })
   })
 
   it('records the terminal removed state when re-adding the built-in is refused', async () => {

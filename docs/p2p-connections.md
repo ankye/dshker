@@ -281,11 +281,30 @@ means the same thing everywhere, but what to do about it depends on the step.
 | `p2p.catalog_conflict`                               | The record changed elsewhere. Re-read, then re-apply. Your input is preserved.        |
 | `p2p.service_not_found` / `p2p.connection_not_found` | The target record is gone, usually removed. Re-read the list.                         |
 
+### A stored configuration this build cannot read
+
+| Code                     | Meaning and what to do                                                                                                                                                                      |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.catalog_invalid`    | The stored record is not one this build can read — usually written by an older release, when ids had another length. **It is not empty and it is not lost**: the card offers to discard it. |
+| `p2p.catalog_incomplete` | Only one of the two stored files is present, so there is no record to use. The card offers the same discard.                                                                                |
+| `p2p.catalog_intact`     | A discard was asked for a record that reads cleanly, so it was refused and nothing was deleted.                                                                                             |
+
+Discarding is the only operation that repairs either state: every other catalog
+operation re-validates the stored record, including the removal of a single
+service, so a machine that upgraded can neither use that configuration nor drop
+it. The Connect card shows the code, says plainly that nothing is deleted
+automatically, and offers **Discard the unreadable configuration and start
+over**. Both files are then kept beside the new one as
+`p2p-devices.json.legacy-<stamp>` and `p2p-enabled.json.legacy-<stamp>`, the
+device key and the saved sign-ins are left alone, and the built-in server is
+provisioned again — so this computer registers once more instead of becoming a
+different device.
+
 ### Storage and internal errors
 
 These usually indicate an environment problem or a defect. Send the full error:
 
-`p2p.catalog_invalid`, `p2p.catalog_incomplete`, `p2p.catalog_unavailable`,
+`p2p.catalog_unavailable`,
 `p2p.catalog_write_failed`, `p2p.catalog_exists`, `p2p.credential_invalid`,
 `p2p.credential_unavailable`, `p2p.credential_write_failed`,
 `p2p.credential_create_failed`, `p2p.credential_conflict`,

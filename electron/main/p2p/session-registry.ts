@@ -59,6 +59,53 @@ export class PeerSessionRegistry {
 }
 
 /**
+ * Reuses the persisted login session so a restart does not ask for the password
+ * again. The server stays authoritative: a refusal drops the persisted token and
+ * the user simply signs in again. A refusal that is not the server's — a locked
+ * credential file, a helper that died — must not delete the session, so only the
+ * adopt call's failure does.
+ */
+export async function restoreUserSession(
+  credentials: {
+    loadUserSession: (serviceId: string) => Promise<
+      | {
+          token: string
+          expiresAt: number
+        }
+      | undefined
+    >
+    removeUserSession: (serviceId: string) => Promise<void>
+  },
+  session: {
+    accounts: {
+      hasSession: (serviceId: string) => boolean
+      adoptPersistedSession: (
+        serviceId: string,
+        token: string,
+        expiresAt: number,
+        signal: AbortSignal
+      ) => Promise<unknown>
+    }
+  },
+  serviceId: string,
+  signal: AbortSignal
+): Promise<void> {
+  if (session.accounts.hasSession(serviceId)) return
+  const persisted = await credentials.loadUserSession(serviceId).catch(() => undefined)
+  if (!persisted) return
+  try {
+    await session.accounts.adoptPersistedSession(
+      serviceId,
+      persisted.token,
+      persisted.expiresAt,
+      signal
+    )
+  } catch {
+    await credentials.removeUserSession(serviceId).catch(() => undefined)
+  }
+}
+
+/**
  * Writes a failure the product cannot explain next to the records this shell owns.
  *
  * The surface only shows typed codes, so a failure that is not a named refusal used

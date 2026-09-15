@@ -146,7 +146,10 @@ func (client *Client) WithDevice(device Device, private ed25519.PrivateKey, auth
 }
 
 func (client *Client) Identity(ctx context.Context, pinnedKey ed25519.PublicKey) (Identity, error) {
-	nonce := protocol.NewID()
+	// A challenge, not an id: the shell refuses an identity whose nonce is not
+	// the thirty-two character challenge shape, so minting this from the id
+	// generator made every first registration fail its own readback.
+	nonce := protocol.NewNonce()
 	var value Identity
 	if err := client.call(ctx, "POST", "/v1/identity", "", struct {
 		Nonce string `json:"nonce"`

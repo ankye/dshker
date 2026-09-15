@@ -9,6 +9,7 @@ import {
 export const p2pManagement: P2PManagementApi = Object.freeze({
   enable: (request) => ipcRenderer.invoke(channels.enable, request),
   catalog: (request) => ipcRenderer.invoke(channels.catalog, request),
+  resetCatalog: (request) => ipcRenderer.invoke(channels.resetCatalog, request),
   addService: (request) => ipcRenderer.invoke(channels.addService, request),
   login: (request) => ipcRenderer.invoke(channels.login, request),
   register: (request) => ipcRenderer.invoke(channels.register, request),

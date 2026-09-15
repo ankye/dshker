@@ -5,6 +5,7 @@ export const P2P_MANAGEMENT_VERSION = 1 as const
 export const P2P_MANAGEMENT_CHANNELS = {
   enable: 'dsh-launcher:p2p:enable',
   catalog: 'dsh-launcher:p2p:catalog',
+  resetCatalog: 'dsh-launcher:p2p:catalog-reset',
   addService: 'dsh-launcher:p2p:add-service',
   login: 'dsh-launcher:p2p:login',
   register: 'dsh-launcher:p2p:register',
@@ -303,6 +304,8 @@ interface RevisionRequest extends ServiceRequest {
 export interface P2PManagementInputs {
   enable: Record<never, never>
   catalog: Record<never, never>
+  /** Discards a catalog this build cannot read and starts an empty one. */
+  resetCatalog: Record<never, never>
   addService: P2PServiceInput & { revision: string }
   login: ServiceRequest & { username: string; password: string }
   register: ServiceRequest & { email: string; password: string }
@@ -403,6 +406,7 @@ export interface P2PManagementInputs {
 export interface P2PManagementResults {
   enable: P2PCatalogView
   catalog: P2PCatalogView | null
+  resetCatalog: P2PCatalogView
   addService: P2PCatalogView
   login: P2PUserView
   register: P2PUserView
@@ -488,6 +492,7 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.catalog_conflict',
   'p2p.catalog_exists',
   'p2p.catalog_incomplete',
+  'p2p.catalog_intact',
   'p2p.catalog_invalid',
   'p2p.catalog_unavailable',
   'p2p.catalog_write_failed',

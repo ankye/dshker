@@ -36,6 +36,7 @@ const fingerprint = ['1111', '2222', '3333'].join(' ')
 const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   enable: {},
   catalog: {},
+  resetCatalog: {},
   addService: {
     revision,
     displayName: 'Home',
@@ -157,6 +158,7 @@ function fixture() {
   const owner = {
     enable: vi.fn(async () => snapshot),
     catalog: vi.fn(async () => snapshot),
+    resetCatalog: vi.fn(async () => snapshot),
     addService: vi.fn(async () => snapshot),
     login: vi.fn(async () => user),
     register: vi.fn(async () => user),

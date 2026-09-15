@@ -76,6 +76,7 @@ export function registerPeerManagementIpc(
     const saved = await owner.catalog()
     return saved === undefined ? null : projectPeerCatalog(saved)
   })
+  register('resetCatalog', true, async () => projectPeerCatalog(await owner.resetCatalog()))
   register('addService', true, async (r, s) =>
     projectPeerCatalog(
       await owner.addService(

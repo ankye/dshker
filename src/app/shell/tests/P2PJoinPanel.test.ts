@@ -333,6 +333,67 @@ describe('P2P 「我的网络」 card', () => {
   })
 
   /**
+   * A record written by an older release cannot be read by any operation, so a
+   * retry can never succeed. The card must say what happened, warn that nothing is
+   * deleted, and offer the one act that works — discarding it and starting over.
+   */
+  it('offers to discard a catalog this build cannot read', async () => {
+    const catalog = vi
+      .fn<P2PManagementApi['catalog']>()
+      .mockResolvedValue({ ok: false, code: 'p2p.catalog_invalid', message: 'invalid' })
+    const resetCatalog = vi
+      .fn<P2PManagementApi['resetCatalog']>()
+      .mockResolvedValue({ ok: true, data: { ...saved, services: [] } })
+    const addService = vi
+      .fn<P2PManagementApi['addService']>()
+      .mockResolvedValue({ ok: true, data: saved })
+    const localDevice = vi.fn<P2PManagementApi['localDevice']>().mockResolvedValue({
+      ok: true,
+      data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
+    })
+    window.dshLauncher = {
+      p2pManagement: {
+        catalog,
+        resetCatalog,
+        addService,
+        localDevice,
+        serviceSessions: sessionReader()
+      }
+    } as unknown as DesktopApi
+    const component = (await import('../components/P2PJoinPanel.vue')).default
+    wrapper = mount(component)
+    await flushPromises()
+    const error = wrapper.get('[data-testid="p2p-catalog-error"]')
+    expect(error.text()).toContain('p2p.catalog_invalid')
+    expect(wrapper.get('[data-testid="p2p-catalog-unreadable"]').text()).toContain('不会被自动删除')
+    const discard = wrapper.get('[data-testid="p2p-catalog-discard"]')
+    await discard.trigger('click')
+    await flushPromises()
+    expect(resetCatalog).toHaveBeenCalledTimes(1)
+    // The user gets a working page: the fresh catalog is provisioned, not left empty.
+    expect(addService).toHaveBeenCalledTimes(1)
+  })
+
+  /** A failure a discard cannot repair must keep the plain retry. */
+  it('keeps the retry when the catalog failure is not an unreadable record', async () => {
+    const catalog = vi
+      .fn<P2PManagementApi['catalog']>()
+      .mockResolvedValue({ ok: false, code: 'p2p.catalog_unavailable', message: 'unavailable' })
+    const localDevice = vi.fn<P2PManagementApi['localDevice']>().mockResolvedValue({
+      ok: true,
+      data: { deviceId: 'local-device-a'.padEnd(32, 'a'), name: 'My mac' }
+    })
+    window.dshLauncher = {
+      p2pManagement: { catalog, localDevice, serviceSessions: sessionReader() }
+    } as unknown as DesktopApi
+    const component = (await import('../components/P2PJoinPanel.vue')).default
+    wrapper = mount(component)
+    await flushPromises()
+    expect(wrapper.find('[data-testid="p2p-catalog-discard"]').exists()).toBe(false)
+    expect(wrapper.get('[data-testid="p2p-catalog-error"]').find('button').exists()).toBe(true)
+  })
+
+  /**
    * A device id can be bound to more than one account, and the account stored in
    * the local credential is only the one the machine first enrolled under. So the
    * coordinator's own list for the signed-in account decides whether the machine

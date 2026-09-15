@@ -92,6 +92,7 @@ func TestServiceIdentityNoncePinAndCertificateBinding(t *testing.T) {
 	}
 	var client *Client
 	var corrupt atomic.Bool
+	var challenge string
 	client = testClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var request struct {
 			Nonce string `json:"nonce"`
@@ -100,6 +101,7 @@ func TestServiceIdentityNoncePinAndCertificateBinding(t *testing.T) {
 			t.Error("invalid request")
 			return
 		}
+		challenge = request.Nonce
 		value := Identity{Version: 1, ServiceID: protocol.KeyID(public), PublicKey: public, Certificate: der, Nonce: request.Nonce, HTTPSOrigin: client.endpoints.HTTPSOrigin, WSSURL: client.endpoints.WSSURL, STUNAddress: client.endpoints.STUNAddress}
 		if corrupt.Load() {
 			value.Nonce = protocol.NewID()
@@ -111,6 +113,12 @@ func TestServiceIdentityNoncePinAndCertificateBinding(t *testing.T) {
 	identity, err := client.Identity(context.Background(), public)
 	if err != nil || identity.ServiceID != protocol.KeyID(public) {
 		t.Fatalf("valid signed identity readback failed: %v", err)
+	}
+	// The shell refuses any service identity whose challenge is not the
+	// thirty-two character shape, and the readback never reaches it otherwise:
+	// the challenge is the client's own, so its shape is asserted here.
+	if !protocol.ValidNonce(challenge) {
+		t.Fatalf("identity challenge is not a nonce: %q", challenge)
 	}
 	other, _, _ := ed25519.GenerateKey(rand.Reader)
 	if _, err = client.Identity(context.Background(), other); err == nil {

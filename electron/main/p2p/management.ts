@@ -13,7 +13,7 @@ import type { PeerPairMember } from './pair-records'
 import { PeerRemoteProjects } from './remote-projects'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
 import { recordMembers, remoteSide } from './member-catalog'
-import { diagnoseShellFailure, PeerSessionRegistry } from './session-registry'
+import { diagnoseShellFailure, PeerSessionRegistry, restoreUserSession } from './session-registry'
 
 /** Refusals that mean this machine holds no authorized pair for the service. */
 const UNAUTHORIZED_MEMBER_CODES = new Set(['p2p.pair_unauthorized', 'p2p.device_unauthorized'])
@@ -297,6 +297,19 @@ export class PeerManagement {
     this.#admit()
     return this.#catalog.enable()
   }
+
+  /**
+   * Discards a catalog this build cannot read and starts an empty one.
+   *
+   * The record is otherwise undroppable: every catalog operation re-validates it,
+   * removal of a single service included. Nothing else is touched, and the
+   * unreadable files are kept beside the new one.
+   */
+  async resetCatalog() {
+    this.#admit()
+    return this.#catalog.reset()
+  }
+
   async catalog() {
     this.#admit()
     return this.#catalog.inspect()
@@ -308,14 +321,9 @@ export class PeerManagement {
   /**
    * This machine's local device identity.
    *
-   * The device id is the machine's own key id: the core keeps one device key
-   * beside its data root, and every registration, member list and pair on every
-   * account refers to this machine by that key's id. It is therefore read from
-   * the key rather than minted here — an id invented for display looked like an
-   * identifier but named a device the coordinator, the network and every peer had
-   * never seen, so it could not be copied into a member list or compared with
-   * anything. The name defaults to the OS hostname so the identity is readable
-   * before any network is joined.
+   * Read from the machine key, not minted here: an invented id looked like an
+   * identifier but named a device nothing else had seen. Details in
+   * `.agents/notes/2026-09-15-one-device-id-per-machine.md`.
    */
   async localDevice(signal: AbortSignal) {
     this.#admit()
@@ -583,19 +591,7 @@ export class PeerManagement {
     session: Session,
     signal: AbortSignal
   ): Promise<void> {
-    if (session.accounts.hasSession(serviceId)) return
-    const persisted = await this.#credentials.loadUserSession(serviceId).catch(() => undefined)
-    if (!persisted) return
-    try {
-      await session.accounts.adoptPersistedSession(
-        serviceId,
-        persisted.token,
-        persisted.expiresAt,
-        signal
-      )
-    } catch {
-      await this.#credentials.removeUserSession(serviceId).catch(() => undefined)
-    }
+    return restoreUserSession(this.#credentials, session, serviceId, signal)
   }
 
   /**

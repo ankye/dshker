@@ -61,10 +61,55 @@ export class PeerCatalog {
   }
 
   enable(): Promise<PeerCatalogSnapshot> {
+    return this.#serialize(() => this.#create())
+  }
+
+  /**
+   * Discards a catalog this build cannot read and starts an empty one.
+   *
+   * A record written by an older identity scheme cannot be read, migrated or
+   * even removed: inspection, commit and service removal all re-validate
+   * strictly, so a machine that upgraded keeps a configuration it can neither
+   * use nor drop, and no operation in the product can repair it. Discarding is
+   * then the only way forward, and it stays an explicit act: both files are moved
+   * aside under a stamped name — never deleted, because an unreadable record is
+   * still the user's only copy — and a catalog that reads cleanly is refused
+   * outright, so this can never become a quiet way to erase working
+   * configuration.
+   */
+  reset(): Promise<PeerCatalogSnapshot> {
     return this.#serialize(async () => {
-      const routed = await this.#onCore((port) => port.enable())
-      return routed === UNSERVED ? this.#enableLocal() : routed
+      const parent = await this.#parent()
+      const record = join(parent, 'p2p-devices.json')
+      const marker = join(parent, 'p2p-enabled.json')
+      const [recordThere, markerThere] = await Promise.all([exists(record), exists(marker)])
+      // Nothing stored: the plain first enable already produces this state.
+      if (!recordThere && !markerThere) return this.#create()
+      if (recordThere && markerThere && (await this.#readsCleanly(parent)))
+        throw new PeerHelperError('p2p.catalog_intact')
+      const stamp = legacyStamp()
+      for (const [file, present] of [
+        [record, recordThere],
+        [marker, markerThere]
+      ] as const) {
+        if (present) await moveAside(file, `${file}.legacy-${stamp}`)
+      }
+      return this.#create()
     })
+  }
+
+  /** Creates the first, empty catalog through the core, or on the file. */
+  async #create(): Promise<PeerCatalogSnapshot> {
+    const routed = await this.#onCore((port) => port.enable())
+    return routed === UNSERVED ? this.#enableLocal() : routed
+  }
+
+  /** Whether the stored pair is a catalog this build can actually use. */
+  async #readsCleanly(parent: string): Promise<boolean> {
+    return this.#read(parent).then(
+      () => true,
+      () => false
+    )
   }
 
   /** Main workflows must authorize their named mutation before calling commit. */
@@ -248,6 +293,27 @@ async function exists(path: string): Promise<boolean> {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false
     throw new PeerHelperError('p2p.catalog_unavailable')
   }
+}
+
+/**
+ * Keeps a file this build cannot read beside the fresh one.
+ *
+ * The stamp is readable on purpose: the user (or a later build that can read the
+ * old scheme) has to be able to find it by hand. A name already taken gets a
+ * short suffix, because two discards inside one second must not fail the second.
+ */
+async function moveAside(file: string, preferred: string): Promise<void> {
+  let target = preferred
+  for (let attempt = 0; attempt < 4 && (await exists(target)); attempt += 1) {
+    target = `${preferred}-${randomBytes(2).toString('hex')}`
+  }
+  await rename(file, target).catch(() => {
+    throw new PeerHelperError('p2p.catalog_write_failed')
+  })
+}
+
+function legacyStamp(): string {
+  return new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
 }
 async function readRecord(path: string): Promise<string> {
   const info = await lstat(path)

@@ -40,6 +40,15 @@ const reads = new Set<Operation>([
   'registration'
 ])
 
+/**
+ * Operations that describe this machine as a whole rather than one service.
+ *
+ * They carry no `serviceId`, so the default scope would put them in the catalog's
+ * slot — and they mount beside the catalog card, where a success would erase the
+ * catalog's own failure. Each therefore owns its scope.
+ */
+const MACHINE_SCOPED = new Set<Operation>(['localDevice', 'connections', 'serviceSessions'])
+
 /** Domain owner survives route changes. No password, token or request body enters state. */
 export class P2PManagementDomain {
   /**
@@ -101,7 +110,7 @@ export class P2PManagementDomain {
   /** Mirrors the scope `run` derives, so a queued read waits on the right one. */
   #scopeOf<K extends Operation>(method: K, input: P2PManagementInputs[K]): string {
     const fields = { ...input }
-    if (method === 'localDevice' || method === 'connections') return method
+    if (MACHINE_SCOPED.has(method)) return method
     return 'serviceId' in fields ? String(fields.serviceId) : 'catalog'
   }
 
@@ -111,14 +120,17 @@ export class P2PManagementDomain {
   ): Promise<P2PDomainResult<K>> {
     // These contracts contain primitives only. Preserve exactly what was submitted.
     const fields = { ...input }
-    // Pure machine reads without a service (localDevice, connections) must not
-    // collide with the catalog-scoped operations, so they use their own scope.
-    const scope =
-      method === 'localDevice' || method === 'connections'
-        ? method
-        : 'serviceId' in fields
-          ? String(fields.serviceId)
-          : 'catalog'
+    // Reads about this machine as a whole carry no service and must not land in
+    // the catalog's slot: serviceSessions and connections are read by a status
+    // line and a panel that mount beside the catalog card, and a successful one
+    // overwrote the catalog's failure with its own state — which is how a failed
+    // read came to be shown as "nothing read yet", with no code and no retry that
+    // could ever succeed.
+    const scope = MACHINE_SCOPED.has(method)
+      ? method
+      : 'serviceId' in fields
+        ? String(fields.serviceId)
+        : 'catalog'
     if (this.busy(scope))
       return { ok: false, code: 'p2p.service_busy', message: 'p2p.service_busy' }
     const requestId = nextRequestId()
@@ -192,6 +204,24 @@ export class P2PManagementDomain {
   async enable(): Promise<void> {
     const result = await this.run('enable', {})
     if (result.ok) this.catalog.value = result.data
+  }
+
+  /**
+   * Discards a catalog this build cannot read, then provisions again.
+   *
+   * The read failure is what the user is looking at, so the fresh catalog is
+   * recorded here and the built-in server is provisioned immediately: leaving the
+   * page on "nothing read yet" after a successful discard would ask the user to
+   * do again what the reset just did. A refusal to discard (the catalog reads
+   * cleanly) is left in the operation state for the panel to show.
+   */
+  async resetCatalog(): Promise<void> {
+    const result = await this.run('resetCatalog', {})
+    if (!result.ok) return
+    this.catalog.value = result.data
+    this.builtinProvisioned.value = false
+    this.builtinRemoved.value = false
+    await this.ensureBuiltinService()
   }
 
   async addService(): Promise<void> {

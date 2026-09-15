@@ -73,6 +73,7 @@
     "p2pManagement.remoteRoots()",
     "p2pManagement.removeService()",
     "p2pManagement.renameNetwork()",
+    "p2pManagement.resetCatalog()",
     "p2pManagement.revokePair()",
     "p2pManagement.serviceSessions()",
     "p2pManagement.submitEnrollment()",

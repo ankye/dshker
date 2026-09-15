@@ -48,6 +48,20 @@ const catalogError = computed(() =>
 const catalogLoading = computed(
   () => catalog.value === undefined && catalogOperation.value?.phase === 'pending'
 )
+/**
+ * Whether the failure is one a discard can repair.
+ *
+ * A stored record this build cannot read — an identity scheme from an older
+ * release, or half of the pair missing — leaves every catalog operation refused,
+ * including the removal of a single service, so retrying can never succeed and
+ * the only way forward is to discard it. Every other failure (an unreachable
+ * bridge, a write that did not land) must keep the plain retry: discarding
+ * configuration would not fix it and would destroy records that are still good.
+ */
+const catalogUnreadable = computed(
+  () =>
+    catalogError.value === 'p2p.catalog_invalid' || catalogError.value === 'p2p.catalog_incomplete'
+)
 const registration = computed(() => enrollmentState.value?.registration)
 const joining = computed(
   () => operation.value?.method === 'joinNetwork' && operation.value?.phase === 'pending'
@@ -180,6 +194,20 @@ async function retryProvision(): Promise<void> {
   if (id && !management.busy(id)) void enrollment.read(id)
 }
 
+/**
+ * Discards a catalog this build cannot read, then provisions the built-in server.
+ *
+ * The device key and the saved credentials are untouched, so this costs the user
+ * a fresh registration, not a new device identity; the unreadable files stay on
+ * disk beside the new one.
+ */
+async function discardCatalog(): Promise<void> {
+  await management.readLocalDevice()
+  await management.resetCatalog()
+  const id = serviceId.value
+  if (id && !management.busy(id)) void enrollment.read(id)
+}
+
 /** Seeds the device name once per service so an empty draft never reaches a join. */
 function ensureNameDraft(): void {
   const state = enrollmentState.value
@@ -275,10 +303,24 @@ async function leave(): Promise<void> {
       </div>
     </div>
 
-    <p v-if="catalogError" role="alert" class="remote-error" data-testid="p2p-catalog-error">
-      {{ t('p2p.myNetwork.catalogReadFailed') }}
+    <div v-if="catalogError" role="alert" class="remote-error" data-testid="p2p-catalog-error">
+      <p>{{ t('p2p.myNetwork.catalogReadFailed') }}</p>
       <code>{{ catalogError }}</code>
+      <p v-if="catalogUnreadable" data-testid="p2p-catalog-unreadable">
+        {{ t('p2p.myNetwork.catalogUnreadable') }}
+      </p>
       <button
+        v-if="catalogUnreadable"
+        class="prototype-button"
+        type="button"
+        :disabled="catalogLoading"
+        data-testid="p2p-catalog-discard"
+        @click="discardCatalog"
+      >
+        {{ t('p2p.myNetwork.catalogDiscard') }}
+      </button>
+      <button
+        v-else
         class="prototype-button"
         type="button"
         :disabled="catalogLoading"
@@ -286,7 +328,7 @@ async function leave(): Promise<void> {
       >
         {{ t('p2p.myNetwork.retry') }}
       </button>
-    </p>
+    </div>
     <p v-else-if="catalogLoading" role="status" data-testid="p2p-catalog-loading">
       {{ t('p2p.myNetwork.catalogLoading') }}
     </p>

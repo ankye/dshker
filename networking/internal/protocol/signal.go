@@ -30,6 +30,25 @@ func NewID() string {
 
 func ValidID(value string) bool { return identifier.MatchString(value) }
 
+// nonceShape is the shape of a challenge nonce: sixteen bytes, hex encoded.
+//
+// A nonce is not an identifier. The client picks it, the coordinator echoes it
+// and signs the echo, and the shell refuses a service identity whose nonce is
+// not this shape — so it keeps its own length the way a secret does, instead of
+// following the twelve-character id it used to be minted from.
+var nonceShape = regexp.MustCompile(`^[a-f0-9]{32}$`)
+
+// NewNonce mints a fresh challenge nonce for the service identity handshake.
+func NewNonce() string {
+	value := make([]byte, 16)
+	if _, err := rand.Read(value); err != nil {
+		panic(err) // A predictable challenge is no challenge.
+	}
+	return hex.EncodeToString(value)
+}
+
+func ValidNonce(value string) bool { return nonceShape.MatchString(value) }
+
 // KeyID derives the stable twelve-character id of a public key.
 func KeyID(public ed25519.PublicKey) string {
 	digest := sha256.Sum256(public)

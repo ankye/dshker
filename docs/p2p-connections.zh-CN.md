@@ -243,11 +243,21 @@ STUN 通过只能证明本机能通过 UDP 到达服务器，**不能**证明两
 | `p2p.catalog_conflict`                               | 记录已被其他操作更改。重新读取后再应用你的修改。你的输入会被保留。 |
 | `p2p.service_not_found` / `p2p.connection_not_found` | 目标记录不存在，通常是已被移除。重新读取列表。                     |
 
+### 本机配置当前版本读不了
+
+| 错误码                   | 含义与处理                                                                                                                       |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `p2p.catalog_invalid`    | 本机保存的记录当前版本读不了，通常是旧版本写入的（那时 id 还是别的长度）。**它既不是空的，也没有丢**：卡片上会提供「丢弃」操作。 |
+| `p2p.catalog_incomplete` | 两个文件只剩了一个，没有可用记录。卡片上提供同样的丢弃操作。                                                                     |
+| `p2p.catalog_intact`     | 请求丢弃的是一份能正常读取的记录，因此被拒绝，什么都没删。                                                                       |
+
+丢弃是唯一能修复这两种状态的操作：其它所有目录操作（包括只删掉一个服务器）都会重新校验保存的记录，所以升级上来的机器既用不了这份配置、也删不掉它。连接卡片会显示错误码，明确说明不会自动删除任何东西，并提供 **丢弃无法读取的配置并重新开始**。两个文件随后会以 `p2p-devices.json.legacy-<时间戳>`、`p2p-enabled.json.legacy-<时间戳>` 的形式留在同一目录，设备密钥和已保存的登录不受影响，内置服务器会重新写入并自动就绪——这台电脑会重新登记一次，而不会变成另一台设备。
+
 ### 存储与内部错误
 
 这些通常意味着环境问题或缺陷，遇到请把完整错误发我：
 
-`p2p.catalog_invalid`、`p2p.catalog_incomplete`、`p2p.catalog_unavailable`、
+`p2p.catalog_unavailable`、
 `p2p.catalog_write_failed`、`p2p.catalog_exists`、`p2p.credential_invalid`、
 `p2p.credential_unavailable`、`p2p.credential_write_failed`、
 `p2p.credential_create_failed`、`p2p.credential_conflict`、
