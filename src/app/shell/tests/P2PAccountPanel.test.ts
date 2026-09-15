@@ -158,7 +158,7 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(refreshDirectory).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps identity and editing details collapsed while exposing a scannable network row', async () => {
+  it('shows the network id outright while the account identity stays folded away', async () => {
     const ui = await render({
       currentUser: async () => ({ ok: true, data: user }),
       networks: async () => ({ ok: true, data: [network] })
@@ -166,12 +166,18 @@ describe('P2P account public controls (component diagnostics)', () => {
     const row = ui.get('.p2p-network-row')
     expect(row.text()).toContain('Office')
     expect(row.text()).toContain('10 台')
+    // The row itself stays scannable: the id is not in the collapsed summary.
     expect(row.text()).not.toContain(network.networkId)
+    // The account's technical identity is still a disclosure, and closed.
     expect(ui.get('.p2p-account-identity details').attributes('open')).toBeUndefined()
     expect(ui.get('.p2p-network-toggle').attributes('aria-expanded')).toBe('false')
-    expect(ui.get('.p2p-network-editor .p2p-technical-details code').text()).toBe(network.networkId)
     await ui.get('.p2p-network-toggle').trigger('click')
     expect(ui.get('.p2p-network-toggle').attributes('aria-expanded')).toBe('true')
+    // Once the row is open the id is shown outright, not behind a second
+    // disclosure, and carries its own copy control.
+    expect(ui.get('[data-testid="p2p-network-id"]').text()).toBe(network.networkId)
+    expect(ui.find('.p2p-network-editor details').exists()).toBe(false)
+    expect(ui.find('.p2p-network-identity button').exists()).toBe(true)
     expect(ui.get('.p2p-network-editor-body').isVisible()).toBe(true)
     expect(ui.get('.p2p-network-create').attributes('open')).toBeUndefined()
     expect(ui.findAll('.p2p-network-row button')).toHaveLength(0)

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.46 — 2026-09-15
+
+- **The network ID is shown outright.** It sat behind a "network technical
+  details" disclosure, which put the one value a user opens the row to copy — the
+  ID another machine joins by, and the ID support asks for — one click deeper than
+  everything around it. The row now shows the label, the ID and its copy button on
+  one line, with the explanation below. The account's own technical ID stays a
+  disclosure; the machine's is not what this row is for.
+
 ## 0.1.45 — 2026-09-15
 
 - **The Connect page stops asking the server a question it already has an answer

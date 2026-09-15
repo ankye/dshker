@@ -16,7 +16,7 @@ export const zhCNP2P = {
   'p2p.account.notSelected': '未选择',
   'p2p.account.manageNetwork': '管理网络',
   'p2p.account.manageHint': '名称、设备上限与删除',
-  'p2p.account.networkDetails': '网络技术信息',
+  'p2p.account.networkId': '网络 ID',
   'p2p.account.networkIdHint': '网络 ID 是此网络的唯一标识，用于技术排查；同名网络也有不同的 ID。',
   'p2p.enrollment.title': '本机登记与恢复',
   'p2p.enrollment.description': '查看此服务的本机凭据，或核对中断的登记。私钥始终留在本机。',
@@ -322,7 +322,7 @@ export const enUSP2P: Record<keyof typeof zhCNP2P, string> = {
   'p2p.account.notSelected': 'Not selected',
   'p2p.account.manageNetwork': 'Manage network',
   'p2p.account.manageHint': 'Name, device limit and deletion',
-  'p2p.account.networkDetails': 'Network technical details',
+  'p2p.account.networkId': 'Network ID',
   'p2p.account.networkIdHint':
     'The network ID uniquely identifies this network for troubleshooting. Networks with the same name still have different IDs.',
   'p2p.enrollment.title': 'Local enrollment and recovery',

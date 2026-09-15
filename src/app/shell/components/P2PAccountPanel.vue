@@ -462,14 +462,18 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
                     </button>
                   </div>
                 </div>
-                <details class="p2p-technical-details">
-                  <summary>{{ t('p2p.account.networkDetails') }}</summary>
-                  <p>{{ t('p2p.account.networkIdHint') }}</p>
-                  <!-- The network id is what another machine joins by, so it carries
-                       its own copy control rather than being selected by hand. -->
-                  <code>{{ network.networkId }}</code>
+                <!-- The network id is what another machine joins by and what
+                     support asks for, so it is shown outright with its own copy
+                     control: a disclosure in front of it made the one value a
+                     reader came for the only value they had to go looking for. -->
+                <div class="p2p-network-identity">
+                  <span class="p2p-network-identity-label">{{ t('p2p.account.networkId') }}</span>
+                  <code class="p2p-network-identity-value" data-testid="p2p-network-id">{{
+                    network.networkId
+                  }}</code>
                   <CopyPathButton :value="network.networkId" />
-                </details>
+                </div>
+                <p class="p2p-network-identity-hint">{{ t('p2p.account.networkIdHint') }}</p>
                 <div class="p2p-network-danger">
                   <span>{{ t('p2p.account.deleteWarning') }}</span>
                   <button
@@ -798,6 +802,31 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
 }
 .p2p-technical-details code {
   display: block;
+}
+/* The network id reads as a labelled value rather than as prose: its label, the
+   id and the copy control sit on one line, and the explanation follows it. */
+.p2p-network-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-network-identity-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-network-identity-value {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--type-body);
+  user-select: all;
+}
+.p2p-network-identity-hint {
+  margin-block: var(--space-1) 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
 }
 .p2p-account summary {
   cursor: pointer;
