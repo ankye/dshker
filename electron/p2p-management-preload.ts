@@ -1,8 +1,10 @@
 import { ipcRenderer } from 'electron'
 import {
+  P2P_CATALOG_CHANGED_CHANNEL,
   P2P_DIRECTORY_CHANGED_CHANNEL,
   P2P_MANAGEMENT_CHANNELS as channels,
   P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
+  type P2PCatalogChangedPayload,
   type P2PDirectoryChangedPayload,
   type P2PManagementApi
 } from '../src/shared/p2p-management'
@@ -63,6 +65,14 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
     ipcRenderer.on(P2P_DIRECTORY_CHANGED_CHANNEL, onChanged)
     return () => {
       ipcRenderer.removeListener(P2P_DIRECTORY_CHANGED_CHANNEL, onChanged)
+    }
+  },
+  onCatalogChange: (listener: (payload: P2PCatalogChangedPayload) => void): (() => void) => {
+    const onChanged = (_event: unknown, payload: P2PCatalogChangedPayload): void =>
+      listener(payload)
+    ipcRenderer.on(P2P_CATALOG_CHANGED_CHANNEL, onChanged)
+    return () => {
+      ipcRenderer.removeListener(P2P_CATALOG_CHANGED_CHANNEL, onChanged)
     }
   },
   cancel: (request) => ipcRenderer.invoke(channels.cancel, request)

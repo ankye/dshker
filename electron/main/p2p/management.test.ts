@@ -70,7 +70,7 @@ function fixture() {
     { networkId, userId: user.userId, name: 'Work', maxDevices: 10 },
     { networkId: otherNetworkId, userId: user.userId, name: 'Other', maxDevices: 10 }
   ]
-  vi.spyOn(PeerCatalog.prototype, 'inspect').mockImplementation(async () => ({
+  const inspect = vi.spyOn(PeerCatalog.prototype, 'inspect').mockImplementation(async () => ({
     revision: 'f'.repeat(64),
     record: structuredClone(record)
   }))
@@ -156,6 +156,7 @@ function fixture() {
     attach,
     detach,
     commit,
+    inspect,
     removeService,
     activate,
     clearAccounts,
@@ -164,7 +165,9 @@ function fixture() {
     record: () => record,
     unavailable: () => unavailable(),
     directoryChanged: (payload: unknown) =>
-      handler!('directory.changed', payload, new AbortController().signal)
+      handler!('directory.changed', payload, new AbortController().signal),
+    catalogChanged: (payload: unknown) =>
+      handler!('catalog.changed', payload, new AbortController().signal)
   }
 }
 
@@ -394,74 +397,33 @@ describe('bringing enrolled services online at startup', () => {
     expect(f.call.mock.calls.map(([method]) => method)).toContain('pairs.adopt')
   })
 
-  it('builds the catalog from the pair identities, not the keyless device directory', async () => {
-    // The network device directory deliberately withholds credential material, so
-    // a catalog built from it skipped every member and stayed empty even though
-    // the pair existed. The only place this device is handed the peer's real key
-    // is pairs.identity, so the catalog must come from the pairs.
+  it('answers the recorded pairs from the catalog without reading the coordinator', async () => {
+    // The core reads the coordinator's pairs on its own maintenance loop, pins them
+    // and records them, so rendering the pairing list must not put a coordinator
+    // read back on the product. A row the core has recorded as revoked is no
+    // longer an authorization, so it is not offered as a pair the menu can open.
     const f = fixture()
-    enrolled()
-    await f.owner.login(serviceId, user.username, 'test-password', new AbortController().signal)
-    const remoteDeviceId = '4'.repeat(12)
-    const remoteKey = Buffer.alloc(32, 2).toString('base64')
-    const pairId = '7'.repeat(12)
-    const pairRecord = {
-      pairId,
-      networkId,
-      initiator: deviceId,
-      target: remoteDeviceId,
-      state: 'active',
-      revision: 1,
-      expiresAt: 0
-    }
-    const identity = {
-      pair: pairRecord,
-      initiator: {
-        deviceId,
-        userId: user.userId,
-        publicKey,
-        name: 'This machine',
-        presence: 'online'
-      },
-      target: {
-        deviceId: remoteDeviceId,
-        userId: user.userId,
-        publicKey: remoteKey,
-        name: 'Remote',
-        presence: 'online'
-      }
-    }
-    let listed: unknown[] = []
-    f.call.mockImplementation(async (method: string) => {
-      if (method === 'user.current') return user
-      if (method === 'device.restore') return { deviceId }
-      if (method === 'pairs.list') return listed
-      if (method === 'pairs.identity') return identity
-      if (method === 'pairs.pin') return {}
-      throw new PeerHelperError('p2p.invalid_operation')
+    f.record().computers.push({
+      ...f.record().computers[0],
+      connectionId: '9'.repeat(12),
+      pairId: '9'.repeat(12),
+      pairState: 'revoked'
     })
-    // Nothing paired yet: the directory is never consulted and nothing appears.
-    expect(await f.owner.pairs(serviceId, new AbortController().signal)).toEqual([])
-    expect(f.call.mock.calls.map(([method]) => method)).not.toContain('networks.devices')
-    // The coordinator now reports the pair, and its identity carries the key.
-    listed = [pairRecord]
     const result = await f.owner.pairs(serviceId, new AbortController().signal)
-    // The connection id is the TARGET DEVICE ID, because that is what the
-    // coordinator keys an attempt by; the pairs-table row id is not it.
-    expect(result.map((pair) => pair.pairId)).toEqual([remoteDeviceId])
-    expect(
-      f
-        .record()
-        .computers.map((computer) => [
-          computer.connectionId,
-          computer.pairId,
-          computer.remoteDeviceId,
-          computer.remotePublicKey,
-          computer.pairState
-        ])
-    ).toEqual([[remoteDeviceId, remoteDeviceId, remoteDeviceId, remoteKey, 'active']])
-    // The restored device starts with no pins, so the pair is re-pinned.
-    expect(f.call.mock.calls.map(([method]) => method)).toContain('pairs.pin')
+    expect(result.map((pair) => pair.state)).toEqual(['active', 'active'])
+    expect(result.map((pair) => pair.pairId)).toEqual(['2'.repeat(12), '6'.repeat(12)])
+    // Nothing is asked of the core's channel: no session, no pairs.list, no pin.
+    expect(f.call).not.toHaveBeenCalled()
+    expect(f.attach).not.toHaveBeenCalled()
+    expect(f.runtimeStart).not.toHaveBeenCalled()
+  })
+
+  it('refuses a pre-cancelled pairs read without touching the catalog', async () => {
+    const f = fixture()
+    await expect(f.owner.pairs(serviceId, AbortSignal.abort())).rejects.toMatchObject({
+      code: 'p2p.request_cancelled'
+    })
+    expect(f.inspect).not.toHaveBeenCalled()
   })
 
   it('stays online when adoption is refused', async () => {
@@ -583,6 +545,21 @@ describe('formal P2P management composition', () => {
     unsubscribe()
     await f.directoryChanged({ serviceId, revision: 5 })
     expect(seen).toEqual([serviceId])
+  })
+
+  it('announces the core catalog revision to subscribers and stops when released', async () => {
+    const f = await loggedIn()
+    const seen: { serviceId: string; revision: string }[] = []
+    const unsubscribe = f.owner.onCatalogChange((changedServiceId, revision) =>
+      seen.push({ serviceId: changedServiceId, revision })
+    )
+    expect(await f.catalogChanged({ serviceId, revision: 'a'.repeat(64) })).toEqual({})
+    expect(seen).toEqual([{ serviceId, revision: 'a'.repeat(64) }])
+    // A released subscriber is not told again: the push channel is the only signal
+    // that the paired computers the renderer listed are no longer the core's.
+    unsubscribe()
+    await f.catalogChanged({ serviceId, revision: 'b'.repeat(64) })
+    expect(seen).toEqual([{ serviceId, revision: 'a'.repeat(64) }])
   })
 
   it('projects the core directory and marks this machine from the registered credential', async () => {

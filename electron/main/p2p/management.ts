@@ -5,11 +5,10 @@ import { PeerAccounts } from './accounts'
 import { PeerCatalog } from './catalog'
 import { peerPartition } from './partitions'
 import { PeerConnections } from './connections'
-import { PeerCredentialStore, type PeerCredential } from './credentials'
+import { PeerCredentialStore } from './credentials'
 import { PeerDeviceViews } from './device-views'
 import { PeerEnrollment } from './enrollment'
 import { enrollWhenMissing } from './enrollment-bootstrap'
-import { PeerMemberSync } from './member-sync'
 import { PeerPairing } from './pairing'
 import { PeerRemoteProjects } from './remote-projects'
 import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
@@ -64,8 +63,6 @@ export class PeerManagement {
   readonly #selection: P2PSelectionStore
   /** The device directories the renderer reads, so the local marker has one source. */
   readonly #devices: PeerDeviceViews
-  /** The repeatable catalog rewrite of the coordinator's network members. */
-  readonly #members: PeerMemberSync
   /**
    * Listeners told when the core announces a new directory revision.
    *
@@ -73,13 +70,20 @@ export class PeerManagement {
    * that already rendered a list has to be told rather than left to poll.
    */
   readonly #directoryListeners = new Set<(serviceId: string) => void>()
+  /**
+   * Listeners told when the core announces a new catalog revision.
+   *
+   * The paired computers are the core's now: it re-reads the coordinator's pairs
+   * on its own maintenance loop and pins them, so nothing the shell renders can
+   * learn that a computer appeared or went away unless it is told.
+   */
+  readonly #catalogListeners = new Set<(serviceId: string, revision: string) => void>()
 
   constructor(options: Options) {
     this.#resolveSettingsRoot = options.resolveSettingsRoot
     this.#selection = new P2PSelectionStore({ resolveSettingsRoot: options.resolveSettingsRoot })
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot, options.catalog)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot, options.secrets)
-    this.#members = new PeerMemberSync(this.#catalog, this.#credentials, this.#lifetime.signal)
     this.#devices = new PeerDeviceViews(
       (serviceId, signal, operation) => this.#account(serviceId, signal, operation),
       async (serviceId) => {
@@ -104,6 +108,12 @@ export class PeerManagement {
       // see a new device list otherwise.
       onDirectoryChange: (serviceId) => {
         for (const listener of this.#directoryListeners) listener(serviceId)
+      },
+      // The core announces a catalog revision for the same reason: it owns the
+      // paired computers, so a Run menu that already listed them cannot see a
+      // computer that was paired on another machine otherwise.
+      onCatalogChange: (serviceId, revision) => {
+        for (const listener of this.#catalogListeners) listener(serviceId, revision)
       }
     })
     // An active pair is meant to be connected. Nothing about which tab the user
@@ -232,14 +242,31 @@ export class PeerManagement {
   }
 
   /**
+   * Notifies when the core's paired-computer catalog for a service moves.
+   *
+   * Separate from `onDirectoryChange` because the two describe different lists: a
+   * directory revision says the coordinator's device list changed, while a catalog
+   * revision says which computers are paired and authorized changed — a machine on
+   * the network without a pair is in the first and not the second. The revision
+   * travels with the service so a listener can ignore a repeat of a snapshot it
+   * has already read.
+   */
+  onCatalogChange(listener: (serviceId: string, revision: string) => void): () => void {
+    this.#catalogListeners.add(listener)
+    return () => {
+      this.#catalogListeners.delete(listener)
+    }
+  }
+
+  /**
    * Re-establishes any service that is not currently online.
    *
    * A session is not self-healing: the coordinator can drop it, the network can
    * change, or the machine can wake from sleep, and nothing in the one-shot
    * startup pass would notice. Only services that are already offline are
-   * retried, so an online service's session is never disturbed by the sweep;
-   * an online service only has its network membership re-synced, because that
-   * can change while the session itself stays up.
+   * retried, so an online service's session is never disturbed by the sweep.
+   * Nothing else has to be re-synced here: the core re-reads the coordinator's
+   * members on its own loop and announces the result.
    *
    * Failure is per service and never escapes: an unreachable coordinator leaves
    * the app usable and simply offline, exactly as at startup.
@@ -274,14 +301,9 @@ export class PeerManagement {
     if (!snapshot) return
     for (const service of snapshot.record.services) {
       if (this.#lifetime.signal.aborted) return
-      if (this.#sessions.find(service.serviceId)?.state === 'online') {
-        // The session staying up does not mean membership stood still: a machine
-        // can join the network while this one is already online. Refresh the
-        // catalog the Run tabs read so the list converges without a restart.
-        if (this.#session)
-          await this.#refreshMembers(service.serviceId, this.#session, this.#lifetime.signal)
-        continue
-      }
+      // A session that stayed up needs nothing from this sweep: the catalog of
+      // paired computers is the core's, and the core re-reads it on its own.
+      if (this.#sessions.find(service.serviceId)?.state === 'online') continue
       try {
         await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
         this.#sessions.record(service.serviceId, 'online', '')
@@ -498,12 +520,10 @@ export class PeerManagement {
     await this.#account(serviceId, signal, (accounts, active) =>
       accounts.unbindDevice(serviceId, networkId, deviceId, active)
     )
-    // The coordinator invalidates this device's pairs in the same transaction, so
-    // the catalog is re-recorded right here. Waiting for the next sweep leaves the
-    // dead pair as a row the user is expected to delete by hand -- which is what
-    // the catalog is meant to make unnecessary.
-    const session = await this.#ready(signal)
-    await this.#refreshMembers(serviceId, session, this.#signal(signal))
+    // The coordinator invalidates this device's pairs in the same transaction, and
+    // the core's own maintenance pass records that as a revocation. Nothing here
+    // re-reads it: the shell no longer holds a pairs read, and asking for one would
+    // put a coordinator round trip back on a page action.
   }
   async accountSelection(serviceId: string, userId: string) {
     return this.#selection.remembered(serviceId, userId)
@@ -528,9 +548,9 @@ export class PeerManagement {
    * Ready session with the enrolled device restored into the helper.
    *
    * Pairing, connections and remote browsing all speak as the enrolled device, but
-   * nothing restored the saved credential after enrollment, so every pairs.* call
-   * failed with device_unregistered. Restoring is idempotent: the helper refusing
-   * a second restore counts as restored.
+   * nothing restored the saved credential after enrollment, so those calls failed
+   * with device_unregistered. Restoring is idempotent: the helper refusing a
+   * second restore counts as restored.
    */
   async #readyAsDevice(serviceId: string, signal: AbortSignal): Promise<Session> {
     const session = await this.#ready(signal)
@@ -559,7 +579,8 @@ export class PeerManagement {
                 certificate: saved.credential.certificate
               },
               privateKey: saved.credential.privateKey,
-              // Pins come from live network membership, synced right after restore.
+              // Pins are the core's: its own catalog pass re-pins every active
+              // pair into this session, so a restore hands over none.
               pins: []
             }
           },
@@ -573,7 +594,6 @@ export class PeerManagement {
         throw error
     }
     this.#restored.add(serviceId)
-    await this.#refreshMembers(serviceId, session, this.#signal(signal), saved.credential)
     return session
   }
 
@@ -622,32 +642,18 @@ export class PeerManagement {
   }
 
   /**
-   * Re-records the coordinator's current network members into the catalog.
+   * Lists paired computers as the pairing surface.
    *
-   * Delegated to `PeerMemberSync`, which owns the repeatable sync and its
-   * best-effort refusal handling.
-   */
-  #refreshMembers(
-    serviceId: string,
-    session: Session,
-    signal: AbortSignal,
-    credential?: PeerCredential
-  ): Promise<void> {
-    return this.#members.refresh(serviceId, session.pairing, signal, credential)
-  }
-
-  /**
-   * Lists network members as the pairing surface.
-   *
-   * Trust is network membership: every bound device appears as an active member
-   * offering a direct connection, rather than an invite flow. Membership is
-   * re-synced from the coordinator on every read, because the catalog it projects
-   * is otherwise only written once per helper lifetime and a machine that joins
-   * later would never reach the Run tabs.
+   * Trust is a pair the coordinator has authorized, and that decision is already
+   * recorded: the core reads the coordinator's pairs on its own maintenance loop,
+   * pins them and writes the catalog, then announces the change. So this is a
+   * read of the snapshot main already holds — no session is started and no
+   * coordinator read is made, because a list a page happens to render must never
+   * be the reason the machine talks to the server.
    */
   async pairs(serviceId: string, signal: AbortSignal) {
-    const session = await this.#readyAsDevice(serviceId, signal)
-    await this.#refreshMembers(serviceId, session, this.#signal(signal))
+    this.#admit()
+    if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
     const saved = await this.#catalog.inspect()
     if (!saved) throw new PeerHelperError('p2p.not_enabled')
     return saved.record.computers

@@ -317,6 +317,20 @@ core instead of each page reading the server and keeping its own copy. **Refresh
 list** beside the list asks the core to read the server again right now, which is
 only needed if you do not want to wait for the next read.
 
+### The paired-computer list
+
+The list the Run tab offers — the computers this one may connect to — has the same
+single owner for the same reason. The core reads the server's pairings on that same
+30-second interval, after anything that can change them (joining or leaving a
+network, binding or unbinding a device, approving, revoking or adopting a pairing),
+pins each active pairing, and records the result. When it changes, the core tells
+the window, so a computer paired elsewhere appears in the list while the list is
+open rather than the next time it is opened.
+
+Which is why opening the Run tab no longer asks the server anything: it reads what
+the core already holds, and a page that is never opened cannot leave the list out
+of date.
+
 | Code                                            | Meaning and what to do                                                                                                                                 |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `p2p.user_login_required`                       | Nothing is signed in on this server, so there is nothing to maintain or show. Sign in; the list follows the account that is signed in here.            |

@@ -242,6 +242,9 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	if secrets != nil {
 		host.SetDeviceKeys(secrets)
 	}
+	if server.Catalog != nil {
+		host.SetCatalog(server.Catalog)
+	}
 	if *rootsPath != "" {
 		roots, err := loadRoots(*rootsPath)
 		if err != nil {

@@ -31,7 +31,11 @@ type Host struct {
 	// credential: see machineDeviceKey.
 	deviceKeys secret.Store
 	deviceKey  ed25519.PrivateKey
-	closed     bool
+	// catalog is the store this machine's paired computers are recorded in. It
+	// belongs to the core and the pairing half lives here, so the record is written
+	// where the pairs are read. See members.go.
+	catalog catalogStore
+	closed  bool
 }
 type account struct {
 	mu        sync.Mutex
@@ -48,6 +52,9 @@ type account struct {
 	// directory is this account's single snapshot of the coordinator's device
 	// directory. See directory.go.
 	directory directory
+	// catalogRevision is the last catalog revision announced for this account, so a
+	// pass that found the same pairs does not announce anything.
+	catalogRevision string
 }
 type scopedRequest struct {
 	ServiceID string          `json:"serviceId"`
@@ -250,6 +257,9 @@ func (host *Host) manage(ctx context.Context, account *account, method string, d
 	if directoryChangesOn(method) {
 		account.refreshAfterWrite()
 	}
+	if catalogChangesOn(method) {
+		account.refreshCatalogAfterWrite()
+	}
 	return result, nil
 }
 
@@ -259,6 +269,21 @@ func directoryChangesOn(method string) bool {
 	switch method {
 	case "devices.bind", "devices.unbind", "network.leave", "network.join",
 		"networks.create", "networks.delete", "pairs.adopt":
+		return true
+	}
+	return false
+}
+
+// catalogChangesOn reports whether a successful operation can change which pairs
+// the coordinator authorizes. Leaving a network invalidates its pairs in the same
+// transaction, and an approval or a revocation changes one directly, so the
+// recorded computers are re-read after those rather than waiting for the next
+// maintenance interval to notice.
+func catalogChangesOn(method string) bool {
+	switch method {
+	case "devices.bind", "devices.unbind", "network.leave", "network.join",
+		"networks.create", "networks.delete", "networks.deletePair",
+		"pairs.adopt", "pairs.action", "pairs.invite":
 		return true
 	}
 	return false
@@ -320,8 +345,10 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 	host.accounts[identity.ServiceID] = &account{base: base, identity: identity, endpoints: request.Endpoints, host: host}
 	// The directory is maintained for as long as the account exists: once the
 	// shell hands over a user session, the core keeps the list current on its own
-	// instead of waiting for a page to be opened.
+	// instead of waiting for a page to be opened. The catalog of paired computers
+	// is maintained the same way, from the pairs the same account reads.
 	go host.accounts[identity.ServiceID].maintainDirectory(host.ctx)
+	go host.accounts[identity.ServiceID].maintainCatalog(host.ctx)
 	return identity, nil
 }
 

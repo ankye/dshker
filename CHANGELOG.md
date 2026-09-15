@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.48 — 2026-09-15
+
+- **The paired-computer list looks after itself.** Which computers you may connect
+  to was rebuilt whenever a page asked for it: the Run tab read the server's
+  pairings, pinned them and rewrote the stored list, so a computer paired elsewhere
+  appeared only the next time that menu was opened, and a list nobody opened could
+  stay wrong. The core now does that work on its own — on the same 30-second
+  interval it already uses for the network device list, and immediately after
+  anything that can change a pairing (joining or leaving a network, binding or
+  unbinding a device, approving, revoking or adopting one) — and tells the window
+  when the list changes. A computer paired elsewhere appears while the list is
+  open; leaving a network drops its computer right away instead of up to half a
+  minute later.
+- Opening the Run tab no longer asks the server anything: it reads what the core
+  already holds.
+
 ## 0.1.47 — 2026-09-15
 
 - **A window that vanishes now says why.** When a renderer, a GPU or utility

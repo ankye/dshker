@@ -269,6 +269,65 @@ describe('RuntimeTabsPanel rendering controls', () => {
     ).not.toBeNull()
   })
 
+  /**
+   * The core reads the coordinator's pairs on its own maintenance loop, so a
+   * computer paired on another machine reaches this menu only through the catalog
+   * announcement it subscribes to. Before that, the menu had to be closed and
+   * reopened before the new computer appeared.
+   */
+  it('lists a computer paired elsewhere while the menu stays open', async () => {
+    const added: P2PComputerView = {
+      ...peerComputer,
+      connectionId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+      displayName: '新配对的 Mac',
+      pairId: '33333333333333333333333333333333'
+    }
+    const view = {
+      revision: 'a'.repeat(64),
+      catalogId: 'd'.repeat(12),
+      services: [
+        {
+          serviceId: peerComputer.serviceId,
+          displayName: 'DSHKer 服务器',
+          httpsOrigin: 'https://my.ffkey.com:8443',
+          wssUrl: 'wss://my.ffkey.com:8443/v1/signals',
+          stunAddress: 'my.ffkey.com:8443',
+          publicKey: 'pinned-key'
+        }
+      ],
+      computers: [peerComputer],
+      forgottenServiceIds: []
+    }
+    let announced: ((payload: { serviceId: string; revision: string }) => void) | undefined
+    installRuntimeApi({
+      p2pManagement: {
+        pairs: vi.fn(async () => ({ ok: true as const, data: [] })),
+        catalog: vi.fn(async () => ({ ok: true as const, data: structuredClone(view) })),
+        addService: vi.fn(),
+        onCatalogChange: (listener: (payload: { serviceId: string; revision: string }) => void) => {
+          announced = listener
+          return () => {
+            announced = undefined
+          }
+        }
+      }
+    })
+    p2pManagement.catalog.value = undefined
+    const wrapper = await mountRunningPanel()
+    await wrapper.get('[data-testid="runtime-add-tab"]').trigger('click')
+    await flushPromises()
+    const selector = '[data-testid="runtime-add-peer-eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"]'
+    expect(getAddMenu().querySelector(selector)).toBeNull()
+
+    // The core records the new pair on another machine and announces the catalog.
+    view.computers = [peerComputer, added]
+    announced?.({ serviceId: peerComputer.serviceId, revision: 'b'.repeat(64) })
+    await flushPromises()
+
+    expect(getAddMenu().querySelector(selector)).not.toBeNull()
+    wrapper.unmount()
+  })
+
   it('lists unopened LAN and SSH computers, then creates only the chosen tab', async () => {
     remoteConnectionsState.value = {
       connections: [

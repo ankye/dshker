@@ -26,6 +26,9 @@ export interface P2PPairingState {
  */
 export class P2PPairingDomain {
   readonly #states = reactive<Record<string, P2PPairingState>>({})
+  #unsubscribe: (() => void) | undefined
+  /** The coordinator whose catalog announcements this domain currently follows. */
+  #serviceId: string | undefined
   constructor(private readonly management: P2PManagementDomain) {}
 
   state(serviceId: string): P2PPairingState {
@@ -48,11 +51,39 @@ export class P2PPairingDomain {
       const state = this.state(serviceId)
       state.pairs = result.data
       state.resultUnconfirmed = false
-      // The main-side pairs read also synchronises the coordinator's current
-      // members into its catalog. Refresh that projection so the shell's fixed
-      // Run tabs reflect the same authoritative list immediately.
+      // The pairs above are projected from main's catalog snapshot, and the shell's
+      // fixed Run tabs read the catalog itself rather than the pairing list. Refresh
+      // that projection too, so both surfaces show the same recorded computers.
       await this.management.readCatalog()
     }
+  }
+
+  /**
+   * Follows the catalog changes the core announces.
+   *
+   * The core reads the coordinator's pairs on its own maintenance loop now, so
+   * nothing here triggers that read: without the subscription a computer paired on
+   * another machine would only appear after the menu was closed and reopened, and
+   * which computers this machine may open is exactly what the menu lists.
+   */
+  subscribe(serviceId: string): void {
+    // The menu can switch coordinators. Only an announcement for the one it now
+    // shows is worth re-reading; one for a stale service is ignored rather than
+    // answered with a read nobody asked for.
+    this.#serviceId = serviceId
+    if (this.#unsubscribe !== undefined) return
+    const api = window.dshLauncher?.p2pManagement
+    if (api?.onCatalogChange === undefined) return
+    this.#unsubscribe = api.onCatalogChange((event) => {
+      if (event.serviceId !== this.#serviceId) return
+      void this.read(event.serviceId)
+    })
+  }
+
+  /** Releases the subscription; used by tests and by the component on unmount. */
+  stop(): void {
+    this.#unsubscribe?.()
+    this.#unsubscribe = undefined
   }
 
   /** Loads full identities so the user can compare a real fingerprint. */

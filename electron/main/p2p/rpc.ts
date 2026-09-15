@@ -7,7 +7,11 @@ import {
   type PeerFrame
 } from './wire'
 
-export type PeerMainMethod = 'runtime.connect' | 'peer.state' | 'directory.changed'
+export type PeerMainMethod =
+  | 'runtime.connect'
+  | 'peer.state'
+  | 'directory.changed'
+  | 'catalog.changed'
 export type PeerMainHandler = (
   method: PeerMainMethod,
   payload: unknown,
@@ -127,7 +131,8 @@ export class PeerRpc {
     if (
       frame.method !== 'runtime.connect' &&
       frame.method !== 'peer.state' &&
-      frame.method !== 'directory.changed'
+      frame.method !== 'directory.changed' &&
+      frame.method !== 'catalog.changed'
     ) {
       this.#write({ ...frame, method: '', payload: {}, error: 'p2p.invalid_operation' })
       return

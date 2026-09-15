@@ -2,6 +2,7 @@ import { EventEmitter } from 'node:events'
 import type { IpcMainInvokeEvent } from 'electron'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  P2P_CATALOG_CHANGED_CHANNEL,
   P2P_DIRECTORY_CHANGED_CHANNEL,
   P2P_MANAGEMENT_CHANNELS as channels,
   P2P_SERVICE_SESSIONS_CHANGED_CHANNEL,
@@ -331,6 +332,33 @@ describe('P2P named management admission', () => {
     // Only the service travels: the renderer re-reads the rows through the
     // admitted operation rather than trusting a pushed projection.
     expect(live).toHaveBeenCalledWith(P2P_DIRECTORY_CHANGED_CHANNEL, { serviceId })
+    expect(destroyed).not.toHaveBeenCalled()
+    mocks.windows = []
+  })
+
+  it('pushes a catalog change with its service and revision to every live window only', async () => {
+    const { owner } = fixture()
+    const listeners: ((serviceId: string, revision: string) => void)[] = []
+    registerPeerManagementIpc(owner as unknown as PeerManagementOwner, undefined, undefined, {
+      onCatalogChange: (listener) => {
+        listeners.push(listener)
+        return () => undefined
+      }
+    })
+    expect(listeners).toHaveLength(1)
+    // Registered at startup like the other two, so it must never look like a
+    // dispatched operation.
+    for (const handler of Object.values(owner)) expect(handler).not.toHaveBeenCalled()
+    const live = vi.fn()
+    const destroyed = vi.fn()
+    mocks.windows = [
+      { isDestroyed: () => false, webContents: { send: live } },
+      { isDestroyed: () => true, webContents: { send: destroyed } }
+    ]
+    listeners[0]?.(serviceId, revision)
+    // The announcement travels as the core stated it: the renderer re-reads the
+    // computers through the admitted operation rather than trusting a pushed set.
+    expect(live).toHaveBeenCalledWith(P2P_CATALOG_CHANGED_CHANNEL, { serviceId, revision })
     expect(destroyed).not.toHaveBeenCalled()
     mocks.windows = []
   })

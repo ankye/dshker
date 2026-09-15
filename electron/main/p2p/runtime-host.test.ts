@@ -79,10 +79,13 @@ function fixture() {
     }
   }
   const directories: string[] = []
+  const catalogs: { serviceId: string; revision: string }[] = []
   const host = new PeerRuntimeHost({
     channel,
     catalog,
     onDirectoryChange: (changedServiceId) => directories.push(changedServiceId),
+    onCatalogChange: (changedServiceId, revision) =>
+      catalogs.push({ serviceId: changedServiceId, revision }),
     runtime: {
       getRuntimeState: () => launch,
       onRuntimeState: (listener) => {
@@ -105,12 +108,14 @@ function fixture() {
     start,
     listeners,
     directories,
+    catalogs,
     set: (value: LauncherHarnessLaunchView) => {
       launch = value
       for (const listener of listeners) listener(value)
     },
     emit: (value: unknown) => handler!('peer.state', { serviceId, state: value }, signal()),
     directoryChanged: (payload: unknown) => handler!('directory.changed', payload, signal()),
+    catalogChanged: (payload: unknown) => handler!('catalog.changed', payload, signal()),
     connect: (payload: unknown = { serviceId, pairId }, requestSignal = signal()) =>
       handler!('runtime.connect', payload, requestSignal),
     unavailable: (error: PeerHelperError) => {
@@ -314,5 +319,36 @@ describe('formal main P2P runtime ownership', () => {
     ])
       await expect(f.directoryChanged(payload)).rejects.toThrow()
     expect(f.directories).toEqual([serviceId, serviceId])
+  })
+
+  it('routes a well-formed catalog change and refuses a malformed one', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    const revision = 'a'.repeat(64)
+    expect(await f.catalogChanged({ serviceId, revision })).toEqual({})
+    expect(f.catalogs).toEqual([{ serviceId, revision }])
+    // The catalog is the account's, not a pair's: a service with no computer left
+    // still has a recorded set worth re-reading.
+    f.record.computers.length = 0
+    const second = 'b'.repeat(64)
+    await f.catalogChanged({ serviceId, revision: second })
+    expect(f.catalogs).toEqual([
+      { serviceId, revision },
+      { serviceId, revision: second }
+    ])
+    // A payload outside the core's vocabulary is refused rather than coerced: an
+    // unknown id shape, a revision that is not the record's own hash, a missing
+    // field or an extra one.
+    for (const payload of [
+      { serviceId: 'A'.repeat(12), revision },
+      { serviceId: serviceId.slice(0, 11), revision },
+      { serviceId, revision: second.toUpperCase() },
+      { serviceId, revision: 'abc' },
+      { serviceId, revision: 4 },
+      { serviceId },
+      { serviceId, revision, extra: true }
+    ])
+      await expect(f.catalogChanged(payload)).rejects.toThrow()
+    expect(f.catalogs).toHaveLength(2)
   })
 })

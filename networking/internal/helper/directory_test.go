@@ -87,7 +87,7 @@ func (recorder *announceRecorder) Call(_ context.Context, method string, payload
 	recorder.mu.Lock()
 	recorder.calls = append(recorder.calls, method)
 	recorder.mu.Unlock()
-	if method == "directory.changed" {
+	if method == "directory.changed" || method == "catalog.changed" {
 		encoded, err := json.Marshal(payload)
 		if err != nil {
 			return nil, err

@@ -261,6 +261,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       directory: unusedP2P,
       refreshDirectory: unusedP2P,
       onDirectoryChange: () => () => undefined,
+      onCatalogChange: () => () => undefined,
       updateServiceConfig: unusedP2P,
       remoteRoots: unusedP2P,
       remoteDirectory: unusedP2P,

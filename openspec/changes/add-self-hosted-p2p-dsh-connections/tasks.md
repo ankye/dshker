@@ -12,14 +12,27 @@ launcher root 就绪时立即安装，把每次意外死亡写进 `logs/main-fau
 关闭、被停止的进程都不写，**空文件即正常状态**，已在 `docs/usage.zh-CN.md` / `docs/usage.en.md`
 写明。
 
-下一步（记录，尚未实施）：目录已归 core，但**catalog 里的 computers（已配对电脑）仍由 shell 同步**
-——`PeerMemberSync` 在读 `pairs.list`、给每个 active pair 重新 pin，再改写 catalog；触发点是页面
-（运行页添加菜单打开时、shell 启动时）而不是 core 自己。这留下了同类的最后一个「页面触发协调器读取」
-路径。收尾方案：把「读 pairs → pin → 记录 catalog computers」整段搬进 core（它已经拥有 catalog store
-与 peer session 的 pin 表），按 core 自己的维护节奏执行并在内容变化时发一个 `catalog.changed` 回调；
-届时 `p2pPairing.read` 的同步副作用与 `member-sync.ts`/`member-catalog.ts` 一并删除，运行页添加菜单
-只读 catalog 快照，任何页面都不再触发协调器读取。难点是 `recordMembers` 的迁移规则（revoked 行先
-retire 再记录、身份连续性守卫）必须在 Go 侧逐条对齐，并有对应测试。
+已配对的电脑列表也归 core（2026-09-15，0.1.48）：最后一条「页面触发协调器读取」路径已消除。此前
+`PeerMemberSync` 由页面触发——运行页添加菜单每次打开都会读 `pairs.list`、给每个 active pair 重新 pin、
+再改写 catalog——所以别处刚配好的电脑要等下次打开菜单才出现，没人打开的列表可以一直错着。现在
+`networking/internal/helper/members.go` 在 core 自己的维护节奏里（与目录同一条 30 秒轮次，外加任何
+可能改变配对的操作之后立即执行：加入/退出网络、绑定/解绑设备、新建/删除网络或配对、批准、撤销、
+邀请、认领）读 pairs 与每个 pair 的 identity、pin 生效配对、并写入它本来就拥有的 catalog。记录规则
+是原样搬运而非重写：仅接受 active 且 revision > 0；本机不是该 pair 的本地端就跳过；把自己当对端的
+行一律丢弃（否则每次重写都会存活）；每个对端只留一行；服务器不再携带的行记成 **revoked** 而不是删除
+（删除生效中的电脑正是 catalog 转移守卫要拒绝的静默丢失），而重新被授权的连接必须先在单独一次提交里
+retire（守卫同样拒绝一步复活 revoked 行）——这两条正是过去让两台机器互相卡在旧身份上的原因。
+内容变化时 core 发 `catalog.changed {serviceId, revision}`（revision 就是 catalog 自己的 revision，
+记录不变时 store 的提交是 no-op，因此同一份配对不会重复通告）。shell 侧
+`member-sync.ts`/`member-catalog.ts`/`#refreshMembers`/`PeerPairing.members`/`PeerPairing.pin`/
+`PeerPairing.list` 及只服务它们的 pair-record 辅助一并删除，`pairs()` 改为直接过滤 catalog 快照
+（无会话、无协调器调用、不启动 runtime）；渲染进程新增 `P2P_CATALOG_CHANGED_CHANNEL` 推送与
+`onCatalogChange` 订阅。证据：`members_test.go` 六例（记录生效配对、revoked 后删除、retire 后再记录、
+自对端与本地密钥不符两种丢弃、每个对端一行且保留其他服务、每次 revision 只通告一次、触发方法清单）
+均在**真实** `catalog.Store` 上运行以真正触发转移守卫；`management.test.ts` 的「不再读协调器」、
+`runtime-host.test.ts` 的负载校验、`p2pPairing.test.ts` 的订阅与 `RuntimeTabsPanel.test.ts` 的
+「菜单保持打开时出现新配对电脑」。有意保留：订阅是单槽的（与 enrollment 域一致），出现第二个消费者
+时应改为共享/计数订阅而不是让两个组件互相取消。
 
 固定端口不再被自己的遗留工作台卡死（2026-09-15，0.1.44）：端口预检本来就是「认出是自己上次启动的
 DSH Web 就停掉旧的再启新的」（`PreparePortForLaunch` → `PortCleared`），但它依赖的命令行识别规则

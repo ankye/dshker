@@ -183,11 +183,13 @@ function close(): void {
 function toggle(): void {
   if (open.value) close()
   else {
-    // Paired computers are main's catalog, which main syncs from the coordinator.
-    // The Run tab is reachable without ever opening a P2P page, and relying on one
-    // of those pages to have read it left this menu claiming there was nothing to
-    // add while the coordinator already held an active pair. Asking for the pairs
-    // both re-syncs main's catalog and re-reads it here, on every open.
+    // Paired computers are the core's catalog, which the core keeps current from
+    // the coordinator on its own maintenance loop. The Run tab is reachable without
+    // ever opening a P2P page, and relying on one of those pages to have read it
+    // left this menu claiming there was nothing to add while the coordinator already
+    // held an active pair. Reading on every open still keeps the menu honest after a
+    // write this document made; a computer paired elsewhere arrives through the
+    // catalog announcement the component subscribes to.
     void refreshPeers()
     updateMenuPosition()
     open.value = true
@@ -203,13 +205,24 @@ async function refreshPeers(): Promise<void> {
   await p2pManagement.ensureBuiltinService()
   const serviceId =
     p2pManagement.selectedServiceId.value ?? p2pManagement.catalog.value?.services[0]?.serviceId
-  if (serviceId !== undefined) await p2pPairing.read(serviceId)
+  if (serviceId === undefined) return
+  // Subscribing to the coordinator being shown is what makes a newly paired
+  // computer appear while this menu stays open.
+  p2pPairing.subscribe(serviceId)
+  await p2pPairing.read(serviceId)
 }
 
 onMounted(() => {
   // The list is what the trigger's own label summarises, so it is read before the
   // menu is opened rather than only when it is.
   void refreshPeers()
+})
+
+onUnmounted(() => {
+  // The pairing domain outlives this component, so its subscription to the core's
+  // announcements is released with the component that asked for it.
+  p2pPairing.stop()
+  removeGlobalListeners()
 })
 
 function select(id: RuntimeRemoteTabId): void {
@@ -241,8 +254,6 @@ function onEscape(event: KeyboardEvent): void {
   event.preventDefault()
   close()
 }
-
-onUnmounted(removeGlobalListeners)
 </script>
 
 <template>

@@ -202,7 +202,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | runtime   | `runtime.console`, `runtime.invalidate`, `runtime.port_get`, `runtime.port_set`, `runtime.start`, `runtime.status`, `runtime.stop`                                                                                                                                                                                | shell  |
 | service   | `service.configure`                                                                                                                                                                                                                                                                                               | shell  |
 | user      | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                                                                                                                      | shell  |
-| callback  | `runtime.connect`, `peer.state`, `directory.changed`                                                                                                                                                                                                                                                              | parent |
+| callback  | `runtime.connect`, `peer.state`, `directory.changed`, `catalog.changed`                                                                                                                                                                                                                                           | parent |
 
 The `core.*` group is the local state the core owns outright: its version, the
 device credential store, the device catalog, the managed-root registry (4.1) and
@@ -246,6 +246,23 @@ forwards to its renderer; a read that found the same devices sends nothing, so a
 list that did not change is not re-rendered. Signing out drops the session and the
 snapshot together, because one account's devices must never be shown under
 another's session.
+
+The catalog of paired computers is maintained the same way, and by the same owner.
+Each account reads the coordinator's pairs and every pair's identity on the same
+30-second interval, pins each active pair into its peer session, and records the
+result as the catalog's computers — the rules the shell used to apply when it did
+this work through `pairs.list`, `pairs.identity` and `pairs.pin`. A row the
+coordinator no longer carries is recorded as revoked rather than dropped, because
+dropping an active computer is what the catalog's transition guard refuses, and a
+connection authorized a second time is retired in a commit of its own before it is
+recorded again, because the guard refuses reviving a revoked row in one step.
+Whenever the record changes the core sends the parent-role `catalog.changed`
+callback with `{ "serviceId", "revision" }`, where the revision is the catalog's
+own — unchanged when the record did not, so a pass that found the same pairs
+announces nothing. This is what removes the last "a page has to open before a newly
+paired computer exists" path: `pairs.list`, `pairs.pin` and `pairs.identity` remain
+published for the shell's own pairing flows, but nothing has to call them to keep
+the computer list current.
 
 `core.install_catalog_inspect` and `core.install_catalog_commit` own the other
 document below that same `dsh-launcher` directory,
@@ -306,7 +323,8 @@ Two findings from writing this table down, both deliberate:
 1. The plan for task 1.2 expected **four** parent-role methods. The shipped
    dispatch admits **three** (`runtime.connect`, `peer.state` and
    `directory.changed`, the exact `PeerMainMethod` union in
-   `electron/main/p2p/rpc.ts`). `runtime.invalidate`,
+   `electron/main/p2p/rpc.ts`); a fourth, `catalog.changed`, joined them when the
+   core took over the paired-computer catalog. `runtime.invalidate`,
    `remote.roots` and `remote.directory` travel the other way, from the shell
    into the core. Design decision D7 still holds, because D7 is about which
    process answers them, not about who initiates.

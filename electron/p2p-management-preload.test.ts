@@ -16,15 +16,21 @@ describe('formal P2P preload capability surface', () => {
     const desktop = mocks.exposed.get('dshLauncher') as { p2pManagement: P2PManagementApi }
     expect(Object.isFrozen(desktop)).toBe(true)
     expect(Object.isFrozen(desktop.p2pManagement)).toBe(true)
-    // Exactly the named operations, plus the two subscriptions. Sessions and the
-    // directory are established/read after the window exists, so the renderer has
-    // to be told when either changes; neither carries a request and neither can
-    // invoke anything.
+    // Exactly the named operations, plus the three subscriptions. Sessions, the
+    // directory and the paired-computer catalog are established/read after the
+    // window exists, so the renderer has to be told when any of them changes;
+    // none carries a request and none can invoke anything.
     expect(Object.keys(desktop.p2pManagement).sort()).toEqual(
-      [...Object.keys(channels), 'onServiceSessionsChange', 'onDirectoryChange'].sort()
+      [
+        ...Object.keys(channels),
+        'onServiceSessionsChange',
+        'onDirectoryChange',
+        'onCatalogChange'
+      ].sort()
     )
     expect(typeof desktop.p2pManagement.onServiceSessionsChange).toBe('function')
     expect(typeof desktop.p2pManagement.onDirectoryChange).toBe('function')
+    expect(typeof desktop.p2pManagement.onCatalogChange).toBe('function')
     const response = { ok: false, code: 'p2p.invalid_request', message: 'p2p.invalid_request' }
     mocks.invoke.mockResolvedValue(response)
     for (const name of Object.keys(channels) as (keyof typeof channels)[]) {

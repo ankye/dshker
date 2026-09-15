@@ -43,6 +43,15 @@ interface Options {
    * way a device list the renderer already read learns that it moved.
    */
   onDirectoryChange?(serviceId: string): void
+  /**
+   * Reports a new revision of the core's paired-computer catalog for one service.
+   *
+   * Same reason as the directory: the core records the coordinator's pairs
+   * itself, so a Run menu that already listed the computers learns about a newly
+   * paired one only from here. The revision travels with the service because it
+   * is the core's own snapshot identity.
+   */
+  onCatalogChange?(serviceId: string, revision: string): void
 }
 
 /** Main composition owner. Nothing is started until an explicit P2P operation. */
@@ -136,6 +145,21 @@ export class PeerRuntimeHost {
       if (!Number.isSafeInteger(changed.revision) || (changed.revision as number) < 0)
         throw new PeerHelperError('p2p.invalid_payload')
       this.options.onDirectoryChange?.(changed.serviceId)
+      return {}
+    }
+    // A catalog revision is announced for the same reason as a directory one: a
+    // list main already handed to a page cannot see the computers the core has
+    // recorded since. Nothing is authorized here on purpose — this is an
+    // announcement, not a request, so it is not gated by `#authorize`; a page
+    // that acts on it re-reads through the admitted operation, which is.
+    if (method === 'catalog.changed') {
+      const changed = exactPeerObject(payload, ['serviceId', 'revision'])
+      assertAccountId(changed.serviceId, 12)
+      // The catalog's revision is the sha256 of the stored record, so anything
+      // else is a callback this shell cannot route.
+      if (typeof changed.revision !== 'string' || !/^[a-f0-9]{64}$/.test(changed.revision))
+        throw new PeerHelperError('p2p.invalid_payload')
+      this.options.onCatalogChange?.(changed.serviceId, changed.revision)
       return {}
     }
     const fields = exactPeerObject(

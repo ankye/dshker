@@ -522,6 +522,25 @@ export interface P2PDirectoryChangedPayload {
   serviceId: string
 }
 
+/**
+ * Push channel for catalog changes.
+ *
+ * Not an operation: it carries no request and is never admitted as one. The core
+ * owns the paired-computer catalog — it re-reads the coordinator's pairs on its
+ * own maintenance loop, pins them and records them — and announces a revision
+ * when the content moves, so a list the renderer already read is re-read instead
+ * of staying frozen until the page is reopened. The service and the revision
+ * travel together because the revision is the core's own snapshot identity: a
+ * listener can drop a repeat of one it has already read, and a listener showing
+ * another coordinator can ignore the announcement outright.
+ */
+export const P2P_CATALOG_CHANGED_CHANNEL = 'dsh-launcher:p2p:catalog-changed' as const
+
+export interface P2PCatalogChangedPayload {
+  serviceId: string
+  revision: string
+}
+
 export type P2PManagementApi = Readonly<
   {
     [K in P2PManagementOperation]: (
@@ -532,6 +551,8 @@ export type P2PManagementApi = Readonly<
     onServiceSessionsChange(listener: () => void): () => void
     /** Subscribes to directory changes; returns an unsubscribe function. */
     onDirectoryChange(listener: (payload: P2PDirectoryChangedPayload) => void): () => void
+    /** Subscribes to paired-computer catalog changes; returns an unsubscribe function. */
+    onCatalogChange(listener: (payload: P2PCatalogChangedPayload) => void): () => void
   }
 >
 

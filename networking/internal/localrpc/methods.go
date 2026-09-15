@@ -131,6 +131,9 @@ var Methods = []Method{
 	// Sent when the core's directory snapshot for a service changes, so a shell
 	// mirrors one maintained list instead of polling every list it renders.
 	{"directory.changed", RoleParent},
+	// Sent when the computers recorded for a service change, so the paired-computer
+	// list follows the coordinator without a page having to ask for it.
+	{"catalog.changed", RoleParent},
 }
 
 // Lookup reports the table entry for a method name.

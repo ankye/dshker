@@ -176,6 +176,12 @@ func run(parsed options) error {
 	if secrets != nil {
 		host.SetDeviceKeys(secrets)
 	}
+	// The paired-computer catalog is recorded where the pairs are read: the core
+	// owns the store and the pairing half of it, so no page has to open before a
+	// newly paired computer exists anywhere.
+	if server.Catalog != nil {
+		host.SetCatalog(server.Catalog)
+	}
 	// Explicit trust anchors for the coordinator, added to the machine's store.
 	// The shell passes none, so the app keeps refusing a server this machine does
 	// not already trust; a headless host that must reach a coordinator with a

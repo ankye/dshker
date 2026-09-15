@@ -59,6 +59,7 @@
     "p2pManagement.login()",
     "p2pManagement.logout()",
     "p2pManagement.networks()",
+    "p2pManagement.onCatalogChange()",
     "p2pManagement.onDirectoryChange()",
     "p2pManagement.onServiceSessionsChange()",
     "p2pManagement.pairIdentity()",

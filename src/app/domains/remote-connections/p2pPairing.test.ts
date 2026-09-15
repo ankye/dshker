@@ -1,4 +1,6 @@
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import type { DesktopApi } from '@/shared/contracts'
 import type { P2PManagementApi, P2PPairView } from '@/shared/p2p-management'
 import { P2PManagementDomain } from './p2pManagement'
 import { P2PPairingDomain } from './p2pPairing'
@@ -211,4 +213,74 @@ describe('renderer P2P pairing domain', () => {
     await pairing.revoke(serviceId, pairId)
     expect(pairing.state(serviceId).pairs?.[0]?.state).toBe('revoked')
   })
+
+  /**
+   * The core reads the coordinator's pairs on its own maintenance loop, so the
+   * announcement is the only thing that turns a computer paired on another machine
+   * into an openable row; without it the list stayed frozen until the menu was
+   * closed and reopened. An announcement for another coordinator is stale for the
+   * one on screen and is ignored rather than answered with a read nobody asked for.
+   */
+  it('re-reads the pairs when the core announces the shown catalog', async () => {
+    const { api, pairing } = setup()
+    const listener = installCatalogChange()
+    try {
+      pairing.subscribe(serviceId)
+      listener.fire({ serviceId: 'service-b', revision: 'b'.repeat(64) })
+      await flushPromises()
+      expect(api.pairs).not.toHaveBeenCalled()
+      listener.fire({ serviceId, revision: 'a'.repeat(64) })
+      await flushPromises()
+      expect(api.pairs).toHaveBeenCalledTimes(1)
+      expect(api.pairs).toHaveBeenLastCalledWith(expect.objectContaining({ serviceId }))
+      // The catalog projection is refreshed too, because the Run tab lists the
+      // computers from the catalog rather than from the pairing list.
+      expect(api.catalog).toHaveBeenCalledTimes(1)
+    } finally {
+      listener.restore()
+    }
+  })
+
+  it('releases the announcement subscription and re-arms on the next subscribe', async () => {
+    const { api, pairing } = setup()
+    const listener = installCatalogChange()
+    try {
+      pairing.subscribe(serviceId)
+      pairing.stop()
+      expect(listener.released()).toBe(true)
+      // A later mount subscribes again rather than assuming the old bridge
+      // subscription, which the release removed, is still live.
+      pairing.subscribe(serviceId)
+      listener.fire({ serviceId, revision: 'a'.repeat(64) })
+      await flushPromises()
+      expect(api.pairs).toHaveBeenCalledTimes(1)
+    } finally {
+      listener.restore()
+    }
+  })
 })
+
+/** Installs a catalog-change bridge on the window and returns a handle to it. */
+function installCatalogChange() {
+  const previous = window.dshLauncher
+  let listener: ((event: { serviceId: string; revision: string }) => void) | undefined
+  let released = false
+  window.dshLauncher = {
+    p2pManagement: {
+      onCatalogChange: (next: (event: { serviceId: string; revision: string }) => void) => {
+        listener = next
+        return () => {
+          released = true
+          listener = undefined
+        }
+      }
+    }
+  } as unknown as DesktopApi
+  return {
+    fire: (event: { serviceId: string; revision: string }) => listener?.(event),
+    released: () => released,
+    restore: () => {
+      window.dshLauncher = previous
+    }
+  }
+}
