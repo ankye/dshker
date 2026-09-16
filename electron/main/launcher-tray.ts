@@ -16,6 +16,14 @@ let tray: Tray | undefined
 let mainWindow: BrowserWindow | undefined
 let currentBehavior: CloseBehavior = DEFAULT
 let closeHandlerInstalled = false
+/**
+ * Set before a deliberate `app.quit()` from the tray or its context menu so the
+ * window close handler lets the quit through instead of hiding the window —
+ * without this flag a tray quit is caught by the minimise-to-tray handler, the
+ * window stays open, the app never exits, and the single-instance lock keeps a
+ * relaunch from working.
+ */
+let forceQuitting = false
 
 function prefsPath(): string {
   return nodePath.join(app.getPath('userData'), PREFS_FILE)
@@ -72,14 +80,18 @@ export function createTray(window: BrowserWindow): void {
 
   tray = new Tray(icon ?? nativeImage.createEmpty())
   tray.setToolTip('DSHKer Launcher')
-  tray.on('click', () => app.quit())
+  tray.on('click', () => quitApp())
 
   rebuildContextMenu()
 
   // Single close-handler that reads currentBehavior at event time.
+  // A deliberate quit from the tray or its context menu sets forceQuitting,
+  // so the window closes and the app exits; only a click on the window's own
+  // close button is intercepted by the minimise-to-tray behaviour.
   if (!closeHandlerInstalled) {
     closeHandlerInstalled = true
     window.on('close', (event) => {
+      if (forceQuitting) return
       if (currentBehavior === 'minimize-to-tray') {
         event.preventDefault()
         window.hide()
@@ -92,6 +104,12 @@ export function createTray(window: BrowserWindow): void {
 export function destroyTray(): void {
   tray?.destroy()
   tray = undefined
+}
+
+/** Quits the app from the tray (icon click or context menu). */
+function quitApp(): void {
+  forceQuitting = true
+  app.quit()
 }
 
 function rebuildContextMenu(): void {
