@@ -15,8 +15,9 @@ const t = useTranslator()
 const trayCloseBehavior = ref<'minimize-to-tray' | 'quit'>('minimize-to-tray')
 
 onMounted(async () => {
-  const trayApi = (window as unknown as { dshLauncher?: { tray?: { getCloseBehavior(): Promise<unknown> } } })
-    .dshLauncher?.tray
+  const trayApi = (
+    window as unknown as { dshLauncher?: { tray?: { getCloseBehavior(): Promise<unknown> } } }
+  ).dshLauncher?.tray
   if (trayApi) {
     const result = (await trayApi.getCloseBehavior()) as {
       ok: boolean
@@ -33,8 +34,11 @@ onMounted(async () => {
 
 async function updateTrayBehavior(behavior: 'minimize-to-tray' | 'quit'): Promise<void> {
   trayCloseBehavior.value = behavior
-  const trayApi = (window as unknown as { dshLauncher?: { tray?: { setCloseBehavior(b: string): Promise<unknown> } } })
-    .dshLauncher?.tray
+  const trayApi = (
+    window as unknown as {
+      dshLauncher?: { tray?: { setCloseBehavior(b: string): Promise<unknown> } }
+    }
+  ).dshLauncher?.tray
   if (trayApi) await trayApi.setCloseBehavior(behavior)
 }
 
@@ -258,7 +262,10 @@ const selectedLocale = computed<SupportedLocale>({
         </header>
         <div class="settings-section-body">
           <div class="settings-port-modes" role="radiogroup" :aria-label="t('settings.tray')">
-            <label class="settings-port-mode" :data-selected="trayCloseBehavior === 'minimize-to-tray'">
+            <label
+              class="settings-port-mode"
+              :data-selected="trayCloseBehavior === 'minimize-to-tray'"
+            >
               <input
                 v-model="trayCloseBehavior"
                 type="radio"

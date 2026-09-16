@@ -264,9 +264,11 @@ export const enUS: Record<MessageKey, string> = {
   'settings.language': 'Display language',
   'settings.language.hint': 'Applies to every surface as soon as it changes.',
   'settings.tray': 'Close behaviour',
-  'settings.tray.hint': 'When the window close button is pressed: minimise to the system tray, or quit the app.',
+  'settings.tray.hint':
+    'When the window close button is pressed: minimise to the system tray, or quit the app.',
   'settings.tray.minimize': 'Minimise to the system tray',
-  'settings.tray.minimize.description': 'The app keeps running in the background. Reopen or quit it from the tray icon.',
+  'settings.tray.minimize.description':
+    'The app keeps running in the background. Reopen or quit it from the tray icon.',
   'settings.tray.quit': 'Quit the app',
   'settings.tray.quit.description': 'Ends the app as soon as the close button is pressed.',
   'update.notice.title': 'A new DSHKer Launcher is available',

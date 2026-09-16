@@ -46,7 +46,9 @@ import {
   type UninstallLauncherHarnessPluginRequest,
   type DesktopApi,
   type ExternalLinkErrorCode,
-  type LauncherExternalLinkId
+  type LauncherExternalLinkId,
+  type TrayCloseBehavior,
+  type TrayCloseBehaviorView
 } from '../src/shared/contracts'
 
 const desktopApi: DesktopApi = Object.freeze({
@@ -254,11 +256,11 @@ const desktopApi: DesktopApi = Object.freeze({
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.pluginCatalogRefresh)
   }),
   tray: Object.freeze({
-    getCloseBehavior: (): Promise<ApiResult<{ closeBehavior: string }>> =>
+    getCloseBehavior: (): Promise<ApiResult<TrayCloseBehaviorView>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.trayGetCloseBehavior),
     setCloseBehavior: (
-      closeBehavior: string
-    ): Promise<ApiResult<{ closeBehavior: string }>> =>
+      closeBehavior: TrayCloseBehavior
+    ): Promise<ApiResult<TrayCloseBehaviorView>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.traySetCloseBehavior, closeBehavior)
   }),
   externalLinks: Object.freeze({

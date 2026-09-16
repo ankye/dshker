@@ -339,6 +339,14 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
         ok: true,
         data: undefined
       })
+    },
+    tray: {
+      getCloseBehavior: async (): Promise<
+        ApiResult<{ closeBehavior: 'minimize-to-tray' | 'quit' }>
+      > => apiOk({ closeBehavior: 'minimize-to-tray' }),
+      setCloseBehavior: async (): Promise<
+        ApiResult<{ closeBehavior: 'minimize-to-tray' | 'quit' }>
+      > => apiOk({ closeBehavior: 'minimize-to-tray' })
     }
   }
 }

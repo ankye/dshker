@@ -113,9 +113,7 @@ function rebuildContextMenu(): void {
       {
         label: toggleLabel,
         click: () =>
-          setCloseBehavior(
-            currentBehavior === 'minimize-to-tray' ? 'quit' : 'minimize-to-tray'
-          )
+          setCloseBehavior(currentBehavior === 'minimize-to-tray' ? 'quit' : 'minimize-to-tray')
       },
       { type: 'separator' },
       { label: '退出', click: () => app.quit() }

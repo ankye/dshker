@@ -9,6 +9,7 @@ import {
 
 export type PeerMainMethod =
   | 'runtime.connect'
+  | 'runtime.roots'
   | 'peer.state'
   | 'directory.changed'
   | 'catalog.changed'

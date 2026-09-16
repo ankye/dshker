@@ -69,6 +69,19 @@ export const DESKTOP_IPC_CHANNELS = {
   traySetCloseBehavior: 'dsh-launcher:tray:set-close-behavior'
 } as const
 
+/** What the window close button does when the tray is present. */
+export type TrayCloseBehavior = 'minimize-to-tray' | 'quit'
+
+/** The tray preference projection a renderer reads and writes. */
+export interface TrayCloseBehaviorView {
+  readonly closeBehavior: TrayCloseBehavior
+}
+
+/** Whether a value is one of the two admitted close behaviours. */
+export function isTrayCloseBehavior(value: unknown): value is TrayCloseBehavior {
+  return value === 'minimize-to-tray' || value === 'quit'
+}
+
 /** Immutable product identity compiled into the launcher artifact. */
 export const APP_METADATA = {
   appId: 'dsh-launcher',
@@ -767,10 +780,8 @@ export interface DesktopApi {
     onZoomChange(listener: (result: ApiResult<RuntimeBrowserPreferences>) => void): () => void
   }>
   readonly tray: Readonly<{
-    getCloseBehavior(): Promise<ApiResult<{ closeBehavior: 'minimize-to-tray' | 'quit' }>>
-    setCloseBehavior(
-      behavior: 'minimize-to-tray' | 'quit'
-    ): Promise<ApiResult<{ closeBehavior: 'minimize-to-tray' | 'quit' }>>
+    getCloseBehavior(): Promise<ApiResult<TrayCloseBehaviorView>>
+    setCloseBehavior(behavior: TrayCloseBehavior): Promise<ApiResult<TrayCloseBehaviorView>>
   }>
   readonly p2pManagement: P2PManagementApi
   readonly remoteConnections: Readonly<{

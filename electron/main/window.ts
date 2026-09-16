@@ -53,7 +53,11 @@ function saveWindowBounds(window: ElectronBrowserWindow): void {
     const file = nodePath.join(app.getPath('userData'), 'launcher-window-state.json')
     const dir = nodePath.dirname(file)
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
-    writeFileSync(file, JSON.stringify({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }), 'utf8')
+    writeFileSync(
+      file,
+      JSON.stringify({ x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }),
+      'utf8'
+    )
   } catch {
     // Best-effort: a failed write must not interfere with the window itself.
   }
@@ -133,7 +137,10 @@ export function createWindow(
   const icon = unpackagedAppIcon()
   const saved = loadWindowBounds()
   const mainWindow = new BrowserWindow({
-    ...saved,
+    x: saved.x,
+    y: saved.y,
+    width: saved.width ?? DEFAULT_WIDTH,
+    height: saved.height ?? DEFAULT_HEIGHT,
     minWidth: 760,
     minHeight: 560,
     title: APP_METADATA.name,

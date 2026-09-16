@@ -33,7 +33,9 @@ import {
   type TokenUsageState,
   type StartManagedHarnessRequest,
   type StopManagedHarnessRequest,
-  type SwitchManagedHarnessRevisionRequest
+  type SwitchManagedHarnessRevisionRequest,
+  isTrayCloseBehavior,
+  type TrayCloseBehaviorView
 } from '../../src/shared/contracts'
 import { assertDirectorySelectionPurpose } from './managed/capabilities'
 import { ManagedRootError } from './managed/errors'
@@ -852,18 +854,20 @@ function isManagedRootKind(
 function registerTrayIpc(): void {
   ipcMain.handle(
     DESKTOP_IPC_CHANNELS.trayGetCloseBehavior,
-    async (event): Promise<ApiResult<{ closeBehavior: string }>> => {
+    async (event): Promise<ApiResult<TrayCloseBehaviorView>> => {
       if (!isTrustedRenderer(event)) return invalidSender()
-      const closeBehavior = getCloseBehavior()
-      return apiOk({ closeBehavior })
+      return apiOk({ closeBehavior: getCloseBehavior() })
     }
   )
   ipcMain.handle(
     DESKTOP_IPC_CHANNELS.traySetCloseBehavior,
-    async (event, payload: unknown): Promise<ApiResult<{ closeBehavior: string }>> => {
+    async (event, payload: unknown): Promise<ApiResult<TrayCloseBehaviorView>> => {
       if (!isTrustedRenderer(event)) return invalidSender()
-      if (typeof payload !== 'string' || (payload !== 'minimize-to-tray' && payload !== 'quit'))
-        return apiFail('managed.selection_invalid', 'Close behavior must be "minimize-to-tray" or "quit".')
+      if (!isTrayCloseBehavior(payload))
+        return apiFail(
+          'managed.selection_invalid',
+          'Close behavior must be "minimize-to-tray" or "quit".'
+        )
       setCloseBehavior(payload)
       return apiOk({ closeBehavior: payload })
     }
