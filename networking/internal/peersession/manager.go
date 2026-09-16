@@ -733,11 +733,14 @@ func (manager *Manager) run(connection *session) {
 			// A mismatch (HTTP frame to ServeDirectory, or directory frame to
 			// http.Server) closes the stream cleanly, and the initiator retries.
 			//
-			// This races the HTTP listener on the answered side, but the
-			// infrequency of directory requests makes collision rare.
-			if !initiator && manager.rootProvider != nil {
-				go runtimebridge.ServeDirectoryStreams(manager.ctx, mux, manager.rootProvider)
-			}
+			// This races the HTTP listener on the answered side, and the
+			// collision caused every HTTP request to be lost when the directory
+			// service won the race — the probe then failed with
+			// p2p.runtime_http_failed and the connection never established.
+			// Disabled until a stream-demultiplexing layer exists.
+			//if !initiator && manager.rootProvider != nil {
+			//	go runtimebridge.ServeDirectoryStreams(manager.ctx, mux, manager.rootProvider)
+			//}
 		}
 	}
 	if mux != nil {
