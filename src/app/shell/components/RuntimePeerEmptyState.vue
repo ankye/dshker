@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
+import { p2pConnections as connections } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { refusalKeyForCode } from '@/app/shared/i18n/i18n.refusals'
 import type { RuntimeTabStatus } from '../runtimeBrowserState'
@@ -36,6 +37,17 @@ const description = computed(() =>
     ? t('runtime.peerUnavailable.description')
     : t(refusalKeyForCode(failureCode.value))
 )
+
+/**
+ * Reads the connection stages on arrival.
+ *
+ * The Run page is where the connect action lives, and the stages it acts on were
+ * only ever read on the Remote connections page. A refused attempt therefore left
+ * this page holding an unresolved outcome that blocked every later attempt, with
+ * no way to recover short of visiting another page: reading here is what resolves
+ * it, because a read is always allowed.
+ */
+onMounted(() => void connections.read())
 </script>
 
 <template>

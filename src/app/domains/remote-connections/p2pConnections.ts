@@ -10,6 +10,14 @@ export interface P2PConnectionsState {
   /** Last helper-level error, separate from any one connection's failure. */
   helperError: string
   resultUnconfirmed: boolean
+  /**
+   * The code of the last refused connect or disconnect, or an empty string.
+   *
+   * A refusal that proves nothing happened is not a failure of the connection, so
+   * it does not become one — but discarding it entirely left a button that answered
+   * with nothing at all, which is indistinguishable from a broken one.
+   */
+  lastRefusal: string
 }
 
 /**
@@ -24,7 +32,8 @@ export class P2PConnectionsDomain {
   readonly #state = reactive<P2PConnectionsState>({
     peers: undefined,
     helperError: '',
-    resultUnconfirmed: false
+    resultUnconfirmed: false,
+    lastRefusal: ''
   })
   #polling: ReturnType<typeof setTimeout> | undefined
   constructor(private readonly management: P2PManagementDomain) {}
@@ -88,16 +97,22 @@ export class P2PConnectionsDomain {
   async connect(serviceId: string, pairId: string): Promise<void> {
     if (!this.#canWrite(serviceId) || this.isConnecting(serviceId, pairId)) return
     const result = await this.management.run('connect', { serviceId, pairId })
-    // Dispatch only starts an attempt; the stage arrives through a readback.
-    if (result.ok) await this.read()
-    else this.#recordWriteOutcome(result.code)
+    this.#state.lastRefusal = result.ok ? '' : result.code
+    if (!result.ok) this.#recordWriteOutcome(result.code)
+    // Dispatch only starts an attempt, so the stage arrives through a readback.
+    // A refusal is read back the same way, and that is the whole point: reading is
+    // how an unknown outcome is resolved, so skipping it left this window holding a
+    // result it could never clear — a connect button that answered every later
+    // press with silence.
+    await this.read()
   }
 
   async disconnect(serviceId: string, pairId: string): Promise<void> {
     if (!this.#canWrite(serviceId)) return
     const result = await this.management.run('disconnect', { serviceId, pairId })
-    if (result.ok) await this.read()
-    else this.#recordWriteOutcome(result.code)
+    this.#state.lastRefusal = result.ok ? '' : result.code
+    if (!result.ok) this.#recordWriteOutcome(result.code)
+    await this.read()
   }
 
   /**
@@ -125,20 +140,34 @@ export class P2PConnectionsDomain {
   /**
    * Codes that prove the request never took effect leave state clean; anything
    * else may have started or torn down a session, so it counts as unknown.
+   *
+   * The two busy refusals belong in the first group for the same reason as the
+   * rest: the boundary that refused them is the one that decides whether a
+   * request is dispatched at all, so nothing was started. Counting them as
+   * unknown blocked every later attempt from this page — a refusal the user could
+   * neither see nor get past.
    */
   #recordWriteOutcome(code: string): void {
     const rejectedBeforeEffect = [
       'bridge',
       'p2p.connection_busy',
       'p2p.connection_not_found',
+      'p2p.helper_busy',
       'p2p.invalid_request',
       'p2p.pair_not_found',
       'p2p.pair_state_mismatch',
+      'p2p.service_busy',
       'p2p.device_unregistered',
       'p2p.not_enabled',
       'p2p.request_cancelled'
     ]
-    if (!rejectedBeforeEffect.includes(code)) this.#state.resultUnconfirmed = true
+    if (!rejectedBeforeEffect.includes(code)) {
+      this.#state.resultUnconfirmed = true
+      // Reading is how an unknown outcome is resolved, and the user must not have
+      // to visit another page to make that happen: the states that block a retry
+      // are exactly the ones a read clears.
+      void this.read()
+    }
   }
 }
 

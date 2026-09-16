@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"log"
 	"sync"
 	"time"
 
@@ -398,6 +399,16 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		return nil, err
 	}
 	account.client, account.manager, account.device = client, manager, request.Device
+	// A restored session starts with no pins, and the peer session admits a
+	// connection only for a pair it has pinned. The catalog pass is what pins, and
+	// answering this call is what the shell takes as "online", so the pass runs
+	// before the answer: until it has run, this machine is online and unable to
+	// accept a connection, and an attempt in that window is refused with nothing the
+	// user could read. It runs with the account lock already held, which is why it
+	// is the locked half of the pass.
+	if _, err := account.refreshCatalogLocked(ctx); err != nil {
+		log.Printf("[p2p] catalog refresh after restore failed: %v", err)
+	}
 	return struct {
 		DeviceID string `json:"deviceId"`
 	}{request.Device.DeviceID}, nil

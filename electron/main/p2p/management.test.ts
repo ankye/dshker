@@ -547,6 +547,60 @@ describe('formal P2P management composition', () => {
     expect(seen).toEqual([serviceId])
   })
 
+  /**
+   * `p2p.pair_unauthorized` is final because retrying it is pointless — but it is
+   * also what "the pin does not exist yet" looks like, and a pair refused in that
+   * window was never attempted again whatever the core did afterwards, because
+   * only a change of the machine's own network state cleared the refusals. The
+   * core announces a new catalog revision exactly when it has re-derived the pairs
+   * and their pins, so that announcement is the signal to try once more.
+   */
+  it('retries a pair refused before its pin existed, once the core announces a catalog revision', async () => {
+    const f = await loggedIn()
+    // A paired machine is an enrolled one: the attempt goes through the device
+    // session before it can name a pair at all.
+    const credential = {
+      serviceId,
+      deviceId: '3'.repeat(12),
+      userId: user.userId,
+      name: 'This machine',
+      publicKey: Buffer.alloc(32, 1).toString('base64'),
+      certificate: 'test-only-credential-boundary',
+      privateKey: Buffer.alloc(32, 9).toString('base64')
+    }
+    vi.spyOn(PeerCredentialStore.prototype, 'load').mockResolvedValue({
+      revision: 'a'.repeat(64),
+      credential
+    } as Awaited<ReturnType<PeerCredentialStore['load']>>)
+    vi.spyOn(PeerCredentialStore.prototype, 'loadRegistration').mockResolvedValue({
+      kind: 'registered',
+      revision: 'a'.repeat(64),
+      credential
+    } as Awaited<ReturnType<PeerCredentialStore['loadRegistration']>>)
+    const base = f.call.getMockImplementation()
+    // Both computers in the fixture are active, so attempts are counted per pair.
+    const attempts = new Map<string, number>()
+    f.call.mockImplementation(async (method: string, payload: unknown, signal: AbortSignal) => {
+      if (method === 'peer.connect') {
+        const pairId = (payload as { data?: { pairId?: string } }).data?.pairId ?? ''
+        attempts.set(pairId, (attempts.get(pairId) ?? 0) + 1)
+        throw new PeerHelperError('p2p.pair_unauthorized')
+      }
+      return base!(method, payload, signal)
+    })
+    // A network change is the one trigger that clears refusals today, so it is
+    // what establishes the first attempt and its terminal refusal.
+    f.owner.resumeConnectivity()
+    const pairId = '2'.repeat(12)
+    await vi.waitFor(() => expect(attempts.get(pairId)).toBe(1))
+    // The refusal is final: the backoff that would retry within a second is not
+    // scheduled at all.
+    await new Promise((resolve) => setTimeout(resolve, 1400))
+    expect(attempts.get(pairId)).toBe(1)
+    await f.catalogChanged({ serviceId, revision: 'c'.repeat(64) })
+    await vi.waitFor(() => expect(attempts.get(pairId)).toBe(2))
+  })
+
   it('announces the core catalog revision to subscribers and stops when released', async () => {
     const f = await loggedIn()
     const seen: { serviceId: string; revision: string }[] = []

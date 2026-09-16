@@ -185,7 +185,17 @@ func planMembers(saved catalog.Snapshot, serviceID string, local localMember, me
 // not detail is skipped rather than failing the pass: one unreadable row is not a
 // reason to leave every other computer unrecorded, and the next interval retries.
 func (account *account) refreshCatalog(ctx context.Context) (string, error) {
-	store, client, local, serviceID := account.catalogInputs()
+	account.mu.Lock()
+	defer account.mu.Unlock()
+	return account.refreshCatalogLocked(ctx)
+}
+
+// refreshCatalogLocked is the same pass for a caller that already holds the account
+// lock. `device.restore` is one: it is answered while holding that lock, and it must
+// leave the pins in place before it answers, because the shell treats the answer as
+// "this machine is online" and starts connecting.
+func (account *account) refreshCatalogLocked(ctx context.Context) (string, error) {
+	store, client, local, serviceID := account.catalogInputsLocked()
 	if store == nil {
 		return "", errors.New("p2p.catalog_unavailable")
 	}
@@ -206,12 +216,16 @@ func (account *account) refreshCatalog(ctx context.Context) (string, error) {
 		if pair.State != "active" {
 			continue
 		}
-		// The peer session admits a connection only for a pair it has pinned, so
-		// the pin travels with the record that offers the computer. A refusal is
-		// logged rather than dropped: a silent failure here is invisible from every
-		// user surface, and the failure it causes is "this computer will not
-		// connect".
-		if err := account.pin(identity); err != nil {
+		remote, _, ok := remoteSide(identity, account.device.DeviceID)
+		if !ok {
+			continue
+		}
+		// The peer session keys its pin map by the value a connection attempt names,
+		// which is the remote device id — not the pairs-table row id the coordinator
+		// reports. The shell rewrote the id for exactly this reason; pinning the row
+		// id instead pinned nothing any attempt could look up, and every connection
+		// was refused as p2p.pair_unauthorized.
+		if err := account.pinLocked(pinnedIdentity(identity, remote.DeviceID)); err != nil {
 			log.Printf("[p2p] pair pin failed: %v", err)
 		}
 	}
@@ -267,6 +281,12 @@ func recordPlan(store CatalogStore, saved catalog.Snapshot, plan memberPlan) (st
 func (account *account) catalogInputs() (CatalogStore, *controlplane.Client, localMember, string) {
 	account.mu.Lock()
 	defer account.mu.Unlock()
+	return account.catalogInputsLocked()
+}
+
+// catalogInputsLocked is that read for a caller that already holds the lock. It
+// still takes the host lock for the store, which no caller of this holds.
+func (account *account) catalogInputsLocked() (CatalogStore, *controlplane.Client, localMember, string) {
 	var store CatalogStore
 	if account.host != nil {
 		account.host.mu.Lock()
@@ -282,8 +302,13 @@ func (account *account) catalogInputs() (CatalogStore, *controlplane.Client, loc
 // pin hands one authorized pair to the session, which admits connections by it.
 func (account *account) pin(identity controlplane.PairIdentity) error {
 	account.mu.Lock()
+	defer account.mu.Unlock()
+	return account.pinLocked(identity)
+}
+
+// pinLocked is that handover for a caller that already holds the lock.
+func (account *account) pinLocked(identity controlplane.PairIdentity) error {
 	manager := account.manager
-	account.mu.Unlock()
 	if manager == nil {
 		return errors.New("p2p.device_unregistered")
 	}
@@ -330,13 +355,30 @@ func (account *account) maintainCatalog(ctx context.Context) {
 			// A failed pass keeps whatever the catalog already holds: the
 			// coordinator being briefly unreachable is not evidence that the pairs
 			// went away, and rewriting the record from a failed read is what would
-			// revoke every computer at once.
+			// revoke every computer at once. It is logged rather than dropped,
+			// because the failure it hides is "this machine cannot accept a
+			// connection", which no user surface would otherwise explain.
 			if err != nil {
+				log.Printf("[p2p] catalog refresh failed: %v", err)
 				continue
 			}
 			account.announceCatalog(revision)
 		}
 	}
+}
+
+// pinnedIdentity is the coordinator's pair as the peer session stores it and as the
+// catalog records it: keyed by the remote device id.
+//
+// A connection attempt names that id, and the peer session looks the pin up by it,
+// so the id in the pin map, in the catalog row and in the request are one value.
+// They drifted once — the coordinator's own pair id went into the pin map while
+// every attempt asked for the device id — and every connect was refused as
+// p2p.pair_unauthorized, with nothing on screen to say why.
+func pinnedIdentity(identity controlplane.PairIdentity, remoteDeviceID string) controlplane.PairIdentity {
+	pinned := identity
+	pinned.Pair.PairID = remoteDeviceID
+	return pinned
 }
 
 // refreshCatalogAfterWrite re-reads the pairs once an operation that can change
@@ -351,6 +393,10 @@ func (account *account) refreshCatalogAfterWrite() {
 		defer cancel()
 		revision, err := account.refreshCatalog(ctx)
 		if err != nil {
+			// The write the shell is waiting for has already been answered; this is
+			// the bookkeeping behind it, and a failure here means the pins and the
+			// recorded computers are stale rather than wrong.
+			log.Printf("[p2p] catalog refresh after a write failed: %v", err)
 			return
 		}
 		account.announceCatalog(revision)

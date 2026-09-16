@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.1.49 — 2026-09-16
+
+- **0.1.48 could not connect to any paired computer.** The list of paired
+  computers moved into the core in 0.1.48, and the pin that authorizes a connection
+  was recorded under the server's own pairing id instead of the id a connection
+  actually names — the far computer's device id. Nothing could look that pin up, so
+  every attempt was refused with `p2p.pair_unauthorized`, and that refusal is one
+  auto-reconnect treats as final: each computer was written off after a single
+  attempt until the machine's own network changed. SSH connections were unaffected.
+- The pins are now in place before the core reports the machine online. A
+  connection made in the first seconds after launch used to be refused for a pin
+  that had not been derived yet, which looked exactly like a computer that cannot
+  be reached.
+- **A connect button that does nothing now says why.** Refusals that prove nothing
+  was started (the helper or the service was busy) no longer count as an unknown
+  outcome that blocks every later attempt; a refusal is read back so the attempt is
+  resolved where it happened, and the Run page reads the connection state when it
+  opens instead of only the Remote connections page doing so. A disabled connect
+  button explains itself, and a refused attempt leaves its code on screen.
+- A computer that was refused before its pin existed is tried again as soon as the
+  core announces a new paired-computer list, instead of staying written off until
+  the machine's network changes.
+- A failed paired-computer pass is written to the core's log rather than dropped:
+  its only symptom used to be "this computer will not connect".
+
 ## 0.1.48 — 2026-09-15
 
 - **The paired-computer list looks after itself.** Which computers you may connect

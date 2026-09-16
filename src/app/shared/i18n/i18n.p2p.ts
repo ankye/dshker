@@ -133,6 +133,8 @@ export const zhCNP2P = {
   'p2p.run.retry': '重试连接',
   'p2p.run.edit': '编辑这台电脑',
   'p2p.run.revoked': '这台电脑的配对已撤销，无法再连接。如需继续使用，请重新配对。',
+  'p2p.run.unknownOutcome':
+    '上一次连接没有确认结果，已暂停再次发起：重新发起可能重复已在进行的连接。打开远程连接页会重新读取当前状态，之后即可重试。',
   'p2p.serviceEdit.title': '服务器配置（共享）',
   'p2p.serviceEdit.sharedNotice':
     '此配置由通过该服务器配对的所有电脑共用。修改会同时影响它们，因此任一电脑正在使用时无法保存。',
@@ -463,6 +465,8 @@ export const enUSP2P: Record<keyof typeof zhCNP2P, string> = {
   'p2p.run.edit': 'Edit this computer',
   'p2p.run.revoked':
     'Pairing with this computer was revoked, so it can no longer connect. Pair again to keep using it.',
+  'p2p.run.unknownOutcome':
+    'The last attempt ended without a confirmed result, so another is paused: starting one could duplicate a connection already under way. Opening Remote connections reads the current state, after which you can retry.',
   'p2p.serviceEdit.title': 'Server configuration (shared)',
   'p2p.serviceEdit.sharedNotice':
     'This configuration is shared by every computer paired through this server. A change affects all of them, so it cannot be saved while any of them is in use.',

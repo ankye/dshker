@@ -92,17 +92,29 @@ describe('P2P Run disconnected actions', () => {
     expect(connect).not.toHaveBeenCalled()
   })
 
-  it('disables actions while the service is busy', () => {
+  /**
+   * A button that does nothing when pressed is indistinguishable from a broken
+   * one, and both reasons `connect()` refuses for are invisible: a busy service,
+   * and an attempt this window already believes is running.
+   */
+  it('disables actions while the service is busy, and says why', () => {
     vi.spyOn(p2pManagement, 'busy').mockReturnValue(true)
     const wrapper = mountActions()
     expect(wrapper.get('[data-testid="p2p-run-connect"]').attributes('disabled')).toBeDefined()
     expect(wrapper.get('[data-testid="p2p-run-edit"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="p2p-run-inert"]').text()).not.toBe('')
   })
 
-  it('does not start a second attempt while one is negotiating', () => {
+  it('does not start a second attempt while one is negotiating, and says so', () => {
     vi.spyOn(p2pConnections, 'isConnecting').mockReturnValue(true)
     const wrapper = mountActions()
     expect(wrapper.get('[data-testid="p2p-run-connect"]').attributes('disabled')).toBeDefined()
+    expect(wrapper.get('[data-testid="p2p-run-inert"]').text()).not.toBe('')
+  })
+
+  it('says nothing about being inert when the action would run', () => {
+    const wrapper = mountActions()
+    expect(wrapper.find('[data-testid="p2p-run-inert"]').exists()).toBe(false)
   })
 
   it('emits an edit request that locates this same computer', async () => {

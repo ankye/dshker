@@ -116,9 +116,30 @@ describe('renderer P2P connections domain', () => {
     expect(api.connect).not.toHaveBeenCalled()
   })
 
-  it('blocks further writes after an outcome that may have taken effect', async () => {
+  /**
+   * A refusal whose outcome is unknown is resolved by reading it back: a read is
+   * always allowed, and the helper's own session list is the answer. Skipping that
+   * read left the window holding an unresolved result that blocked every later
+   * attempt — a connect button that answers with silence.
+   */
+  it('resolves an unknown outcome by reading it back, so the next attempt is possible', async () => {
     const { api, connections } = setup([])
     api.connect.mockResolvedValue({ ok: false, code: 'p2p.server_unavailable', message: 'unknown' })
+    await connections.connect(serviceId, pairId)
+    expect(api.connections).toHaveBeenCalled()
+    expect(connections.state.resultUnconfirmed).toBe(false)
+    await connections.connect(serviceId, pairId)
+    expect(api.connect).toHaveBeenCalledTimes(2)
+  })
+
+  it('stays blocked when the readback of an unknown outcome fails too', async () => {
+    const { api, connections } = setup([])
+    api.connect.mockResolvedValue({ ok: false, code: 'p2p.server_unavailable', message: 'unknown' })
+    api.connections.mockResolvedValue({
+      ok: false,
+      code: 'p2p.helper_unavailable',
+      message: 'down'
+    })
     await connections.connect(serviceId, pairId)
     expect(connections.state.resultUnconfirmed).toBe(true)
     await connections.connect(serviceId, pairId)

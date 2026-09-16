@@ -320,6 +320,35 @@ func TestPlanMembersKeepsOtherServicesAndOneRowPerPeer(t *testing.T) {
 	}
 }
 
+// The pin map, the catalog row and the connection request must name a pair by one
+// value: the remote device id. They drifted once — the coordinator's own pair id was
+// pinned while every attempt asked for the device id — and every connect was refused
+// as p2p.pair_unauthorized, with nothing on screen to explain it.
+func TestPinnedIdentityUsesTheIDTheCatalogRecords(t *testing.T) {
+	key := newKey(t)
+	local := localMember{deviceID: protocol.NewID(), publicKey: key}
+	serviceID := protocol.NewID()
+	identity, remote := plantedPair(t, local.deviceID, protocol.NewID(), key, "studio", protocol.NewID())
+	if identity.Pair.PairID == remote.DeviceID {
+		t.Fatal("the fixture must report a coordinator pair id of its own")
+	}
+
+	pinned := pinnedIdentity(identity, remote.DeviceID)
+	if pinned.Pair.PairID != remote.DeviceID {
+		t.Fatalf("pinned id = %q, want the remote device id %q", pinned.Pair.PairID, remote.DeviceID)
+	}
+	if pinned.Pair.Initiator != identity.Pair.Initiator || pinned.Pair.Target != identity.Pair.Target || pinned.Pair.Revision != identity.Pair.Revision {
+		t.Fatalf("pinned pair = %+v, want everything but the id unchanged", pinned.Pair)
+	}
+	planned := planMembers(catalog.Snapshot{Record: catalog.Record{
+		Format: "dshker.catalog", Version: 1, CatalogID: protocol.NewID(),
+		Services: []catalog.Service{}, Computers: []catalog.Computer{}, ForgottenServiceIDs: []string{},
+	}}, serviceID, local, []controlplane.PairIdentity{identity})
+	if len(planned.final) != 1 || planned.final[0].PairID != pinned.Pair.PairID {
+		t.Fatalf("catalog row = %+v, want the pair id every attempt names (%q)", planned.final, pinned.Pair.PairID)
+	}
+}
+
 // The core's maintenance pass converges within its interval, but a write that can
 // change the pairs is followed by a read of its own: leaving a network invalidates
 // its pairs in the same transaction, and an approval or a revocation changes one
