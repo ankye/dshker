@@ -172,9 +172,15 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		manager.mu.Unlock()
 		return Connected{}, errors.New("p2p.pair_unauthorized")
 	}
-	if _, exists := manager.sessions[pairID]; exists {
-		manager.mu.Unlock()
-		return Connected{}, errors.New("p2p.connection_busy")
+	// A session whose transport or context ended is a dead attachment — the
+	// peer restarted or the network changed, and the new connect must not be
+	// refused by an old session that has not finished unwinding yet.
+	if current, busy := manager.sessions[pairID]; busy {
+		if !manager.retireDeadLocked(current) {
+			manager.mu.Unlock()
+			return Connected{}, errors.New("p2p.connection_busy")
+		}
+		delete(manager.sessions, pairID)
 	}
 	connection := newSession(manager.ctx)
 	connection.PairID = pairID
@@ -266,6 +272,29 @@ func namedRefusal(err error, transportReady bool) string {
 	return "p2p.runtime_unavailable"
 }
 
+// retireDeadLocked reports whether a session is over — its transport and
+// context are both done — so a new attempt for the pair can take its place
+// instead of being refused by a corpse. The caller holds manager.mu and must
+// delete the session from its map when this returns true.
+//
+// A session whose transport is alive but whose context is done is mid-cleanup;
+// its goroutine finishes the session. A session whose transport is not done and
+// whose context is not done is genuinely live, and the pair's other direction
+// stays busy through it.
+func (manager *Manager) retireDeadLocked(current *session) bool {
+	if current.ctx.Err() != nil {
+		return true
+	}
+	if current.transport != nil {
+		select {
+		case <-current.transport.Done():
+			return true
+		default:
+		}
+	}
+	return false
+}
+
 // finish retires a session exactly once.
 //
 // Both the connecting caller and the session runner can reach it — the caller
@@ -294,6 +323,9 @@ func (manager *Manager) end(lease protocol.Lease) {
 func (manager *Manager) Disconnect(pairID string) error {
 	manager.mu.Lock()
 	connection, exists := manager.sessions[pairID]
+	if !exists {
+		connection, exists = manager.inbound[pairID]
+	}
 	manager.mu.Unlock()
 	if !exists {
 		return errors.New("p2p.not_connected")
@@ -373,8 +405,14 @@ func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *ses
 		return nil, errors.New("p2p.connection_busy")
 	}
 	if reserved == nil {
-		if _, answered := manager.inbound[pairID]; answered {
-			return nil, errors.New("p2p.connection_busy")
+		if answered, busy := manager.inbound[pairID]; busy {
+			// The slot belongs to the answered direction; only a session that is
+			// already over (peer restart, transport loss) is retired so the new
+			// answer can take its place instead of being refused by a corpse.
+			if !manager.retireDeadLocked(answered) {
+				return nil, errors.New("p2p.connection_busy")
+			}
+			delete(manager.inbound, pairID)
 		}
 	}
 	if reserved != nil && reserved.ctx.Err() != nil {

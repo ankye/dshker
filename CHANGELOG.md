@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.51 — 2026-09-16
+
+- **A stale session after a peer restarted no longer blocks reconnection.**
+  When the remote machine went offline and came back, the old session's
+  transport endpoints still occupied the outbound (or inbound) slot at the
+  moment the new connect arrived, and every attempt was refused as
+  `p2p.connection_busy`. The connect path now retires a session whose
+  context or transport is already done — the peer is gone and the cleanup is
+  merely racing the next attempt — so a fresh one replaces it instead of
+  being denied by a corpse.
+- **Disconnect now tears down an inbound (answered) session.** The
+  Disconnect function only checked the outbound `sessions` map, so a session
+  created by the far side dialling this machine could not be terminated from
+  the Run page; the button returned `p2p.not_connected` and the session
+  lived on. The inbound map is checked too, so the user can close a session
+  regardless of which side opened it.
+
 ## 0.1.50 — 2026-09-16
 
 - **A pair now owns one session per direction, not one slot shared between both.**
