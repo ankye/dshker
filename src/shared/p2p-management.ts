@@ -617,7 +617,6 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.network_unavailable',
   'p2p.not_enabled',
   'p2p.operation_failed',
-  'p2p.attempt_mismatch',
   'p2p.connection_busy',
   'p2p.connection_not_found',
   'p2p.invalid_peer_state',

@@ -155,10 +155,15 @@ describe('formal main P2P runtime ownership', () => {
     expect(JSON.stringify(f.host.snapshot())).not.toContain('token')
   })
 
-  it('rejects unauthorized, forgotten, revoked and unscoped callback requests before DSH access', async () => {
+  it('rejects unauthorized, malformed and forgotten callback requests before DSH access', async () => {
     const f = fixture()
     await f.host.start(signal())
-    await expect(f.connect()).rejects.toMatchObject({ code: 'p2p.runtime_request_unscoped' })
+    // A runtime request the core vouches for needs no stage this document was
+    // told: the core owns one slot per direction now and asks only while an
+    // answered attempt is at starting-runtime, so the pair's authorization is
+    // the whole gate. The stage requirement made every answered attempt die as
+    // p2p.runtime_request_unscoped.
+    expect(await f.connect()).toEqual({ generation: 1, url })
     await expect(f.connect({ serviceId, pairId: 'f'.repeat(12) })).rejects.toMatchObject({
       code: 'p2p.pair_unauthorized'
     })
@@ -267,16 +272,24 @@ describe('formal main P2P runtime ownership', () => {
     expect(f.start).not.toHaveBeenCalled()
   })
 
-  it('fences late state, conflicting attempts and terminal-to-ready revival', async () => {
+  it('fences late replays and terminal revival, and accepts a restarted peer', async () => {
     const f = fixture()
     await f.host.start(signal())
     await f.emit(state('ready'))
+    // Same attempt regressing is a late frame from the attempt already recorded.
     await expect(f.emit(state('punching'))).rejects.toMatchObject({ code: 'p2p.stale_generation' })
-    await expect(f.emit({ ...state('ready'), attemptId: 'f'.repeat(12) })).rejects.toMatchObject({
-      code: 'p2p.attempt_mismatch'
-    })
-    await f.emit(state('disconnected'))
+    // An attempt id this host has never seen is a peer that restarted and began
+    // counting attempts again: its generation orders nothing across restarts,
+    // and refusing it here is what made every connection after a peer restart
+    // die as p2p.runtime_request_unscoped.
+    await f.emit({ ...state('ready'), attemptId: 'f'.repeat(12) })
+    expect(f.host.snapshot().peers[0].state.attemptId).toBe('f'.repeat(12))
+    // A frame naming an attempt this host has already moved past is a replay.
     await expect(f.emit(state('ready'))).rejects.toMatchObject({ code: 'p2p.stale_generation' })
+    await f.emit({ ...state('disconnected'), attemptId: 'f'.repeat(12) })
+    await expect(f.emit({ ...state('ready'), attemptId: 'f'.repeat(12) })).rejects.toMatchObject({
+      code: 'p2p.stale_generation'
+    })
     expect(f.host.snapshot().peers[0].state.stage).toBe('disconnected')
     const copied = f.host.snapshot()
     copied.peers[0].state.path.protocol = 'modified'

@@ -204,20 +204,28 @@ async function loadPeerEntries(): Promise<void> {
     if (peerEntryFetches.has(id)) continue
     const { serviceId, pairId } = computer
     const generation = view.generation
-    const fetch = p2pConnections.entry(serviceId, pairId, generation).then((entry) => {
-      peerEntryFetches.delete(id)
-      // The attempt this answer describes may have been replaced while we
-      // waited. Storing it would put the previous attempt's address in a tab
-      // that is already showing the next one, so drop it — and ask about the
-      // attempt that is actually current, since the change that replaced it
-      // found this fetch in flight and left it alone.
-      if (p2pConnections.find(serviceId, pairId)?.generation !== generation) {
-        void loadPeerEntries()
-        return
-      }
-      if (entry === undefined) delete peerEntries[id]
-      else peerEntries[id] = { generation, ...entry }
-    })
+    const fetch = p2pConnections
+      .entry(serviceId, pairId, generation)
+      .then((entry) => {
+        peerEntryFetches.delete(id)
+        // The attempt this answer describes may have been replaced while we
+        // waited. Storing it would put the previous attempt's address in a tab
+        // that is already showing the next one, so drop it — and ask about the
+        // attempt that is actually current, since the change that replaced it
+        // found this fetch in flight and left it alone.
+        if (p2pConnections.find(serviceId, pairId)?.generation !== generation) {
+          void loadPeerEntries()
+          return
+        }
+        if (entry === undefined) delete peerEntries[id]
+        else peerEntries[id] = { generation, ...entry }
+      })
+      .catch(() => {
+        // A refused question must not wedge the asking: without this, the
+        // in-flight marker below stayed forever and the tab never asked again,
+        // which is a ready connection with no page in it.
+        peerEntryFetches.delete(id)
+      })
     peerEntryFetches.set(id, fetch)
     await fetch
   }

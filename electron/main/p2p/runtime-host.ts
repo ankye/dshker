@@ -60,6 +60,17 @@ export class PeerRuntimeHost {
   readonly #lifetime = new AbortController()
   readonly #runtimeServices = new Set<string>()
   readonly #states = new Map<string, { serviceId: string; state: PeerHelperState }>()
+  /**
+   * Attempt ids this host has already recorded per pair, most recent last.
+   *
+   * A peer that restarts begins counting attempts again, so a generation cannot
+   * order attempts across restarts; the id can, by familiarity. A frame naming
+   * an attempt never seen before is a new lineage — refusing it is what made
+   * every connection after a peer restart die as p2p.runtime_request_unscoped —
+   * while a frame naming an attempt this host has already moved past is a late
+   * replay, and is refused.
+   */
+  readonly #attempts = new Map<string, string[]>()
   #detach: (() => void) | undefined
   #pending = false
   #closing: Promise<void> | undefined
@@ -175,21 +186,39 @@ export class PeerRuntimeHost {
     const key = `${fields.serviceId}:${pairId}`
     if (state) {
       const previous = this.#states.get(key)
-      if (previous) assertStateProgress(previous.state, state)
+      if (previous) {
+        if (state.attemptId !== previous.state.attemptId && this.#sawAttempt(key, state.attemptId))
+          throw new PeerHelperError('p2p.stale_generation')
+        assertStateProgress(previous.state, state)
+      }
+      this.#rememberAttempt(key, state.attemptId)
       this.#states.set(key, { serviceId: fields.serviceId, state })
       this.options.onPeerStage?.(fields.serviceId, pairId, state.stage)
       return {}
     }
-    const current = this.#states.get(key)?.state
-    if (!current || current.stage !== 'starting-runtime')
-      throw new PeerHelperError('p2p.runtime_request_unscoped')
+    // The stage a runtime request used to require is gone with the inbound
+    // session's announcements: the core owns one slot per direction now and
+    // asks for a runtime only while an answered attempt is at starting-runtime,
+    // so the authorization below — the pair must still be recorded and active —
+    // is the whole gate. Requiring a stage this document was never told made
+    // every answered attempt die as p2p.runtime_request_unscoped.
     this.#runtimeServices.add(fields.serviceId)
     const binding = await this.#runtime.connect(signal)
     await this.#authorize(fields.serviceId, pairId)
     this.#admit(signal)
-    if (this.#states.get(key)?.state !== current) throw new PeerHelperError('p2p.stale_generation')
     this.#runtime.assertCurrent(binding)
     return binding
+  }
+
+  /** True when this pair has already recorded states from that attempt id. */
+  #sawAttempt(key: string, attemptId: string): boolean {
+    return (this.#attempts.get(key) ?? []).includes(attemptId)
+  }
+
+  /** Keeps the most recent attempt ids per pair, so the set stays bounded. */
+  #rememberAttempt(key: string, attemptId: string): void {
+    const seen = this.#attempts.get(key) ?? []
+    this.#attempts.set(key, seen.includes(attemptId) ? seen : [...seen, attemptId].slice(-4))
   }
 
   async #authorize(serviceId: string, pairId: string): Promise<void> {

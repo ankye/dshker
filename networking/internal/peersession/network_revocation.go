@@ -34,15 +34,25 @@ func (manager *Manager) RevokeNetwork(networkID string) error {
 		// A deleted network revokes the pair, so its gateway must stop being a
 		// reachable address at once — the same rule the coordinator's revocation
 		// signal follows. Keeping the port would leave a URL that still answers
-		// for a network the user just removed.
+		// for a network the user just removed. Both attachments go: the browsed
+		// one and the one serving the far machine.
 		if endpoint := manager.endpoints[pairID]; endpoint != nil {
 			endpoints = append(endpoints, endpoint)
 			delete(manager.endpoints, pairID)
+		}
+		if endpoint := manager.inboundEndpoints[pairID]; endpoint != nil {
+			endpoints = append(endpoints, endpoint)
+			delete(manager.inboundEndpoints, pairID)
 		}
 	}
 	// Concurrent repeated revocations must also wait for sessions whose pins
 	// were removed by the first call, including reservations before Begin.
 	for pairID, connection := range manager.sessions {
+		if manager.revokedPairs[pairID] == networkID {
+			pending = append(pending, connection)
+		}
+	}
+	for pairID, connection := range manager.inbound {
 		if manager.revokedPairs[pairID] == networkID {
 			pending = append(pending, connection)
 		}

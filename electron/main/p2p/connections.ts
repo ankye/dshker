@@ -4,6 +4,9 @@ import { assertAccountId } from './account-records'
 import type { PeerRpc } from './rpc'
 import { exactPeerObject, PeerHelperError } from './wire'
 
+/** 2026-01-01T00:00:00Z: the epoch attempt generations are seeded from. */
+const GENERATION_EPOCH_MILLISECONDS = 1_767_225_600_000
+
 /**
  * Main-only connection operations for paired computers.
  *
@@ -22,6 +25,23 @@ export class PeerConnections {
 
   constructor(private readonly rpc: Pick<PeerRpc, 'call'>) {}
 
+  /**
+   * Names the next attempt of this process.
+   *
+   * A counter starting at 1 names every attempt of a restarted process "older"
+   * than the ones a previous process made: a peer that orders attempts by
+   * generation alone rejects the fresh attempt as stale, and the connection
+   * dies as p2p.runtime_request_unscoped until that peer restarts. Seeding from
+   * the clock makes each process start above everything an earlier one could
+   * have counted, so a fresh attempt is always the newest any peer has seen —
+   * including peers running builds that never learned attempt lineages.
+   */
+  #nextGeneration(): number {
+    const seeded = Math.max(Date.now() - GENERATION_EPOCH_MILLISECONDS, 1)
+    this.#generation = Math.max(this.#generation + 1, seeded)
+    return this.#generation
+  }
+
   close(): void {
     this.#closed = true
     this.#entries.clear()
@@ -38,7 +58,7 @@ export class PeerConnections {
     assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     return this.#operation(serviceId, pairId, async () => {
-      const generation = ++this.#generation
+      const generation = this.#nextGeneration()
       const reply = await this.rpc.call(
         'peer.connect',
         { serviceId, data: { pairId, generation } },

@@ -54,9 +54,14 @@ export function parseHelperState(value: unknown): PeerHelperState {
 }
 
 export function assertStateProgress(previous: PeerHelperState, next: PeerHelperState): void {
-  if (next.generation < previous.generation) throw new PeerHelperError('p2p.stale_generation')
-  if (next.generation !== previous.generation) return
-  if (next.attemptId !== previous.attemptId) throw new PeerHelperError('p2p.attempt_mismatch')
+  // A generation counts attempts within one launcher process, so a peer that
+  // restarts begins again from one: comparing generations across attempts named
+  // every attempt a restarted peer made "stale", the stage never recorded, and
+  // every runtime request after that was refused as p2p.runtime_request_unscoped.
+  // Inside one attempt the generation never changes, so ordering is enforced
+  // there — the ranks are the replay guard — while a different attempt is a new
+  // lineage whose freshness the caller decides by whether it has seen it before.
+  if (next.attemptId !== previous.attemptId) return
   const ranks = { punching: 0, 'starting-runtime': 1, ready: 2, failed: 3, disconnected: 3 }
   if (
     ranks[next.stage] < ranks[previous.stage] ||

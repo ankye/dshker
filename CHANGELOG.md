@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.1.50 — 2026-09-16
+
+- **A pair now owns one session per direction, not one slot shared between both.**
+  This machine's own Run tab dials out; the far machine's tab is the answered
+  session here. Before, whichever side dialled first kept the other side's
+  "connect" answering `p2p.connection_busy` for as long as its session lived,
+  with a tab that showed the answered session's stage and no address of its own
+  to load — a function that had already connected appeared disabled with no
+  explanation. The core now tracks inbound sessions and their endpoints
+  separately from outbound ones, and revocation clears both attachments.
+- **A restarted process no longer writes off every peer as stale.** Attempt
+  generations were seeded from a counter starting at 1, so a fresh process that
+  was forced to reconnect named every attempt "older" than the previous process's
+  last attempt: the peer refused it as stale, the stage never recorded it, and
+  every runtime request that followed died as `p2p.runtime_request_unscoped`
+  until that peer restarted too. Generations are now seeded from the wall clock,
+  so each process start sets every attempt above anything the peer has seen
+  before — including peers running builds that never learned attempt lineages.
+- **A failed result from asking about a connection no longer locks that tab
+  forever.** A promise that rejected left the in-flight marker in place, so the
+  tab never asked again and entered a terminal state: "ready" with no page
+  loaded. The ask now catches the refusal and clears the marker, so the next
+  render cycle retries normally.
+- **The host no longer refuses answered runtime requests for not being in a
+  "starting-runtime" stage that the inbound session's document was never told.**
+  The core owns one slot per direction now and asks for a runtime only while an
+  answered attempt is at `starting-runtime`, so the only gate is whether the pair
+  is still recorded and active. Requiring a stage the doc never had made every
+  answered attempt die as `p2p.runtime_request_unscoped`.
+
 ## 0.1.49 — 2026-09-16
 
 - **0.1.48 could not connect to any paired computer.** The list of paired

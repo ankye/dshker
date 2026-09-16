@@ -90,7 +90,7 @@ func TestInvalidationRejectsLateOwnerBinding(t *testing.T) {
 	child, stop := context.WithCancel(ctx)
 	defer stop()
 	connection := &session{ctx: child, cancel: stop, transport: &peer.Transport{}, lease: protocol.Lease{ToDeviceID: manager.config.Device.DeviceID}}
-	manager.sessions = map[string]*session{pin.Pair.PairID: connection}
+	manager.inbound = map[string]*session{pin.Pair.PairID: connection}
 	entered, release := make(chan struct{}), make(chan struct{})
 	manager.owner = func(context.Context, string) (runtimebridge.Binding, error) {
 		close(entered)
@@ -125,7 +125,11 @@ func TestInvalidationPreservesOtherRuntimeAndOutgoingPeer(t *testing.T) {
 	outgoing.transport = &peer.Transport{}
 	outgoing.lease.ToDeviceID = pin.Target.DeviceID
 	outgoing.result.State.RuntimeGeneration = 7
-	manager.sessions = map[string]*session{"incoming": incoming, "outgoing": outgoing}
+	// Each direction owns its slot: the answered session serves this machine's
+	// runtime, the dialled one browses the far side's, and invalidation is asked
+	// about the served side only.
+	manager.sessions = map[string]*session{"outgoing": outgoing}
+	manager.inbound = map[string]*session{"incoming": incoming}
 	manager.InvalidateRuntime(7)
 	if incoming.ctx.Err() != nil || outgoing.ctx.Err() != nil {
 		t.Fatal("invalidation cancelled an unrelated runtime")

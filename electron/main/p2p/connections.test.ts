@@ -21,15 +21,24 @@ function state(generation: number, stage = 'punching', pair = pairId) {
   }
 }
 
+function dispatchedGeneration(payload: unknown): number {
+  return (payload as { data: { generation: number } }).data.generation
+}
+
 function fixture() {
   const call = vi.fn<(method: string, payload: unknown, signal: AbortSignal) => Promise<unknown>>()
-  return { call, connections: new PeerConnections({ call }) }
+  /** Answers one peer.connect with a reply naming the attempt that was sent. */
+  const accept = (entry = url, stage = 'punching', pair = pairId) =>
+    call.mockImplementationOnce((_method, payload) =>
+      Promise.resolve({ state: state(dispatchedGeneration(payload), stage, pair), url: entry })
+    )
+  return { call, connections: new PeerConnections({ call }), accept }
 }
 
 describe('main-owned P2P connections', () => {
   it('keeps the local DSH entry URL out of the returned state', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url })
+    f.accept()
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     expect(JSON.stringify(accepted)).not.toContain('127.0.0.1')
     expect(JSON.stringify(accepted)).not.toContain(url)
@@ -37,18 +46,23 @@ describe('main-owned P2P connections', () => {
 
   it('never reports a dispatched attempt as ready', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url })
+    f.accept()
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     expect(accepted.stage).not.toBe('ready')
   })
 
-  it('assigns an increasing generation per attempt so late callbacks are detectable', async () => {
+  it('names attempts above anything an earlier process could have counted', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url })
-    await f.connections.connect(serviceId, pairId, signal())
-    f.call.mockResolvedValueOnce({ state: state(2), url })
+    f.accept()
+    const first = await f.connections.connect(serviceId, pairId, signal())
+    // A counter starting at 1 names every attempt of a restarted process older
+    // than the ones a previous process made, which a peer ordering attempts by
+    // generation alone rejects as stale. The clock seed keeps a fresh attempt
+    // the newest any peer has seen.
+    expect(first.generation).toBeGreaterThan(1_000_000_000)
+    f.accept()
     const second = await f.connections.connect(serviceId, pairId, signal())
-    expect(second.generation).toBe(2)
+    expect(second.generation).toBeGreaterThan(first.generation)
   })
 
   it('rejects a reply whose generation does not match the dispatched attempt', async () => {
@@ -61,7 +75,7 @@ describe('main-owned P2P connections', () => {
 
   it('rejects a reply naming a different pair', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1, 'punching', otherPair), url })
+    f.accept(url, 'punching', otherPair)
     await expect(f.connections.connect(serviceId, pairId, signal())).rejects.toMatchObject({
       code: 'p2p.identity_mismatch'
     })
@@ -69,7 +83,7 @@ describe('main-owned P2P connections', () => {
 
   it('refuses a connection reply that carries no usable entry point', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url: '' })
+    f.accept('')
     await expect(f.connections.connect(serviceId, pairId, signal())).rejects.toMatchObject({
       code: 'p2p.invalid_socket'
     })
@@ -77,7 +91,7 @@ describe('main-owned P2P connections', () => {
 
   it('hands the entry point only for the matching generation', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url })
+    f.accept()
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     expect(f.connections.entry(serviceId, pairId, accepted.generation)).toBe(url)
     // A superseded attempt must not resurrect an old entry point.
@@ -88,7 +102,7 @@ describe('main-owned P2P connections', () => {
 
   it('drops the entry point on disconnect so the old URL cannot be reused', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url })
+    f.accept()
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     f.call.mockResolvedValueOnce({})
     await f.connections.disconnect(serviceId, pairId, signal())
@@ -99,7 +113,7 @@ describe('main-owned P2P connections', () => {
 
   it('drops the entry point even when helper teardown fails', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url })
+    f.accept()
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     f.call.mockRejectedValueOnce(new Error('teardown failed'))
     await expect(f.connections.disconnect(serviceId, pairId, signal())).rejects.toThrow()
@@ -112,9 +126,9 @@ describe('main-owned P2P connections', () => {
   it('invalidates every entry point of one service without touching others', async () => {
     const f = fixture()
     const otherService = 'b'.repeat(12)
-    f.call.mockResolvedValueOnce({ state: state(1), url })
+    f.accept()
     const first = await f.connections.connect(serviceId, pairId, signal())
-    f.call.mockResolvedValueOnce({ state: state(2), url: `${url}other` })
+    f.accept(`${url}other`)
     const second = await f.connections.connect(otherService, pairId, signal())
     f.connections.invalidate(serviceId)
     expect(() => f.connections.entry(serviceId, pairId, first.generation)).toThrow()
@@ -125,7 +139,11 @@ describe('main-owned P2P connections', () => {
     const f = fixture()
     let release = (): void => {}
     f.call.mockImplementationOnce(
-      () => new Promise((resolve) => (release = () => resolve({ state: state(1), url })))
+      (_method, payload) =>
+        new Promise(
+          (resolve) =>
+            (release = () => resolve({ state: state(dispatchedGeneration(payload)), url }))
+        )
     )
     const first = f.connections.connect(serviceId, pairId, signal())
     await expect(f.connections.connect(serviceId, pairId, signal())).rejects.toMatchObject({
@@ -137,7 +155,7 @@ describe('main-owned P2P connections', () => {
 
   it('clears every entry point once closed', async () => {
     const f = fixture()
-    f.call.mockResolvedValueOnce({ state: state(1), url })
+    f.accept()
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     f.connections.close()
     expect(() => f.connections.entry(serviceId, pairId, accepted.generation)).toThrow(

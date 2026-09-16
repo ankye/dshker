@@ -52,16 +52,29 @@ type Manager struct {
 	revokedNetworks map[string]struct{}
 	revokedPairs    map[string]string
 	sessions        map[string]*session
+	// inbound holds the sessions this device answered, one per pair: the far
+	// side connected to us. A pair can carry one session in each direction at
+	// the same time — each machine's own Run tab is an outbound session, and the
+	// far machine's tab is this one — so sharing one slot meant whichever side
+	// dialled first kept the other side's "connect" answering p2p.connection_busy
+	// forever, with a tab that showed the inbound session's stage and no address
+	// of its own to load.
+	inbound map[string]*session
 	// endpoints outlive any one session: a browser tab or a desktop client left
 	// pointed at a pair's gateway must keep working across a reconnect, so the
 	// gateway is only closed when the pair itself stops being pinned — never
 	// when a session inside it ends. Establish attaches each rebuilt session's
 	// mux to the same Endpoint instead of the run creating a fresh one.
-	endpoints   map[string]*runtimebridge.Endpoint
-	closed      bool
-	turnFetched bool
-	turnCreds   controlplane.TurnCredentials
-	turnErr     error
+	endpoints map[string]*runtimebridge.Endpoint
+	// inboundEndpoints is that long-lived attachment for answered sessions: the
+	// served runtime is not the browsed one, so the two must never share an
+	// Endpoint — an inbound session reusing the browser Endpoint reported no
+	// local address, and the outbound attempt after it answered an empty URL.
+	inboundEndpoints map[string]*runtimebridge.Endpoint
+	closed           bool
+	turnFetched      bool
+	turnCreds        controlplane.TurnCredentials
+	turnErr          error
 }
 type session struct {
 	PairID    string
@@ -93,7 +106,7 @@ func New(ctx context.Context, client *controlplane.Client, config Config, pins [
 		return nil, errors.New("p2p.helper_configuration_required")
 	}
 	child, cancel := context.WithCancel(ctx)
-	manager := &Manager{ctx: child, cancel: cancel, client: client, config: config, owner: owner, emit: emit, pins: make(map[string]controlplane.PairIdentity), sessions: make(map[string]*session), endpoints: make(map[string]*runtimebridge.Endpoint)}
+	manager := &Manager{ctx: child, cancel: cancel, client: client, config: config, owner: owner, emit: emit, pins: make(map[string]controlplane.PairIdentity), sessions: make(map[string]*session), inbound: make(map[string]*session), endpoints: make(map[string]*runtimebridge.Endpoint), inboundEndpoints: make(map[string]*runtimebridge.Endpoint)}
 	for _, pin := range pins {
 		if err := manager.Pin(pin); err != nil {
 			cancel()
@@ -267,6 +280,9 @@ func (manager *Manager) finish(pairID string, connection *session) {
 	if manager.sessions[pairID] == connection {
 		delete(manager.sessions, pairID)
 	}
+	if manager.inbound[pairID] == connection {
+		delete(manager.inbound, pairID)
+	}
 	manager.mu.Unlock()
 	connection.finishOnce.Do(func() { close(connection.done) })
 }
@@ -289,8 +305,11 @@ func (manager *Manager) Disconnect(pairID string) error {
 func (manager *Manager) InvalidateRuntime(generation uint64) {
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
-	for _, connection := range manager.sessions {
-		if connection.transport == nil || connection.lease.ToDeviceID != manager.config.Device.DeviceID {
+	// InvalidateRuntime is asked to drop the sessions bound to a runtime this
+	// device serves, which are the answered ones; the dialled ones browse the
+	// far side's runtime and cannot be bound to a local generation.
+	for _, connection := range manager.inbound {
+		if connection.transport == nil {
 			continue
 		}
 		connection.mu.Lock()
@@ -304,15 +323,22 @@ func (manager *Manager) InvalidateRuntime(generation uint64) {
 func (manager *Manager) Close() {
 	manager.mu.Lock()
 	manager.closed = true
-	pending := make([]<-chan struct{}, 0, len(manager.sessions))
+	pending := make([]<-chan struct{}, 0, len(manager.sessions)+len(manager.inbound))
 	for _, connection := range manager.sessions {
 		pending = append(pending, connection.done)
 	}
-	endpoints := make([]*runtimebridge.Endpoint, 0, len(manager.endpoints))
+	for _, connection := range manager.inbound {
+		pending = append(pending, connection.done)
+	}
+	endpoints := make([]*runtimebridge.Endpoint, 0, len(manager.endpoints)+len(manager.inboundEndpoints))
 	for _, endpoint := range manager.endpoints {
 		endpoints = append(endpoints, endpoint)
 	}
+	for _, endpoint := range manager.inboundEndpoints {
+		endpoints = append(endpoints, endpoint)
+	}
 	manager.endpoints = make(map[string]*runtimebridge.Endpoint)
+	manager.inboundEndpoints = make(map[string]*runtimebridge.Endpoint)
 	manager.mu.Unlock()
 	manager.cancel()
 	manager.signals.close()
@@ -339,9 +365,17 @@ func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *ses
 	if !exists || manager.closed {
 		return nil, errors.New("p2p.pair_unauthorized")
 	}
-	current, busy := manager.sessions[pairID]
-	if (reserved == nil && busy) || (reserved != nil && (!busy || current != reserved)) {
+	// Outbound attempts reserve their slot in Connect; an answered attempt owns
+	// the inbound one. The two never block each other: a pair can be dialled and
+	// answered at the same time, each direction serving the other machine's tab.
+	dialed, dialedBusy := manager.sessions[pairID]
+	if reserved != nil && (!dialedBusy || dialed != reserved) {
 		return nil, errors.New("p2p.connection_busy")
+	}
+	if reserved == nil {
+		if _, answered := manager.inbound[pairID]; answered {
+			return nil, errors.New("p2p.connection_busy")
+		}
 	}
 	if reserved != nil && reserved.ctx.Err() != nil {
 		return nil, errors.New("p2p.connection_cancelled")
@@ -374,7 +408,11 @@ func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *ses
 	}
 	connection.PairID = pairID
 	connection.lease, connection.transport = lease, transport
-	manager.sessions[pairID] = connection
+	if reserved == nil {
+		manager.inbound[pairID] = connection
+	} else {
+		manager.sessions[pairID] = connection
+	}
 	go manager.run(connection)
 	return connection, nil
 }
@@ -435,9 +473,15 @@ func (manager *Manager) pairForRemoteLocked(remoteDeviceID, networkID string) (s
 }
 
 // sessionByAttemptLocked finds the session whose lease carries an attempt id.
-// Caller holds manager.mu.
+// Caller holds manager.mu. Both directions are searched: an attempt id names
+// one attempt, but dialled and answered sessions coexist for one pair.
 func (manager *Manager) sessionByAttemptLocked(attemptID string) *session {
 	for _, connection := range manager.sessions {
+		if connection.lease.AttemptID == attemptID {
+			return connection
+		}
+	}
+	for _, connection := range manager.inbound {
 		if connection.lease.AttemptID == attemptID {
 			return connection
 		}
@@ -464,17 +508,26 @@ func (manager *Manager) revoke(pairID string) {
 		manager.revokedPairs[pairID] = pin.Pair.NetworkID
 	}
 	endpoint := manager.endpoints[pairID]
+	served := manager.inboundEndpoints[pairID]
 	delete(manager.endpoints, pairID)
+	delete(manager.inboundEndpoints, pairID)
 	connection := manager.sessions[pairID]
-	if connection != nil {
-		connection.cancel()
-	}
+	answered := manager.inbound[pairID]
 	manager.mu.Unlock()
 	// Closed outside the lock: a revoked pair must lose its reachable address at
 	// once, including when no session was live, and Close reaches into the
 	// gateway's own locks.
+	if connection != nil {
+		connection.cancel()
+	}
+	if answered != nil {
+		answered.cancel()
+	}
 	if endpoint != nil {
 		endpoint.Close()
+	}
+	if served != nil {
+		served.Close()
 	}
 }
 
@@ -510,6 +563,9 @@ func (manager *Manager) receive(active subscription) {
 		}
 		manager.mu.Lock()
 		connection := manager.sessions[event.PairID]
+		if connection == nil {
+			connection = manager.inbound[event.PairID]
+		}
 		if event.Type == "signal" {
 			connection = manager.sessionByAttemptLocked(event.Signal.AttemptID)
 		}
@@ -553,10 +609,20 @@ func (manager *Manager) receive(active subscription) {
 }
 
 func (manager *Manager) run(connection *session) {
+	// This device dialled the far side when the lease names it as the sender.
+	// The direction decides everything downstream: which Endpoint map the
+	// long-lived attachment lives in, and whether the stage is announced — an
+	// answered session serves the far machine's tab, and announcing its stage
+	// here made this machine's own tab show a "ready" it had no address for.
+	initiator := connection.lease.FromDeviceID == manager.config.Device.DeviceID
+	announce := manager.emit
+	if !initiator {
+		announce = func(State) {}
+	}
 	renewed := make(chan struct{})
 	go func() { defer close(renewed); manager.renew(connection) }()
 	state := State{PairID: connection.PairID, AttemptID: connection.lease.AttemptID, Generation: connection.lease.Generation, Stage: "punching"}
-	manager.emit(state)
+	announce(state)
 	defer func() {
 		connection.cancel()
 		connection.transport.Close()
@@ -564,7 +630,7 @@ func (manager *Manager) run(connection *session) {
 		if state.Stage != "failed" {
 			state.Stage = "disconnected"
 		}
-		manager.emit(state)
+		announce(state)
 		manager.end(connection.lease)
 		// The endpoint (and its gateway, its port, its URL) is not torn down here:
 		// this session ending does not mean the pair stopped being pinned. Only
@@ -591,21 +657,30 @@ func (manager *Manager) run(connection *session) {
 	}
 	if err == nil {
 		state.Stage = "starting-runtime"
-		manager.emit(state)
+		announce(state)
+		// The browsed runtime and the served one are separate attachments, so the
+		// direction picks the map: a dialled session's Endpoint carries the
+		// browser gateway this machine's tab loads, an answered session's carries
+		// the listener that serves the far machine. Sharing one made whichever
+		// direction connected second reuse the other's attachment.
+		attachments := manager.endpoints
+		if !initiator {
+			attachments = manager.inboundEndpoints
+		}
 		manager.mu.Lock()
-		existing := manager.endpoints[connection.PairID]
+		existing := attachments[connection.PairID]
 		manager.mu.Unlock()
 		// The session context ends with this attempt; the gateway must outlive it,
 		// so its listener is owned by the manager instead. Attaching the gateway to
 		// connection.ctx would close its port the moment this session ended, making
 		// the URL change on every reconnect — the thing a stable URL must not do.
-		gateway, endpoint, mux, binding, err = runtimebridge.Establish(connection.ctx, manager.ctx, connection.transport, connection.lease, connection.lease.FromDeviceID == manager.config.Device.DeviceID, manager.runtimeOwner(connection), existing)
+		gateway, endpoint, mux, binding, err = runtimebridge.Establish(connection.ctx, manager.ctx, connection.transport, connection.lease, initiator, manager.runtimeOwner(connection), existing)
 		if err == nil {
 			connection.mu.Lock()
 			connection.mux, connection.endpoint = mux, endpoint
 			connection.mu.Unlock()
 			manager.mu.Lock()
-			manager.endpoints[connection.PairID] = endpoint
+			attachments[connection.PairID] = endpoint
 			manager.mu.Unlock()
 		}
 	}
@@ -648,7 +723,7 @@ func (manager *Manager) run(connection *session) {
 	}
 	connection.mu.Unlock()
 	close(connection.ready)
-	manager.emit(state)
+	announce(state)
 	if err != nil {
 		return
 	}
@@ -742,6 +817,12 @@ func (manager *Manager) connectedMux(pairID string) (*peer.Mux, error) {
 	}
 	manager.mu.Lock()
 	connection, exists := manager.sessions[pairID]
+	if !exists {
+		// A pair with only an answered session still carries a live transport,
+		// and the remote operations below are asked over whichever session is
+		// connected, in either direction.
+		connection, exists = manager.inbound[pairID]
+	}
 	manager.mu.Unlock()
 	if !exists {
 		return nil, errors.New("p2p.not_connected")
