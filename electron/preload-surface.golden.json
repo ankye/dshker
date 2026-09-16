@@ -95,6 +95,8 @@
     "runtimeBrowser.getPreferences()",
     "runtimeBrowser.onZoomChange()",
     "runtimeBrowser.setZoom()",
-    "tokenUsage.getState()"
+    "tokenUsage.getState()",
+    "tray.getCloseBehavior()",
+    "tray.setCloseBehavior()"
   ]
 }

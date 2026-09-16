@@ -253,6 +253,14 @@ const desktopApi: DesktopApi = Object.freeze({
     refresh: (): Promise<ApiResult<PluginCatalogState>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.pluginCatalogRefresh)
   }),
+  tray: Object.freeze({
+    getCloseBehavior: (): Promise<ApiResult<{ closeBehavior: string }>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.trayGetCloseBehavior),
+    setCloseBehavior: (
+      closeBehavior: string
+    ): Promise<ApiResult<{ closeBehavior: string }>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.traySetCloseBehavior, closeBehavior)
+  }),
   externalLinks: Object.freeze({
     open: (linkId: LauncherExternalLinkId): Promise<ApiResult<void, ExternalLinkErrorCode>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.externalLinkOpen, linkId)

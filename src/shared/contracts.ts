@@ -62,7 +62,11 @@ export const DESKTOP_IPC_CHANNELS = {
   launcherUpdatesStateChanged: 'dsh-launcher:updates:state-changed',
   pluginCatalogGetState: 'dsh-launcher:plugin-catalog:get-state',
   pluginCatalogRefresh: 'dsh-launcher:plugin-catalog:refresh',
-  externalLinkOpen: 'dsh-launcher:external-link:open'
+  externalLinkOpen: 'dsh-launcher:external-link:open',
+  /** Get the current tray minimise-on-close behaviour. */
+  trayGetCloseBehavior: 'dsh-launcher:tray:get-close-behavior',
+  /** Set the current tray minimise-on-close behaviour. */
+  traySetCloseBehavior: 'dsh-launcher:tray:set-close-behavior'
 } as const
 
 /** Immutable product identity compiled into the launcher artifact. */
@@ -761,6 +765,12 @@ export interface DesktopApi {
     getHostRenderingInfo(): Promise<ApiResult<RuntimeBrowserHostRenderingInfo>>
     /** Follows guest-focused Cmd/Ctrl zoom shortcuts handled by Electron main. */
     onZoomChange(listener: (result: ApiResult<RuntimeBrowserPreferences>) => void): () => void
+  }>
+  readonly tray: Readonly<{
+    getCloseBehavior(): Promise<ApiResult<{ closeBehavior: 'minimize-to-tray' | 'quit' }>>
+    setCloseBehavior(
+      behavior: 'minimize-to-tray' | 'quit'
+    ): Promise<ApiResult<{ closeBehavior: 'minimize-to-tray' | 'quit' }>>
   }>
   readonly p2pManagement: P2PManagementApi
   readonly remoteConnections: Readonly<{

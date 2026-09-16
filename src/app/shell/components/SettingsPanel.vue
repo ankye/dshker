@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ThemedListbox, type ThemedListboxOption } from '@/app/shared/controls'
 import { useLauncherHarness } from '@/app/domains/launcher-harness'
 import { LauncherUpdateSettingsCard } from '@/app/domains/launcher-updates'
@@ -10,6 +10,33 @@ import { setTheme, theme, type Theme } from '@/app/shared/theme/useTheme'
 import { LAUNCHER_HARNESS_MAX_PORT, LAUNCHER_HARNESS_MIN_PORT } from '@/shared/contracts'
 
 const t = useTranslator()
+
+/** Tray close-behaviour setting, loaded on mount. */
+const trayCloseBehavior = ref<'minimize-to-tray' | 'quit'>('minimize-to-tray')
+
+onMounted(async () => {
+  const trayApi = (window as unknown as { dshLauncher?: { tray?: { getCloseBehavior(): Promise<unknown> } } })
+    .dshLauncher?.tray
+  if (trayApi) {
+    const result = (await trayApi.getCloseBehavior()) as {
+      ok: boolean
+      data?: { closeBehavior: string }
+    }
+    if (result.ok && result.data) {
+      const behavior = result.data.closeBehavior
+      if (behavior === 'minimize-to-tray' || behavior === 'quit') {
+        trayCloseBehavior.value = behavior
+      }
+    }
+  }
+})
+
+async function updateTrayBehavior(behavior: 'minimize-to-tray' | 'quit'): Promise<void> {
+  trayCloseBehavior.value = behavior
+  const trayApi = (window as unknown as { dshLauncher?: { tray?: { setCloseBehavior(b: string): Promise<unknown> } } })
+    .dshLauncher?.tray
+  if (trayApi) await trayApi.setCloseBehavior(behavior)
+}
 
 /**
  * The control edits shared app state rather than owning it. While this route
@@ -218,6 +245,45 @@ const selectedLocale = computed<SupportedLocale>({
               :label="t('settings.language')"
               test-id="settings-language"
             />
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <header class="settings-section-header">
+          <div class="settings-section-title">
+            <h3>{{ t('settings.tray') }}</h3>
+            <p>{{ t('settings.tray.hint') }}</p>
+          </div>
+        </header>
+        <div class="settings-section-body">
+          <div class="settings-port-modes" role="radiogroup" :aria-label="t('settings.tray')">
+            <label class="settings-port-mode" :data-selected="trayCloseBehavior === 'minimize-to-tray'">
+              <input
+                v-model="trayCloseBehavior"
+                type="radio"
+                value="minimize-to-tray"
+                name="launcher-close-behavior"
+                @change="updateTrayBehavior('minimize-to-tray')"
+              />
+              <span class="settings-port-mode-copy">
+                <strong>{{ t('settings.tray.minimize') }}</strong>
+                <small>{{ t('settings.tray.minimize.description') }}</small>
+              </span>
+            </label>
+            <label class="settings-port-mode" :data-selected="trayCloseBehavior === 'quit'">
+              <input
+                v-model="trayCloseBehavior"
+                type="radio"
+                value="quit"
+                name="launcher-close-behavior"
+                @change="updateTrayBehavior('quit')"
+              />
+              <span class="settings-port-mode-copy">
+                <strong>{{ t('settings.tray.quit') }}</strong>
+                <small>{{ t('settings.tray.quit.description') }}</small>
+              </span>
+            </label>
           </div>
         </div>
       </section>

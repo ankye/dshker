@@ -31,6 +31,7 @@ import { CoreHarnessRuntime, type CoreHarnessRuntimePort } from './main/core/har
 import { CoreRoots, type CoreRootsPort } from './main/core/roots'
 import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
+import { createTray, destroyTray, isTrayActive } from './main/launcher-tray'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
 import { runSmokeTest, writeSmokeFailure, writeSmokeTrace } from './main/smoke'
 import { createWindow } from './main/window'
@@ -139,6 +140,13 @@ async function start(): Promise<void> {
     scheduleLauncherUpdateCheckAfterWindowReady(window, services.launcherUpdateService)
   })
   createWindow(mainDirectory, services.runtimeBrowserController)
+  // System tray for minimise-to-tray close behaviour. Uses the same window the
+  // update scheduler received, so the icon and close handler always attach to
+  // the one window the app owns.
+  void app.whenReady().then(() => {
+    const main = BrowserWindow.getAllWindows()
+    if (main.length > 0) createTray(main[0])
+  })
   // A second instance tried to start (the user clicked the shortcut while
   // this process was already running). Focus the existing window rather than
   // leaving the user wondering where the application went.
@@ -182,6 +190,7 @@ function registerServicesShutdown(services: LauncherShutdownOwners): void {
     if (shutdownInProgress) return
     shutdownInProgress = true
     try {
+      destroyTray()
       await shutdownLauncherOwners(services)
       shutdownComplete = true
       app.quit()
@@ -540,5 +549,9 @@ if (IS_SMOKE_TEST) {
 }
 
 app.on('window-all-closed', () => {
+  // With minimise-to-tray enabled the app keeps running in the tray after the
+  // window closes; only quit when the user chose close-to-quit or the tray
+  // is not active.
+  if (isTrayActive()) return
   if (process.platform !== 'darwin') app.quit()
 })

@@ -57,6 +57,7 @@ import { registerRemoteConnectionIpc } from './remote-ipc'
 import { type RemoteConnectionService } from './remote/service'
 import { registerPeerManagementIpc } from './p2p/management-ipc'
 import type { PeerManagement } from './p2p/management'
+import { getCloseBehavior, setCloseBehavior } from './launcher-tray'
 
 /** Dependencies for the restricted Electron IPC registration. */
 export interface LauncherIpcOptions {
@@ -84,6 +85,7 @@ export function registerIpc(options: LauncherIpcOptions): void {
     options.peerManagement,
     options.peerManagement
   )
+  registerTrayIpc()
   // The console push channel sends appended records to every launcher window,
   // so operation and launch output do not wait for a periodic state read.
   options.launcherHarnessService.onConsoleAppend((entry) => {
@@ -844,4 +846,26 @@ function isManagedRootKind(
   value: unknown
 ): value is RegisterManagedRootsRequest['selections'][number]['kind'] {
   return value === 'harness' || value === 'plugins' || value === 'presets' || value === 'settings'
+}
+
+/** Registers the narrow surface for tray minimise-on-close preference. */
+function registerTrayIpc(): void {
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.trayGetCloseBehavior,
+    async (event): Promise<ApiResult<{ closeBehavior: string }>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      const closeBehavior = getCloseBehavior()
+      return apiOk({ closeBehavior })
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.traySetCloseBehavior,
+    async (event, payload: unknown): Promise<ApiResult<{ closeBehavior: string }>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (typeof payload !== 'string' || (payload !== 'minimize-to-tray' && payload !== 'quit'))
+        return apiFail('managed.selection_invalid', 'Close behavior must be "minimize-to-tray" or "quit".')
+      setCloseBehavior(payload)
+      return apiOk({ closeBehavior: payload })
+    }
+  )
 }
