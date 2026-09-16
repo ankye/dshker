@@ -177,14 +177,14 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		manager.mu.Unlock()
 		return Connected{}, errors.New("p2p.pair_unauthorized")
 	}
-	// A session whose transport or context ended is a dead attachment — the
-	// peer restarted or the network changed, and the new connect must not be
-	// refused by an old session that has not finished unwinding yet.
+	// A new explicit connect always supersedes an existing outbound session.
+	// The old session belongs to a previous attempt: after a peer restart its
+	// transport may still look alive (ICE has not timed out), so checking
+	// liveness here refused the fresh attempt as p2p.connection_busy for as
+	// long as the old transport lingered. The caller only offers connect when
+	// the pair is not ready, so replacing the slot is always the right move.
 	if current, busy := manager.sessions[pairID]; busy {
-		if !manager.retireDeadLocked(current) {
-			manager.mu.Unlock()
-			return Connected{}, errors.New("p2p.connection_busy")
-		}
+		current.cancel()
 		delete(manager.sessions, pairID)
 	}
 	connection := newSession(manager.ctx)
@@ -411,12 +411,13 @@ func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *ses
 	}
 	if reserved == nil {
 		if answered, busy := manager.inbound[pairID]; busy {
-			// The slot belongs to the answered direction; only a session that is
-			// already over (peer restart, transport loss) is retired so the new
-			// answer can take its place instead of being refused by a corpse.
-			if !manager.retireDeadLocked(answered) {
-				return nil, errors.New("p2p.connection_busy")
-			}
+			// A new inbound attempt always supersedes the previous answered
+			// session: the same reasons that apply to the outbound slot apply
+			// here — a peer restart leaves the old attachment alive in ICE's
+			// view for up to 30 seconds, and refusing the new answer on that
+			// basis made every reconnect after the far side came back produce
+			// p2p.connection_busy.
+			answered.cancel()
 			delete(manager.inbound, pairID)
 		}
 	}

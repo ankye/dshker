@@ -17,10 +17,10 @@ import (
 	"github.com/ankye/dshker/networking/internal/runtimebridge"
 )
 
-func TestDisconnectCancelsPendingBegin(t *testing.T) {
-	entered := make(chan struct{}, 1)
+func TestConnectReplacesPendingBegin(t *testing.T) {
+	entered := make(chan struct{}, 2)
 	release := make(chan struct{})
-	requestCancelled := make(chan struct{})
+	requestCancelled := make(chan struct{}, 2)
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/attempt" {
 			t.Errorf("unexpected operation %s", r.URL.Path)
@@ -32,7 +32,7 @@ func TestDisconnectCancelsPendingBegin(t *testing.T) {
 		entered <- struct{}{}
 		select {
 		case <-r.Context().Done():
-			close(requestCancelled)
+			requestCancelled <- struct{}{}
 		case <-release:
 		}
 	}))
@@ -61,14 +61,22 @@ func TestDisconnectCancelsPendingBegin(t *testing.T) {
 	case <-manager.ctx.Done():
 		t.Fatal("Begin did not reach server")
 	}
-	if _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 2); err == nil || err.Error() != "p2p.connection_busy" {
-		t.Fatalf("duplicate admitted: %v", err)
+	// A second connect supersedes the first: the old attempt's Begin request is
+	// cancelled and a fresh reservation replaces it. Refusing it as busy left a
+	// peer restart unable to reconnect for as long as the old transport lived.
+	go func() { _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 2); result <- err }()
+	select {
+	case <-entered:
+	case <-manager.ctx.Done():
+		t.Fatal("replacement Begin did not reach server")
+	}
+	select {
+	case <-requestCancelled:
+	case <-manager.ctx.Done():
+		t.Fatal("superseded Begin HTTP request remained active")
 	}
 	if err := manager.Disconnect(pin.Pair.PairID); err != nil {
 		t.Fatal(err)
-	}
-	if err := <-result; err == nil {
-		t.Fatal("cancelled Begin reported success")
 	}
 	manager.mu.Lock()
 	remaining := len(manager.sessions)
@@ -77,9 +85,9 @@ func TestDisconnectCancelsPendingBegin(t *testing.T) {
 		t.Fatal("Disconnect returned before reservation cleanup")
 	}
 	select {
-	case <-requestCancelled:
+	case <-result:
 	case <-manager.ctx.Done():
-		t.Fatal("outgoing Begin HTTP request remained active after disconnect")
+		t.Fatal("Connect did not settle after disconnect")
 	}
 }
 
