@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.1.52 — 2026-09-16
+
+- **The window stays visible when monitors or RDP sessions change.** Disconnecting
+  an external monitor, ending a remote-desktop session, or switching display
+  layouts could leave the Launcher window on a desktop that no longer exists —
+  positioned where a secondary monitor used to be, or at the resolution of the
+  RDP session that just ended. The window is now repositioned to the centre of
+  the primary display whenever the display configuration changes, and on every
+  startup it checks that its saved bounds sit on at least one available display.
+- **Window position and size survive a restart.** The last window bounds are
+  written on every move or resize and restored on the next launch.
+- **Double-clicking the shortcut now brings up the running window instead of
+  starting a second process.** An Electron single-instance lock prevents the
+  multiple processes that shared the same data root, core socket and catalog
+  files — the extra instance failed to start its own dshkerd (the data directory
+  was taken), and the user saw nothing at all.
+
 ## 0.1.51 — 2026-09-16
 
 - **A stale session after a peer restarted no longer blocks reconnection.**

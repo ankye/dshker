@@ -66,6 +66,16 @@ const IS_SMOKE_TEST =
   process.env.ELECTRON_SMOKE_TEST === '1' ||
   process.argv.includes('--dshker-smoke')
 
+// Electron's built-in single instance lock. Without this, each click of the
+// shortcut starts a new process that races the running one for the same data
+// root, core helper socket, and catalog files — the second instance fails to
+// start its own dshkerd (the data directory is taken) and shows nothing, which
+// reads as "the application cannot be opened". When another instance tries to
+// start, the existing one is brought to the front instead.
+if (!app.requestSingleInstanceLock()) {
+  app.quit()
+}
+
 const remoteDebuggingPort = process.env.ELECTRON_REMOTE_DEBUGGING_PORT
 if (remoteDebuggingPort !== undefined) {
   if (!/^\d+$/u.test(remoteDebuggingPort)) {
@@ -129,6 +139,17 @@ async function start(): Promise<void> {
     scheduleLauncherUpdateCheckAfterWindowReady(window, services.launcherUpdateService)
   })
   createWindow(mainDirectory, services.runtimeBrowserController)
+  // A second instance tried to start (the user clicked the shortcut while
+  // this process was already running). Focus the existing window rather than
+  // leaving the user wondering where the application went.
+  app.on('second-instance', () => {
+    const existing = BrowserWindow.getAllWindows()
+    if (existing.length > 0) {
+      const main = existing[0]
+      if (main.isMinimized()) main.restore()
+      main.focus()
+    }
+  })
   void initializeActiveVersion(services.launcherHarnessService)
   // Presence, the reported build, discoverability and pairing all ride on the
   // coordinator heartbeat, which only runs while a device session is held. Until
