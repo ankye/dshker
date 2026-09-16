@@ -384,6 +384,21 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		}
 		return binding, err
 	}
+	roots := func(ctx context.Context) ([]runtimebridge.Root, error) {
+		data, err := main.Call(ctx, "runtime.roots", struct {
+			ServiceID string `json:"serviceId"`
+		}{account.identity.ServiceID})
+		if err != nil {
+			return nil, err
+		}
+		var result struct {
+			Roots []runtimebridge.Root `json:"roots"`
+		}
+		if err := protocol.Decode(data, &result); err != nil {
+			return nil, err
+		}
+		return result.Roots, nil
+	}
 	emit := func(state peersession.State) {
 		ctx, cancel := context.WithTimeout(host.ctx, 5*time.Second)
 		defer cancel()
@@ -393,7 +408,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		}{account.identity.ServiceID, state})
 	}
 	client.SetAccount(request.Device.UserID)
-	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: request.PrivateKey}, request.Pins, owner, emit)
+	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: request.PrivateKey, Roots: roots}, request.Pins, owner, emit)
 	if err != nil {
 		client.Close()
 		return nil, err

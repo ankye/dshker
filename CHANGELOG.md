@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.1.53 — 2026-09-16
+
+- **远程工作区目录浏览已修复。** P2P 连接的远端目录服务
+  `ServeDirectoryStreams` 从未接入 `Manager.run()`（v0.1.48 引入后一直是死代
+  码），所以每次 `remote.roots` RPC 请求发出后，远端 mux 上无人应答，请求挂
+  起超时，用户看到"添加远程工作区"无法拉起远端文件夹目录。现在应答方的
+  `Manager` 持有 `RootProvider`，在连接建立后启动 `ServeDirectoryStreams` 监
+  听目录请求，通过私有通道向 Launcher 获取授权根目录列表并应答。
+- 授权根目录管理尚未接入用户界面，当前返回空列表（远端显示"尚未授权任何目
+  录"），后续通过 workspace registry 接入实际目录授权后即可浏览远端文件夹。
+
 ## 0.1.52 — 2026-09-16
 
 - **The window stays visible when monitors or RDP sessions change.** Disconnecting

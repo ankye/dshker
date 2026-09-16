@@ -360,7 +360,8 @@ async function registerLauncherServices(
     resolveSettingsRoot: () => managedWorkspaceService.resolveSettingsRoot(),
     secrets: coreSecrets,
     catalog: coreCatalog,
-    runtime: launcherHarnessService
+    runtime: launcherHarnessService,
+    rootsProvider: async () => []
   })
   registerIpc({
     managedWorkspaceService,

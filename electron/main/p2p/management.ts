@@ -28,6 +28,12 @@ interface Options {
   secrets?: CoreSecretPort
   catalog?: CoreCatalogPort
   runtime: Pick<LauncherHarnessService, 'getRuntimeState' | 'onRuntimeState' | 'start'>
+  /**
+   * Reads the local workspace root directories that a connected peer is
+   * authorised to browse. When absent or returning an empty list the peer is
+   * told "no authorised directories" rather than seeing a connection failure.
+   */
+  rootsProvider?(): Promise<{ rootId: string; name: string; path: string }[]>
 }
 
 interface Session {
@@ -96,6 +102,7 @@ export class PeerManagement {
       channel: options.channel,
       catalog: this.#catalog,
       runtime: options.runtime,
+      rootsProvider: options.rootsProvider,
       onUnavailable: () => this.#clearSession(),
       // A drop is retried at once rather than at the next sweep: the hole is
       // usually re-punchable within a second of a network change, and a tab the

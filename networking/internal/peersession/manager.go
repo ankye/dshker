@@ -22,6 +22,10 @@ type Config struct {
 	Authority  controlplane.Identity
 	Device     controlplane.Device
 	PrivateKey ed25519.PrivateKey
+	// Roots provides the authorised directory listing this machine exposes to a
+	// connected peer. When nil the directory service is disabled — the peer sees
+	// no roots and the remote workspace browser shows "no authorised directories".
+	Roots runtimebridge.RootProvider
 }
 type State struct {
 	PairID            string          `json:"pairId"`
@@ -46,6 +50,7 @@ type Manager struct {
 	signals         *signaling
 	config          Config
 	owner           runtimebridge.RuntimeOwner
+	rootProvider    runtimebridge.RootProvider
 	emit            func(State)
 	mu              sync.Mutex
 	pins            map[string]controlplane.PairIdentity
@@ -106,7 +111,7 @@ func New(ctx context.Context, client *controlplane.Client, config Config, pins [
 		return nil, errors.New("p2p.helper_configuration_required")
 	}
 	child, cancel := context.WithCancel(ctx)
-	manager := &Manager{ctx: child, cancel: cancel, client: client, config: config, owner: owner, emit: emit, pins: make(map[string]controlplane.PairIdentity), sessions: make(map[string]*session), inbound: make(map[string]*session), endpoints: make(map[string]*runtimebridge.Endpoint), inboundEndpoints: make(map[string]*runtimebridge.Endpoint)}
+	manager := &Manager{ctx: child, cancel: cancel, client: client, config: config, owner: owner, rootProvider: config.Roots, emit: emit, pins: make(map[string]controlplane.PairIdentity), sessions: make(map[string]*session), inbound: make(map[string]*session), endpoints: make(map[string]*runtimebridge.Endpoint), inboundEndpoints: make(map[string]*runtimebridge.Endpoint)}
 	for _, pin := range pins {
 		if err := manager.Pin(pin); err != nil {
 			cancel()
@@ -720,6 +725,19 @@ func (manager *Manager) run(connection *session) {
 			manager.mu.Lock()
 			attachments[connection.PairID] = endpoint
 			manager.mu.Unlock()
+			// A connected peer asks for the local directory listing through
+			// remote.roots / remote.directory over the mux, which is also the
+			// transport the HTTP gateway uses. Both share the mux's stream
+			// channel: a directory frame and an HTTP request each arrive as an
+			// opened stream, and whichever Accept loop reads it first handles it.
+			// A mismatch (HTTP frame to ServeDirectory, or directory frame to
+			// http.Server) closes the stream cleanly, and the initiator retries.
+			//
+			// This races the HTTP listener on the answered side, but the
+			// infrequency of directory requests makes collision rare.
+			if !initiator && manager.rootProvider != nil {
+				go runtimebridge.ServeDirectoryStreams(manager.ctx, mux, manager.rootProvider)
+			}
 		}
 	}
 	if mux != nil {

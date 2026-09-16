@@ -27,6 +27,11 @@ interface Options {
   channel?: PeerChannel
   catalog: PeerCatalog
   runtime: Pick<LauncherHarnessService, 'getRuntimeState' | 'onRuntimeState' | 'start'>
+  /**
+   * Reads the list of directories this machine authorises a connected peer
+   * to browse. A nil provider or an empty result means no roots are shared.
+   */
+  rootsProvider?(): Promise<{ rootId: string; name: string; path: string }[]>
   onUnavailable?(): void
   /**
    * Reports every connection stage the helper announces.
@@ -172,6 +177,31 @@ export class PeerRuntimeHost {
         throw new PeerHelperError('p2p.invalid_payload')
       this.options.onCatalogChange?.(changed.serviceId, changed.revision)
       return {}
+    }
+    // A connected peer asks for the directories this machine authorises for
+    // browsing. The answer is read from the shell, which owns the workspace
+    // registry; no path is inferred, defaulted or guessed here.
+    if (method === 'runtime.roots') {
+      const asked = exactPeerObject(payload, ['serviceId'])
+      assertAccountId(asked.serviceId, 12)
+      const roots = this.options.rootsProvider ? await this.options.rootsProvider() : []
+      for (const root of roots) {
+        if (
+          typeof root.rootId !== 'string' ||
+          root.rootId === '' ||
+          root.rootId.length > 128 ||
+          typeof root.name !== 'string' ||
+          root.name === '' ||
+          root.name.length > 256 ||
+          typeof root.path !== 'string' ||
+          root.path === '' ||
+          root.path.length > 4096
+        )
+          throw new PeerHelperError('p2p.invalid_roots')
+      }
+      if (new Set(roots.map((root) => root.rootId)).size !== roots.length)
+        throw new PeerHelperError('p2p.invalid_roots')
+      return { roots }
     }
     const fields = exactPeerObject(
       payload,
