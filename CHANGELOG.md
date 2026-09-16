@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.56 — 2026-09-17
+
+- **修复 Mac 重启后 Windows 连不上（`p2p.connection_busy`）。** 新 Connect 无条件替代
+  旧 session，不再检查 transport 是否还活着——ICE 检测远端断开需要 25-30 秒，
+  `retireDeadLocked` 在这个窗口期内返回 false 导致新连接被拒。现在旧 session 被
+  直接取消替换，不管它的 transport 状态如何。
+- **修复 `p2p.runtime_http_failed`。** `ServeDirectoryStreams` 的 `mux.Accept()`
+  与 HTTP gateway 的 `Listener.Accept` 竞争 stream 通道，HTTP 请求帧被目录服务
+  吃掉后无处转发导致 probe 失败。临时禁用此功能，待 stream 分流机制就绪后再接
+  入。
+- **修复托盘退出后无法启动。** 托盘 `app.quit()` 被窗口 close handler 的
+  `preventDefault` 拦截，进程没退出却销毁了托盘和隐藏了窗口。`forceQuitting` 标
+  志让真正退出绕过拦截。
+
 ## 0.1.55 — 2026-09-16
 
 - **系统托盘图标。** 桌面右下角（Windows）或菜单栏（macOS）新增 DSHKer Launcher
