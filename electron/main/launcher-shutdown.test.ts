@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { shutdownLauncherOwners } from './launcher-shutdown'
+import { createLauncherQuitSequence, shutdownLauncherOwners } from './launcher-shutdown'
 
 function fixture() {
   return {
@@ -58,5 +58,94 @@ describe('Launcher shutdown ownership', () => {
     await expect(shutdownLauncherOwners(owners)).rejects.toMatchObject({ errors: [first, second] })
     expect(owners.remoteConnectionService.shutdown).toHaveBeenCalledTimes(1)
     expect(owners.remotePeerBroker.shutdown).toHaveBeenCalledTimes(1)
+  })
+})
+
+function quitHost() {
+  const order: string[] = []
+  return {
+    order,
+    beginForceQuit: vi.fn(() => void order.push('beginForceQuit')),
+    destroyTray: vi.fn(() => void order.push('destroyTray')),
+    quit: vi.fn(() => void order.push('quit')),
+    exit: vi.fn((code: number) => void order.push(`exit:${code}`)),
+    reportFailure: vi.fn(() => void order.push('reportFailure'))
+  }
+}
+
+describe('Launcher quit sequence', () => {
+  /**
+   * The regression this exists for. Cmd+Q, the application menu, the Dock's Quit
+   * item and a termination signal all reach `app.quit()` without passing through
+   * the tray, so the close interception has to be released by the shared quit
+   * sequence rather than by the tray alone. Releasing it after the cleanup — or
+   * not at all — let the window hide itself instead of closing, which cancelled
+   * the quit and left a process with no window, no tray icon, a stopped core and
+   * the single-instance lock still held.
+   */
+  it('releases the close interception before any cleanup runs', async () => {
+    const owners = fixture()
+    const host = quitHost()
+    owners.peerManagement.close.mockImplementationOnce(async () => {
+      host.order.push('cleanup')
+    })
+
+    await createLauncherQuitSequence(owners, host).run()
+
+    expect(host.order.indexOf('beginForceQuit')).toBeLessThan(host.order.indexOf('cleanup'))
+    expect(host.quit).toHaveBeenCalledTimes(1)
+  })
+
+  it('destroys the tray only once the quit is certain to proceed', async () => {
+    const owners = fixture()
+    const host = quitHost()
+
+    await createLauncherQuitSequence(owners, host).run()
+
+    expect(host.order).toEqual(['beginForceQuit', 'destroyTray', 'quit'])
+  })
+
+  it('reports completion so the next quit request is not intercepted again', async () => {
+    const owners = fixture()
+    const sequence = createLauncherQuitSequence(owners, quitHost())
+
+    expect(sequence.isComplete()).toBe(false)
+    await sequence.run()
+    expect(sequence.isComplete()).toBe(true)
+  })
+
+  /**
+   * A cleanup failure must not become an application that cannot be quit: the
+   * user asked to leave and every owner was already attempted. Staying alive
+   * leaves the same hidden process holding the single-instance lock that only
+   * Activity Monitor can end.
+   */
+  it('still ends the process when an owner cleanup fails', async () => {
+    const owners = fixture()
+    const host = quitHost()
+    owners.launcherHarnessService.shutdown.mockRejectedValueOnce(new Error('DSH cleanup failed'))
+
+    const sequence = createLauncherQuitSequence(owners, host)
+    await sequence.run()
+
+    expect(host.reportFailure).toHaveBeenCalledTimes(1)
+    expect(host.exit).toHaveBeenCalledWith(1)
+    expect(host.destroyTray).toHaveBeenCalledTimes(1)
+    // The quit never "completed", but the process is ending regardless, so a
+    // retry loop that reruns the same failing cleanup cannot form.
+    expect(host.quit).not.toHaveBeenCalled()
+    expect(sequence.isComplete()).toBe(false)
+  })
+
+  it('runs the owners once when several quit paths fire together', async () => {
+    const owners = fixture()
+    const host = quitHost()
+    const sequence = createLauncherQuitSequence(owners, host)
+
+    await Promise.all([sequence.run(), sequence.run(), sequence.run()])
+
+    expect(owners.peerManagement.close).toHaveBeenCalledTimes(1)
+    expect(owners.launcherHarnessService.shutdown).toHaveBeenCalledTimes(1)
+    expect(host.quit).toHaveBeenCalledTimes(1)
   })
 })
