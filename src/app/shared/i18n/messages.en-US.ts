@@ -242,6 +242,8 @@ export const enUS: Record<MessageKey, string> = {
   'controller.log.export': 'Export log',
   'controller.log.exported': 'Exported',
   'controller.log.copyOutput': 'Copy all output',
+  'controller.log.clear': 'Clear output',
+  'controller.log.cleared': 'Cleared',
   'controller.log.copyContext': 'Copy',
   'controller.output.launcher': 'Launcher',
   'controller.output.command': 'Launch command',

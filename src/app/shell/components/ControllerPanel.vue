@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { useLauncherHarness } from '@/app/domains/launcher-harness'
+import { harnessConsole, useLauncherHarness } from '@/app/domains/launcher-harness'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import { CopyPathButton } from '@/app/shared/controls'
 import EmptyState from './EmptyState.vue'
@@ -32,9 +32,11 @@ const showsNotReady = computed(
 const copiedOutput = ref(false)
 const copiedLine = ref(false)
 const exported = ref(false)
+const cleared = ref(false)
 let copyTimer: ReturnType<typeof setTimeout> | undefined
 let copyLineTimer: ReturnType<typeof setTimeout> | undefined
 let exportTimer: ReturnType<typeof setTimeout> | undefined
+let clearTimer: ReturnType<typeof setTimeout> | undefined
 const copyMenu = ref<Readonly<{ text: string; x: number; y: number }>>()
 
 /**
@@ -123,6 +125,15 @@ async function exportLog(): Promise<void> {
   }, CONFIRMATION_MILLISECONDS)
 }
 
+function clearOutput(): void {
+  harnessConsole.value = []
+  cleared.value = true
+  if (clearTimer !== undefined) clearTimeout(clearTimer)
+  clearTimer = setTimeout(() => {
+    cleared.value = false
+  }, CONFIRMATION_MILLISECONDS)
+}
+
 onMounted(() => {
   window.addEventListener('click', dismissCopyMenu)
   window.addEventListener('keydown', dismissCopyMenuOnEscape)
@@ -132,6 +143,7 @@ onUnmounted(() => {
   if (copyTimer !== undefined) clearTimeout(copyTimer)
   if (copyLineTimer !== undefined) clearTimeout(copyLineTimer)
   if (exportTimer !== undefined) clearTimeout(exportTimer)
+  if (clearTimer !== undefined) clearTimeout(clearTimer)
   window.removeEventListener('click', dismissCopyMenu)
   window.removeEventListener('keydown', dismissCopyMenuOnEscape)
 })
@@ -176,6 +188,15 @@ onUnmounted(() => {
           @click="copyOutput"
         >
           {{ copiedOutput ? t('common.copied') : t('controller.log.copyOutput') }}
+        </button>
+        <button
+          type="button"
+          class="prototype-button prototype-button--secondary"
+          :data-confirmed="cleared"
+          :disabled="consoleEntries.length === 0"
+          @click="clearOutput"
+        >
+          {{ cleared ? t('controller.log.cleared') : t('controller.log.clear') }}
         </button>
       </div>
     </div>

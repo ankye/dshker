@@ -229,6 +229,8 @@ export const zhCN = {
   'controller.log.export': '导出日志',
   'controller.log.exported': '已导出',
   'controller.log.copyOutput': '复制全部输出',
+  'controller.log.clear': '清空输出',
+  'controller.log.cleared': '已清空',
   'controller.log.copyContext': '复制',
   'controller.output.launcher': '启动器',
   'controller.output.command': '启动命令',
