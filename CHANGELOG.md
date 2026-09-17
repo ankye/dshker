@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.57 — 2026-09-17
+
+- **修复双击快捷方式无法恢复隐藏到托盘的窗口。** `second-instance` 事件处理器只处理
+  了最小化窗口（`isMinimized()` → `restore()`），未处理隐藏到系统托盘的状态。窗口
+  `isMinimized()` 返回 false、`focus()` 对隐藏窗口无效，用户双击桌面/开始菜单图标
+  后看不到任何反应。现在增加了 `show()`，与托盘菜单"显示 DSHKer Launcher"一致，将
+  隐藏窗口重新显示到前台。Windows 和 macOS 同时生效。
+- **修复托盘右键菜单"退出"后进程残留。** `forceQuitting` 标志和关闭拦截已在 0.1.56
+  中实现，但托盘右键"退出"按钮直接调用了 `app.quit()` 而非 `quitApp()`，导致
+  `forceQuitting` 未被设置，关闭拦截器用 `preventDefault` 阻止了进程退出，窗口被
+  隐藏后进程仍占着单实例锁，后续双击快捷方式无法启动。现在托盘"退出"正确调用
+  `quitApp()` 设置标志后退出。
+
 ## 0.1.56 — 2026-09-17
 
 - **修复 Mac 重启后 Windows 连不上（`p2p.connection_busy`）。** 新 Connect 无条件替代

@@ -155,6 +155,9 @@ async function start(): Promise<void> {
     if (existing.length > 0) {
       const main = existing[0]
       if (main.isMinimized()) main.restore()
+      // A window hidden to the tray (minimize-to-tray) is not minimised, so
+      // restore() alone does nothing. show() brings it back to screen.
+      main.show()
       main.focus()
     }
   })
