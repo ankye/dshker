@@ -19,7 +19,7 @@ export const enUS: Record<MessageKey, string> = {
   'nav.versions': 'Versions',
   'nav.controller': 'Console',
   'nav.settings': 'Settings',
-  'nav.runtime': 'Run',
+  'nav.runtime': 'Browser',
   'nav.remote': 'Remote',
   'nav.collapse': 'Collapse to icon rail',
   'nav.hide': 'Hide sidebar',

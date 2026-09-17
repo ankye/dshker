@@ -17,7 +17,7 @@ export const zhCN = {
   'nav.versions': '版本管理',
   'nav.controller': '控制台',
   'nav.settings': '设置',
-  'nav.runtime': '运行',
+  'nav.runtime': '浏览器',
   'nav.remote': '远程连接',
   'nav.collapse': '收缩为图标栏',
   'nav.hide': '隐藏侧边栏',
