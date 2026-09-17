@@ -380,6 +380,13 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
                   : t('p2p.account.notSelected')
               }}</span>
             </div>
+            <div class="p2p-network-identity">
+              <span class="p2p-network-identity-label">{{ t('p2p.account.networkId') }}</span>
+              <code class="p2p-network-identity-value" data-testid="p2p-network-id">{{
+                network.networkId
+              }}</code>
+              <CopyPathButton :value="network.networkId" />
+            </div>
             <div class="p2p-network-editor">
               <button
                 type="button"
@@ -461,17 +468,6 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
                       {{ t('p2p.account.saveLimit') }}
                     </button>
                   </div>
-                </div>
-                <!-- The network id is what another machine joins by and what
-                     support asks for, so it is shown outright with its own copy
-                     control: a disclosure in front of it made the one value a
-                     reader came for the only value they had to go looking for. -->
-                <div class="p2p-network-identity">
-                  <span class="p2p-network-identity-label">{{ t('p2p.account.networkId') }}</span>
-                  <code class="p2p-network-identity-value" data-testid="p2p-network-id">{{
-                    network.networkId
-                  }}</code>
-                  <CopyPathButton :value="network.networkId" />
                 </div>
                 <p class="p2p-network-identity-hint">{{ t('p2p.account.networkIdHint') }}</p>
                 <div class="p2p-network-danger">
@@ -804,15 +800,16 @@ async function saveLimit(network: P2PNetworkView): Promise<void> {
   display: block;
 }
 /* The network id reads as a labelled value rather than as prose: its label, the
-   id and the copy control sit on one line, and the explanation follows it. */
+   id and the copy control sit on one line, and the explanation follows it.
+   It lives on the selection row itself (always visible) rather than inside the
+   expandable editor, because it is the value another machine joins by. */
 .p2p-network-identity {
+  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  margin-top: var(--space-4);
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--color-border);
+  margin-top: var(--space-1);
 }
 .p2p-network-identity-label {
   color: var(--color-text-muted);
