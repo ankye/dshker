@@ -109,6 +109,7 @@ export function refusalKeyForCode(code: string): keyof typeof zhCNRefusals {
       return 'p2p.refusal.coordinatorUnavailable'
     case 'p2p.direct_unavailable':
     case 'p2p.direct_closed':
+    case 'p2p.stream_failed':
       return 'p2p.refusal.noDirectPath'
     case 'p2p.pair_unauthorized':
     case 'p2p.pair_revoked':

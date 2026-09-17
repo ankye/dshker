@@ -4,12 +4,14 @@ package runtimebridge
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -176,8 +178,11 @@ func serve(parent context.Context, listener net.Listener, resolveIncoming, resol
 		Transport:     transport,
 		FlushInterval: -1,
 		ErrorLog:      log.New(io.Discard, "", 0),
-		ErrorHandler: func(writer http.ResponseWriter, _ *http.Request, _ error) {
-			http.Error(writer, "p2p.stream_failed", http.StatusBadGateway)
+		ErrorHandler: func(writer http.ResponseWriter, request *http.Request, err error) {
+			fmt.Fprintf(os.Stderr, "proxy %s %s: %v\n", request.Method, request.URL.Path, err)
+			writer.Header().Set("Content-Type", "text/html; charset=utf-8")
+			writer.WriteHeader(http.StatusBadGateway)
+			io.WriteString(writer, streamFailedPage(request))
 		},
 		Rewrite: func(request *httputil.ProxyRequest) {
 			destination, err := resolveDestination()
