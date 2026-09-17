@@ -284,7 +284,7 @@
   ],
   "real_commands": [
     {
-      "command": "cd networking && test -n \"$DSHKER_SERVER_BINARY\" && mkdir -p .run/p2p-stability && go test -race ./integration -count=1 -timeout=6m -json > .run/p2p-stability/integration-gate.jsonl",
+      "command": "cd networking && { test -n \"$DSHKER_SERVER_BINARY\" || { echo 'DSHKER_SERVER_BINARY is unset: this gate runs two real peers against an explicitly built coordinator binary and cannot be satisfied without one. See docs/testing/p2p-local-stability.md.' >&2; exit 1; }; } && mkdir -p .run/p2p-stability && go test -race ./integration -count=1 -timeout=10m -json > .run/p2p-stability/integration-gate.jsonl",
       "no_mock": true
     }
   ],

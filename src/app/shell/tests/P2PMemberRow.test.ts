@@ -111,6 +111,42 @@ describe('P2P connect feedback', () => {
     state.pairs = undefined
   })
 
+  // The negative case above kept passing while this feature was entirely broken:
+  // the panel read the operation under `connect:<serviceId>`, a key the management
+  // store never writes (it scopes `connect` by the bare serviceId), so no refusal
+  // ever produced a hint. A pair stuck on p2p.connection_busy showed only the
+  // generic "connecting" state, which is what made the coordinator's permanent
+  // refusal impossible to diagnose from inside the product.
+  //
+  // The refusal travels through the store's real `run` path, so this depends on the
+  // scope the store actually derives instead of a key the test picked — a
+  // hardcoded key is what let the mismatch survive in the first place.
+  it.each([['p2p.connection_busy'], ['p2p.peer_offline'], ['p2p.direct_unavailable']])(
+    'explains %s to the user',
+    async (code) => {
+      const state = p2pPairing.state(serviceId)
+      state.pairs = [windowsMember]
+      const store = p2pManagement as unknown as {
+        bridge: () => Record<string, unknown> | undefined
+      }
+      const original = store.bridge
+      store.bridge = () => ({ connect: async () => ({ ok: false, code, message: code }) })
+      try {
+        await p2pManagement.run('connect', {
+          serviceId,
+          pairId: windowsMember.pairId
+        } as never)
+      } finally {
+        store.bridge = original
+      }
+      const wrapper = mount(P2PPairingPanel, { props: { serviceId, networkId } })
+      const hint = wrapper.find('[data-testid="p2p-connect-hint"]')
+      expect(hint.exists()).toBe(true)
+      expect(hint.text().length).toBeGreaterThan(0)
+      state.pairs = undefined
+    }
+  )
+
   it('opens one on-demand workbench instead of connecting when already ready', async () => {
     vi.spyOn(p2pConnections, 'isReady').mockReturnValue(true)
     const state = p2pPairing.state(serviceId)

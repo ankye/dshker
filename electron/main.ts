@@ -29,9 +29,9 @@ import { CoreInstallCatalog, type CoreInstallCatalogPort } from './main/core/ins
 import { CoreCheckoutClient, type CoreCheckoutPort } from './main/core/checkout'
 import { CoreHarnessRuntime, type CoreHarnessRuntimePort } from './main/core/harness-runtime'
 import { CoreRoots, type CoreRootsPort } from './main/core/roots'
-import { shutdownLauncherOwners, type LauncherShutdownOwners } from './main/launcher-shutdown'
+import { createLauncherQuitSequence, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
-import { createTray, destroyTray, isTrayActive } from './main/launcher-tray'
+import { beginForceQuit, createTray, destroyTray, isTrayActive } from './main/launcher-tray'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
 import { runSmokeTest, writeSmokeFailure, writeSmokeTrace } from './main/smoke'
 import { createWindow } from './main/window'
@@ -187,28 +187,21 @@ async function start(): Promise<void> {
 
 /** Keeps the DSH process tree under Launcher ownership through normal quits and termination signals. */
 function registerServicesShutdown(services: LauncherShutdownOwners): void {
-  let shutdownInProgress = false
-  let shutdownComplete = false
-  const shutdown = async () => {
-    if (shutdownInProgress) return
-    shutdownInProgress = true
-    try {
-      destroyTray()
-      await shutdownLauncherOwners(services)
-      shutdownComplete = true
-      app.quit()
-    } catch (error) {
-      shutdownInProgress = false
+  const sequence = createLauncherQuitSequence(services, {
+    beginForceQuit,
+    destroyTray,
+    quit: () => app.quit(),
+    exit: (code) => app.exit(code),
+    reportFailure: (error) =>
       console.error('DSHKer Launcher could not stop its managed DSH process tree.', error)
-    }
-  }
-  app.on('before-quit', (event) => {
-    if (shutdownComplete) return
-    event.preventDefault()
-    void shutdown()
   })
-  process.once('SIGINT', () => void shutdown())
-  process.once('SIGTERM', () => void shutdown())
+  app.on('before-quit', (event) => {
+    if (sequence.isComplete()) return
+    event.preventDefault()
+    void sequence.run()
+  })
+  process.once('SIGINT', () => void sequence.run())
+  process.once('SIGTERM', () => void sequence.run())
 }
 
 /**

@@ -123,6 +123,14 @@
       {
         "from": "resources/icon-512.png",
         "to": "icon-512.png"
+      },
+      {
+        "from": "resources/trayTemplate.png",
+        "to": "trayTemplate.png"
+      },
+      {
+        "from": "resources/trayTemplate@2x.png",
+        "to": "trayTemplate@2x.png"
       }
     ],
     "mac": {

@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/core"
@@ -163,7 +164,13 @@ func run(parsed options) error {
 		}
 		server.Catalog = store
 	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+	// SIGTERM as well as Interrupt: the shell escalates to SIGTERM shortly after
+	// closing the RPC socket, and Go's default action for an unhandled SIGTERM
+	// terminates the process without running a single deferred call. That skipped
+	// the runtime, remote-route and broker shutdowns below, orphaning the DSH Web
+	// process tree and leaving a published broker descriptor pointing at a port
+	// nothing listens on. The CLI path has always registered both.
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	conn, err := localrpc.AcceptMain(ctx, os.Stdin, os.Stdout)
 	if err != nil {
