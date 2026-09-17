@@ -20,10 +20,6 @@ type subscription interface {
 	Done() <-chan struct{}
 	Send(ctx context.Context, signal protocol.Signal) error
 	Close()
-	// Superseded reports that the coordinator ended this subscription because the
-	// same device opened a newer one, so re-subscribing would displace the live
-	// socket and start a kick-loop between the two.
-	Superseded() bool
 }
 
 // subscribeFunc dials the coordinator and registers this device for attempts
@@ -130,16 +126,6 @@ func (owner *signaling) supervise() {
 		case <-active.Done():
 		}
 		owner.markDown()
-		// A displaced subscription must not be replaced. One device holds exactly
-		// one signalling socket, so the coordinator closing this one means a newer
-		// socket for this same device is already live — normally this process's own
-		// successor after a restart, or a second instance. Reconnecting would
-		// displace that live socket, whose supervisor would reconnect one second
-		// later and displace this one, forever. Stand down and stay marked down:
-		// attempts then fail immediately with a truthful code instead of hanging.
-		if active.Superseded() {
-			return
-		}
 		if !owner.replace() {
 			return
 		}

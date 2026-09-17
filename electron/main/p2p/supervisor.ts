@@ -9,19 +9,11 @@ import { lstat, readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { exactPeerObject, parsePeerJson, PeerHelperError } from './wire'
 
-/**
- * Ends a supervised child, escalating until it is actually gone.
- *
- * The private channel is already closed when this runs, and that closure is
- * itself the core's shutdown signal, so a short grace period covers the ordinary
- * case. Waiting the whole escalation budget before the first signal made every
- * quit appear to hang for ten seconds after the user asked to leave.
- */
 export async function stopChild(
   child: ChildProcessWithoutNullStreams,
   exit: Promise<void>
 ): Promise<void> {
-  if (await exitedWithin(exit, 1_000)) return
+  if (await exitedWithin(exit, 10_000)) return
   child.kill('SIGTERM')
   if (await exitedWithin(exit, 5_000)) return
   child.kill('SIGKILL')

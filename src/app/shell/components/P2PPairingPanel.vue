@@ -41,11 +41,7 @@ const connectHints: Readonly<Record<string, MessageKey>> = {
   'p2p.connection_busy': 'p2p.connect.busyHint'
 }
 const connectHint = computed(() => {
-  // Keyed by the bare serviceId, which is the scope the management store derives
-  // for `connect` (see `#scopeOf`). This read used to look up `connect:<serviceId>`,
-  // a key nothing ever writes, so every hint above was dead code: a pair stuck on
-  // a refusal showed only the generic "connecting" state and never said why.
-  const error = operation.value?.error
+  const error = management.operations[`connect:${props.serviceId}`]?.error
   return error && typeof error === 'string' && connectHints[error]
     ? t(connectHints[error])
     : undefined

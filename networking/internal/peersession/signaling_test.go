@@ -19,9 +19,6 @@ type fakeSubscription struct {
 	done   chan struct{}
 	sent   chan protocol.Signal
 	once   sync.Once
-
-	mu         sync.Mutex
-	superseded bool
 }
 
 func newFakeSubscription() *fakeSubscription {
@@ -39,21 +36,6 @@ func (fake *fakeSubscription) Send(_ context.Context, signal protocol.Signal) er
 	return nil
 }
 func (fake *fakeSubscription) Close() { fake.once.Do(func() { close(fake.done) }) }
-
-func (fake *fakeSubscription) Superseded() bool {
-	fake.mu.Lock()
-	defer fake.mu.Unlock()
-	return fake.superseded
-}
-
-// displace ends this subscription the way the coordinator ends a socket that a
-// newer one for the same device replaced.
-func (fake *fakeSubscription) displace() {
-	fake.mu.Lock()
-	fake.superseded = true
-	fake.mu.Unlock()
-	fake.Close()
-}
 
 func waitFor(t *testing.T, what string, condition func() bool) {
 	t.Helper()
@@ -160,57 +142,5 @@ func TestSignalingReplacesALostSubscription(t *testing.T) {
 	mu.Unlock()
 	if settled != afterClose {
 		t.Fatalf("a closed supervisor kept dialling: %d -> %d", afterClose, settled)
-	}
-}
-
-// A displaced subscription must not be replaced, or the two sockets kick each
-// other off forever.
-//
-// One device holds exactly one signalling socket: the id is derived from its
-// public key and the socket is authenticated by mTLS, so a second connection is
-// always the same machine and the newest one is the live one. The coordinator
-// therefore closes the older socket instead of refusing the new one — refusing it
-// locked a device out of signalling entirely, because there is no ping/pong or
-// read deadline on that socket and a half-open connection is never detected.
-//
-// The displacement has to stop the loser's supervisor. It reconnects one second
-// after any loss, and a reconnect displaces the live socket, whose supervisor
-// reconnects a second later and displaces this one — an endless kick-loop that
-// leaves neither side usable. The supervisor stays marked down instead, so an
-// attempt fails immediately with a truthful code.
-func TestSignalingStandsDownWhenSuperseded(t *testing.T) {
-	first := newFakeSubscription()
-	var mu sync.Mutex
-	dialed := 0
-	dial := func(context.Context, string) (subscription, error) {
-		mu.Lock()
-		defer mu.Unlock()
-		dialed++
-		if dialed == 1 {
-			return first, nil
-		}
-		// Any dial after the displacement is the kick-loop this guards against.
-		return newFakeSubscription(), nil
-	}
-	owner, err := newSignaling(context.Background(), dial, "device", func(subscription) {})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer owner.close()
-
-	first.displace()
-
-	waitFor(t, "signalling to be marked down", owner.isDown)
-	// Well past the one-second retry floor: a supervisor that was going to
-	// re-subscribe would have done so several times over by now.
-	time.Sleep(3 * time.Second)
-	mu.Lock()
-	settled := dialed
-	mu.Unlock()
-	if settled != 1 {
-		t.Fatalf("a displaced subscription was replaced %d times; that is the kick-loop", settled-1)
-	}
-	if !owner.isDown() {
-		t.Fatal("a displaced supervisor reported signalling as healthy")
 	}
 }

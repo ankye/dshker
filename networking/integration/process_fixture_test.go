@@ -287,13 +287,6 @@ func (c *child) wait(t *testing.T, accept func(result) bool, budget time.Duratio
 	}
 }
 
-// connect dials from `a` to `b` and waits until both ends report that attempt
-// ready over a direct UDP path.
-//
-// The dialler is the first argument rather than always the same child: a pair
-// carries one session per direction and both machines dial on their own, so a
-// helper that could only dial one way left the reverse direction — half of the
-// product's real topology — untested. See connectBothWays.
 func connect(t *testing.T, a, b *child, generation uint64) string {
 	t.Helper()
 	value := a.call(t, command{Op: "connect", Generation: generation})
@@ -304,29 +297,4 @@ func connect(t *testing.T, a, b *child, generation uint64) string {
 		}
 	}
 	return value.Attempt
-}
-
-// connectBothWays establishes one session in each direction over the same pair
-// and returns the two attempt ids.
-//
-// This is what two launchers do unprompted: every active pair is an auto-connect
-// intent on both machines, so both dial. The coordinator used to admit only one
-// attempt per pair in either direction, so whichever side dialled first kept the
-// other refused with p2p.connection_busy — and because a live session renews its
-// lease every 20 seconds, the refusal never lapsed. Both machines were online and
-// authorized, and the product just said "connecting" forever.
-//
-// The pause between the two dials keeps the pair inside the coordinator's budget
-// of 20 requests per second per source: both children share 127.0.0.1 in this
-// fixture, so back-to-back handshakes are rate limited here in a way they are not
-// between two real machines.
-func connectBothWays(t *testing.T, a, b *child, generation uint64) (string, string) {
-	t.Helper()
-	outbound := connect(t, a, b, generation)
-	time.Sleep(1200 * time.Millisecond)
-	inbound := connect(t, b, a, generation)
-	if outbound == inbound {
-		t.Fatal("both directions were given the same attempt")
-	}
-	return outbound, inbound
 }

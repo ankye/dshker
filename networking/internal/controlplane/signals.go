@@ -19,17 +19,6 @@ type SignalEvent struct {
 	Revision uint64
 }
 
-// SignalSuperseded is the coordinator's close reason when this device opened a
-// newer signalling socket and this one was displaced.
-//
-// A wire contract shared with the coordinator's `signalSuperseded`. One device
-// holds exactly one signalling socket — the id is derived from its public key and
-// the socket is authenticated by mTLS — so the newest connection is the live one
-// and the displaced side must stand down instead of reconnecting. Without this
-// distinction a displacement is indistinguishable from a dropped network, and the
-// two sockets kick each other off forever.
-const SignalSuperseded = "p2p.signal_superseded"
-
 type Signals struct {
 	connection *websocket.Conn
 	ctx        context.Context
@@ -37,29 +26,6 @@ type Signals struct {
 	events     chan SignalEvent
 	finished   chan struct{}
 	writeMu    sync.Mutex
-
-	// closeMu guards the close reason the read loop recorded when it ended.
-	closeMu     sync.Mutex
-	closeReason string
-}
-
-// Superseded reports whether the coordinator closed this subscription because the
-// same device opened a newer one. A caller seeing true must not re-subscribe.
-func (signals *Signals) Superseded() bool {
-	signals.closeMu.Lock()
-	defer signals.closeMu.Unlock()
-	return signals.closeReason == SignalSuperseded
-}
-
-// recordClose remembers the coordinator's stated reason for ending the socket.
-func (signals *Signals) recordClose(err error) {
-	var closeError websocket.CloseError
-	if !errors.As(err, &closeError) {
-		return
-	}
-	signals.closeMu.Lock()
-	signals.closeReason = closeError.Reason
-	signals.closeMu.Unlock()
 }
 
 func (client *Client) Subscribe(ctx context.Context, deviceID string) (*Signals, error) {
@@ -140,10 +106,6 @@ func (signals *Signals) read() {
 	for {
 		kind, data, err := signals.connection.Read(signals.ctx)
 		if err != nil || kind != websocket.MessageText {
-			// Keep the coordinator's stated reason before unwinding: it is the only
-			// way the supervisor can tell a displacement from a lost network and
-			// avoid reconnecting into a kick-loop.
-			signals.recordClose(err)
 			return
 		}
 		var header struct {
