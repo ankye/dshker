@@ -700,10 +700,19 @@ onUnmounted(() => {
 }
 
 /* The active tab opens downward into the framed page, so its bottom edge is
- * square and its top corners rounded — the classic connected-tab shape. */
+ * square and its top corners rounded — the classic connected-tab shape.
+ * An accent underline makes it unmistakable which tab is selected. */
 .browser-tab[data-active='true'] {
   background: var(--color-bg);
   color: var(--color-text);
+}
+.browser-tab[data-active='true']::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 2px;
+  background: var(--color-accent);
+  pointer-events: none;
 }
 
 .browser-tab:focus-visible {
