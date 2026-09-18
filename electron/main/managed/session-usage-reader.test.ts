@@ -1,5 +1,9 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { createZstdCompress } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { decodeProjectDirectory, foldSessionLog } from './session-usage-reader'
+import { decodeProjectDirectory, foldSessionLog, SessionUsageReader } from './session-usage-reader'
 
 /** Builds one session log line. */
 function line(event: unknown): string {
@@ -20,6 +24,17 @@ function timedUsageChunk(
     type: 'assistant/chunk',
     time,
     data: { turn, step, chunk: { type: 'usage', usage } }
+  })
+}
+
+function compressSessionLog(text: string): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const stream = createZstdCompress()
+    const chunks: Buffer[] = []
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk))
+    stream.on('end', () => resolve(Buffer.concat(chunks)))
+    stream.on('error', reject)
+    stream.end(text)
   })
 }
 
@@ -248,5 +263,85 @@ describe('decodeProjectDirectory', () => {
 
   it('returns the original name when it carries no path markers', () => {
     expect(decodeProjectDirectory('--')).toBe('--')
+  })
+})
+
+describe('SessionUsageReader log discovery', () => {
+  it('reads the highest version once when DSH keeps migrated files together', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'dsh-usage-reader-'))
+    try {
+      const directory = path.join(root, 'sessions', '--workspace--', 'session-1')
+      await mkdir(directory, { recursive: true })
+      const legacy = [
+        line({ type: 'session', id: 'session-1', createdAt: 1 }),
+        usageChunk(1, 1, { inputTokens: 10, outputTokens: 1 })
+      ].join('\n')
+      const versionTwo = [
+        line({ type: 'session', id: 'session-1', createdAt: 1 }),
+        usageChunk(1, 1, { inputTokens: 20, outputTokens: 2 })
+      ].join('\n')
+      const versionThree = [
+        line({ type: 'session', id: 'session-1', createdAt: 1 }),
+        usageChunk(1, 1, { inputTokens: 30, outputTokens: 3 })
+      ].join('\n')
+      await writeFile(path.join(directory, 'session.jsonl.zstd'), await compressSessionLog(legacy))
+      await writeFile(
+        path.join(directory, 'session.v2.jsonl.zstd'),
+        await compressSessionLog(versionTwo)
+      )
+      await writeFile(
+        path.join(directory, 'session.v3.jsonl.zstd'),
+        await compressSessionLog(versionThree)
+      )
+
+      const reader = new SessionUsageReader({
+        dshHomeDirectory: root,
+        cachePath: path.join(root, 'session-usage-cache.json')
+      })
+      const state = await reader.read()
+
+      expect(state.totalSessions).toBe(1)
+      expect(state.unreadableSessions).toBe(0)
+      expect(state.totals.uncachedInputTokens).toBe(30)
+      expect(state.totals.outputTokens).toBe(3)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
+  })
+
+  it('reports only genuinely unreadable logs when the detail page is paged', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'dsh-usage-reader-'))
+    try {
+      for (const [sessionId, inputTokens] of [
+        ['session-1', 10],
+        ['session-2', 20]
+      ] as const) {
+        const directory = path.join(root, 'sessions', '--workspace--', sessionId)
+        await mkdir(directory, { recursive: true })
+        const text = [
+          line({ type: 'session', id: sessionId, createdAt: 1 }),
+          usageChunk(1, 1, { inputTokens, outputTokens: 1 })
+        ].join('\n')
+        await writeFile(
+          path.join(directory, 'session.v3.jsonl.zstd'),
+          await compressSessionLog(text)
+        )
+      }
+      const unreadableDirectory = path.join(root, 'sessions', '--workspace--', 'session-bad')
+      await mkdir(unreadableDirectory, { recursive: true })
+      await writeFile(path.join(unreadableDirectory, 'session.v3.jsonl.zstd'), 'not zstd')
+
+      const reader = new SessionUsageReader({
+        dshHomeDirectory: root,
+        cachePath: path.join(root, 'session-usage-cache.json')
+      })
+      const state = await reader.read({ limit: 1 })
+
+      expect(state.totalSessions).toBe(2)
+      expect(state.sessions).toHaveLength(1)
+      expect(state.unreadableSessions).toBe(1)
+    } finally {
+      await rm(root, { recursive: true, force: true })
+    }
   })
 })

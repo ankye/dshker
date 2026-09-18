@@ -1,0 +1,128 @@
+{
+  "change": "plugin catalog refresh diagnostics",
+  "risk": "standard",
+  "production_files": [
+    "electron/main.ts",
+    "electron/main/managed/awesome-plugin-catalog.ts",
+    "electron/main/ipc.ts",
+    "electron/main/managed/errors.ts",
+    "src/shared/contracts.ts",
+    "src/app/shell/AppShell.vue",
+    "src/app/shared/i18n/i18n.errors.ts"
+  ],
+  "test_files": [
+    "electron/main/managed/awesome-plugin-catalog.test.ts",
+    "src/app/shell/tests/versionRefreshFeedback.test.ts"
+  ],
+  "live_test_files": ["tools/electron-renderer-smoke.mjs"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "records the git command and failure output while keeping the existing catalog untouched"
+    },
+    {
+      "state": "no_op",
+      "test": "records the git command and failure output while keeping the existing catalog untouched"
+    },
+    {
+      "state": "partial",
+      "test": "records the git command and failure output while keeping the existing catalog untouched"
+    },
+    {
+      "state": "recovery",
+      "test": "explains plugin catalog failures without hiding the diagnostic path"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "records the git command and failure output while keeping the existing catalog untouched"
+    },
+    {
+      "state": "reset",
+      "test": "records the git command and failure output while keeping the existing catalog untouched"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/managed/awesome-plugin-catalog.ts",
+      "field": "Git command diagnostics",
+      "source": "the exact shell-free Git child process result",
+      "assertion": "git.command_failed",
+      "test": "records the git command and failure output while keeping the existing catalog untouched",
+      "state": "partial",
+      "identity_keys": ["operation", "command", "exitCode", "signal"],
+      "missing_semantics": "Missing diagnostics output never becomes a successful catalog result or a guessed error."
+    },
+    {
+      "production_file": "electron/main.ts",
+      "field": "plugin catalog activity bridge",
+      "source": "LauncherHarnessService.recordOperationActivity",
+      "assertion": "onActivity: (message) => launcherHarnessService.recordOperationActivity(message)",
+      "test": "explains plugin catalog failures without hiding the diagnostic path",
+      "state": "success",
+      "identity_keys": ["operation", "message"],
+      "missing_semantics": "Without the existing activity bridge, the Git result remains authoritative but its high-level progress is not silently invented."
+    },
+    {
+      "production_file": "electron/main/ipc.ts",
+      "field": "plugin catalog refresh error admission",
+      "source": "pluginCatalogRefreshResult",
+      "assertion": "pluginCatalogRefreshResult(() => options.pluginCatalog.refresh())",
+      "test": "explains plugin catalog failures without hiding the diagnostic path",
+      "state": "recovery",
+      "identity_keys": ["code"],
+      "missing_semantics": "A failed refresh is returned as its dedicated typed code rather than a successful empty list."
+    },
+    {
+      "production_file": "electron/main/managed/errors.ts",
+      "field": "managed plugin catalog error codes",
+      "source": "ManagedRootErrorCode",
+      "assertion": "'managed.plugin_catalog_read_failed'",
+      "test": "explains plugin catalog failures without hiding the diagnostic path",
+      "state": "recovery",
+      "identity_keys": ["code"],
+      "missing_semantics": "Read and refresh failures stay distinct; no generic code is substituted."
+    },
+    {
+      "production_file": "src/shared/contracts.ts",
+      "field": "renderer-visible plugin catalog error code",
+      "source": "ManagedOperationErrorCode",
+      "assertion": "'managed.plugin_catalog_refresh_failed'",
+      "test": "explains plugin catalog failures without hiding the diagnostic path",
+      "state": "recovery",
+      "identity_keys": ["code"],
+      "missing_semantics": "The preload contract rejects neither dedicated code by widening to an untyped fallback."
+    },
+    {
+      "production_file": "src/app/shell/AppShell.vue",
+      "field": "plugin catalog error code mapping",
+      "source": "typed IPC ApiResult code",
+      "assertion": "'managed.plugin_catalog_refresh_failed'",
+      "test": "explains plugin catalog failures without hiding the diagnostic path",
+      "state": "recovery",
+      "identity_keys": ["code"],
+      "missing_semantics": "An unknown code remains visible as the raw code and does not invent a plugin-specific explanation."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.errors.ts",
+      "field": "localized recovery hint",
+      "source": "plugin catalog refresh error code",
+      "assertion": "详细 Git 输出已写入用户目录下的 .dshlauncher/logs/plugin-catalog.log。",
+      "test": "explains plugin catalog failures without hiding the diagnostic path",
+      "state": "recovery",
+      "identity_keys": ["locale", "code"],
+      "missing_semantics": "The user gets a concrete next step and log location instead of a blank or generic error."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "npm test -- --run electron/main/managed/awesome-plugin-catalog.test.ts src/app/shell/tests/versionRefreshFeedback.test.ts",
+      "no_mock": true
+    },
+    {
+      "command": "npm run type-check",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [{ "artifact": ".run/visual-smoke/latest.json" }],
+  "acceptance_status": "Focused diagnostics and type validation required; full visual/release acceptance remains separate."
+}

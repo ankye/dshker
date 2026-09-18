@@ -325,7 +325,7 @@ export function registerIpc(options: LauncherIpcOptions): void {
     async (event, ...args): Promise<ApiResult<PluginCatalogState>> => {
       if (!isTrustedRenderer(event)) return invalidSender()
       if (args.length !== 0) return invalidManagedPayload()
-      return pluginCatalogResult(() => options.pluginCatalog.getState())
+      return pluginCatalogReadResult(() => options.pluginCatalog.getState())
     }
   )
   ipcMain.handle(
@@ -484,7 +484,7 @@ export function registerIpc(options: LauncherIpcOptions): void {
     async (event, ...args): Promise<ApiResult<PluginCatalogState>> => {
       if (!isTrustedRenderer(event)) return invalidSender()
       if (args.length !== 0) return invalidManagedPayload()
-      return pluginCatalogResult(() => options.pluginCatalog.refresh())
+      return pluginCatalogRefreshResult(() => options.pluginCatalog.refresh())
     }
   )
 }
@@ -561,13 +561,24 @@ async function launcherHarnessResult<T>(operation: () => Promise<T>): Promise<Ap
   }
 }
 
-async function pluginCatalogResult<T>(operation: () => Promise<T>): Promise<ApiResult<T>> {
+async function pluginCatalogReadResult<T>(operation: () => Promise<T>): Promise<ApiResult<T>> {
   try {
     return apiOk(await operation())
   } catch {
     return apiFail(
-      'managed.git_operation_failed',
-      'The curated plugin catalog could not be refreshed.'
+      'managed.plugin_catalog_read_failed',
+      'The curated plugin catalog could not be read. The existing list was kept unchanged.'
+    )
+  }
+}
+
+async function pluginCatalogRefreshResult<T>(operation: () => Promise<T>): Promise<ApiResult<T>> {
+  try {
+    return apiOk(await operation())
+  } catch {
+    return apiFail(
+      'managed.plugin_catalog_refresh_failed',
+      'The curated plugin catalog could not be refreshed. The existing list was kept unchanged.'
     )
   }
 }

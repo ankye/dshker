@@ -227,6 +227,58 @@ describe('bringing enrolled services online at startup', () => {
     expect(f.call.mock.calls.map(([method]) => method)).toContain('device.restore')
   })
 
+  it('shares one persisted-account restore with the first account read', async () => {
+    const f = fixture()
+    enrolled()
+    vi.spyOn(PeerCredentialStore.prototype, 'loadUserSession').mockResolvedValue({
+      token: '8'.repeat(64),
+      expiresAt: futureExpiry()
+    })
+
+    let release!: () => void
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let restoreStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      restoreStarted = resolve
+    })
+    const original = f.call.getMockImplementation()
+    if (!original) throw new Error('test fixture call implementation missing')
+    let held = false
+    f.call.mockImplementation(async (method, payload, signal) => {
+      if (method === 'user.current' && !held) {
+        held = true
+        restoreStarted()
+        const result = await original(method, payload, signal)
+        await blocked
+        return result
+      }
+      return original(method, payload, signal)
+    })
+
+    const online = f.owner.goOnline()
+    await started
+    const current = f.owner.currentUser(serviceId, new AbortController().signal)
+    release()
+
+    await expect(current).resolves.toEqual(user)
+    await expect(online).resolves.toEqual([{ serviceId, online: true }])
+  })
+
+  it('does not turn a transient restore failure into signed-out state', async () => {
+    const f = fixture()
+    vi.spyOn(PeerCredentialStore.prototype, 'loadUserSession').mockResolvedValue({
+      token: '8'.repeat(64),
+      expiresAt: futureExpiry()
+    })
+    f.call.mockRejectedValueOnce(new PeerHelperError('p2p.server_unavailable'))
+
+    await expect(
+      f.owner.currentUser(serviceId, new AbortController().signal)
+    ).rejects.toMatchObject({ code: 'p2p.server_unavailable' })
+  })
+
   it('stays offline for a service this machine never enrolled', async () => {
     // Without a saved credential there is no device to speak as, so the service
     // is reported offline rather than failing the whole startup pass.

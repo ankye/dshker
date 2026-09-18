@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.63 — 2026-09-18
+
+### 简体中文 (zh-CN)
+
+- **修复升级/重启后账号页错误显示登录框。** 启动恢复与首屏账户查询现在按协调器串行共享持久会话；临时忙、超时或 helper 不可用不会删除已保存登录状态，只有服务端明确判定会话失效才要求重新登录。
+- **修复 Token 统计无法读取新格式会话。** 兼容 DSH 的 `session.v2.jsonl.zstd` 与 `session.v3.jsonl.zstd`，同一会话目录只读取最高版本，避免最近 7 天数据被误报为“无法读取”。
+- **改进可安装扩展列表刷新失败提示。** Git 刷新现在会把命令、退出码和输出尾部写入用户目录下的 `.dshlauncher/logs/plugin-catalog.log`，同时在控制台显示可追踪的失败原因；失败时保留当前列表，并提示检查网络、代理和 GitHub 访问。
+
+### English (en-US)
+
+- **Keep the signed-in account after restart or upgrade.** Startup recovery and the first account read now share one serialized restore; temporary busy, timeout, and helper transport failures no longer clear the saved session, while explicit server-side session refusals still request sign-in.
+- **Read versioned DSH session logs for token statistics.** The reader supports `session.v2.jsonl.zstd` and `session.v3.jsonl.zstd`, selects the newest format per session, and no longer reports valid recent sessions as unreadable.
+- **Improve failed installable-extension catalog refreshes.** Git refreshes now record the command, exit status, and output tail in the Launcher log, stream a traceable reason to Console, preserve the current list on failure, and explain how to check network, proxy, and GitHub access.
+
 ## 0.1.62 — 2026-09-18
 
 ### 简体中文 (zh-CN)

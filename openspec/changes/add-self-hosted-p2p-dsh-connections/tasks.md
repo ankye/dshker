@@ -1,3 +1,11 @@
+## 0.1.62 follow-up — persisted account recovery at startup (2026-09-18)
+
+- [x] 修复启动恢复与首屏账户查询并发时的会话状态竞态：同一 coordinator 的持久会话恢复使用单服务 single-flight；`service_busy`、取消、helper/传输暂时不可用等非权威错误不再删除持久会话，只有明确的 `user_login_required`、`user_unauthorized` 或 `user_session_expired` 才清理。新增 `session-registry.test.ts` 与 `management.test.ts` 回归覆盖。Focused validation: `npm test -- --run electron/main/p2p/session-registry.test.ts electron/main/p2p/management.test.ts src/app/shell/tests/P2PAccountPanel.test.ts`（60/60）。
+
+## 0.1.62 follow-up — versioned token usage logs (2026-09-18)
+
+- [x] 修复 Token 统计读取器只拼接 `session.jsonl.zstd` 的旧路径，导致 DSH 的 v2/v3 会话被计为不可读且最近日期缺失。每个会话目录选择最高版本日志，保留真实坏文件计数，并修正分页后 `unreadableSessions` 的计算。验证：`npm test -- --run electron/main/managed/session-usage-reader.test.ts`（20/20）；本机真实 `.dsh` 读回为 85 个会话、`unreadableSessions=0`，最新统计日期为 `2026-09-18`。
+
 ## 1. 协议与构建边界
 
 窗口消失要留下原因（2026-09-15，0.1.47）：一次「点远程连接就闪退」的报告在机器上查不到任何证据——

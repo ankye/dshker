@@ -5,6 +5,11 @@ import { describe, expect, it } from 'vitest'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 const shell = readFileSync(path.join(appRoot, 'src/app/shell/AppShell.vue'), 'utf8')
+const main = readFileSync(path.join(appRoot, 'electron/main.ts'), 'utf8')
+const ipc = readFileSync(path.join(appRoot, 'electron/main/ipc.ts'), 'utf8')
+const contracts = readFileSync(path.join(appRoot, 'src/shared/contracts.ts'), 'utf8')
+const managedErrors = readFileSync(path.join(appRoot, 'electron/main/managed/errors.ts'), 'utf8')
+const errors = readFileSync(path.join(appRoot, 'src/app/shared/i18n/i18n.errors.ts'), 'utf8')
 const controls = readFileSync(path.join(appRoot, 'src/styles/controls.css'), 'utf8')
 const routes = readFileSync(path.join(appRoot, 'src/styles/routes.css'), 'utf8')
 const stageActions = readFileSync(
@@ -26,6 +31,20 @@ describe('version-list refresh feedback', () => {
     )
     expect(shell).toContain(
       "if (pluginCatalog.loading.value) return shell.t('status.operation.refreshCatalog')"
+    )
+  })
+
+  it('explains plugin catalog failures without hiding the diagnostic path', () => {
+    expect(shell).toContain("'managed.plugin_catalog_refresh_failed'")
+    expect(shell).toContain("'managed.plugin_catalog_read_failed'")
+    expect(errors).toContain(
+      '详细 Git 输出已写入用户目录下的 .dshlauncher/logs/plugin-catalog.log。'
+    )
+    expect(contracts).toContain("'managed.plugin_catalog_refresh_failed'")
+    expect(managedErrors).toContain("'managed.plugin_catalog_read_failed'")
+    expect(ipc).toContain('pluginCatalogRefreshResult(() => options.pluginCatalog.refresh())')
+    expect(main).toContain(
+      'onActivity: (message) => launcherHarnessService.recordOperationActivity(message)'
     )
   })
 

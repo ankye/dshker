@@ -10,6 +10,8 @@ export const zhCNErrors = {
   'toast.error.harnessPluginOperationFailed': '扩展安装或卸载失败',
   'toast.error.harnessPortInUse': '启动端口被其他程序占用',
   'toast.error.gitOperationFailed': 'Git 操作失败',
+  'toast.error.pluginCatalogReadFailed': '插件目录读取失败',
+  'toast.error.pluginCatalogRefreshFailed': '插件目录刷新失败',
   'toast.error.detail.bridge': '桌面能力未就绪，读取和注册目录暂不可用。请重启 Launcher 后重试。',
   'toast.error.detail.harnessLaunchFailed':
     '内核未启动。请在“控制台”查看输出，确认版本可用后重试。',
@@ -24,6 +26,10 @@ export const zhCNErrors = {
   'toast.error.detail.harnessPortInUse':
     '启动所需的端口正被其他程序使用，Launcher 不会擅自停止它。请停止占用端口的程序后重试。',
   'toast.error.detail.gitOperationFailed': '仓库未变更。请检查网络与分支权限后重试。',
+  'toast.error.detail.pluginCatalogReadFailed':
+    '当前插件列表已保留。请在“控制台”查看 Git 原因；如果目录损坏，请重启 Launcher 后重试。',
+  'toast.error.detail.pluginCatalogRefreshFailed':
+    '当前插件列表已保留。请检查网络、代理和 GitHub 访问后重试；详细 Git 输出已写入用户目录下的 .dshlauncher/logs/plugin-catalog.log。',
   'toast.error.detail.unknown': '操作未生效。请在“控制台”查看输出后重试。',
   'toast.error.code': '错误码',
   'toast.dismiss': '关闭提示'
@@ -41,6 +47,8 @@ export const enUSErrors = {
   'toast.error.harnessPluginOperationFailed': 'Extension install or removal failed',
   'toast.error.harnessPortInUse': 'The launch port is held by another program',
   'toast.error.gitOperationFailed': 'The Git operation failed.',
+  'toast.error.pluginCatalogReadFailed': 'The plugin catalog could not be read.',
+  'toast.error.pluginCatalogRefreshFailed': 'The plugin catalog could not be refreshed.',
   'toast.error.detail.bridge':
     'Desktop capabilities are not ready, so reading and registering directories is unavailable. Restart the Launcher and retry.',
   'toast.error.detail.harnessLaunchFailed':
@@ -59,6 +67,10 @@ export const enUSErrors = {
     'The launch port is in use by another program, which the Launcher will not stop on its own. Stop the program holding the port and retry.',
   'toast.error.detail.gitOperationFailed':
     'The repository is unchanged. Check network access and branch permissions, then retry.',
+  'toast.error.detail.pluginCatalogReadFailed':
+    'The current plugin list was kept. Check the Git reason in Console; if the checkout is damaged, restart the Launcher and retry.',
+  'toast.error.detail.pluginCatalogRefreshFailed':
+    "The current plugin list was kept. Check network access, proxy settings, and GitHub access, then retry. Detailed Git output is in your user directory's .dshlauncher/logs/plugin-catalog.log.",
   'toast.error.detail.unknown': 'The operation had no effect. Check the Console output and retry.',
   'toast.error.code': 'Error code',
   'toast.dismiss': 'Dismiss notification'

@@ -137,6 +137,8 @@ export type ManagedOperationErrorCode =
   | 'managed.git_remote_invalid'
   | 'managed.git_revision_invalid'
   | 'managed.git_operation_failed'
+  | 'managed.plugin_catalog_read_failed'
+  | 'managed.plugin_catalog_refresh_failed'
   | 'managed.bundled_seed_unavailable'
   | 'managed.bundled_seed_invalid'
   | 'managed.harness_launch_failed'

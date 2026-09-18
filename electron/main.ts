@@ -374,7 +374,8 @@ async function registerLauncherServices(
     }),
     pluginCatalog: new AwesomePluginCatalog({
       pluginsDirectory: path.join(launcherRoot, 'plugins'),
-      gitExecutable: GIT_EXECUTABLE
+      gitExecutable: GIT_EXECUTABLE,
+      onActivity: (message) => launcherHarnessService.recordOperationActivity(message)
     }),
     runtimeBrowserController,
     launcherUpdateService,

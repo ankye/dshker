@@ -1,3 +1,7 @@
+## 0.1.63 follow-up — plugin catalog refresh diagnostics (2026-09-18)
+
+- [x] 刷新可安装扩展列表时记录 Git 命令、退出码以及 stdout/stderr 尾部到 Launcher 日志，并同步高层活动到控制台；刷新失败保留上一份列表，IPC 使用读取/刷新专用错误码，界面给出网络、代理、GitHub 和日志路径提示。验证：`awesome-plugin-catalog.test.ts` 覆盖失败日志和控制台活动，`versionRefreshFeedback.test.ts` 覆盖错误码与用户提示。
+
 ## 1. Cross-repository protocol
 
 Scope note: this change requires no DeepSeek Harness modification. Harness ships

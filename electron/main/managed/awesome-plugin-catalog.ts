@@ -1,9 +1,20 @@
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process'
-import { lstat, mkdtemp, readdir, readFile, realpath, rename, rmdir } from 'node:fs/promises'
+import {
+  appendFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rename,
+  rmdir
+} from 'node:fs/promises'
 import nodePath from 'node:path'
 import { tmpdir } from 'node:os'
 import { load as loadYaml } from 'js-yaml'
 import type { PluginCatalogEntry, PluginCatalogState } from '../../../src/shared/contracts'
+import { GitRuntimeError } from './git'
 
 const AWESOME_DSH_PLUGIN_REMOTE = 'https://github.com/awesome-dsh-plugin/awesome-dsh-plugin.git'
 const AWESOME_DSH_PLUGIN_BRANCH = 'main'
@@ -13,6 +24,8 @@ const CATALOG_DIRECTORY_NAME = 'awesome-dsh-plugin'
 export interface AwesomePluginCatalogOptions {
   readonly pluginsDirectory: string
   readonly gitExecutable: string
+  /** Publishes high-level refresh records to the Launcher Console. */
+  readonly onActivity?: (message: string) => void
 }
 
 /** Synchronizes and parses the source repository selected by the product. */
@@ -25,6 +38,56 @@ export class AwesomePluginCatalog {
 
   /** Returns the last synchronized source only; it never reaches the network. */
   async getState(): Promise<PluginCatalogState> {
+    try {
+      return await this.#readState()
+    } catch (error) {
+      await this.#record(`Plugin catalog read failed: ${formatError(error)}`, true)
+      throw error
+    }
+  }
+
+  /** Clones or fast-forwards the Launcher-owned catalog source, then parses every entry file. */
+  async refresh(): Promise<PluginCatalogState> {
+    await this.#record(
+      `Refreshing plugin catalog from ${AWESOME_DSH_PLUGIN_REMOTE} (branch ${AWESOME_DSH_PLUGIN_BRANCH})…`,
+      true
+    )
+    try {
+      await assertDirectDirectory(this.#options.pluginsDirectory)
+      const directory = this.#catalogDirectory()
+      try {
+        await assertDirectDirectory(directory)
+        await assertDirectDirectory(nodePath.join(directory, '.git'))
+        await this.#runGit('fetch', ['-C', directory, 'fetch', '--prune', 'origin'])
+        await this.#runGit('checkout', [
+          '-C',
+          directory,
+          'checkout',
+          '--detach',
+          `origin/${AWESOME_DSH_PLUGIN_BRANCH}`
+        ])
+      } catch (error) {
+        if (!isMissing(error)) throw error
+        await this.#record('The plugin catalog checkout is missing; cloning a fresh copy…', false)
+        await this.#clone(directory)
+      }
+      const state = await this.#readState()
+      await this.#record(
+        `Plugin catalog refresh completed at ${state.kind === 'ready' ? state.revision : 'empty'} (${state.entries.length} entries).`,
+        true
+      )
+      return state
+    } catch (error) {
+      await this.#record(`Plugin catalog refresh failed: ${formatError(error)}`, true)
+      throw error
+    }
+  }
+
+  #catalogDirectory(): string {
+    return nodePath.join(this.#options.pluginsDirectory, CATALOG_DIRECTORY_NAME)
+  }
+
+  async #readState(): Promise<PluginCatalogState> {
     const directory = this.#catalogDirectory()
     try {
       await assertDirectDirectory(directory)
@@ -40,7 +103,7 @@ export class AwesomePluginCatalog {
     }
     await assertDirectDirectory(nodePath.join(directory, '.git'))
     const [revision, entries] = await Promise.all([
-      runText(this.#options.gitExecutable, ['-C', directory, 'rev-parse', 'HEAD']).then((value) =>
+      this.#runGit('read revision', ['-C', directory, 'rev-parse', 'HEAD']).then((value) =>
         value.trim()
       ),
       this.#readEntries(directory)
@@ -53,37 +116,11 @@ export class AwesomePluginCatalog {
     }
   }
 
-  /** Clones or fast-forwards the Launcher-owned catalog source, then parses every entry file. */
-  async refresh(): Promise<PluginCatalogState> {
-    await assertDirectDirectory(this.#options.pluginsDirectory)
-    const directory = this.#catalogDirectory()
-    try {
-      await assertDirectDirectory(directory)
-      await assertDirectDirectory(nodePath.join(directory, '.git'))
-      await runText(this.#options.gitExecutable, ['-C', directory, 'fetch', '--prune', 'origin'])
-      await runText(this.#options.gitExecutable, [
-        '-C',
-        directory,
-        'checkout',
-        '--detach',
-        `origin/${AWESOME_DSH_PLUGIN_BRANCH}`
-      ])
-    } catch (error) {
-      if (!isMissing(error)) throw error
-      await this.#clone(directory)
-    }
-    return this.getState()
-  }
-
-  #catalogDirectory(): string {
-    return nodePath.join(this.#options.pluginsDirectory, CATALOG_DIRECTORY_NAME)
-  }
-
   async #clone(directory: string): Promise<void> {
     const staging = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-awesome-plugin-'))
     const checkout = nodePath.join(staging, CATALOG_DIRECTORY_NAME)
     try {
-      await runText(this.#options.gitExecutable, [
+      await this.#runGit('clone', [
         'clone',
         '--branch',
         AWESOME_DSH_PLUGIN_BRANCH,
@@ -94,6 +131,34 @@ export class AwesomePluginCatalog {
       await rename(checkout, directory)
     } finally {
       await rmdir(staging).catch(() => undefined)
+    }
+  }
+
+  async #runGit(operation: string, arguments_: readonly string[]): Promise<string> {
+    const command = formatCommand(this.#options.gitExecutable, arguments_)
+    await this.#record(`Git ${operation} started: ${command}`, false)
+    try {
+      const output = await runText(this.#options.gitExecutable, arguments_)
+      await this.#record(`Git ${operation} completed.`, false)
+      return output
+    } catch (error) {
+      await this.#record(`Git ${operation} failed: ${formatError(error)}`, true)
+      throw error
+    }
+  }
+
+  async #record(message: string, emit: boolean): Promise<void> {
+    if (emit) this.#options.onActivity?.(message)
+    try {
+      const logPath = nodePath.join(
+        nodePath.dirname(this.#options.pluginsDirectory),
+        'logs',
+        'plugin-catalog.log'
+      )
+      await mkdir(nodePath.dirname(logPath), { recursive: true })
+      await appendFile(logPath, `${new Date().toISOString()} ${message}\n`, 'utf8')
+    } catch {
+      // Diagnostics must not change the authoritative Git/catalog result.
     }
   }
 
@@ -189,9 +254,35 @@ function runText(
         resolve(stdout)
         return
       }
-      reject(new Error(stderr.slice(-4096)))
+      reject(
+        new GitRuntimeError('git.command_failed', 'Git command failed.', {
+          exitCode: code ?? -1,
+          signal: signal ?? '',
+          stderr: stderr.slice(-4096),
+          stdout: stdout.slice(-4096)
+        })
+      )
     })
   })
+}
+
+function formatCommand(executable: string, arguments_: readonly string[]): string {
+  return [executable, ...arguments_].map((value) => JSON.stringify(value)).join(' ')
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof GitRuntimeError) {
+    const details = Object.entries(error.details)
+      .filter(
+        ([key]) => key === 'exitCode' || key === 'signal' || key === 'stderr' || key === 'stdout'
+      )
+      .map(([key, value]) => `${key}=${String(value).trim()}`)
+      .filter((entry) => !entry.endsWith('='))
+      .join(' ')
+    return `${error.code}${details.length > 0 ? ` ${details}` : ''}`
+  }
+  if (error instanceof Error) return `${error.name}: ${error.message || 'no diagnostic message'}`
+  return 'unknown error'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

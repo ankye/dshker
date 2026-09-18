@@ -55,6 +55,8 @@ export class PeerManagement {
   #session: Session | undefined
   /** Services whose enrolled device has been restored into the live helper. */
   readonly #restored = new Set<string>()
+  /** One persisted-account restore at a time per coordinator service. */
+  readonly #restoreInFlight = new Map<string, Promise<void>>()
   /**
    * This computer's session with each coordinator.
    *
@@ -435,6 +437,7 @@ export class PeerManagement {
       this.#session.services.forget(serviceId)
     }
     this.#restored.delete(serviceId)
+    this.#restoreInFlight.delete(serviceId)
     return committed
   }
 
@@ -645,15 +648,24 @@ export class PeerManagement {
 
   /**
    * Reuses the persisted login session so a restart does not ask for the
-   * password again. The server stays authoritative: any refusal drops the
-   * persisted token and the user simply signs in again.
+   * password again. Concurrent startup/account reads share one restore, and
+   * only an authoritative server refusal drops the persisted token.
    */
   async #restoreUserSession(
     serviceId: string,
     session: Session,
     signal: AbortSignal
   ): Promise<void> {
-    return restoreUserSession(this.#credentials, session, serviceId, signal)
+    const existing = this.#restoreInFlight.get(serviceId)
+    if (existing) return existing
+    const pending = restoreUserSession(this.#credentials, session, serviceId, signal).finally(
+      () => {
+        if (this.#restoreInFlight.get(serviceId) === pending)
+          this.#restoreInFlight.delete(serviceId)
+      }
+    )
+    this.#restoreInFlight.set(serviceId, pending)
+    return pending
   }
 
   /**
@@ -888,8 +900,10 @@ export class PeerManagement {
     const active = this.#signal(signal)
     await session.services.activate(serviceId, active)
     // The first account operation after a restart adopts the persisted login,
-    // so opening the panel does not demand the password again.
-    await this.#restoreUserSession(serviceId, session, active).catch(() => undefined)
+    // so opening the panel does not demand the password again. A transient
+    // restore failure must remain a typed loading/transport error; swallowing it
+    // would make the following local `currentUser` call look like a sign-out.
+    await this.#restoreUserSession(serviceId, session, active)
     this.#admit()
     return operation(session.accounts, active)
   }
@@ -948,6 +962,7 @@ export class PeerManagement {
   #clearSession(): void {
     this.#sessions.clear('p2p.helper_unavailable')
     this.#restored.clear()
+    this.#restoreInFlight.clear()
     this.#session?.projects.close()
     this.#session?.connections.close()
     this.#session?.pairing.close()

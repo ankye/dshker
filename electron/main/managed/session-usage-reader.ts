@@ -299,11 +299,16 @@ export class SessionUsageReader {
       totalSessions: sessions.length,
       totals,
       dailyByModel,
-      unreadableSessions: results.length - sessions.length
+      unreadableSessions: results.length - readable.length
     }
   }
 
-  /** Lists every session log under DSH_HOME, ignoring unreadable directories. */
+  /**
+   * Lists one log per session directory, choosing the newest on-disk format.
+   * DSH keeps older files beside migrated `session.v2`/`session.v3` logs, so
+   * treating every directory as the legacy filename both reports false
+   * unreadable sessions and hides the recent usage those files contain.
+   */
   async #discoverSessionFiles(): Promise<
     readonly { readonly filePath: string; readonly project: string }[]
   > {
@@ -328,8 +333,21 @@ export class SessionUsageReader {
         continue
       }
       for (const session of sessionDirectories) {
+        const sessionPath = nodePath.join(projectPath, session)
+        const logNames = await readdir(sessionPath, { withFileTypes: true })
+          .then((entries) =>
+            entries
+              .filter((entry) => entry.isFile())
+              .map((entry) => entry.name)
+              .filter((name) => SESSION_LOG_NAME.test(name))
+          )
+          .catch(() => undefined)
+        const selectedName = selectSessionLogName(logNames ?? [])
         files.push({
-          filePath: nodePath.join(projectPath, session, 'session.jsonl.zstd'),
+          // Keep a deterministic missing path for a directory we cannot inspect
+          // or whose log name is unsupported, so the existing unreadable count
+          // still reports the concrete session entry instead of silently hiding it.
+          filePath: nodePath.join(sessionPath, selectedName ?? 'session.jsonl.zstd'),
           project: decodeProjectDirectory(project)
         })
       }
@@ -367,6 +385,21 @@ export class SessionUsageReader {
       // The next read simply pays full cost again.
     }
   }
+}
+
+const SESSION_LOG_NAME = /^session(?:\.v(\d+))?\.jsonl\.zstd$/u
+
+/** Selects the highest format version, with the unversioned file as v1. */
+function selectSessionLogName(names: readonly string[]): string | undefined {
+  let selected: { name: string; version: number } | undefined
+  for (const name of names) {
+    const match = SESSION_LOG_NAME.exec(name)
+    if (match === null) continue
+    const version = match[1] === undefined ? 1 : Number(match[1])
+    if (!Number.isSafeInteger(version) || version < 1) continue
+    if (selected === undefined || version > selected.version) selected = { name, version }
+  }
+  return selected?.name
 }
 
 /** Admits one cached session record, rejecting any malformed shape. */

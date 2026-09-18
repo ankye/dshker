@@ -113,7 +113,9 @@ const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.
   'managed.harness_input_invalid': 'toast.error.harnessInputInvalid',
   'managed.harness_plugin_operation_failed': 'toast.error.harnessPluginOperationFailed',
   'managed.harness_port_in_use': 'toast.error.harnessPortInUse',
-  'managed.git_operation_failed': 'toast.error.gitOperationFailed'
+  'managed.git_operation_failed': 'toast.error.gitOperationFailed',
+  'managed.plugin_catalog_read_failed': 'toast.error.pluginCatalogReadFailed',
+  'managed.plugin_catalog_refresh_failed': 'toast.error.pluginCatalogRefreshFailed'
 }
 
 /** Consequence and next step per code; the raw code stays available separately. */
@@ -126,7 +128,9 @@ const TOAST_ERROR_DETAIL_KEYS: Readonly<Record<string, Parameters<typeof shell.t
   'managed.harness_input_invalid': 'toast.error.detail.harnessInputInvalid',
   'managed.harness_plugin_operation_failed': 'toast.error.detail.harnessPluginOperationFailed',
   'managed.harness_port_in_use': 'toast.error.detail.harnessPortInUse',
-  'managed.git_operation_failed': 'toast.error.detail.gitOperationFailed'
+  'managed.git_operation_failed': 'toast.error.detail.gitOperationFailed',
+  'managed.plugin_catalog_read_failed': 'toast.error.detail.pluginCatalogReadFailed',
+  'managed.plugin_catalog_refresh_failed': 'toast.error.detail.pluginCatalogRefreshFailed'
 }
 
 const TOAST_VISIBLE_MILLISECONDS = 8_000

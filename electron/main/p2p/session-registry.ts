@@ -1,5 +1,6 @@
 import { appendFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { PeerHelperError } from './wire'
 
 /**
  * This computer's session with each coordinator, as main last observed it.
@@ -60,10 +61,9 @@ export class PeerSessionRegistry {
 
 /**
  * Reuses the persisted login session so a restart does not ask for the password
- * again. The server stays authoritative: a refusal drops the persisted token and
- * the user simply signs in again. A refusal that is not the server's — a locked
- * credential file, a helper that died — must not delete the session, so only the
- * adopt call's failure does.
+ * again. Only an explicit server-side account refusal removes the durable
+ * session. A locked credential store, helper contention or a dead transport is
+ * transient and must leave the session available for a later retry.
  */
 export async function restoreUserSession(
   credentials: {
@@ -100,9 +100,26 @@ export async function restoreUserSession(
       persisted.expiresAt,
       signal
     )
-  } catch {
-    await credentials.removeUserSession(serviceId).catch(() => undefined)
+  } catch (error) {
+    // Only an authoritative account refusal proves that the durable session is
+    // no longer usable. Transport/helper contention must leave it intact so the
+    // next startup/read can retry instead of turning a temporary race into a
+    // visible login form.
+    if (isAuthoritativeSessionRefusal(error)) {
+      await credentials.removeUserSession(serviceId).catch(() => undefined)
+      return
+    }
+    throw error
   }
+}
+
+function isAuthoritativeSessionRefusal(error: unknown): boolean {
+  if (!(error instanceof PeerHelperError)) return false
+  return (
+    error.code === 'p2p.user_login_required' ||
+    error.code === 'p2p.user_unauthorized' ||
+    error.code === 'p2p.user_session_expired'
+  )
 }
 
 /**
