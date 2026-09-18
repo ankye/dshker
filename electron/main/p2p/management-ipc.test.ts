@@ -393,10 +393,12 @@ describe('P2P named management admission', () => {
     let sequence = 0
     // resumeConnectivity is an internal helper the connect route calls first; it
     // is not a dispatched operation, so it is excluded from the routing sweep.
-    const routed = (Object.keys(owner) as Exclude<
-      P2PManagementOperation,
-      'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork' | 'leaveNetwork'
-    >[]).filter((method) => method !== 'resumeConnectivity')
+    const routed = (
+      Object.keys(owner) as Exclude<
+        P2PManagementOperation,
+        'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork' | 'leaveNetwork'
+      >[]
+    ).filter((method) => method !== 'resumeConnectivity')
     for (const method of routed) {
       const result = await invoke(method, event, request(method, ++sequence))
       expect(result.ok, method).toBe(true)

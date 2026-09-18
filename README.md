@@ -176,7 +176,7 @@ Then use the sidebar in this order when needed:
 4. **Token usage** — inspect session and daily model totals from native DSH logs.
 5. **Settings** — manage DSH and Launcher settings, including update checks.
 6. **Remote connections** — register, test, connect, and monitor trusted DSHKer computers through loopback SSH tunnels.
-7. **Run** — use Local and open remote computer tabs on demand for DSH Web sessions.
+7. **Browser** — use Local and open remote computer tabs on demand for DSH Web sessions.
 
 For step-by-step details, troubleshooting, and the directory ownership model, read the [English usage guide](docs/usage.en.md) or [Chinese usage guide](docs/usage.zh-CN.md).
 
