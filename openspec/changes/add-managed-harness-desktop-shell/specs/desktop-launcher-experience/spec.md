@@ -114,7 +114,7 @@ The Launcher SHALL expose update discovery in Launcher Settings as exactly idle,
 
 The Launcher SHALL start one update check in the background after its main window is usable. That check SHALL NOT delay first paint, route navigation, Harness preparation, or launch actions. Only an available higher stable version SHALL create a passive startup notice. A startup check failure SHALL NOT open a dialog or replace the current page; Launcher Settings SHALL retain the failed state and provide an explicit retry.
 
-For a supported macOS arm64 or Windows x64 build, an available update SHALL identify exactly one matching installer asset. Download SHALL open that exact asset in the operating-system browser for manual installation. A missing asset, multiple matching assets, unsupported platform or architecture, unavailable public Release, or invalid asset URL SHALL produce a failed state and SHALL NOT select another platform, architecture, release page, Actions artifact, or cached installer as a substitute.
+For a supported macOS arm64 or Windows x64 build, an available update SHALL identify exactly one matching installer asset. Download SHALL stream that exact asset to the system Downloads directory, expose determinate or indeterminate byte progress, and leave installation manual. A file that already exists at the exact destination SHALL fail without overwriting it. A missing asset, multiple matching assets, unsupported platform or architecture, unavailable public Release, invalid asset URL, or download failure SHALL produce a typed failed download state and SHALL NOT select another platform, architecture, release page, Actions artifact, or cached installer as a substitute. A release body MAY contain `### ... (zh-CN)` and `### ... (en-US)` sections; Settings SHALL show only the section matching the active Launcher language and SHALL show no release-notes section when that section is absent.
 
 #### Scenario: Startup finds a higher stable version
 
@@ -138,9 +138,22 @@ For a supported macOS arm64 or Windows x64 build, an available update SHALL iden
 #### Scenario: User downloads an available update
 
 - **WHEN** the user chooses Download for a validated available update
-- **THEN** the operating-system browser opens the one exact installer asset retained by the successful check
+- **THEN** Electron main downloads the one exact installer asset retained by the successful check to the system Downloads directory
+- **AND** the Launcher shows download progress while bytes are received and a completed state after the file is saved
 - **AND** the Launcher describes the unsigned package as a manual installation
-- **AND** it does not download, replace, install, or restart the application silently
+- **AND** it does not overwrite an existing destination, install, replace, or restart the application silently
+
+#### Scenario: User views localized release notes
+
+- **WHEN** a release body contains both `zh-CN` and `en-US` sections
+- **THEN** Settings shows only the section matching the selected Launcher language
+- **AND** it renders the selected release notes as plain text
+
+#### Scenario: Localized release notes are unavailable
+
+- **WHEN** a release body does not contain a section for the selected Launcher language
+- **THEN** Settings omits the release-notes section
+- **AND** it does not display the other language as a substitute
 
 #### Scenario: Release asset selection is ambiguous
 

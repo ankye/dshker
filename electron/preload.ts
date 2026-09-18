@@ -237,8 +237,8 @@ const desktopApi: DesktopApi = Object.freeze({
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherUpdatesGetState),
     check: (): Promise<ApiResult<LauncherUpdateState>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherUpdatesCheck),
-    openInstallerDownload: (): Promise<ApiResult<LauncherUpdateState>> =>
-      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherUpdatesOpenInstallerDownload),
+    downloadInstaller: (): Promise<ApiResult<LauncherUpdateState>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.launcherUpdatesDownloadInstaller),
     onStateChange: (listener: (result: ApiResult<LauncherUpdateState>) => void): (() => void) => {
       const onChanged = (_event: unknown, result: ApiResult<LauncherUpdateState>): void => {
         listener(result)

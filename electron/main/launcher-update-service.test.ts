@@ -42,12 +42,16 @@ type TestFetchRelease = (
   init: Readonly<{ headers: Readonly<Record<string, string>> }>
 ) => Promise<TestFetchResponse>
 
-type TestOpenExternal = (url: string) => Promise<void>
+type TestDownloadInstaller = (
+  url: string,
+  destinationPath: string,
+  onProgress: (progress: { bytesReceived: number; totalBytes?: number }) => void
+) => Promise<void>
 
 function service(options?: {
   payload?: unknown
   fetchRelease?: TestFetchRelease
-  openExternal?: TestOpenExternal
+  downloadInstaller?: TestDownloadInstaller
   platform?: NodeJS.Platform
   arch?: string
   currentVersion?: string
@@ -55,16 +59,21 @@ function service(options?: {
   const fetchRelease =
     options?.fetchRelease ??
     vi.fn<TestFetchRelease>(async () => response(options?.payload ?? releasePayload()))
-  const openExternal = options?.openExternal ?? vi.fn<TestOpenExternal>(async () => undefined)
+  const downloadInstaller =
+    options?.downloadInstaller ??
+    vi.fn<TestDownloadInstaller>(async (_url, _destinationPath, onProgress) => {
+      onProgress({ bytesReceived: 4, totalBytes: 4 })
+    })
   return {
     fetchRelease,
-    openExternal,
+    downloadInstaller,
     updateService: new LauncherUpdateService({
       currentVersion: options?.currentVersion ?? '0.1.6',
       platform: options?.platform ?? 'darwin',
       arch: options?.arch ?? 'arm64',
+      downloadsDirectory: '/tmp/dshker-launcher-tests',
       fetchRelease,
-      openExternal,
+      downloadInstaller,
       now: () => new Date('2026-09-04T08:00:00.000Z')
     })
   }
@@ -193,8 +202,8 @@ describe('Launcher update version and package matrix', () => {
 })
 
 describe('LauncherUpdateService', () => {
-  it('publishes an available update and opens only its cached exact installer URL', async () => {
-    const { updateService, fetchRelease, openExternal } = service()
+  it('publishes an available update and downloads only its cached exact installer URL', async () => {
+    const { updateService, fetchRelease, downloadInstaller } = service()
 
     await expect(updateService.check()).resolves.toEqual({
       kind: 'update-available',
@@ -202,12 +211,18 @@ describe('LauncherUpdateService', () => {
       latestVersion: '0.2.0',
       assetName: 'dshker-launcher-0.2.0-mac-arm64.dmg',
       releasePageUrl: 'https://github.com/ankye/dshker/releases/tag/v0.2.0',
+      download: { kind: 'idle' },
       checkedAt: '2026-09-04T08:00:00.000Z'
     })
-    await updateService.openInstallerDownload()
+    await expect(updateService.downloadInstaller()).resolves.toMatchObject({
+      kind: 'update-available',
+      download: { kind: 'downloaded' }
+    })
 
-    expect(openExternal).toHaveBeenCalledWith(
-      'https://github.com/ankye/dshker/releases/download/v0.2.0/dshker-launcher-0.2.0-mac-arm64.dmg'
+    expect(downloadInstaller).toHaveBeenCalledWith(
+      'https://github.com/ankye/dshker/releases/download/v0.2.0/dshker-launcher-0.2.0-mac-arm64.dmg',
+      '/tmp/dshker-launcher-tests/dshker-launcher-0.2.0-mac-arm64.dmg',
+      expect.any(Function)
     )
     expect(fetchRelease).toHaveBeenCalledWith(
       'https://api.github.com/repos/ankye/dshker/releases/latest',
@@ -304,25 +319,72 @@ describe('LauncherUpdateService', () => {
     }
   )
 
-  it('does not open a URL before an available release has been verified', async () => {
-    const { updateService, openExternal } = service()
+  it('does not download before an available release has been verified', async () => {
+    const { updateService, downloadInstaller } = service()
 
-    await expect(updateService.openInstallerDownload()).rejects.toEqual(
+    await expect(updateService.downloadInstaller()).rejects.toEqual(
       expect.objectContaining({ code: 'launcher.update_not_available' })
     )
-    expect(openExternal).not.toHaveBeenCalled()
+    expect(downloadInstaller).not.toHaveBeenCalled()
   })
 
-  it('reports an operating-system handoff failure without exposing its cause', async () => {
-    const openExternal = vi.fn<TestOpenExternal>(async () => {
-      throw new Error('private operating-system detail')
+  it('reports a download failure without exposing its cause', async () => {
+    const downloadInstaller = vi.fn<TestDownloadInstaller>(async () => {
+      throw new Error('private filesystem detail')
     })
-    const { updateService } = service({ openExternal })
+    const { updateService } = service({ downloadInstaller })
     await updateService.check()
 
-    await expect(updateService.openInstallerDownload()).rejects.toEqual(
-      expect.objectContaining({ code: 'launcher.update_open_failed' })
+    await expect(updateService.downloadInstaller()).rejects.toEqual(
+      expect.objectContaining({ code: 'launcher.update_download_failed' })
     )
+  })
+
+  it('coalesces repeated download requests while the installer is transferring', async () => {
+    let releaseDownload!: () => void
+    const downloadInstaller = vi.fn<TestDownloadInstaller>(
+      async () =>
+        await new Promise<void>((resolve) => {
+          releaseDownload = resolve
+        })
+    )
+    const { updateService } = service({ downloadInstaller })
+    await updateService.check()
+
+    const first = updateService.downloadInstaller()
+    const second = updateService.downloadInstaller()
+    expect(downloadInstaller).toHaveBeenCalledOnce()
+    releaseDownload()
+    await expect(first).resolves.toMatchObject({ download: { kind: 'downloaded' } })
+    await expect(second).resolves.toMatchObject({ download: { kind: 'downloaded' } })
+  })
+
+  it('does not let an old download complete a newer update generation', async () => {
+    let releaseDownload!: () => void
+    const fetchRelease = vi
+      .fn<TestFetchRelease>()
+      .mockResolvedValueOnce(response(releasePayload('0.2.0')))
+      .mockResolvedValueOnce(response(releasePayload('0.2.1')))
+    const downloadInstaller = vi.fn<TestDownloadInstaller>(
+      async () =>
+        await new Promise<void>((resolve) => {
+          releaseDownload = resolve
+        })
+    )
+    const { updateService } = service({ fetchRelease, downloadInstaller })
+    await updateService.check()
+    const oldDownload = updateService.downloadInstaller()
+    await updateService.check()
+
+    releaseDownload()
+    await expect(oldDownload).rejects.toEqual(
+      expect.objectContaining({ code: 'launcher.update_not_available' })
+    )
+    expect(updateService.getState()).toMatchObject({
+      kind: 'update-available',
+      latestVersion: '0.2.1',
+      download: { kind: 'idle' }
+    })
   })
 
   it('withdraws a retained installer as soon as a later check supersedes it', async () => {
@@ -330,14 +392,14 @@ describe('LauncherUpdateService', () => {
       .fn<TestFetchRelease>()
       .mockResolvedValueOnce(response(releasePayload()))
       .mockRejectedValueOnce(new Error('offline'))
-    const { updateService, openExternal } = service({ fetchRelease })
+    const { updateService, downloadInstaller } = service({ fetchRelease })
     await updateService.check()
     await updateService.check()
 
-    await expect(updateService.openInstallerDownload()).rejects.toEqual(
+    await expect(updateService.downloadInstaller()).rejects.toEqual(
       expect.objectContaining({ code: 'launcher.update_not_available' })
     )
-    expect(openExternal).not.toHaveBeenCalled()
+    expect(downloadInstaller).not.toHaveBeenCalled()
   })
 
   it('schedules startup discovery only after the window is ready and never awaits it', () => {

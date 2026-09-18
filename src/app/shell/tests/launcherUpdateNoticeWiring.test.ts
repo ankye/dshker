@@ -11,6 +11,6 @@ describe('startup update notice wiring', () => {
     expect(appShell).toContain('const launcherUpdates = useLauncherUpdates()')
     expect(appShell).toContain('v-if="updateNotice"')
     expect(appShell).toContain('@dismiss="launcherUpdates.dismissNotice"')
-    expect(appShell).toContain('@download="launcherUpdates.openInstallerDownload"')
+    expect(appShell).toContain('@download="launcherUpdates.downloadInstaller"')
   })
 })

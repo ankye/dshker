@@ -277,9 +277,9 @@ export const enUS: Record<MessageKey, string> = {
   'update.notice.version': 'Version',
   'update.notice.download': 'Download installer',
   'update.notice.installHint':
-    'The download opens in your system browser. Quit Launcher and run the installer when it finishes.',
+    'The installer is saved to your system Downloads folder. Quit Launcher and run it when the download finishes.',
   'update.notice.dismiss': 'Dismiss update notice',
-  'update.notice.openFailed': 'Could not open the download:',
+  'update.notice.downloadFailed': 'Download failed:',
   'nav.usage': 'Token usage',
   'usage.title': 'Token usage',
   'usage.description': 'Read from the session logs DSH records; the Launcher only reads them.',

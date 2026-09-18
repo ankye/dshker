@@ -39,10 +39,14 @@ cannot drift.
 
 The public update feed is the fixed
 [DSHKer GitHub Releases page](https://github.com/ankye/dshker/releases/latest).
-The Launcher reads its latest stable release in Electron main and only opens the
-exact installer selected for the current supported platform and architecture.
-It does not download, install, replace, or restart the application silently.
-GitHub Actions artifacts remain build evidence and are not an update feed.
+The Launcher reads its latest stable release in Electron main, downloads the
+exact installer selected for the current supported platform and architecture
+into the system Downloads folder, and reports progress through the typed
+preload surface. It does not install, replace, or restart the application
+silently. Release bodies use `### ... (zh-CN)` and `### ... (en-US)` sections so
+the Launcher can show the selected language; a release without those sections
+does not fabricate localized notes. GitHub Actions artifacts remain build
+evidence and are not an update feed.
 
 ## Readiness gates
 
@@ -107,8 +111,8 @@ When signing is introduced:
 3. The release assembly verifies the signed installer against that manifest and
    the platform checksum before publication.
 4. macOS automatic installation is considered only after signing and
-   notarization are operational; the current update action remains a system
-   browser download.
+   notarization are operational; the current update action remains an in-app
+   download followed by manual installation.
 
 ## GitHub Actions builds
 

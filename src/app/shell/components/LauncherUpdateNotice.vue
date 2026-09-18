@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import type { LauncherUpdateState } from '@/shared/contracts'
+import LauncherUpdateDownloadProgress from '@/app/domains/launcher-updates/components/LauncherUpdateDownloadProgress.vue'
 
 defineProps<{
   readonly state: Extract<LauncherUpdateState, { readonly kind: 'update-available' }>
   readonly title: string
   readonly versionLabel: string
   readonly downloadLabel: string
-  readonly openingLabel: string
+  readonly downloadingLabel: string
+  readonly downloadProgressLabel: string
+  readonly downloadedLabel: string
   readonly installHint: string
   readonly dismissLabel: string
   readonly errorLabel: string
-  readonly opening: boolean
+  readonly downloading: boolean
   readonly error?: string
 }>()
 
@@ -42,6 +45,12 @@ const emit = defineEmits<{
         <b>{{ state.latestVersion }}</b>
       </p>
       <p class="launcher-update-notice-hint">{{ installHint }}</p>
+      <LauncherUpdateDownloadProgress
+        :state="state.download"
+        :progress-label="downloadProgressLabel"
+        :downloading-label="downloadingLabel"
+        :downloaded-label="downloadedLabel"
+      />
       <p v-if="error" class="launcher-update-notice-error" role="alert">
         {{ errorLabel }} <code>{{ error }}</code>
       </p>
@@ -50,12 +59,18 @@ const emit = defineEmits<{
       <button
         class="prototype-button prototype-button--primary"
         type="button"
-        :disabled="opening"
-        :aria-busy="opening"
+        :disabled="downloading || state.download.kind === 'downloaded'"
+        :aria-busy="downloading"
         data-testid="launcher-update-notice-download"
         @click="emit('download')"
       >
-        {{ opening ? openingLabel : downloadLabel }}
+        {{
+          downloading
+            ? downloadingLabel
+            : state.download.kind === 'downloaded'
+              ? downloadedLabel
+              : downloadLabel
+        }}
       </button>
       <button
         class="launcher-update-notice-dismiss"

@@ -57,7 +57,7 @@ export const DESKTOP_IPC_CHANNELS = {
   remoteConnectionsStateChanged: 'dsh-launcher:remote-connections:state-changed',
   launcherUpdatesGetState: 'dsh-launcher:updates:get-state',
   launcherUpdatesCheck: 'dsh-launcher:updates:check',
-  launcherUpdatesOpenInstallerDownload: 'dsh-launcher:updates:open-installer-download',
+  launcherUpdatesDownloadInstaller: 'dsh-launcher:updates:download-installer',
   /** Main-to-renderer push whenever update discovery changes state. */
   launcherUpdatesStateChanged: 'dsh-launcher:updates:state-changed',
   pluginCatalogGetState: 'dsh-launcher:plugin-catalog:get-state',
@@ -170,7 +170,20 @@ export type LauncherUpdateErrorCode =
   | 'launcher.update_asset_ambiguous'
   | 'launcher.update_asset_url_invalid'
   | 'launcher.update_not_available'
-  | 'launcher.update_open_failed'
+  | 'launcher.update_download_in_progress'
+  | 'launcher.update_download_failed'
+  | 'launcher.update_download_destination_exists'
+
+/** Progress owned by the main-process installer download. */
+export type LauncherUpdateDownloadState =
+  | { readonly kind: 'idle' }
+  | {
+      readonly kind: 'downloading'
+      readonly bytesReceived: number
+      readonly totalBytes?: number
+    }
+  | { readonly kind: 'downloaded' }
+  | { readonly kind: 'failed'; readonly code: LauncherUpdateErrorCode }
 
 /** Stable failures from the Launcher-to-Launcher SSH peer capability. */
 export type RemoteConnectionErrorCode =
@@ -683,6 +696,7 @@ export type LauncherUpdateState =
        * descriptive data: its absence must never block an update.
        */
       readonly releaseNotes?: string
+      readonly download: LauncherUpdateDownloadState
       readonly checkedAt: string
     }
   | {
@@ -811,8 +825,8 @@ export interface DesktopApi {
   readonly launcherUpdates: Readonly<{
     getState(): Promise<ApiResult<LauncherUpdateState>>
     check(): Promise<ApiResult<LauncherUpdateState>>
-    /** Opens only the exact installer URL cached by the latest successful check. */
-    openInstallerDownload(): Promise<ApiResult<LauncherUpdateState>>
+    /** Downloads only the exact installer asset cached by the latest successful check. */
+    downloadInstaller(): Promise<ApiResult<LauncherUpdateState>>
     onStateChange(listener: (result: ApiResult<LauncherUpdateState>) => void): () => void
   }>
   readonly pluginCatalog: Readonly<{

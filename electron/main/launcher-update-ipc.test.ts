@@ -29,7 +29,7 @@ function updateService() {
     service: {
       getState: vi.fn(() => state),
       check: vi.fn(async () => state),
-      openInstallerDownload: vi.fn(async () => state),
+      downloadInstaller: vi.fn(async () => state),
       onStateChange: vi.fn((next) => {
         listener = next
         return () => undefined
@@ -52,7 +52,7 @@ describe('Launcher update IPC', () => {
     const channels = [
       DESKTOP_IPC_CHANNELS.launcherUpdatesGetState,
       DESKTOP_IPC_CHANNELS.launcherUpdatesCheck,
-      DESKTOP_IPC_CHANNELS.launcherUpdatesOpenInstallerDownload
+      DESKTOP_IPC_CHANNELS.launcherUpdatesDownloadInstaller
     ] as const
 
     mocks.trusted = false
@@ -73,7 +73,7 @@ describe('Launcher update IPC', () => {
     }
     expect(service.getState).not.toHaveBeenCalled()
     expect(service.check).not.toHaveBeenCalled()
-    expect(service.openInstallerDownload).not.toHaveBeenCalled()
+    expect(service.downloadInstaller).not.toHaveBeenCalled()
   })
 
   it('admits the three payload-free operations', async () => {
@@ -89,7 +89,7 @@ describe('Launcher update IPC', () => {
       data: { kind: 'idle', currentVersion: '0.1.6' }
     })
     expect(
-      await mocks.handlers.get(DESKTOP_IPC_CHANNELS.launcherUpdatesOpenInstallerDownload)?.({})
+      await mocks.handlers.get(DESKTOP_IPC_CHANNELS.launcherUpdatesDownloadInstaller)?.({})
     ).toEqual({
       ok: true,
       data: { kind: 'idle', currentVersion: '0.1.6' }
@@ -98,7 +98,7 @@ describe('Launcher update IPC', () => {
 
   it('sanitizes unavailable installer failures', async () => {
     const { service } = updateService()
-    vi.mocked(service.openInstallerDownload).mockRejectedValue(
+    vi.mocked(service.downloadInstaller).mockRejectedValue(
       new LauncherUpdateRuntimeError(
         'launcher.update_not_available',
         'private detail must not cross IPC'
@@ -107,7 +107,7 @@ describe('Launcher update IPC', () => {
     registerLauncherUpdateIpc(service)
 
     await expect(
-      mocks.handlers.get(DESKTOP_IPC_CHANNELS.launcherUpdatesOpenInstallerDownload)?.({})
+      mocks.handlers.get(DESKTOP_IPC_CHANNELS.launcherUpdatesDownloadInstaller)?.({})
     ).resolves.toEqual({
       ok: false,
       code: 'launcher.update_not_available',

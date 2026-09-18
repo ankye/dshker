@@ -306,7 +306,7 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
     launcherUpdates: {
       getState: async () => apiFail('launcher.update_invalid_request', 'Not used in this test.'),
       check: async () => apiFail('launcher.update_invalid_request', 'Not used in this test.'),
-      openInstallerDownload: async () =>
+      downloadInstaller: async () =>
         apiFail('launcher.update_not_available', 'Not used in this test.'),
       onStateChange: () => () => undefined
     },

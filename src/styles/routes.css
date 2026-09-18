@@ -1442,6 +1442,61 @@
   line-height: 1.5;
 }
 
+.settings-update-download-progress {
+  display: grid;
+  gap: var(--space-1);
+  max-width: 34rem;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.settings-update-download-progress-label {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.settings-update-download-progress-label strong {
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.settings-update-download-progress-track {
+  position: relative;
+  height: 0.35rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+}
+
+.settings-update-download-progress-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--color-accent);
+  transition: width var(--motion-fast) var(--ease-standard);
+}
+
+.settings-update-download-progress-track[data-determinate='false'] span {
+  width: 42% !important;
+  animation: settings-update-download-progress-slide 1.2s ease-in-out infinite;
+}
+
+.settings-update-download-complete {
+  margin: 0;
+  color: var(--color-success);
+}
+
+@keyframes settings-update-download-progress-slide {
+  from {
+    transform: translateX(-120%);
+  }
+  to {
+    transform: translateX(260%);
+  }
+}
+
 /* Release notes: the update said only that a version existed, so what changed
    had to be read on GitHub. Bounded height keeps a long body from pushing the
    download action out of view. */

@@ -153,7 +153,7 @@ If the repository has no published Release yet, the latest-release link has no u
 
 Open **Settings → Launcher settings → Updates** to check the fixed DSHKer GitHub Release feed. The Launcher also performs this check in the background after startup without blocking the window. It shows a startup notice only when GitHub reports a higher stable semantic version; a network or feed failure remains available in Settings for an explicit retry instead of interrupting startup.
 
-When an update is available, **Download** opens the exact installer asset for the current macOS or Windows architecture in the system browser. Missing, duplicate, or unsupported platform assets are reported as errors; the Launcher does not choose another package. Installation remains a user-controlled manual step because the current macOS and Windows packages are unsigned.
+When an update is available, **Download** shows progress in the Launcher and saves the exact installer asset for the current macOS or Windows architecture to the system Downloads folder. Missing, duplicate, or unsupported platform assets are reported as errors; the Launcher does not choose another package. Installation remains a user-controlled manual step because the current macOS and Windows packages are unsigned. Release notes are shown in the Launcher language.
 
 ## First launch
 

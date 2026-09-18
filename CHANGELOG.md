@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.62 — 2026-09-18
+
+### 简体中文 (zh-CN)
+
+- **修复 Launcher 更新下载体验。** 更新卡片的主按钮保持正确样式，更新说明按 Launcher 当前语言显示；下载现在在 Launcher 内展示进度并保存到系统“下载”目录，不再跳转到浏览器。
+
+### English (en-US)
+
+- **Fix Launcher update downloads.** The update card keeps the correct primary-button style, release notes follow the selected Launcher language, and downloads now show in-app progress before saving the installer to the system Downloads folder instead of opening a browser.
+
 ## 0.1.61 — 2026-09-18
 
 - **修复多端频繁上下线后的 P2P 恢复。** 旧连接在新连接已经接管后迟到清理时，不再误删新连接的网关；TURN 凭据会在过期前刷新，临时获取失败也会在下一次连接重试，不再必须重启应用。

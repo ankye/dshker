@@ -40,12 +40,12 @@ export function registerLauncherUpdateIpc(service: LauncherUpdateService): void 
   )
 
   ipcMain.handle(
-    DESKTOP_IPC_CHANNELS.launcherUpdatesOpenInstallerDownload,
+    DESKTOP_IPC_CHANNELS.launcherUpdatesDownloadInstaller,
     async (event, ...args): Promise<ApiResult<LauncherUpdateState>> => {
       if (!isTrustedRenderer(event)) return invalidSender()
       if (args.length !== 0) return invalidRequest()
       try {
-        return apiOk(await service.openInstallerDownload())
+        return apiOk(await service.downloadInstaller())
       } catch (error) {
         if (error instanceof LauncherUpdateRuntimeError) {
           return apiFail(error.code, updateFailureMessage(error.code))
@@ -71,8 +71,14 @@ function updateFailureMessage(code: LauncherUpdateErrorCode): string {
   if (code === 'launcher.update_not_available') {
     return 'No verified Launcher installer is available.'
   }
-  if (code === 'launcher.update_open_failed') {
-    return 'The verified Launcher installer could not be opened.'
+  if (code === 'launcher.update_download_in_progress') {
+    return 'The Launcher installer is already downloading.'
+  }
+  if (code === 'launcher.update_download_destination_exists') {
+    return 'The Launcher installer already exists in the system Downloads folder.'
+  }
+  if (code === 'launcher.update_download_failed') {
+    return 'The Launcher installer could not be downloaded.'
   }
   return 'The Launcher update operation failed.'
 }

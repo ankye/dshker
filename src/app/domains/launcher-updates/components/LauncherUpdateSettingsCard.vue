@@ -2,8 +2,10 @@
 import { computed } from 'vue'
 import type { LauncherUpdateErrorCode } from '@/shared/contracts'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
+import { selectLocalizedReleaseNotes } from '@/app/shared/i18n/i18n.updates'
 import { locale, useTranslator } from '@/app/shared/i18n/useLocale'
 import { useLauncherUpdates } from '../useLauncherUpdates'
+import LauncherUpdateDownloadProgress from './LauncherUpdateDownloadProgress.vue'
 
 defineProps<{ readonly title?: string; readonly description?: string }>()
 
@@ -12,8 +14,20 @@ const updates = useLauncherUpdates()
 const updateState = updates.state
 const updateError = updates.error
 const isChecking = computed(
-  () => updates.checking.value || updates.state.value?.kind === 'checking'
+  () =>
+    updates.checking.value ||
+    updates.downloading.value ||
+    updates.state.value?.kind === 'checking' ||
+    (updates.state.value?.kind === 'update-available' &&
+      updates.state.value.download.kind === 'downloading')
 )
+
+const localizedReleaseNotes = computed(() => {
+  const current = updateState.value
+  return current?.kind === 'update-available'
+    ? selectLocalizedReleaseNotes(current.releaseNotes, locale.value)
+    : undefined
+})
 
 const FAILURE_MESSAGE_KEYS: Readonly<Record<LauncherUpdateErrorCode, MessageKey>> = {
   'launcher.update_invalid_request': 'settings.update.error.invalidRequest',
@@ -27,7 +41,9 @@ const FAILURE_MESSAGE_KEYS: Readonly<Record<LauncherUpdateErrorCode, MessageKey>
   'launcher.update_asset_ambiguous': 'settings.update.error.asset',
   'launcher.update_asset_url_invalid': 'settings.update.error.asset',
   'launcher.update_not_available': 'settings.update.error.notAvailable',
-  'launcher.update_open_failed': 'settings.update.error.open'
+  'launcher.update_download_in_progress': 'settings.update.error.download',
+  'launcher.update_download_failed': 'settings.update.error.download',
+  'launcher.update_download_destination_exists': 'settings.update.error.destinationExists'
 }
 
 const failureMessage = computed(() => {
@@ -137,14 +153,20 @@ const statusLabel = computed(() => {
           </div>
         </dl>
         <section
-          v-if="updateState.releaseNotes"
+          v-if="localizedReleaseNotes"
           class="settings-update-notes"
           aria-labelledby="launcher-update-notes-title"
         >
           <h4 id="launcher-update-notes-title">{{ t('settings.update.notesTitle') }}</h4>
           <!-- Plain text: the body is remote, so it is never rendered as markup. -->
-          <p class="settings-update-notes-body">{{ updateState.releaseNotes }}</p>
+          <p class="settings-update-notes-body">{{ localizedReleaseNotes }}</p>
         </section>
+        <LauncherUpdateDownloadProgress
+          :state="updateState.download"
+          :progress-label="t('settings.update.downloadProgress')"
+          :downloading-label="t('settings.update.downloading')"
+          :downloaded-label="t('settings.update.downloaded')"
+        />
         <p class="settings-update-install-hint">{{ t('settings.update.installHint') }}</p>
       </div>
       <div v-else-if="updateState?.kind === 'failed'" class="settings-update-failure" role="alert">
@@ -196,15 +218,17 @@ const statusLabel = computed(() => {
           v-if="updateState?.kind === 'update-available'"
           class="prototype-button prototype-button--primary"
           type="button"
-          :disabled="updates.openingDownload.value"
-          :aria-busy="updates.openingDownload.value"
+          :disabled="isChecking || updateState.download.kind === 'downloaded'"
+          :aria-busy="isChecking"
           data-testid="settings-download-update"
-          @click="updates.openInstallerDownload"
+          @click="updates.downloadInstaller"
         >
           {{
-            updates.openingDownload.value
-              ? t('settings.update.openingDownload')
-              : t('settings.update.download')
+            isChecking
+              ? t('settings.update.downloading')
+              : updateState.download.kind === 'downloaded'
+                ? t('settings.update.downloaded')
+                : t('settings.update.download')
           }}
         </button>
       </footer>

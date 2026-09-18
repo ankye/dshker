@@ -1,0 +1,7 @@
+# Launcher update download and localized notes
+
+- The update action now stays inside the Launcher. Electron main validates the cached exact GitHub asset, streams it to `app.getPath('downloads')`, writes through a `.part` file, refuses an existing destination, and publishes typed byte progress over the existing update-state event.
+- The renderer no longer receives an update `openExternal` capability. The update card and startup notice render the shared progress state, keep the primary button accent style, and disable repeated downloads while a transfer is active or complete.
+- Release bodies use `### ... (zh-CN)` and `### ... (en-US)` sections. Settings selects only the active Launcher locale and omits notes when that locale is absent; remote notes remain plain text.
+- Evidence: `npm test -- --run` (159 files, 1401 tests), focused update suite (58 tests), `npm run type-check`, `npm run format:check`, `npm run architecture:check`, `npm run environment:check`, `npm run build`, `npm run build:electron`, `npm run service:smoke`, and `npm run visual:smoke` passed.
+- `npm run electron:renderer-smoke -- --json` was attempted but could not find a renderer debugger target after Electron started; this is recorded as unverified rather than passed evidence. The committed `test-gates/launcher-update-download.json` remains `implementation_complete: false` because packaged-app download acceptance against a real GitHub Release and its raw interaction ledger were not run in this environment; focused tests must not be presented as that live evidence.

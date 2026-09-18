@@ -1,3 +1,20 @@
+import type { SupportedLocale } from './i18n'
+
+/** Selects the locale section from a structured release body. */
+export function selectLocalizedReleaseNotes(
+  notes: string | undefined,
+  selectedLocale: SupportedLocale
+): string | undefined {
+  if (notes === undefined) return undefined
+  const sections = [...notes.matchAll(/^###\s+.*?\((zh-CN|en-US)\)\s*$/gmu)]
+  if (sections.length === 0) return undefined
+  const selected = sections.find((match) => match[1] === selectedLocale)
+  if (selected === undefined || selected.index === undefined) return undefined
+  const bodyStart = selected.index + selected[0].length
+  const next = sections.find((match) => (match.index ?? Number.POSITIVE_INFINITY) > selected.index!)
+  return notes.slice(bodyStart, next?.index ?? notes.length).trim() || undefined
+}
+
 /**
  * Launcher update copy, kept out of the primary catalogs.
  *
@@ -26,12 +43,14 @@ export const zhCNUpdates = {
   'settings.update.notesTitle': '更新内容',
   'settings.update.checkedAt': '检查时间',
   'settings.update.installHint':
-    '点击后将在系统浏览器中下载；下载完成后请退出 Launcher 并手动运行安装包。',
+    '点击下载后会保存到系统“下载”目录；完成后请退出 Launcher 并手动运行安装包。',
   'settings.update.check': '检查更新',
   'settings.update.checkingAction': '正在检查…',
   'settings.update.retry': '重新检查',
   'settings.update.download': '下载安装包',
-  'settings.update.openingDownload': '正在打开…',
+  'settings.update.downloading': '正在下载…',
+  'settings.update.downloadProgress': '下载进度',
+  'settings.update.downloaded': '下载完成，安装包已保存到系统“下载”目录。',
   'settings.update.operationFailed': '更新操作未完成，请根据诊断代码重试。',
   'settings.update.errorCode': '诊断代码',
   'settings.update.error.invalidRequest': '更新请求无效，请重新打开应用后再试。',
@@ -42,7 +61,8 @@ export const zhCNUpdates = {
   'settings.update.error.platform': '最新发布版本不支持当前操作系统或处理器架构。',
   'settings.update.error.asset': '最新发布版本没有唯一匹配当前系统的安装包。',
   'settings.update.error.notAvailable': '当前没有可下载的新版本。',
-  'settings.update.error.open': '系统浏览器未能打开安装包下载地址，请重试。'
+  'settings.update.error.download': '安装包下载失败，请重试。',
+  'settings.update.error.destinationExists': '系统“下载”目录中已经存在同名安装包。'
 } as const
 
 export const enUSUpdates = {
@@ -66,12 +86,15 @@ export const enUSUpdates = {
   'settings.update.notesTitle': "What's new",
   'settings.update.checkedAt': 'Checked',
   'settings.update.installHint':
-    'This opens the download in your system browser. Quit Launcher and run the installer manually after it finishes.',
+    'The installer is saved to your system Downloads folder. Quit Launcher and run it manually after the download finishes.',
   'settings.update.check': 'Check for updates',
   'settings.update.checkingAction': 'Checking…',
   'settings.update.retry': 'Check again',
   'settings.update.download': 'Download installer',
-  'settings.update.openingDownload': 'Opening…',
+  'settings.update.downloading': 'Downloading…',
+  'settings.update.downloadProgress': 'Download progress',
+  'settings.update.downloaded':
+    'Download complete. The installer was saved to your system Downloads folder.',
   'settings.update.operationFailed':
     'The update action did not finish. Use the diagnostic code and try again.',
   'settings.update.errorCode': 'Diagnostic code',
@@ -88,6 +111,7 @@ export const enUSUpdates = {
   'settings.update.error.asset':
     'The latest release does not contain one unambiguous installer for this system.',
   'settings.update.error.notAvailable': 'There is no newer installer to download.',
-  'settings.update.error.open':
-    'The system browser could not open the installer download. Try again.'
+  'settings.update.error.download': 'The installer download failed. Try again.',
+  'settings.update.error.destinationExists':
+    'An installer with the same name already exists in the system Downloads folder.'
 } as const

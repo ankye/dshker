@@ -52,9 +52,9 @@ The diagnostic result SHALL contain only host and guest device-pixel ratios, eff
 
 ### Requirement: Launcher update authority remains in Electron main
 
-The preload surface SHALL expose only named typed operations to read update state, request a check, request the current validated installer download, and receive update-state changes. Electron main SHALL own the fixed DSHKer GitHub release endpoint, network request, semantic-version comparison, platform and architecture selection, retained installer URL, and operating-system browser call. The renderer SHALL NOT supply a repository, endpoint, release URL, asset URL, platform, architecture, HTTP options, or filesystem destination.
+The preload surface SHALL expose only named typed operations to read update state, request a check, request the current validated installer download, and receive update-state changes. Electron main SHALL own the fixed DSHKer GitHub release endpoint, network request, semantic-version comparison, platform and architecture selection, retained installer URL, Downloads destination, filesystem write, and progress publication. The renderer SHALL NOT supply a repository, endpoint, release URL, asset URL, platform, architecture, HTTP options, or filesystem destination.
 
-An installer download request SHALL succeed only while Electron main retains one update-available observation from the current successful check. Electron main SHALL validate the trusted renderer sender and the retained HTTPS GitHub asset URL before opening it. A failed or superseded check SHALL withdraw download authority; it SHALL NOT reuse a stale asset URL.
+An installer download request SHALL succeed only while Electron main retains one update-available observation from the current successful check. Electron main SHALL validate the trusted renderer sender and the retained HTTPS GitHub asset URL before downloading it. A failed or superseded check SHALL withdraw download authority; it SHALL NOT reuse a stale asset URL or let a stale download mutate a newer update state.
 
 #### Scenario: Renderer checks the fixed release source
 

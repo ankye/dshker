@@ -358,6 +358,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          release_version="${GITHUB_REF_NAME#v}"
+          release_notes="$(awk -v version="$release_version" '
+            $0 ~ "^##[[:space:]]+" version "([[:space:]]|$)" { inside=1; next }
+            inside && /^##[[:space:]]/ { exit }
+            inside { print }
+          ' CHANGELOG.md)"
+          if [[ -z "${release_notes//[[:space:]]/}" ]]; then
+            echo "::error title=Missing release notes::CHANGELOG.md has no entry for ${GITHUB_REF_NAME}."
+            exit 1
+          fi
           gh release create "$GITHUB_REF_NAME" \
             publish/*.dmg \
             publish/*.exe \
@@ -371,7 +381,6 @@ jobs:
             publish/release-manifest-linux-x64.json \
             publish/release-manifest-linux-arm64.json \
             --verify-tag \
-            --generate-notes \
-            --notes 'These macOS and Windows installers are currently unsigned. Download the exact package for your platform, verify it with `checksums.txt`, and run the installer manually. macOS may require **Open** from Finder context menu; Windows may show SmartScreen. DSHKer Launcher can notify you about this release, but it does not install or replace the application silently.' \
+            --notes "$release_notes" \
             --title "DSHKer Launcher ${GITHUB_REF_NAME}" \
             --prerelease

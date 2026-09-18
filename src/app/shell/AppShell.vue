@@ -54,7 +54,7 @@ const pluginCatalog = usePluginCatalog()
 const launcherUpdates = useLauncherUpdates()
 useRemoteConnections()
 const updateNotice = launcherUpdates.notice
-const updateDownloadOpening = launcherUpdates.openingDownload
+const updateDownloading = launcherUpdates.downloading
 const updateError = launcherUpdates.error
 
 const statusbarBaseLabel = computed(() => {
@@ -231,13 +231,15 @@ function openConsoleRoute(): void {
           :title="shell.t('update.notice.title')"
           :version-label="shell.t('update.notice.version')"
           :download-label="shell.t('update.notice.download')"
-          :opening-label="shell.t('settings.update.openingDownload')"
+          :downloading-label="shell.t('settings.update.downloading')"
+          :download-progress-label="shell.t('settings.update.downloadProgress')"
+          :downloaded-label="shell.t('settings.update.downloaded')"
           :install-hint="shell.t('update.notice.installHint')"
           :dismiss-label="shell.t('update.notice.dismiss')"
-          :error-label="shell.t('update.notice.openFailed')"
-          :opening="updateDownloadOpening"
+          :error-label="shell.t('update.notice.downloadFailed')"
+          :downloading="updateDownloading"
           :error="updateError"
-          @download="launcherUpdates.openInstallerDownload"
+          @download="launcherUpdates.downloadInstaller"
           @dismiss="launcherUpdates.dismissNotice"
         />
         <RouteStage

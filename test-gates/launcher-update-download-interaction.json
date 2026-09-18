@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "change": "Launcher in-app update download and localized release notes",
+  "acceptance_stage": "diagnostic",
+  "implementation_complete": false,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "prerequisites": [
+    "A stable GitHub Release with one exact installer asset for the running platform and a bilingual release body."
+  ],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "workflows": [
+    {
+      "id": "download-update-in-app",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='settings-download-update']",
+      "expected_state": {
+        "download_progress_is_visible": true,
+        "download_destination_is_system_downloads": true,
+        "browser_navigation_is_not_triggered": true,
+        "primary_button_uses_accent_style": true
+      },
+      "expected_native_event": "The exact installer is saved and the Launcher reports completion",
+      "requires_persistence": false,
+      "invariants": [
+        "the renderer supplies no URL or filesystem destination",
+        "an existing destination is never overwritten",
+        "a later check cannot be mutated by an earlier download",
+        "the download button cannot start a second concurrent transfer"
+      ],
+      "required_content_checks": [
+        "progress",
+        "button_style",
+        "accessible_actions",
+        "no_external_navigation"
+      ]
+    },
+    {
+      "id": "select-release-notes-language",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid='settings-launcher-update']",
+      "expected_state": {
+        "zh_cn_shows_zh_cn_section": true,
+        "en_us_shows_en_us_section": true,
+        "missing_section_is_omitted": true,
+        "remote_markup_stays_text": true
+      },
+      "expected_native_event": "The update card follows the selected Launcher language",
+      "requires_persistence": false,
+      "invariants": [
+        "the other language is not used as a substitute",
+        "release notes do not become HTML"
+      ],
+      "required_content_checks": ["text_order", "locale", "content_errors"]
+    }
+  ]
+}

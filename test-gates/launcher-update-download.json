@@ -1,0 +1,79 @@
+{
+  "change": "launcher-update-download: in-app installer download, progress, button styling and localized release notes",
+  "risk": "interactive",
+  "scope_note": "Focused Electron-main, IPC, renderer and component tests cover the implementation. A live packaged-app download against a real GitHub Release and the raw interaction ledger remain unverified because the current check was run without a release-download fixture and must not be replaced by a mock browser path.",
+  "production_files": [
+    "electron/main.ts",
+    "electron/main/launcher-update-ipc.ts",
+    "electron/main/launcher-update-service.ts",
+    "electron/preload.ts",
+    "src/shared/contracts.ts",
+    "src/app/domains/launcher-updates/components/LauncherUpdateDownloadProgress.vue",
+    "src/app/domains/launcher-updates/components/LauncherUpdateSettingsCard.vue",
+    "src/app/domains/launcher-updates/useLauncherUpdates.ts",
+    "src/app/shell/AppShell.vue",
+    "src/app/shell/components/LauncherUpdateNotice.vue",
+    "src/app/shared/i18n/i18n.updates.ts",
+    "src/app/shared/i18n/messages.en-US.ts",
+    "src/app/shared/i18n/messages.zh-CN.ts",
+    "src/styles/launch-home.css",
+    "src/styles/routes.css"
+  ],
+  "test_files": [
+    "electron/main/launcher-update-service.test.ts",
+    "electron/main/launcher-update-ipc.test.ts",
+    "src/app/domains/launcher-updates/tests/launcherUpdates.test.ts",
+    "src/app/shell/tests/launcherUpdateNoticeWiring.test.ts"
+  ],
+  "live_test_files": ["electron/main/smoke.ts", "tools/electron-renderer-smoke.mjs"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "publishes downloading progress and downloaded state for the exact installer"
+    },
+    {
+      "state": "no_op",
+      "test": "returns the retained download promise and does not start a second transfer"
+    },
+    {
+      "state": "recovery",
+      "test": "maps a failed transfer to a typed failed download state that can be retried"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "withdraws the retained installer after a later check"
+    },
+    {
+      "state": "reset",
+      "test": "clears renderer download state when the update domain test singleton resets"
+    },
+    {
+      "state": "superseded",
+      "test": "prevents a stale download callback from mutating a newer update generation"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/launcher-update-service.ts",
+      "field": "download.bytesReceived and download.totalBytes",
+      "source": "the real response body reader in Electron main",
+      "assertion": "the update state reports the received byte count and determinate percentage when content-length is known",
+      "test": "publishes downloading progress and downloaded state for the exact installer",
+      "state": "success",
+      "identity_keys": ["release version", "asset name", "update generation"],
+      "missing_semantics": "No progress or destination is fabricated when the response has no content-length; the bar remains indeterminate."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "npm test -- --run electron/main/launcher-update-service.test.ts electron/main/launcher-update-ipc.test.ts src/app/domains/launcher-updates/tests/launcherUpdates.test.ts src/app/shell/tests/launcherUpdateNoticeWiring.test.ts",
+      "no_mock": false
+    }
+  ],
+  "runtime_evidence": [],
+  "interaction_gate": {
+    "contract": "test-gates/launcher-update-download-interaction.json",
+    "ledger": ".run/launcher-update-download/interaction.jsonl"
+  },
+  "acceptance_status": "Focused tests are required code evidence. Packaged-app visual/download acceptance and the raw interaction ledger are still pending and must not be claimed from the focused tests."
+}

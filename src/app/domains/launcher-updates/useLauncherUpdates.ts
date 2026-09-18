@@ -4,7 +4,7 @@ import type { ApiResult, LauncherUpdateState } from '@/shared/contracts'
 const state = ref<LauncherUpdateState>()
 const error = ref<string>()
 const checking = ref(false)
-const openingDownload = ref(false)
+const downloading = ref(false)
 const dismissedLatestVersion = ref<string>()
 
 let startPromise: Promise<void> | undefined
@@ -77,25 +77,25 @@ async function check(): Promise<boolean> {
   }
 }
 
-/** Opens the verified installer asset in the system browser. */
-async function openInstallerDownload(): Promise<boolean> {
+/** Downloads the verified installer asset through the main-process bridge. */
+async function downloadInstaller(): Promise<boolean> {
   const api = window.dshLauncher?.launcherUpdates
   if (api === undefined) {
     error.value = 'bridge'
     return false
   }
-  if (openingDownload.value || state.value?.kind !== 'update-available') return false
-  openingDownload.value = true
+  if (downloading.value || state.value?.kind !== 'update-available') return false
+  downloading.value = true
   error.value = undefined
   try {
     try {
-      return publish(await api.openInstallerDownload())
+      return publish(await api.downloadInstaller())
     } catch {
       error.value = 'bridge'
       return false
     }
   } finally {
-    openingDownload.value = false
+    downloading.value = false
   }
 }
 
@@ -125,10 +125,10 @@ export function useLauncherUpdates() {
     state,
     error,
     checking,
-    openingDownload,
+    downloading,
     notice,
     check,
-    openInstallerDownload,
+    downloadInstaller,
     dismissNotice
   }
 }
@@ -142,6 +142,6 @@ export function resetLauncherUpdatesForTests(): void {
   state.value = undefined
   error.value = undefined
   checking.value = false
-  openingDownload.value = false
+  downloading.value = false
   dismissedLatestVersion.value = undefined
 }

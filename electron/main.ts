@@ -1,4 +1,4 @@
-import { app, BrowserWindow, powerMonitor, protocol, shell } from 'electron'
+import { app, BrowserWindow, powerMonitor, protocol } from 'electron'
 import { mkdir, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -280,9 +280,7 @@ async function registerLauncherServices(
     currentVersion: APP_METADATA.version,
     platform: process.platform,
     arch: process.arch,
-    openExternal: async (url) => {
-      await shell.openExternal(url)
-    }
+    downloadsDirectory: app.getPath('downloads')
   })
   // The core owns the remote route now, and it starts after this service is
   // constructed, so the port is a getter: a shell without a core refuses every

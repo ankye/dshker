@@ -1,3 +1,6 @@
+import { constants } from 'node:fs'
+import { copyFile, open, rm } from 'node:fs/promises'
+import path from 'node:path'
 import type { LauncherUpdateErrorCode, LauncherUpdateState } from '../../src/shared/contracts'
 
 /** Fixed public endpoint for the only Launcher release source. */
@@ -20,13 +23,25 @@ interface LauncherUpdateServiceOptions {
   readonly currentVersion: string
   readonly platform: NodeJS.Platform
   readonly arch: string
+  readonly downloadsDirectory: string
   readonly fetchRelease?: (
     url: typeof LAUNCHER_RELEASE_API_URL,
     init: Readonly<{ headers: Readonly<Record<string, string>> }>
   ) => Promise<LauncherUpdateFetchResponse>
-  readonly openExternal: (url: string) => Promise<void>
+  readonly downloadInstaller?: DownloadInstaller
   readonly now?: () => Date
 }
+
+export interface LauncherUpdateDownloadProgress {
+  readonly bytesReceived: number
+  readonly totalBytes?: number
+}
+
+export type DownloadInstaller = (
+  url: string,
+  destinationPath: string,
+  onProgress: (progress: LauncherUpdateDownloadProgress) => void
+) => Promise<void>
 
 interface ParsedRelease {
   readonly tag: string
@@ -61,7 +76,9 @@ export class LauncherUpdateService {
   private state: LauncherUpdateState
   private readonly listeners = new Set<StateListener>()
   private pendingCheck: Promise<LauncherUpdateState> | undefined
+  private pendingDownload: Promise<LauncherUpdateState> | undefined
   private cachedInstallerUrl: string | undefined
+  private updateGeneration = 0
 
   constructor(private readonly options: LauncherUpdateServiceOptions) {
     parseVersion(options.currentVersion)
@@ -82,6 +99,7 @@ export class LauncherUpdateService {
   /** Runs one shared strict latest-release request. */
   check(): Promise<LauncherUpdateState> {
     if (this.pendingCheck !== undefined) return this.pendingCheck
+    this.updateGeneration += 1
     this.cachedInstallerUrl = undefined
     this.transition({ kind: 'checking', currentVersion: this.options.currentVersion })
     const pending = this.performCheck().finally(() => {
@@ -91,28 +109,87 @@ export class LauncherUpdateService {
     return pending
   }
 
-  /** Opens the cached installer only while its matching update remains available. */
-  async openInstallerDownload(): Promise<LauncherUpdateState> {
+  /** Downloads the cached installer only while its matching update remains available. */
+  async downloadInstaller(): Promise<LauncherUpdateState> {
     if (this.state.kind !== 'update-available' || this.cachedInstallerUrl === undefined) {
       throw new LauncherUpdateRuntimeError(
         'launcher.update_not_available',
         'No verified Launcher installer is available.'
       )
     }
+    if (this.pendingDownload !== undefined) return this.pendingDownload
+    if (this.state.download.kind === 'downloaded') return Promise.resolve(this.state)
     validateInstallerUrl(
       this.cachedInstallerUrl,
       `v${this.state.latestVersion}`,
       this.state.assetName
     )
+    const update = this.state
+    const installerUrl = this.cachedInstallerUrl
+    const updateGeneration = this.updateGeneration
+    const destinationPath = path.join(this.options.downloadsDirectory, update.assetName)
+    const downloadInstaller = this.options.downloadInstaller ?? defaultDownloadInstaller
+    this.transition({
+      ...update,
+      download: { kind: 'downloading', bytesReceived: 0 }
+    })
+    const pending = this.performDownload(
+      update,
+      installerUrl,
+      destinationPath,
+      updateGeneration,
+      downloadInstaller
+    ).finally(() => {
+      if (this.pendingDownload === pending) this.pendingDownload = undefined
+    })
+    this.pendingDownload = pending
+    return pending
+  }
+
+  private async performDownload(
+    update: Extract<LauncherUpdateState, { readonly kind: 'update-available' }>,
+    installerUrl: string,
+    destinationPath: string,
+    updateGeneration: number,
+    downloadInstaller: DownloadInstaller
+  ): Promise<LauncherUpdateState> {
     try {
-      await this.options.openExternal(this.cachedInstallerUrl)
-    } catch {
-      throw new LauncherUpdateRuntimeError(
-        'launcher.update_open_failed',
-        'The verified Launcher installer could not be opened.'
-      )
+      await downloadInstaller(installerUrl, destinationPath, (progress) => {
+        if (!this.isCurrentUpdate(update, updateGeneration)) return
+        this.transition({ ...update, download: { kind: 'downloading', ...progress } })
+      })
+      if (!this.isCurrentUpdate(update, updateGeneration)) {
+        throw new LauncherUpdateRuntimeError(
+          'launcher.update_not_available',
+          'The verified Launcher installer is no longer available.'
+        )
+      }
+      return this.transition({ ...update, download: { kind: 'downloaded' } })
+    } catch (error) {
+      const failure =
+        error instanceof LauncherUpdateRuntimeError
+          ? error
+          : new LauncherUpdateRuntimeError(
+              'launcher.update_download_failed',
+              'The Launcher installer could not be downloaded.'
+            )
+      if (this.isCurrentUpdate(update, updateGeneration)) {
+        this.transition({ ...update, download: { kind: 'failed', code: failure.code } })
+      }
+      throw failure
     }
-    return this.state
+  }
+
+  private isCurrentUpdate(
+    update: Extract<LauncherUpdateState, { readonly kind: 'update-available' }>,
+    updateGeneration: number
+  ): boolean {
+    return (
+      this.updateGeneration === updateGeneration &&
+      this.state.kind === 'update-available' &&
+      this.state.latestVersion === update.latestVersion &&
+      this.state.assetName === update.assetName
+    )
   }
 
   private async performCheck(): Promise<LauncherUpdateState> {
@@ -139,6 +216,7 @@ export class LauncherUpdateService {
         assetName: asset.name,
         releasePageUrl: release.releasePageUrl,
         ...(release.notes === undefined ? {} : { releaseNotes: release.notes }),
+        download: { kind: 'idle' },
         checkedAt
       })
     } catch (error) {
@@ -206,6 +284,67 @@ async function defaultFetchRelease(
   init: Readonly<{ headers: Readonly<Record<string, string>> }>
 ): Promise<LauncherUpdateFetchResponse> {
   return fetch(url, init)
+}
+
+async function defaultDownloadInstaller(
+  url: string,
+  destinationPath: string,
+  onProgress: (progress: LauncherUpdateDownloadProgress) => void
+): Promise<void> {
+  const temporaryPath = `${destinationPath}.part`
+  let file: Awaited<ReturnType<typeof open>> | undefined
+  try {
+    const response = await fetch(url, { redirect: 'follow' })
+    if (!response.ok || response.body === null) {
+      throw new LauncherUpdateRuntimeError(
+        'launcher.update_download_failed',
+        'The Launcher installer could not be downloaded.'
+      )
+    }
+    const rawLength = response.headers.get('content-length')
+    const parsedLength = rawLength === null ? undefined : Number(rawLength)
+    const totalBytes =
+      parsedLength !== undefined && Number.isSafeInteger(parsedLength) && parsedLength > 0
+        ? parsedLength
+        : undefined
+    file = await open(temporaryPath, 'wx')
+    let bytesReceived = 0
+    onProgress({ bytesReceived, ...(totalBytes === undefined ? {} : { totalBytes }) })
+    const reader = response.body.getReader()
+    try {
+      while (true) {
+        const next = await reader.read()
+        if (next.done) break
+        await file.write(next.value)
+        bytesReceived += next.value.byteLength
+        onProgress({ bytesReceived, ...(totalBytes === undefined ? {} : { totalBytes }) })
+      }
+    } finally {
+      reader.releaseLock()
+    }
+    await file.close()
+    file = undefined
+    await copyFile(temporaryPath, destinationPath, constants.COPYFILE_EXCL)
+  } catch (error) {
+    if (isFileAlreadyExistsError(error)) {
+      throw new LauncherUpdateRuntimeError(
+        'launcher.update_download_destination_exists',
+        'The Launcher installer already exists in the system Downloads folder.'
+      )
+    }
+    if (error instanceof LauncherUpdateRuntimeError) throw error
+    throw new LauncherUpdateRuntimeError(
+      'launcher.update_download_failed',
+      'The Launcher installer could not be downloaded.'
+    )
+  } finally {
+    await file?.close().catch(() => undefined)
+    await rm(temporaryPath, { force: true }).catch(() => undefined)
+  }
+}
+
+function isFileAlreadyExistsError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST')
 }
 
 /** Strictly compares two stable `X.Y.Z` versions. */

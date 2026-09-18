@@ -8,6 +8,7 @@ import {
   type LauncherUpdateState
 } from '@/shared/contracts'
 import LauncherUpdateNotice from '@/app/shell/components/LauncherUpdateNotice.vue'
+import { selectLocalizedReleaseNotes } from '@/app/shared/i18n/i18n.updates'
 import LauncherUpdateSettingsCard from '../components/LauncherUpdateSettingsCard.vue'
 import {
   resetLauncherUpdatesForTests,
@@ -18,11 +19,11 @@ import {
 function installApi(initial: LauncherUpdateState) {
   let listener: ((result: ApiResult<LauncherUpdateState>) => void) | undefined
   const check = vi.fn(async () => apiOk(initial))
-  const openInstallerDownload = vi.fn(async () => apiOk(initial))
+  const downloadInstaller = vi.fn(async () => apiOk(initial))
   const updates: DesktopApi['launcherUpdates'] = {
     getState: vi.fn(async () => apiOk(initial)),
     check,
-    openInstallerDownload,
+    downloadInstaller,
     onStateChange: (next) => {
       listener = next
       return () => {
@@ -33,7 +34,7 @@ function installApi(initial: LauncherUpdateState) {
   window.dshLauncher = { launcherUpdates: updates } as DesktopApi
   return {
     check,
-    openInstallerDownload,
+    downloadInstaller,
     emit: (state: LauncherUpdateState) => listener?.(apiOk(state))
   }
 }
@@ -53,6 +54,16 @@ const states = {
     latestVersion: '0.1.7',
     assetName: 'dshker-launcher-0.1.7-mac-arm64.dmg',
     releasePageUrl: 'https://github.com/ankye/dshker/releases/tag/v0.1.7',
+    download: { kind: 'idle' },
+    checkedAt: '2026-09-04T10:00:00.000Z'
+  },
+  downloading: {
+    kind: 'update-available',
+    currentVersion: '0.1.6',
+    latestVersion: '0.1.7',
+    assetName: 'dshker-launcher-0.1.7-mac-arm64.dmg',
+    releasePageUrl: 'https://github.com/ankye/dshker/releases/tag/v0.1.7',
+    download: { kind: 'downloading', bytesReceived: 50, totalBytes: 100 },
     checkedAt: '2026-09-04T10:00:00.000Z'
   },
   failed: {
@@ -116,6 +127,13 @@ describe('launcher update shared state', () => {
 })
 
 describe('Launcher update Settings card', () => {
+  it('selects the release notes for the active DSHKer language', () => {
+    const notes = '### 简体中文 (zh-CN)\n中文修复\n\n### English (en-US)\nEnglish fix'
+    expect(selectLocalizedReleaseNotes(notes, 'zh-CN')).toBe('中文修复')
+    expect(selectLocalizedReleaseNotes(notes, 'en-US')).toBe('English fix')
+    expect(selectLocalizedReleaseNotes('Unstructured notes', 'zh-CN')).toBeUndefined()
+  })
+
   it('supports the home announcement heading without changing update identity or actions', async () => {
     const api = installApi(states.available)
     const wrapper = mount(LauncherUpdateSettingsCard, {
@@ -148,11 +166,15 @@ describe('Launcher update Settings card', () => {
   it('shows what changed when the release carries notes', async () => {
     // The card previously reported only that a newer version existed, so the
     // user had to open GitHub to find out what was in it.
-    installApi({ ...states.available, releaseNotes: '- Devices pair automatically' })
+    installApi({
+      ...states.available,
+      releaseNotes:
+        '### 简体中文 (zh-CN)\n- 设备会自动配对\n\n### English (en-US)\n- Devices pair automatically'
+    })
     const wrapper = mount(LauncherUpdateSettingsCard)
     await flushPromises()
     expect(wrapper.text()).toContain('更新内容')
-    expect(wrapper.text()).toContain('- Devices pair automatically')
+    expect(wrapper.text()).toContain('- 设备会自动配对')
     wrapper.unmount()
   })
 
@@ -167,7 +189,10 @@ describe('Launcher update Settings card', () => {
 
   it('renders notes as text so remote markup cannot become elements', async () => {
     // The body is untrusted remote content.
-    installApi({ ...states.available, releaseNotes: '<img src=x onerror="alert(1)">' })
+    installApi({
+      ...states.available,
+      releaseNotes: '### 简体中文 (zh-CN)\n<img src=x onerror="alert(1)">'
+    })
     const wrapper = mount(LauncherUpdateSettingsCard)
     await flushPromises()
     expect(wrapper.find('img').exists()).toBe(false)
@@ -175,7 +200,7 @@ describe('Launcher update Settings card', () => {
     wrapper.unmount()
   })
 
-  it('checks and opens the verified installer without accepting a renderer URL', async () => {
+  it('checks and downloads the verified installer without accepting a renderer URL', async () => {
     const api = installApi(states.available)
     const wrapper = mount(LauncherUpdateSettingsCard)
     await flushPromises()
@@ -186,7 +211,20 @@ describe('Launcher update Settings card', () => {
 
     await wrapper.get('[data-testid="settings-download-update"]').trigger('click')
     await flushPromises()
-    expect(api.openInstallerDownload).toHaveBeenCalledWith()
+    expect(api.downloadInstaller).toHaveBeenCalledWith()
+    wrapper.unmount()
+  })
+
+  it('shows download progress from the main-process state', async () => {
+    const api = installApi(states.available)
+    const wrapper = mount(LauncherUpdateSettingsCard)
+    await flushPromises()
+
+    api.emit(states.downloading)
+    await flushPromises()
+
+    expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('50')
+    expect(wrapper.text()).toContain('50%')
     wrapper.unmount()
   })
 })
@@ -199,11 +237,13 @@ describe('LauncherUpdateNotice', () => {
         title: '发现新版本',
         versionLabel: '版本',
         downloadLabel: '下载安装包',
-        openingLabel: '正在打开',
+        downloadingLabel: '正在下载',
+        downloadProgressLabel: '下载进度',
+        downloadedLabel: '已下载',
         installHint: '请手动运行安装包',
         dismissLabel: '关闭',
         errorLabel: '失败',
-        opening: false
+        downloading: false
       }
     })
 
