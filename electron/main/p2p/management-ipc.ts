@@ -35,7 +35,10 @@ import { PeerHelperError } from './wire'
  * they assert no member is touched by a refused request. A subscription is
  * therefore passed separately rather than added here.
  */
-export type PeerManagementOwner = Pick<PeerManagement, Exclude<P2PManagementOperation, 'cancel'>>
+export type PeerManagementOwner = Pick<
+  PeerManagement,
+  Exclude<P2PManagementOperation, 'cancel'> | 'resumeConnectivity'
+>
 
 /**
  * No raw RPC dispatch, paths, keys or tokens cross this boundary.
@@ -207,9 +210,12 @@ export function registerPeerManagementIpc(
         window.webContents.send(P2P_CATALOG_CHANGED_CHANNEL, { serviceId, revision })
   })
   // Starting a connection is a write: it consumes an attempt and a generation.
-  register('connect', true, async (r, s) =>
-    projectPeerConnection(r.serviceId, await owner.connect(r.serviceId, r.pairId, s))
-  )
+  // Clearing the auto-connect backoff first means a user click never waits for a
+  // stuck sweep cycle — the attempt is tried at once.
+  register('connect', true, async (r, s) => {
+    owner.resumeConnectivity()
+    return projectPeerConnection(r.serviceId, await owner.connect(r.serviceId, r.pairId, s))
+  })
   register('disconnect', true, (r, s) => owner.disconnect(r.serviceId, r.pairId, s))
   // Read-only: it answers with the address main already holds, and never starts a
   // connection of its own.

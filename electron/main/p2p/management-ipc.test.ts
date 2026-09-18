@@ -224,7 +224,8 @@ function fixture() {
       total: 1
     })),
     accountSelection: vi.fn(async () => 'net-a' as string | undefined),
-    rememberAccountSelection: vi.fn(async () => undefined)
+    rememberAccountSelection: vi.fn(async () => undefined),
+    resumeConnectivity: vi.fn(() => undefined)
   }
   registerPeerManagementIpc(owner as unknown as PeerManagementOwner)
   const invoke = (
@@ -390,10 +391,13 @@ describe('P2P named management admission', () => {
     const { owner, invoke, user, network, registration, directory } = fixture()
     const { event } = page()
     let sequence = 0
-    for (const method of Object.keys(owner) as Exclude<
+    // resumeConnectivity is an internal helper the connect route calls first; it
+    // is not a dispatched operation, so it is excluded from the routing sweep.
+    const routed = (Object.keys(owner) as Exclude<
       P2PManagementOperation,
       'cancel' | 'register' | 'updateNetworkLimit' | 'joinNetwork' | 'leaveNetwork'
-    >[]) {
+    >[]).filter((method) => method !== 'resumeConnectivity')
+    for (const method of routed) {
       const result = await invoke(method, event, request(method, ++sequence))
       expect(result.ok, method).toBe(true)
       expect(owner[method]).toHaveBeenCalledTimes(1)
