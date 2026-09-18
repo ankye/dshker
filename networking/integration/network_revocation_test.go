@@ -17,17 +17,18 @@ func TestManagerNetworkRevocationRealDSH(t *testing.T) {
 	ctx, cancel := context.WithTimeout(f.ctx, 40*time.Second)
 	defer cancel()
 	var managers [2]*peersession.Manager
-	var states [2]chan peersession.State
 	for _, i := range []int{1, 0} {
 		config := f.config[i]
-		states[i] = make(chan peersession.State, 32)
+		// Presence belongs to the signed-in account; the manager cannot make an
+		// account-less fixture online by inference.
+		f.devices[i].SetAccount(config.Device.UserID)
 		owner := func(context.Context, string) (runtimebridge.Binding, error) {
 			if i != 1 {
 				return runtimebridge.Binding{}, errors.New("p2p.unexpected_runtime_owner")
 			}
 			return runtimebridge.Binding{Generation: 1, URL: runtimeURL}, nil
 		}
-		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private}, []controlplane.PairIdentity{config.Pin}, owner, func(state peersession.State) { states[i] <- state })
+		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private}, []controlplane.PairIdentity{config.Pin}, owner, func(peersession.State) {})
 		must(t, err)
 		managers[i] = manager
 		defer manager.Close()
@@ -40,7 +41,7 @@ func TestManagerNetworkRevocationRealDSH(t *testing.T) {
 	must(t, f.client.DeleteNetwork(ctx, f.userSession.Token, pin.Pair.NetworkID))
 	must(t, managers[0].RevokeNetwork(pin.Pair.NetworkID))
 	assertGatewayClosed(t, ctx, connected.URL)
-	waitDisconnected(t, ctx, states[1], connected.State.AttemptID)
+	waitManagerNotConnected(t, ctx, managers[1], pin.Pair.PairID)
 	if err := managers[0].Pin(pin); err == nil || err.Error() != "p2p.network_revoked" {
 		t.Fatalf("deleted network repinned: %v", err)
 	}

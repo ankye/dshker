@@ -144,6 +144,10 @@ Renderer 接续：增加 remote-connections 的共享 P2P domain owner，以及�
 
 登记编排接续：新增 `PeerEnrollment`，串接服务信任、账户/网络准入、加密待登记保存、原 CSR、登记及独立结果查询，三处身份读回一致后才报告完成。恢复查询不自动消费新凭据；显式重提保留原 key/request。17 项契约测试覆盖持久化失败、回复不明、身份冲突、并发/取消/关闭迟到结果。正式 controller/IPC/UI 及该 TS 流程的真实服务器集成尚未接通，3.1/5.2/5.3 保持未完成。
 
+CI 类型检查修复（2026-09-18）：`resumeConnectivity` 是 `connect` 路由内部调用的 owner helper，不是 named IPC operation。管理 IPC 测试的路由扫描现在把它显式纳入运行时键集合，再用类型守卫排除；同时断言 `connect` 确实调用该 helper。这样保留了 IPC admission 边界，修复了 TS2367，而没有把 helper 暴露成 renderer operation。`npm run type-check` 与该测试文件的 92 项测试通过。
+
+P2P 会话/TURN 生命周期修复（2026-09-18）：长生命周期 Endpoint 的 detach 现在绑定创建它的准确 mux，旧 session 在 replacement ready 后迟到清理不会再清空新 mux。TURN REST 凭据按既有 `<unix-expiry>:<deviceId>` 用户名严格校验并在到期前刷新；成功值只缓存到刷新窗口，瞬时失败不再永久缓存，并发刷新合并为同一请求。新增 stale detach、过期刷新、失败后重试、并发刷新及错误身份/期限测试；真实 coordinator 下再让两端各离线/上线 4 次，共 9 个唯一 attempt，逐轮 direct UDP、稳定 gateway 及 runtime probe 均在 race 模式通过。三个历史集成用例补齐 account-scoped presence，并按当前单向 UI 状态契约改用公开 session 能力断言应答端清理；真实 DSH fixture 以 HTTP/cookie/websocket 完整探测作为就绪条件。显式 server/Harness 下完整 `go test -race ./...` 通过，integration 501.615 秒。没有新增协议字段、服务端 API、备用服务或 UI；3.3/4.4 及跨机验收仍保持未完成。
+
 原密钥登记准入接续：新增 main/helper `device.createCSR`，校验已保存 Ed25519 key 的 seed/public 一致性，不生成替代身份；真实 helper 的 8 个原 CSR 读回及关闭/取消准入通过。main 账户层新增原用户/网络归属约束的登记 grant 获取，拒绝身份变更、错网络和过期结果（新增 5 项测试）。尚未接通完整登记编排及 UI，不提前完成 3.1/5.3。
 
 登记恢复接续：客户端/helper 已接现有服务器签名登记查询；原请求/密钥可独立读回，真实 server 重启后身份/证书不变，错误 key/request 被拒绝且无重复设备。全 Go race 回归通过（integration 187.565 秒）。main 安全存储新增待登记→正式凭据的同文件原子转换和显式状态读取，14 项 schema 单测及真实两 Electron 进程加密/重启/身份冲突诊断通过。尚需正式登记编排、原 key 的 CSR 重建、结果不明 UI 和实际回复丢失注入；3.1/5.3 不提前勾选。

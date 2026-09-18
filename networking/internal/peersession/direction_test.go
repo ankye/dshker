@@ -2,8 +2,9 @@ package peersession
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/ankye/dshker/networking/internal/controlplane"
 	"github.com/ankye/dshker/networking/internal/protocol"
@@ -28,8 +29,12 @@ func admissionFixture(t *testing.T, ctx context.Context) (*Manager, controlplane
 	manager.ctx = ctx
 	manager.sessions = map[string]*session{}
 	manager.inbound = map[string]*session{}
-	manager.turnFetched = true
-	manager.turnErr = errors.New("p2p.relay_unconfigured")
+	manager.turnCreds = controlplane.TurnCredentials{
+		URLs:       []string{"turn:127.0.0.1:3478"},
+		Username:   fmt.Sprintf("%d:%s", time.Now().Add(time.Hour).Unix(), manager.config.Device.DeviceID),
+		Credential: "admission-test-credential",
+	}
+	manager.turnExpiresAt = time.Now().Add(time.Hour)
 	if err := manager.Pin(pin); err != nil {
 		t.Fatal(err)
 	}

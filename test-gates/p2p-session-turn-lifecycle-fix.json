@@ -1,0 +1,122 @@
+{
+  "change": "p2p session ownership and TURN credential lifecycle defect repair",
+  "risk": "standard",
+  "production_files": [
+    "networking/internal/runtimebridge/endpoint.go",
+    "networking/internal/peersession/manager.go"
+  ],
+  "test_files": [
+    "networking/internal/runtimebridge/endpoint_test.go",
+    "networking/internal/peersession/turn_credentials_test.go",
+    "networking/integration/frequent_recovery_test.go",
+    "networking/integration/core_connection_test.go",
+    "networking/integration/network_revocation_test.go",
+    "networking/integration/runtime_session_test.go"
+  ],
+  "live_test_files": ["networking/internal/runtimebridge/endpoint_test.go"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestTurnCredentialsCacheOnlyFreshDeviceCredentials"
+    },
+    {
+      "state": "no_op",
+      "test": "TestStaleDetachPreservesReplacement"
+    },
+    {
+      "state": "partial",
+      "test": "TestTurnCredentialExpiryRejectsMalformedForeignAndStaleValues"
+    },
+    {
+      "state": "recovery",
+      "test": "TestTurnCredentialFetchFailureIsRetried"
+    },
+    {
+      "state": "recovery",
+      "test": "TestManagersAlternateOfflineAndRecover"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestTurnCredentialsRefreshExpiredCache"
+    },
+    {
+      "state": "reset",
+      "test": "TestDetachedGatewayServesNoRuntimeContent"
+    },
+    {
+      "state": "superseded",
+      "test": "TestStaleDetachPreservesReplacement"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "networking/internal/runtimebridge/endpoint.go",
+      "field": "mux",
+      "source": "the exact peer.Mux established for the owning session",
+      "test": "TestStaleDetachPreservesReplacement",
+      "assertion": "stale session detached its replacement",
+      "state": "superseded",
+      "identity_keys": ["attemptId", "generation", "mux"],
+      "missing_semantics": "Detach without the exact current mux is rejected and cannot clear a replacement."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager.go",
+      "field": "turnCreds",
+      "source": "the configured coordinator /v1/turn-credentials response",
+      "test": "TestTurnCredentialFetchFailureIsRetried",
+      "assertion": "failed response was cached",
+      "state": "recovery",
+      "identity_keys": ["deviceId", "username", "expiresAt"],
+      "missing_semantics": "A failed or invalid response is not retained; a later connection retries the configured coordinator."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager.go",
+      "field": "turnExpiresAt",
+      "source": "the Unix expiry in the existing <unix-expiry>:<deviceId> TURN REST username",
+      "test": "TestTurnCredentialsRefreshExpiredCache",
+      "assertion": "expired credentials were reused",
+      "state": "stale_timeout",
+      "identity_keys": ["deviceId", "username", "expiresAt"],
+      "missing_semantics": "Malformed, foreign-device, expired, and near-expiry credentials are rejected rather than guessed or reused."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager.go",
+      "field": "turnRefresh",
+      "source": "the one in-flight credential request to the configured coordinator",
+      "test": "TestTurnCredentialRefreshIsSingleFlight",
+      "assertion": "concurrent refresh issued",
+      "state": "recovery",
+      "identity_keys": ["deviceId", "username", "expiresAt"],
+      "missing_semantics": "Concurrent callers share the exact request; a completed failure is not a cache entry."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "cd networking && go test -race -count=1 ./internal/runtimebridge ./internal/peersession",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go vet ./internal/runtimebridge ./internal/peersession",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && { test -n \"$DSHKER_SERVER_BINARY\" || { echo 'DSHKER_SERVER_BINARY is unset: the frequent recovery gate requires an explicitly built coordinator binary.' >&2; exit 1; }; } && go test -race -count=1 -timeout=4m ./integration -run '^TestManagersAlternateOfflineAndRecover$'",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && { test -n \"$DSHKER_SERVER_BINARY\" || { echo 'DSHKER_SERVER_BINARY is unset: the real DSH diagnostics require an explicitly built coordinator binary.' >&2; exit 1; }; } && { test -n \"$DSHKER_TEST_HARNESS_ROOT\" || { echo 'DSHKER_TEST_HARNESS_ROOT is unset: the real DSH diagnostics require an explicitly selected built Harness checkout.' >&2; exit 1; }; } && go test -race -count=1 -timeout=6m ./integration -run '^(TestCoreDaemonCompletesAPeerConnection|TestManagerNetworkRevocationRealDSH|TestManagerRealDSH)$'",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/p2p-session-turn-lifecycle/go-test-race.txt"
+    },
+    {
+      "artifact": ".run/p2p-session-turn-lifecycle/frequent-recovery-race.txt"
+    },
+    {
+      "artifact": ".run/p2p-session-turn-lifecycle/full-go-race.txt"
+    }
+  ]
+}

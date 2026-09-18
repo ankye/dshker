@@ -184,10 +184,10 @@
       "field": "pairState",
       "source": "authoritative pairs.identity readback after every write",
       "test": "reads back the authoritative record instead of trusting the invite write reply",
-      "assertion": "expect(pair.state).toBe('pending_target_approval')",
+      "assertion": "expect(pair.state).toBe('invited')",
       "state": "no_op",
       "identity_keys": ["pairId", "revision", "state"],
-      "missing_semantics": "pending_target_approval and pending_initiator_confirmation are distinct from active; accepting an invite can never yield an active pair."
+      "missing_semantics": "invited and approved are distinct from active; accepting an invite can never yield an active pair."
     },
     {
       "production_file": "electron/main/p2p/connections.ts",

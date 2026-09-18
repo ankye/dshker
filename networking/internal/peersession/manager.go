@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -77,9 +79,15 @@ type Manager struct {
 	// local address, and the outbound attempt after it answered an empty URL.
 	inboundEndpoints map[string]*runtimebridge.Endpoint
 	closed           bool
-	turnFetched      bool
 	turnCreds        controlplane.TurnCredentials
-	turnErr          error
+	turnExpiresAt    time.Time
+	turnRefresh      *turnCredentialRefresh
+}
+
+type turnCredentialRefresh struct {
+	done  chan struct{}
+	creds controlplane.TurnCredentials
+	err   error
 }
 type session struct {
 	PairID    string
@@ -463,31 +471,67 @@ func (manager *Manager) start(pairID string, lease protocol.Lease, reserved *ses
 
 // targetDevice returns the far device identity of a pinned pair, normalizing
 // the pair so the local device is the initiator or the target side.
-// turnEndpoints returns the device-scoped TURN relay credentials, fetched at
-// most once from the coordinator and cached for the manager lifetime. A fetch
-// failure leaves the session on the direct path only; the relay is an
-// enhancement, never a requirement.
+const turnCredentialRefreshLead = 5 * time.Minute
+
+// turnEndpoints returns fresh device-scoped TURN relay credentials. The REST
+// username carries its Unix expiry, so a successful response is cached only
+// until the refresh window and a failed response is never retained. Concurrent
+// callers share the same coordinator request but a later attempt may retry it.
 func (manager *Manager) turnEndpoints(ctx context.Context) (controlplane.TurnCredentials, error) {
 	manager.mu.Lock()
-	if manager.turnFetched {
-		creds, err := manager.turnCreds, manager.turnErr
+	if manager.turnExpiresAt.After(time.Now().Add(turnCredentialRefreshLead)) {
+		creds := cloneTurnCredentials(manager.turnCreds)
 		manager.mu.Unlock()
-		return creds, err
+		return creds, nil
 	}
+	if refresh := manager.turnRefresh; refresh != nil {
+		manager.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return controlplane.TurnCredentials{}, ctx.Err()
+		case <-refresh.done:
+			return cloneTurnCredentials(refresh.creds), refresh.err
+		}
+	}
+	refresh := &turnCredentialRefresh{done: make(chan struct{})}
+	manager.turnRefresh = refresh
 	manager.mu.Unlock()
-	// Fetch outside the mutex: the coordinator call may be slow or fail
-	// (server restart, transient network); holding manager.mu across it would
-	// block every other session path. The first writer wins the cache.
+	// Fetch outside the mutex: the coordinator call may be slow or fail, and
+	// holding manager.mu across it would block every other session path.
 	creds, err := manager.client.TurnCredentials(ctx)
-	manager.mu.Lock()
-	if !manager.turnFetched {
-		manager.turnFetched = true
-		manager.turnCreds = creds
-		manager.turnErr = err
+	var expiresAt time.Time
+	if err == nil {
+		expiresAt, err = turnCredentialExpiry(creds.Username, manager.config.Device.DeviceID, time.Now())
 	}
-	result, finalErr := manager.turnCreds, manager.turnErr
+	manager.mu.Lock()
+	if err == nil {
+		manager.turnCreds = cloneTurnCredentials(creds)
+		manager.turnExpiresAt = expiresAt
+	}
+	refresh.creds = cloneTurnCredentials(creds)
+	refresh.err = err
+	manager.turnRefresh = nil
+	close(refresh.done)
 	manager.mu.Unlock()
-	return result, finalErr
+	return cloneTurnCredentials(creds), err
+}
+
+func turnCredentialExpiry(username, deviceID string, now time.Time) (time.Time, error) {
+	expires, subject, found := strings.Cut(username, ":")
+	seconds, err := strconv.ParseInt(expires, 10, 64)
+	if !found || err != nil || seconds <= 0 || subject != deviceID || !protocol.ValidID(subject) {
+		return time.Time{}, errors.New("p2p.invalid_server_response")
+	}
+	expiresAt := time.Unix(seconds, 0)
+	if !expiresAt.After(now.Add(turnCredentialRefreshLead)) {
+		return time.Time{}, errors.New("p2p.invalid_server_response")
+	}
+	return expiresAt, nil
+}
+
+func cloneTurnCredentials(creds controlplane.TurnCredentials) controlplane.TurnCredentials {
+	creds.URLs = append([]string(nil), creds.URLs...)
+	return creds
 }
 
 func (manager *Manager) targetDevice(pin controlplane.PairIdentity) (string, error) {
@@ -682,10 +726,10 @@ func (manager *Manager) run(connection *session) {
 		// left attached to nothing until the next reconnect calls Establish again
 		// and replaces the session inside it.
 		connection.mu.Lock()
-		endpoint := connection.endpoint
+		endpoint, mux := connection.endpoint, connection.mux
 		connection.mu.Unlock()
-		if endpoint != nil {
-			endpoint.Detach()
+		if endpoint != nil && mux != nil {
+			endpoint.Detach(mux)
 		}
 		manager.finish(state.PairID, connection)
 	}()

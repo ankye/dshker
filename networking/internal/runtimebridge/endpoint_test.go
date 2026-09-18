@@ -73,7 +73,9 @@ func TestBrowserGatewayKeepsItsURLAcrossSessions(t *testing.T) {
 	// gateway's ErrorHandler turns every stream failure into a 502 so a
 	// browser sees a clean server error instead of a hung connection; the Go
 	// client call itself still succeeds at the HTTP level.
-	attachment.Detach()
+	if !attachment.Detach(left) {
+		t.Fatal("current session was not detached")
+	}
 	if gateway.URL != first {
 		t.Fatalf("URL changed on drop: %s want %s", gateway.URL, first)
 	}
@@ -121,6 +123,34 @@ func TestClosedEndpointRefusesLaterSessions(t *testing.T) {
 	}
 	if _, err = attachment.open(); err == nil {
 		t.Fatal("a closed endpoint opened a stream")
+	}
+}
+
+// A superseded run can finish after its replacement is already ready. Its
+// cleanup owns only the old mux and must not detach the replacement from the
+// long-lived endpoint.
+func TestStaleDetachPreservesReplacement(t *testing.T) {
+	_, oldMux, _ := directMuxes(t)
+	_, newMux, _ := directMuxes(t)
+	binding := Binding{Generation: 7, URL: "http://127.0.0.1:1/?token=t"}
+	attachment, err := NewEndpoint(oldMux, binding)
+	if err != nil {
+		t.Fatalf("endpoint: %v", err)
+	}
+	if err = attachment.Replace(newMux, binding); err != nil {
+		t.Fatalf("replace: %v", err)
+	}
+	if attachment.Detach(oldMux) {
+		t.Fatal("stale session detached its replacement")
+	}
+	attachment.mu.RLock()
+	current := attachment.mux
+	attachment.mu.RUnlock()
+	if current != newMux {
+		t.Fatal("stale cleanup changed the current mux")
+	}
+	if !attachment.Detach(newMux) {
+		t.Fatal("current replacement could not detach itself")
 	}
 }
 
@@ -190,7 +220,9 @@ func TestServeTargetEndpointSurvivesSessionReplacement(t *testing.T) {
 
 	// The session drops; the endpoint is detached but the gateway keeps
 	// running.
-	attachment.Detach()
+	if !attachment.Detach(right) {
+		t.Fatal("current target session was not detached")
+	}
 	time.Sleep(20 * time.Millisecond)
 
 	// A fresh mux pair stands in for the rebuilt session and is attached to
@@ -251,7 +283,9 @@ func TestDetachedGatewayServesNoRuntimeContent(t *testing.T) {
 		t.Fatal("an attached gateway did not reach the runtime")
 	}
 
-	attachment.Detach()
+	if !attachment.Detach(left) {
+		t.Fatal("current browser session was not detached")
+	}
 	response, err = client.Get(gateway.URL)
 	if err != nil {
 		t.Fatalf("detached request: %v", err)
@@ -306,7 +340,9 @@ func TestGatewayPortSurvivesSessionContextCancel(t *testing.T) {
 	url := gateway.URL
 
 	// The session ends; the tab's port must remain bound.
-	attachment.Detach()
+	if !attachment.Detach(left) {
+		t.Fatal("current browser session was not detached")
+	}
 	client := &http.Client{Timeout: 2 * time.Second}
 	response, err := client.Get(url)
 	if err != nil {
@@ -367,7 +403,9 @@ func TestEndpointReportsItsOwnGatewayURL(t *testing.T) {
 		t.Fatalf("binding readback: %+v %v", current, err)
 	}
 	// The address survives a session drop, which is the point of the design.
-	attachment.Detach()
+	if !attachment.Detach(left) {
+		t.Fatal("current browser session was not detached")
+	}
 	if after := attachment.LocalURL(); after != local {
 		t.Fatalf("address changed on detach: %q → %q", local, after)
 	}

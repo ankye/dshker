@@ -77,11 +77,19 @@ func (endpoint *Endpoint) replace(mux *peer.Mux, binding Binding, dropPrevious b
 	return nil
 }
 
-// Detach drops the current session without closing the gateway, so requests
-// arriving while the shell reconnects fail cleanly instead of reaching a mux
-// that is already gone.
-func (endpoint *Endpoint) Detach() {
+// Detach drops expected when it is still the current session without closing
+// the gateway. A superseded session may finish after Replace installed a new
+// mux; comparing ownership here prevents that stale cleanup from detaching the
+// replacement.
+func (endpoint *Endpoint) Detach(expected *peer.Mux) bool {
+	if expected == nil {
+		return false
+	}
 	endpoint.mu.Lock()
+	if endpoint.closed || endpoint.mux != expected {
+		endpoint.mu.Unlock()
+		return false
+	}
 	endpoint.mux = nil
 	detach, onReplace := endpoint.onDetach, endpoint.onReplace
 	endpoint.mu.Unlock()
@@ -91,6 +99,7 @@ func (endpoint *Endpoint) Detach() {
 	if onReplace != nil {
 		onReplace(nil)
 	}
+	return true
 }
 
 // Replace attaches a rebuilt session, dropping the previous one's connections

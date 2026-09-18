@@ -34,6 +34,10 @@ func TestManagerRealDSH(t *testing.T) {
 	for _, i := range []int{1, 0} {
 		config := f.config[i]
 		states[i] = make(chan peersession.State, 128)
+		// Presence is scoped to the signed-in account. Without this explicit
+		// account the coordinator correctly reports the peer offline before any
+		// transport or runtime work begins.
+		f.devices[i].SetAccount(config.Device.UserID)
 		owner := func(context.Context, string) (runtimebridge.Binding, error) {
 			if i != 1 {
 				return runtimebridge.Binding{}, errors.New("p2p.unexpected_runtime_owner")
@@ -76,7 +80,7 @@ func TestManagerRealDSH(t *testing.T) {
 		// is attached. The endpoint must still be listening (which is what keeps
 		// the URL stable), yet it must never serve runtime content.
 		assertGatewayDetached(t, ctx, connected.URL)
-		waitDisconnected(t, ctx, states[1], previousAttempt)
+		waitManagerNotConnected(t, ctx, managers[1], pairID)
 		must(t, runtimebridge.Probe(ctx, runtimeURL))
 	}
 	// An actual DSH process restart changes the announced endpoint and token.
@@ -86,7 +90,7 @@ func TestManagerRealDSH(t *testing.T) {
 	runtimeProcess.stop(t, false)
 	managers[1].InvalidateRuntime(1)
 	waitDisconnected(t, ctx, states[0], connected.State.AttemptID)
-	waitDisconnected(t, ctx, states[1], connected.State.AttemptID)
+	waitManagerNotConnected(t, ctx, managers[1], pairID)
 	// The endpoint is detached (nothing proxied) but its port stays up so the
 	// URL is reusable once the runtime comes back.
 	assertGatewayDetached(t, ctx, connected.URL)
@@ -158,6 +162,26 @@ func waitDisconnected(t *testing.T, ctx context.Context, states <-chan peersessi
 	}
 }
 
+// Answered sessions intentionally emit no renderer state: that machine has no
+// tab or gateway URL for the far side's attempt. Observe their actual public
+// session capability instead and require it to retire after disconnect/revoke.
+func waitManagerNotConnected(t *testing.T, ctx context.Context, manager *peersession.Manager, pairID string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	var lastErr error
+	for time.Now().Before(deadline) {
+		probeCtx, cancel := context.WithTimeout(ctx, time.Second)
+		_, err := manager.RemoteRoots(probeCtx, pairID)
+		cancel()
+		lastErr = err
+		if err != nil && err.Error() == "p2p.not_connected" {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("manager still exposed a session for pair %s (last=%v)", pairID, lastErr)
+}
+
 func startRealDSH(t *testing.T) (string, *process) {
 	t.Helper()
 	root := os.Getenv("DSHKER_TEST_HARNESS_ROOT")
@@ -205,7 +229,25 @@ func startRealDSH(t *testing.T) (string, *process) {
 	go read(stderr)
 	select {
 	case value := <-announced:
-		return value, process
+		// The CLI announces the selected URL before the HTTP listener is
+		// necessarily accepting connections. Wait for the exact production
+		// HTTP/cookie/websocket contract instead of treating log output as
+		// readiness and racing the first peer probe.
+		var probeErr error
+		for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
+			probeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			probeErr = runtimebridge.Probe(probeCtx, value)
+			cancel()
+			if probeErr == nil {
+				return value, process
+			}
+			select {
+			case processErr := <-process.done:
+				t.Fatalf("real DSH exited before readiness: %v", processErr)
+			case <-time.After(100 * time.Millisecond):
+			}
+		}
+		t.Fatalf("real DSH announced %s but did not become ready: %v", value, probeErr)
 	case <-process.done:
 		t.Fatal("real DSH exited before runtime announcement")
 	case <-time.After(70 * time.Second):

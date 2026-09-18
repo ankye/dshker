@@ -40,7 +40,6 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 	binding := runtimebridge.Binding{Generation: 1, URL: runtimeURL}
 	// Presence is reported per account, exactly as the shell configures its core.
 	f.devices[1].SetAccount(f.config[1].Device.UserID)
-	remoteStates := make(chan peersession.State, 256)
 	remote, err := peersession.New(
 		ctx,
 		f.devices[1],
@@ -51,12 +50,7 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 			defer bindingMu.Unlock()
 			return binding, nil
 		},
-		func(state peersession.State) {
-			select {
-			case remoteStates <- state:
-			default:
-			}
-		},
+		func(peersession.State) {},
 	)
 	must(t, err)
 	defer remote.Close()
@@ -112,11 +106,10 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 		t.Fatalf("core did not select a direct UDP path: %+v", path)
 	}
 
-	// The remote device must have observed the same connection.
-	waitForStage(t, remoteStates, "ready", 30*time.Second)
-
 	// The whole runtime path is real: the address the daemon returned proxies
-	// through the negotiated data channel to the remote's stub workbench.
+	// through the negotiated data channel to the remote's stub workbench. This is
+	// also the responder-side proof: answered sessions intentionally do not emit
+	// renderer state for a tab/address they do not own.
 	if err := runtimebridge.Probe(ctx, answer.URL); err != nil {
 		t.Fatalf("probe through the core gateway: %v", err)
 	}
@@ -254,22 +247,6 @@ func callCore(t *testing.T, ctx context.Context, parent *localrpc.Peer, method s
 		t.Fatalf("%s: %v", method, err)
 	}
 	return reply
-}
-
-func waitForStage(t *testing.T, states <-chan peersession.State, stage string, budget time.Duration) {
-	t.Helper()
-	deadline := time.NewTimer(budget)
-	defer deadline.Stop()
-	for {
-		select {
-		case state := <-states:
-			if state.Stage == stage {
-				return
-			}
-		case <-deadline.C:
-			t.Fatalf("no %s state within %s", stage, budget)
-		}
-	}
 }
 
 // drainInto consumes states until one reaches the wanted stage, so a slow
