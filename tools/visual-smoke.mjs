@@ -28,6 +28,7 @@ async function readSources(root) {
   const files = [
     'src/app/shell/AppShell.vue',
     'src/app/shell/components/ShellSidebar.vue',
+    'src/app/shell/components/ShellStatusbar.vue',
     'src/app/shell/components/RuntimeTabsPanel.vue',
     'src/app/shell/components/RemoteConnectionsPanel.vue',
     'src/app/shell/components/RemoteSSHManagementPanel.vue',
@@ -59,6 +60,7 @@ function evaluateSources(sources) {
   const sourceByPath = new Map(sources.map((entry) => [entry.relativePath, entry.source]))
   const shell = sourceByPath.get('src/app/shell/AppShell.vue')
   const sidebar = sourceByPath.get('src/app/shell/components/ShellSidebar.vue')
+  const statusbar = sourceByPath.get('src/app/shell/components/ShellStatusbar.vue')
   const runtimePanel = sourceByPath.get('src/app/shell/components/RuntimeTabsPanel.vue')
   const runtimeState = sourceByPath.get('src/app/shell/runtimeBrowserState.ts')
   const remotePanel = sourceByPath.get('src/app/shell/components/RemoteSSHManagementPanel.vue')
@@ -98,7 +100,18 @@ function evaluateSources(sources) {
       sidebar.includes('sidebar-brand') && styles.includes('.sidebar-brand')
     ),
     finding('shell.no-full-width-topbar', !styles.includes('.topbar')),
-    finding('shell.sidebar-toggle', shell.includes("t('nav.collapse')")),
+    // Both shell chrome controls live in the status bar. The sidebar must not
+    // reintroduce a floating rail over the route plane or the Run guest, and the
+    // hidden-state clearance offset that rail needed must stay retired.
+    finding(
+      'shell.statusbar-owns-chrome-controls',
+      statusbar.includes('statusbar-sidebar-toggle') &&
+        statusbar.includes('statusbar-console-toggle') &&
+        shell.includes("t('nav.collapse')") &&
+        styles.includes('.statusbar-controls') &&
+        !sidebar.includes('sidebar-toggle') &&
+        !styles.includes('--sidebar-controls-offset')
+    ),
     finding('shell.route-navigation', shell.includes("t('versions.title')")),
     finding('shell.no-seeded-workspace', !shell.includes('templateShellData')),
 

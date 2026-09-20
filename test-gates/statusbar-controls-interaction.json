@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "change": "Status bar owns the sidebar and console tail controls",
+  "acceptance_stage": "diagnostic",
+  "implementation_complete": true,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "prerequisites": [],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "workflows": [
+    {
+      "id": "cycle-sidebar-from-statusbar",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["standard", "compact"],
+      "requires_public_ui": true,
+      "selector": ".statusbar-sidebar-toggle",
+      "expected_state": {
+        "sidebar": "hidden",
+        "root_font_px": 16,
+        "control_height_px": 22,
+        "statusbar_height_px": 30,
+        "control_group_leads_bar": true,
+        "floating_controls_present": false,
+        "footer_pointer_clear": true
+      },
+      "expected_native_event": "Sidebar cycles expanded to collapsed to hidden from the status bar control",
+      "requires_persistence": false,
+      "invariants": [
+        "Adopting both controls does not increase the status bar height",
+        "No Launcher control overlays the route plane or the Run guest in any sidebar state",
+        "Guest navigation and settings remain unchanged"
+      ],
+      "required_content_checks": ["button_geometry", "footer_hit_test", "accessible_actions"]
+    },
+    {
+      "id": "open-console-tail-from-statusbar",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["macos", "windows"],
+      "requires_public_ui": true,
+      "selector": ".statusbar-console-toggle",
+      "expected_state": {
+        "console_open": true,
+        "badge_visible_when_unread": true
+      },
+      "expected_native_event": "Console drawer becomes visible",
+      "requires_persistence": false,
+      "invariants": [
+        "newest 200 entries retained",
+        "Escape closes drawer",
+        "Both controls stay operable while the busy strip runs"
+      ],
+      "required_content_checks": ["text_order", "severity_colors", "source_labels"]
+    }
+  ]
+}

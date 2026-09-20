@@ -83,6 +83,37 @@ describe('ConsoleDrawer', () => {
     expect(drawer.open.value).toBe(false)
   })
 
+  /**
+   * Opening the tail on an existing backlog used to land on the oldest retained
+   * line: the list mounts at scrollTop 0 and only *appended* entries scrolled it,
+   * so a user who opened the drawer after an operation finished had to scroll
+   * down to find what just happened.
+   *
+   * happy-dom reports zero-height layout, so the scroll metrics are defined
+   * explicitly; the assertion is that opening drives scrollTop to scrollHeight.
+   */
+  it('scrolls to the newest entry when opened on an existing backlog', async () => {
+    harnessConsole.value = Array.from({ length: 120 }, (_unused, index) => entry(index + 1))
+    await nextTick()
+    const wrapper = mount(ConsoleDrawer)
+    drawer.toggleConsoleDrawer()
+    await nextTick()
+
+    const list = wrapper.get('.console-drawer-entries').element as HTMLElement
+    Object.defineProperty(list, 'scrollHeight', { value: 4000, configurable: true })
+    list.scrollTop = 0
+
+    // Re-open so the watcher runs against the now-measurable element.
+    drawer.closeConsoleDrawer()
+    await nextTick()
+    drawer.toggleConsoleDrawer()
+    await nextTick()
+    await nextTick()
+
+    expect(list.scrollTop).toBe(4000)
+    wrapper.unmount()
+  })
+
   it('collapses on Escape without affecting other keys', async () => {
     harnessConsole.value = [entry(1)]
     await nextTick()

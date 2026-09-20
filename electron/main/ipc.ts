@@ -35,6 +35,7 @@ import {
   type StopManagedHarnessRequest,
   type SwitchManagedHarnessRevisionRequest,
   isTrayCloseBehavior,
+  type CoreAutostartView,
   type TrayCloseBehaviorView
 } from '../../src/shared/contracts'
 import { assertDirectorySelectionPurpose } from './managed/capabilities'
@@ -60,6 +61,7 @@ import { type RemoteConnectionService } from './remote/service'
 import { registerPeerManagementIpc } from './p2p/management-ipc'
 import type { PeerManagement } from './p2p/management'
 import { getCloseBehavior, setCloseBehavior } from './launcher-tray'
+import type { CoreAutostartPort } from './core/autostart'
 
 /** Dependencies for the restricted Electron IPC registration. */
 export interface LauncherIpcOptions {
@@ -72,6 +74,13 @@ export interface LauncherIpcOptions {
   readonly launcherUpdateService: LauncherUpdateService
   readonly remoteConnectionService: RemoteConnectionService
   readonly peerManagement: PeerManagement
+  /**
+   * The core's start-at-boot registration, absent when no core is running.
+   *
+   * Optional on purpose: a build or a session without a core must report the
+   * feature as unsupported rather than render a switch that cannot act.
+   */
+  readonly coreAutostart?: CoreAutostartPort
 }
 
 /** Registers only named, sender-validated, runtime-validated Launcher IPC methods. */
@@ -88,6 +97,7 @@ export function registerIpc(options: LauncherIpcOptions): void {
     options.peerManagement
   )
   registerTrayIpc()
+  registerAutostartIpc(options.coreAutostart)
   // The console push channel sends appended records to every launcher window,
   // so operation and launch output do not wait for a periodic state read.
   options.launcherHarnessService.onConsoleAppend((entry) => {
@@ -859,6 +869,60 @@ function isManagedRootKind(
   value: unknown
 ): value is RegisterManagedRootsRequest['selections'][number]['kind'] {
   return value === 'harness' || value === 'plugins' || value === 'presets' || value === 'settings'
+}
+
+/**
+ * Registers the start-at-boot surface.
+ *
+ * The registration belongs to the core, so this handler only projects it. When no
+ * core is running the state is reported as unsupported and not installed, which
+ * lets the settings control disable itself instead of failing on click.
+ */
+function registerAutostartIpc(autostart: CoreAutostartPort | undefined): void {
+  const projectUnsupported = (): ApiResult<CoreAutostartView> =>
+    apiOk({ installed: false, mechanism: 'unavailable', supported: false })
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.autostartGetState,
+    async (event): Promise<ApiResult<CoreAutostartView>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (autostart === undefined) return projectUnsupported()
+      try {
+        const state = await autostart.status()
+        return apiOk({
+          installed: state.installed,
+          mechanism: state.mechanism,
+          supported: state.mechanism !== 'unsupported'
+        })
+      } catch (error) {
+        return apiFail(
+          'managed.selection_invalid',
+          error instanceof Error ? error.message : 'Start-at-boot state is unavailable.'
+        )
+      }
+    }
+  )
+  ipcMain.handle(
+    DESKTOP_IPC_CHANNELS.autostartSetEnabled,
+    async (event, payload: unknown): Promise<ApiResult<CoreAutostartView>> => {
+      if (!isTrustedRenderer(event)) return invalidSender()
+      if (typeof payload !== 'boolean')
+        return apiFail('managed.selection_invalid', 'Start-at-boot must be enabled or disabled.')
+      if (autostart === undefined) return projectUnsupported()
+      try {
+        const state = payload ? await autostart.enable() : await autostart.disable()
+        return apiOk({
+          installed: state.installed,
+          mechanism: state.mechanism,
+          supported: state.mechanism !== 'unsupported'
+        })
+      } catch (error) {
+        return apiFail(
+          'managed.selection_invalid',
+          error instanceof Error ? error.message : 'Start-at-boot could not be changed.'
+        )
+      }
+    }
+  )
 }
 
 /** Registers the narrow surface for tray minimise-on-close preference. */

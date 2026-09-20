@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.1.64 — 2026-09-19
+
+### 简体中文 (zh-CN)
+
+- **网络核心可以不开 Launcher 独立运行。** `dshkerd` 现在把 operator 明确给过的参数记在 state 目录的 `config.json` 里，`serve`、`call`、`pair`、`connect`、`service` 等命令之后可以不带参数直接运行；显式参数仍然优先，并会覆盖回写。
+- **支持开机自动启动网络核心。** macOS 使用 launchd、Windows 使用注册表启动项，由 `dshkerd autostart` 自行安装和卸载；设置面板新增开关，与命令行共享同一份注册状态。其他平台会明确说明不支持，而不是假装成功。
+- **掉线后的自动重连改由网络核心负责。** 递增退避、终止性拒绝码判定、重新授权后清除记录都下沉到核心，桌面端与无界面主机共用同一份实现。没有桌面会话的机器现在能自己恢复掉线的连接，不再需要有人打开 Launcher 点一次连接。
+- **修复重连后远程工作台地址失效。** 由核心完成的重连会分配新的连接代次，桌面端不再把上一次连接的网关地址交给标签页；页面会自动改用新地址，无需用户操作。
+- **修复 `dshkerd service configure` 在不指定固定密钥时始终失败。** 请求里的空值会被核心的严格解码拒绝，命令因此报告"核心不可用"，而核心其实正在运行；现在会报告真实原因。
+- **修复拔掉显示器后窗口留在已消失的屏幕上。** 之前只处理了分辨率变化，没有处理显示器插拔，所以窗口会停在不存在的坐标上；重开 Launcher 也无法恢复，因为记住的位置会被丢弃并被启动过程覆盖。现在插拔显示器会把窗口移回可操作的屏幕，记住的位置会按当前显示器布局校正后再使用，并且只有标题栏真正可以抓取时才算窗口可见——跨屏摆放的窗口不会再停在屏幕边缘只露出一个像素。
+- **把左下角两个悬浮按钮移到底部状态栏。** 侧边栏折叠按钮和命令行（实时输出）按钮不再悬浮在界面左下角，而是作为状态栏最左侧的一组图标按钮；协议、作用域和网络信息保持在右侧。两个按钮在状态栏原有高度内显示，操作进行中也不会被进度条挤走或隐藏。隐藏侧边栏时不再需要为避让让位而上移，Run 页面左下角也不会再被遮挡。
+
+### English (en-US)
+
+- **Run the networking core without opening Launcher.** `dshkerd` records the parameters an operator explicitly supplied in `config.json` under the state directory, so `serve`, `call`, `pair`, `connect`, and `service` can later run with no arguments. Explicit arguments still win and are written back.
+- **Register the networking core to start at boot.** macOS uses a launchd agent and Windows uses the registry run key, installed and removed by `dshkerd autostart` itself; a Settings toggle shares that one registration with the command line. Other platforms report that they are unsupported instead of pretending to succeed.
+- **Move reconnection into the networking core.** The widening backoff, the terminal-refusal decision, and clearing a recorded stop after re-authorization now live in the core, so the desktop shell and a headless host share one implementation. A machine with no desktop session recovers a dropped connection on its own instead of waiting for someone to open Launcher and connect again.
+- **Fix the stale remote workbench address after a reconnection.** A reconnection performed by the core now carries a new attempt generation, so the desktop no longer hands a tab the previous attempt's gateway address; the page moves to the live address with no user action.
+- **Fix `dshkerd service configure` always failing without a pinned key.** The absent value was sent as a null the core's strict decoder refuses, so the command reported that the core was unavailable while it was in fact running and serving. It now reports the real cause.
+- **Fix the window staying on a monitor that was unplugged.** Only resolution changes were handled, not monitors being attached or removed, so the window stayed at coordinates that no longer existed — and reopening Launcher did not help, because the remembered position was discarded and then overwritten during startup. Attaching or removing a display now moves the window back onto a reachable screen, a remembered position is corrected against the current display layout before it is used, and a window counts as visible only when its title bar is genuinely grabbable, so one spanning two monitors no longer strands itself on a one-pixel sliver at the screen edge.
+- **Move the two lower-left floating buttons into the bottom status bar.** The sidebar toggle and the console (live output) toggle are now a leading icon-button group in the status bar instead of floating over the lower-left corner, while protocol, scope, and network facts stay on the trailing side. Both fit inside the status bar's existing height and stay operable beside a running operation's progress strip. Hiding the sidebar no longer needs a clearance offset, and the Run page's lower-left corner is never covered by Launcher controls.
+
 ## 0.1.63 — 2026-09-18
 
 ### 简体中文 (zh-CN)

@@ -15,24 +15,15 @@ defineProps<{
   readonly activeRoute: AppRouteId
   readonly state: SidebarState
   readonly title: string
-  readonly collapseLabel: string
-  readonly hideLabel: string
-  readonly expandLabel: string
-  readonly consoleLabel: string
-  readonly consoleUnreadLabel: string
-  readonly consoleOpen: boolean
-  readonly consoleUnread: boolean
 }>()
 
 const emit = defineEmits<{
   select: [route: AppRouteId]
-  advance: []
-  toggleConsole: []
 }>()
 </script>
 
 <template>
-  <div class="sidebar-region" :data-state="state">
+  <div class="sidebar-region">
     <aside
       v-if="state !== 'hidden'"
       class="sidebar"
@@ -72,46 +63,9 @@ const emit = defineEmits<{
       </div>
     </aside>
     <!--
-      The console tail control rides the same floating rail as the sidebar
-      state control, so shell-level chrome has exactly one home in every
-      sidebar state. The badge advertises new output without opening anything.
+      No floating control rail lives here: the sidebar state control and the
+      console tail control both belong to the status bar, so a hidden sidebar
+      leaves the route plane and the Run guest's own footer completely free.
     -->
-    <button
-      class="sidebar-toggle sidebar-console-toggle"
-      type="button"
-      :aria-expanded="consoleOpen"
-      :aria-label="consoleUnread ? `${consoleLabel} · ${consoleUnreadLabel}` : consoleLabel"
-      :title="consoleUnread ? `${consoleLabel} · ${consoleUnreadLabel}` : consoleLabel"
-      @click="emit('toggleConsole')"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-        <path d="m5 7 4 4-4 4" />
-        <path d="M12 17h7" />
-      </svg>
-      <span v-if="consoleUnread" class="sidebar-console-badge" aria-hidden="true" />
-    </button>
-    <button
-      class="sidebar-toggle sidebar-state-toggle"
-      type="button"
-      :aria-label="
-        state === 'expanded' ? collapseLabel : state === 'collapsed' ? hideLabel : expandLabel
-      "
-      :title="
-        state === 'expanded' ? collapseLabel : state === 'collapsed' ? hideLabel : expandLabel
-      "
-      @click="emit('advance')"
-    >
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-        <template v-if="state === 'expanded'">
-          <rect x="3.5" y="4" width="17" height="16" rx="2" />
-          <path d="M9 4v16m6 5-3-3 3-3" />
-        </template>
-        <template v-else-if="state === 'collapsed'">
-          <rect x="3.5" y="4" width="17" height="16" rx="2" />
-          <path d="m11 9-3 3 3 3" />
-        </template>
-        <path v-else d="m9 5 7 7-7 7" />
-      </svg>
-    </button>
   </div>
 </template>

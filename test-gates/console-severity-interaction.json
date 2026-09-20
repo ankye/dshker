@@ -46,7 +46,7 @@
       "minimum_attempts": 1,
       "profiles": ["macos", "windows"],
       "requires_public_ui": true,
-      "selector": ".sidebar-console-toggle",
+      "selector": ".statusbar-console-toggle",
       "expected_state": {
         "normal_color": "#72d9a0",
         "error_color": "#ffaba5"

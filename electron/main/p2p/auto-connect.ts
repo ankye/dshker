@@ -1,193 +1,69 @@
-import { PeerHelperError } from './wire'
-
-/** One pair the shell intends to keep connected, keyed serviceId:pairId. */
-interface Intent {
-  serviceId: string
-  pairId: string
-}
-
-export interface AutoConnectOptions {
-  /** Active pairs the catalog currently authorizes; the intent source. */
-  intents(): Promise<Intent[]>
-  /** Live connection stage per pair, as reported by the helper. */
-  stage(serviceId: string, pairId: string): string | undefined
-  /** Starts one connection; resolves when the helper accepted the attempt. */
-  connect(serviceId: string, pairId: string, signal: AbortSignal): Promise<unknown>
-  /** Optional clock hooks so tests do not wait in real time. */
-  setTimer?(callback: () => void, delayMilliseconds: number): { cancel(): void }
-}
-
-// A connection that dropped is retried with a widening delay so a peer that is
-// simply off does not become a busy loop, while a brief network change recovers
-// within seconds. The last delay repeats forever: the pair stays authorized, so
-// the shell keeps trying until it is revoked.
-const BACKOFF_MILLISECONDS = [1_000, 2_000, 5_000, 15_000, 60_000] as const
-
-// Stages that mean a connection exists or is on its way; nothing to do.
-const LIVE_STAGES = new Set(['punching', 'starting-runtime', 'ready'])
-
-// Refusals that will not change by trying again: the pair's authorization is
-// gone, so retrying would only produce the same refusal and hide the reason.
+// The shell's view of the core's reconnection engine.
 //
-// The two authorization stops the core actually answers with are
-// `p2p.pair_unauthorized` (this device holds no pin for the pair) and
-// `p2p.network_revoked` (the network's authorization was withdrawn). Leaving
-// them out is what turned "removed by another device" into a silent retry loop
-// that never succeeded and never said why: the computer stayed listed as active
-// and the shell re-attempted it forever, while the refusal never reached a
-// surface. `clearRefusals` still forgets them when the machine's own state
-// changes, so a re-authorized pair is attempted again.
-const TERMINAL_CODES = new Set([
-  'p2p.not_enabled',
-  'p2p.pair_unauthorized',
-  'p2p.network_revoked',
-  'p2p.pair_revoked',
-  'p2p.pair_not_found',
-  'p2p.identity_mismatch',
-  'p2p.trust_restore_rejected',
-  'p2p.lease_rejected',
-  'p2p.device_revoked',
-  'p2p.unauthorized'
-])
+// This replaced a full implementation that used to live here. The behavior was
+// correct but it was the *shell's*, so a headless host — the machine that has no
+// user to click "connect" — held authorized pairs and never re-established one
+// that dropped. The schedule, the terminal-refusal set and the
+// clear-on-reauthorization rule now live in the core (`internal/autoconnect`), and
+// this class only forwards the events the shell uniquely observes.
+//
+// What the shell still knows that the core does not: which stage transition just
+// happened in its own projection, and when the user asked to resume connectivity.
+// What it deliberately no longer knows: how long to wait, and which refusal is
+// final. Keeping those here is what made two implementations of one behavior.
+import type { PeerRpc } from './rpc'
 
-/**
- * Keeps every authorized pair connected without user action.
- *
- * The intent is the catalog: an active pair should be connected, so a drop is
- * followed by a retry rather than by a disconnected tab waiting for a click.
- * Switching tabs is deliberately not an input here — the connection outlives
- * the view, so returning to a tab never re-punches a hole that was already
- * open. Only losing authorization stops the attempts.
- */
-export class PeerAutoConnect {
-  readonly #options: AutoConnectOptions
-  readonly #attempts = new Map<string, number>()
-  readonly #timers = new Map<string, { cancel(): void }>()
-  readonly #inFlight = new Set<string>()
-  readonly #terminal = new Map<string, string>()
-  readonly #lifetime = new AbortController()
-  #closed = false
+/** The reconnection operations the shell drives, wherever they are served. */
+export interface AutoConnectPort {
+  /** Brings every authorized pair of one service up to intent once. */
+  reconcile(serviceId: string, signal?: AbortSignal): Promise<void>
+  /** Clears every backoff and retries now, after the machine itself changed state. */
+  retryNow(serviceId: string, signal?: AbortSignal): Promise<void>
+  /** Forgets terminal refusals so a re-authorized pair is attempted again. */
+  clearRefusals(serviceId: string, signal?: AbortSignal): Promise<void>
+}
 
-  constructor(options: AutoConnectOptions) {
-    this.#options = options
-  }
+/** A reconciliation pass starts attempts; it does not await their outcome. */
+const CALL_BUDGET_MS = 30_000
 
-  /** Reports why a pair stopped being retried, for the projection to surface. */
-  refusal(serviceId: string, pairId: string): string | undefined {
-    return this.#terminal.get(key(serviceId, pairId))
+function budget(signal?: AbortSignal): AbortSignal {
+  return signal ?? AbortSignal.timeout(CALL_BUDGET_MS)
+}
+
+/** Drives the core's peer.autoconnect_* methods over its private channel. */
+export class CoreAutoConnect implements AutoConnectPort {
+  readonly #rpc: Pick<PeerRpc, 'call'>
+
+  constructor(rpc: Pick<PeerRpc, 'call'>) {
+    this.#rpc = rpc
   }
 
   /**
-   * Brings every authorized pair up to intent once. Safe to call repeatedly:
-   * a pair that is connected, connecting, or already scheduled is skipped.
+   * Sends one engine operation.
+   *
+   * Refusals are swallowed on purpose. These are background maintenance calls made
+   * from stage transitions and catalog revisions, not user operations: a core that
+   * is not configured yet, or a service that was just removed, must not turn a
+   * routine sweep into an unhandled rejection in the shell. A refusal that matters
+   * to the user surfaces through the connection it belongs to instead.
    */
-  async reconcile(): Promise<void> {
-    if (this.#closed) return
-    let intents: Intent[]
+  async #send(method: string, serviceId: string, signal?: AbortSignal): Promise<void> {
     try {
-      intents = await this.#options.intents()
+      await this.#rpc.call(method, { serviceId, data: {} }, budget(signal))
     } catch {
-      // No catalog, no intent. A later pass picks it up once it is readable.
-      return
-    }
-    const wanted = new Set(intents.map((intent) => key(intent.serviceId, intent.pairId)))
-    for (const identifier of [...this.#timers.keys()]) {
-      if (!wanted.has(identifier)) this.#forget(identifier)
-    }
-    for (const identifier of [...this.#terminal.keys()]) {
-      if (!wanted.has(identifier)) this.#terminal.delete(identifier)
-    }
-    for (const intent of intents) this.#ensure(intent)
-  }
-
-  /**
-   * Clears the backoff of every pair and retries now. The caller uses this when
-   * the machine itself changed state — network back, waking from sleep — where
-   * waiting out a 60 second delay would feel broken.
-   */
-  retryNow(): void {
-    this.#attempts.clear()
-    for (const identifier of [...this.#timers.keys()]) this.#cancelTimer(identifier)
-    void this.reconcile()
-  }
-
-  /** Forgets a terminal refusal so a re-authorized pair is attempted again. */
-  clearRefusals(): void {
-    this.#terminal.clear()
-    this.#attempts.clear()
-  }
-
-  close(): void {
-    this.#closed = true
-    this.#lifetime.abort()
-    for (const identifier of [...this.#timers.keys()]) this.#cancelTimer(identifier)
-    this.#attempts.clear()
-  }
-
-  #ensure(intent: Intent): void {
-    const identifier = key(intent.serviceId, intent.pairId)
-    if (this.#closed || this.#inFlight.has(identifier)) return
-    if (this.#terminal.has(identifier) || this.#timers.has(identifier)) return
-    const stage = this.#options.stage(intent.serviceId, intent.pairId)
-    if (stage !== undefined && LIVE_STAGES.has(stage)) {
-      // Connected or connecting: the attempt counter resets so the next drop
-      // retries immediately instead of inheriting an old delay.
-      this.#attempts.delete(identifier)
-      return
-    }
-    void this.#attempt(intent, identifier)
-  }
-
-  async #attempt(intent: Intent, identifier: string): Promise<void> {
-    this.#inFlight.add(identifier)
-    try {
-      await this.#options.connect(intent.serviceId, intent.pairId, this.#lifetime.signal)
-      this.#attempts.delete(identifier)
-    } catch (error) {
-      if (this.#closed) return
-      const code = error instanceof PeerHelperError ? error.code : 'p2p.operation_failed'
-      if (TERMINAL_CODES.has(code)) {
-        this.#terminal.set(identifier, code)
-        return
-      }
-      // Everything else is transient by assumption: a busy helper, an
-      // unreachable peer, a coordinator hiccup. None of them is the user's
-      // problem to solve with a button.
-      this.#schedule(intent, identifier)
-    } finally {
-      this.#inFlight.delete(identifier)
+      // Intentionally ignored; see above.
     }
   }
 
-  #schedule(intent: Intent, identifier: string): void {
-    if (this.#closed || this.#timers.has(identifier)) return
-    const attempt = this.#attempts.get(identifier) ?? 0
-    const delay = BACKOFF_MILLISECONDS[Math.min(attempt, BACKOFF_MILLISECONDS.length - 1)]
-    this.#attempts.set(identifier, attempt + 1)
-    const timer = (this.#options.setTimer ?? defaultTimer)(() => {
-      this.#timers.delete(identifier)
-      this.#ensure(intent)
-    }, delay)
-    this.#timers.set(identifier, timer)
+  async reconcile(serviceId: string, signal?: AbortSignal): Promise<void> {
+    await this.#send('peer.autoconnect_reconcile', serviceId, signal)
   }
 
-  #cancelTimer(identifier: string): void {
-    this.#timers.get(identifier)?.cancel()
-    this.#timers.delete(identifier)
+  async retryNow(serviceId: string, signal?: AbortSignal): Promise<void> {
+    await this.#send('peer.autoconnect_retry_now', serviceId, signal)
   }
 
-  #forget(identifier: string): void {
-    this.#cancelTimer(identifier)
-    this.#attempts.delete(identifier)
+  async clearRefusals(serviceId: string, signal?: AbortSignal): Promise<void> {
+    await this.#send('peer.autoconnect_clear_refusals', serviceId, signal)
   }
-}
-
-function key(serviceId: string, pairId: string): string {
-  return serviceId + ':' + pairId
-}
-
-function defaultTimer(callback: () => void, delayMilliseconds: number): { cancel(): void } {
-  const timer = setTimeout(callback, delayMilliseconds)
-  timer.unref?.()
-  return { cancel: () => clearTimeout(timer) }
 }

@@ -80,16 +80,36 @@ func runService(args []string, stdout io.Writer, stderr io.Writer) int {
 	if flags.Parse(args[1:]) != nil {
 		return 2
 	}
-	if *origin == "" {
-		return fail(stderr, errors.New("p2p.invalid_arguments"))
-	}
-	pinnedKey, err := readPinnedKey(*pinnedKeyFile)
-	if err != nil {
-		return fail(stderr, err)
-	}
 	directory, err := stateRoot(*state)
 	if err != nil {
 		return fail(stderr, err)
+	}
+	// Re-running `service configure` to refresh one endpoint should not require
+	// retyping the others, so the coordinator endpoints are remembered too.
+	stored, configErr := LoadConfig(directory)
+	if configErr != nil {
+		return fail(stderr, configErr)
+	}
+	effectiveOrigin, originChanged := resolveString(*origin, stored.Origin)
+	effectiveWSS, wssChanged := resolveString(*wss, stored.WSS)
+	effectiveSTUN, stunChanged := resolveString(*stun, stored.STUN)
+	effectiveKeyFile, keyFileChanged := resolveString(*pinnedKeyFile, stored.PinnedKey)
+	// The origin has no default: it names the coordinator this machine trusts.
+	if err := requireValue(effectiveOrigin); err != nil {
+		return fail(stderr, err)
+	}
+	pinnedKey, err := readPinnedKey(effectiveKeyFile)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	if originChanged || wssChanged || stunChanged || keyFileChanged {
+		stored.Origin = effectiveOrigin
+		stored.WSS = effectiveWSS
+		stored.STUN = effectiveSTUN
+		stored.PinnedKey = effectiveKeyFile
+		if err := SaveConfig(directory, stored); err != nil {
+			return fail(stderr, err)
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -103,12 +123,25 @@ func runService(args []string, stdout io.Writer, stderr io.Writer) int {
 		PinnedKey []byte                 `json:"pinnedKey"`
 		Telemetry controlplane.Telemetry `json:"telemetry"`
 	}{
-		Endpoints: controlplane.Endpoints{HTTPSOrigin: *origin, WSSURL: *wss, STUNAddress: *stun},
+		Endpoints: controlplane.Endpoints{HTTPSOrigin: effectiveOrigin, WSSURL: effectiveWSS, STUNAddress: effectiveSTUN},
 		PinnedKey: pinnedKey,
 		Telemetry: controlplane.Telemetry{Version: *version, Platform: runtime.GOOS, Architecture: runtime.GOARCH},
 	})
 	if err != nil {
 		return fail(stderr, err)
+	}
+	// The answer carries the service identity every scoped command needs. Recording
+	// it here is what lets `pair` and `connect` run with no --service later.
+	var configured struct {
+		ServiceID string `json:"serviceId"`
+	}
+	if json.Unmarshal(answer, &configured) == nil && configured.ServiceID != "" {
+		if configured.ServiceID != stored.Service {
+			stored.Service = configured.ServiceID
+			if err := SaveConfig(directory, stored); err != nil {
+				return fail(stderr, err)
+			}
+		}
 	}
 	if _, err := fmt.Fprintf(stdout, "%s\n", strings.TrimSpace(string(answer))); err != nil {
 		return fail(stderr, err)
@@ -121,7 +154,12 @@ func runService(args []string, stdout io.Writer, stderr io.Writer) int {
 // a truncated or padded key is refused here rather than by the coordinator.
 func readPinnedKey(path string) ([]byte, error) {
 	if path == "" {
-		return nil, nil
+		// An empty slice, not nil. Go marshals a nil []byte as JSON `null`, and the
+		// core's strict decoder refuses any null field — so returning nil here made
+		// `service configure` without --pinned-key send a frame the core rejected
+		// before dispatch, which reached the terminal as `p2p.helper_unavailable`.
+		// An empty value encodes as "" and is accepted as "no pinned key".
+		return []byte{}, nil
 	}
 	value, err := os.ReadFile(path)
 	if err != nil {

@@ -32,6 +32,66 @@ onMounted(async () => {
   }
 })
 
+/*
+ * Start-at-boot state for the native core.
+ *
+ * The switch reflects the core's own platform registration rather than a local
+ * preference, so it is read on mount and re-read from every write: the same
+ * registration can be changed by `dshkerd autostart` on the command line, and a
+ * toggle that trusted its own last click would then show a state the machine does
+ * not have. `supported` is false when no mechanism exists (or no core is running),
+ * which disables the control instead of offering an action that cannot happen.
+ */
+const autostartInstalled = ref(false)
+const autostartSupported = ref(false)
+const autostartBusy = ref(false)
+const autostartError = ref('')
+
+interface AutostartBridge {
+  getState(): Promise<unknown>
+  setEnabled(enabled: boolean): Promise<unknown>
+}
+
+function autostartApi(): AutostartBridge | undefined {
+  return (window as unknown as { dshLauncher?: { autostart?: AutostartBridge } }).dshLauncher
+    ?.autostart
+}
+
+/** Applies one answer, keeping the switch and the machine in agreement. */
+function applyAutostart(result: unknown): void {
+  const answer = result as {
+    ok?: boolean
+    data?: { installed?: boolean; supported?: boolean }
+    error?: { message?: string }
+  }
+  if (answer?.ok !== true || answer.data === undefined) {
+    autostartError.value = answer?.error?.message ?? t('settings.autostart.failed')
+    return
+  }
+  autostartError.value = ''
+  autostartInstalled.value = answer.data.installed === true
+  autostartSupported.value = answer.data.supported === true
+}
+
+onMounted(async () => {
+  const api = autostartApi()
+  if (api === undefined) return
+  applyAutostart(await api.getState())
+})
+
+async function updateAutostart(enabled: boolean): Promise<void> {
+  const api = autostartApi()
+  if (api === undefined || autostartBusy.value) return
+  autostartBusy.value = true
+  try {
+    // Registering touches the filesystem and a platform tool, so the answer is
+    // the state read back rather than the value that was requested.
+    applyAutostart(await api.setEnabled(enabled))
+  } finally {
+    autostartBusy.value = false
+  }
+}
+
 async function updateTrayBehavior(behavior: 'minimize-to-tray' | 'quit'): Promise<void> {
   trayCloseBehavior.value = behavior
   const trayApi = (
@@ -292,6 +352,33 @@ const selectedLocale = computed<SupportedLocale>({
               </span>
             </label>
           </div>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <header class="settings-section-header">
+          <div class="settings-section-title">
+            <h3>{{ t('settings.autostart') }}</h3>
+            <p>{{ t('settings.autostart.hint') }}</p>
+          </div>
+        </header>
+        <div class="settings-section-body">
+          <label class="settings-autostart-toggle">
+            <input
+              type="checkbox"
+              :checked="autostartInstalled"
+              :disabled="!autostartSupported || autostartBusy"
+              @change="updateAutostart(!autostartInstalled)"
+            />
+            <span class="settings-port-mode-copy">
+              <strong>{{ t('settings.autostart.enable') }}</strong>
+              <small v-if="!autostartSupported">{{ t('settings.autostart.unsupported') }}</small>
+              <small v-else>{{ t('settings.autostart.enable.description') }}</small>
+            </span>
+          </label>
+          <p v-if="autostartError" class="settings-autostart-error" role="status">
+            {{ autostartError }}
+          </p>
         </div>
       </section>
 

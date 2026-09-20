@@ -66,7 +66,11 @@ export const DESKTOP_IPC_CHANNELS = {
   /** Get the current tray minimise-on-close behaviour. */
   trayGetCloseBehavior: 'dsh-launcher:tray:get-close-behavior',
   /** Set the current tray minimise-on-close behaviour. */
-  traySetCloseBehavior: 'dsh-launcher:tray:set-close-behavior'
+  traySetCloseBehavior: 'dsh-launcher:tray:set-close-behavior',
+  /** Read whether the native core is registered to start at system boot. */
+  autostartGetState: 'dsh-launcher:autostart:get-state',
+  /** Register or unregister the native core's start-at-boot entry. */
+  autostartSetEnabled: 'dsh-launcher:autostart:set-enabled'
 } as const
 
 /** What the window close button does when the tray is present. */
@@ -75,6 +79,21 @@ export type TrayCloseBehavior = 'minimize-to-tray' | 'quit'
 /** The tray preference projection a renderer reads and writes. */
 export interface TrayCloseBehaviorView {
   readonly closeBehavior: TrayCloseBehavior
+}
+
+/**
+ * Start-at-boot registration for the native core, as the renderer sees it.
+ *
+ * This is the core's own platform registration (a launchd agent, a Windows
+ * run-key entry) rather than an Electron login item: the point is a host that
+ * serves with no desktop session, which a desktop-app login item cannot provide.
+ * `mechanism` is reported so a machine with no implemented mechanism can say so
+ * instead of showing a toggle that silently does nothing.
+ */
+export interface CoreAutostartView {
+  readonly installed: boolean
+  readonly mechanism: string
+  readonly supported: boolean
 }
 
 /** Whether a value is one of the two admitted close behaviours. */
@@ -798,6 +817,10 @@ export interface DesktopApi {
   readonly tray: Readonly<{
     getCloseBehavior(): Promise<ApiResult<TrayCloseBehaviorView>>
     setCloseBehavior(behavior: TrayCloseBehavior): Promise<ApiResult<TrayCloseBehaviorView>>
+  }>
+  readonly autostart: Readonly<{
+    getState(): Promise<ApiResult<CoreAutostartView>>
+    setEnabled(enabled: boolean): Promise<ApiResult<CoreAutostartView>>
   }>
   readonly p2pManagement: P2PManagementApi
   readonly remoteConnections: Readonly<{

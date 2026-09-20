@@ -216,16 +216,7 @@ function openConsoleRoute(): void {
         :items="applicationItems"
         :active-route="shell.activeRoute.value"
         :state="shell.sidebarState.value"
-        :collapse-label="shell.t('nav.collapse')"
-        :hide-label="shell.t('nav.hide')"
-        :expand-label="shell.t('nav.expand')"
-        :console-label="shell.t('nav.console')"
-        :console-unread-label="shell.t('nav.consoleUnread')"
-        :console-open="consoleDrawer.open.value"
-        :console-unread="consoleDrawer.unread.value"
         @select="shell.selectRoute"
-        @advance="shell.advanceSidebar"
-        @toggle-console="consoleDrawer.toggleConsoleDrawer"
       />
 
       <main class="workbench-stage">
@@ -345,7 +336,17 @@ function openConsoleRoute(): void {
       :network-state="
         networkOnline === undefined ? 'unknown' : networkOnline ? 'online' : 'offline'
       "
+      :sidebar-state="shell.sidebarState.value"
+      :collapse-label="shell.t('nav.collapse')"
+      :hide-label="shell.t('nav.hide')"
+      :expand-label="shell.t('nav.expand')"
+      :console-label="shell.t('nav.console')"
+      :console-unread-label="shell.t('nav.consoleUnread')"
+      :console-open="consoleDrawer.open.value"
+      :console-unread="consoleDrawer.unread.value"
       @progress-toggle="consoleDrawer.toggleConsoleDrawer"
+      @advance-sidebar="shell.advanceSidebar"
+      @toggle-console="consoleDrawer.toggleConsoleDrawer"
     />
   </div>
 </template>

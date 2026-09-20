@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ankye/dshker/networking/internal/autoconnect"
 	"github.com/ankye/dshker/networking/internal/controlplane"
 	"github.com/ankye/dshker/networking/internal/peersession"
 	"github.com/ankye/dshker/networking/internal/protocol"
@@ -36,7 +37,13 @@ type Host struct {
 	// belongs to the core and the pairing half lives here, so the record is written
 	// where the pairs are read. See members.go.
 	catalog catalogStore
-	closed  bool
+	// generation is the last attempt number this host handed out. See nextGeneration.
+	generation uint64
+	// reconnect is this machine's single reconnection engine, created on first use.
+	// The backoff and the recorded terminal refusals are per-machine state, so a
+	// shell-driven pass and the daemon's own sweep must share one instance.
+	reconnect *autoconnect.Engine
+	closed    bool
 }
 type account struct {
 	mu        sync.Mutex
@@ -50,6 +57,11 @@ type account struct {
 	// changes through the host's parent channel, and the host's lifetime is the
 	// one the maintenance loop follows.
 	host *Host
+	// stages is the latest stage announced per pair. The session manager reports
+	// every transition through the emit callback below, so recording them here is
+	// what lets reconnection ask "is this pair already up?" without inventing a
+	// second source of truth or polling the transport.
+	stages map[string]string
 	// directory is this account's single snapshot of the coordinator's device
 	// directory. See directory.go.
 	directory directory
@@ -214,6 +226,10 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	host.mu.Unlock()
 	if account == nil || closed {
 		return nil, errors.New("p2p.service_unconfigured")
+	}
+	if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" ||
+		method == "peer.autoconnect_clear_refusals" {
+		return host.autoConnectOperation(ctx, method)
 	}
 	if method == "peer.connect" || method == "peer.disconnect" || method == "runtime.invalidate" || method == "network.invalidate" || method == "remote.roots" || method == "remote.directory" {
 		return account.connection(ctx, method, request.Data)
@@ -400,6 +416,14 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		return result.Roots, nil
 	}
 	emit := func(state peersession.State) {
+		// Record before announcing: a reconnection pass that runs between the two
+		// must see the new stage, not the one it replaced.
+		account.mu.Lock()
+		if account.stages == nil {
+			account.stages = make(map[string]string)
+		}
+		account.stages[state.PairID] = state.Stage
+		account.mu.Unlock()
 		ctx, cancel := context.WithTimeout(host.ctx, 5*time.Second)
 		defer cancel()
 		main.Call(ctx, "peer.state", struct {

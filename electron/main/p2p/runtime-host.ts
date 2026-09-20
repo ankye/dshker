@@ -40,7 +40,13 @@ interface Options {
    * periodic sweep would leave a tab dead for up to a minute for what is often
    * a one second network change.
    */
-  onPeerStage?(serviceId: string, pairId: string, stage: string): void
+  /**
+   * One announced connection stage.
+   *
+   * The generation names the attempt the stage belongs to, which the listener needs
+   * to tell a fresh attempt from a late announcement of an old one.
+   */
+  onPeerStage?(serviceId: string, pairId: string, stage: string, generation: number): void
   /**
    * Reports a new revision of the core's directory snapshot for one service.
    *
@@ -223,7 +229,7 @@ export class PeerRuntimeHost {
       }
       this.#rememberAttempt(key, state.attemptId)
       this.#states.set(key, { serviceId: fields.serviceId, state })
-      this.options.onPeerStage?.(fields.serviceId, pairId, state.stage)
+      this.options.onPeerStage?.(fields.serviceId, pairId, state.stage, state.generation)
       return {}
     }
     // The stage a runtime request used to require is gone with the inbound

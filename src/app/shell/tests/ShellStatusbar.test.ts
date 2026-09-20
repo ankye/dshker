@@ -16,7 +16,15 @@ describe('ShellStatusbar', () => {
     scopeValue: 'App start',
     networkLabel: 'Network',
     networkValue: 'Status unknown',
-    networkState: 'unknown' as const
+    networkState: 'unknown' as const,
+    sidebarState: 'expanded' as const,
+    collapseLabel: 'Collapse to icon rail',
+    hideLabel: 'Hide',
+    expandLabel: 'Expand',
+    consoleLabel: 'Live output',
+    consoleUnreadLabel: 'New output',
+    consoleOpen: false,
+    consoleUnread: false
   }
 
   it('slides indeterminately while no step progress exists', () => {
@@ -86,5 +94,65 @@ describe('ShellStatusbar', () => {
 
     expect(wrapper.find('.statusbar-progress').exists()).toBe(false)
     expect(wrapper.text()).toContain('Desktop API · 1')
+  })
+
+  it('leads with the sidebar and console controls it took over from the rail', async () => {
+    const wrapper = mount(ShellStatusbar, { props: base })
+    const controls = wrapper.get('.statusbar-controls')
+    const buttons = controls.findAll('.statusbar-control')
+
+    expect(buttons).toHaveLength(2)
+    // The group is the bar's first child so the read-only facts stay trailing.
+    expect(wrapper.get('.statusbar').element.firstElementChild).toBe(controls.element)
+    for (const button of buttons) {
+      expect(button.attributes('disabled')).toBeUndefined()
+      expect(button.find('svg').exists()).toBe(true)
+    }
+
+    await wrapper.get('.statusbar-sidebar-toggle').trigger('click')
+    expect(wrapper.emitted('advanceSidebar')).toEqual([[]])
+
+    await wrapper.get('.statusbar-console-toggle').trigger('click')
+    expect(wrapper.emitted('toggleConsole')).toEqual([[]])
+  })
+
+  it('states the sidebar control next action for every sidebar state', async () => {
+    const wrapper = mount(ShellStatusbar, { props: base })
+    const toggle = () => wrapper.get('.statusbar-sidebar-toggle')
+
+    expect(toggle().attributes('aria-label')).toBe('Collapse to icon rail')
+    await wrapper.setProps({ sidebarState: 'collapsed' as const })
+    expect(toggle().attributes('aria-label')).toBe('Hide')
+    await wrapper.setProps({ sidebarState: 'hidden' as const })
+    expect(toggle().attributes('aria-label')).toBe('Expand')
+  })
+
+  it('advertises unread console output and the tail expanded state', async () => {
+    const wrapper = mount(ShellStatusbar, { props: base })
+
+    expect(wrapper.get('.statusbar-console-toggle').attributes('aria-expanded')).toBe('false')
+    expect(wrapper.get('.statusbar-console-toggle').attributes('aria-label')).toBe('Live output')
+    expect(wrapper.find('.statusbar-console-badge').exists()).toBe(false)
+
+    await wrapper.setProps({ consoleUnread: true, consoleOpen: true })
+    expect(wrapper.get('.statusbar-console-toggle').attributes('aria-expanded')).toBe('true')
+    expect(wrapper.get('.statusbar-console-toggle').attributes('aria-label')).toBe(
+      'Live output · New output'
+    )
+    expect(wrapper.find('.statusbar-console-badge').exists()).toBe(true)
+  })
+
+  it('keeps both controls usable while the busy strip runs', async () => {
+    // A long switch must not take navigation chrome away from the user, which is
+    // why the control group sits outside the busy/idle branch.
+    const wrapper = mount(ShellStatusbar, {
+      props: { ...base, operationLabel: 'busy', operationProgress: 0.5 }
+    })
+
+    expect(wrapper.findAll('.statusbar-control')).toHaveLength(2)
+    expect(wrapper.find('.statusbar-progress').exists()).toBe(true)
+
+    await wrapper.get('.statusbar-sidebar-toggle').trigger('click')
+    expect(wrapper.emitted('advanceSidebar')).toEqual([[]])
   })
 })

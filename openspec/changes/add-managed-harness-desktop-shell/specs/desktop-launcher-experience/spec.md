@@ -38,19 +38,43 @@ The launcher SHALL let the user select a managed workspace, Git remote, branch/t
 
 ### Requirement: Sidebar follows the Launcher information hierarchy
 
-The launcher SHALL use a narrow persistent sidebar with three presentation states: expanded cards, a collapsed icon rail, and hidden. It SHALL present the six primary entries in this exact order: Launch, Controller, Version management, Token usage, Settings, and Run. Controller SHALL follow Launch directly because launch output is its immediate next context. Run SHALL use a browser-window icon. The active entry SHALL have a visible selected state; collapsing the sidebar SHALL preserve the reachable name of every entry for assistive input. A large, floating lower-left chevron control SHALL cycle expanded to collapsed to hidden and then back to expanded; it SHALL remain reachable when the sidebar is hidden.
+The launcher SHALL use a narrow persistent sidebar with three presentation states: expanded cards, a collapsed icon rail, and hidden. It SHALL present the six primary entries in this exact order: Launch, Controller, Version management, Token usage, Settings, and Run. Controller SHALL follow Launch directly because launch output is its immediate next context. Run SHALL use a browser-window icon. The active entry SHALL have a visible selected state; collapsing the sidebar SHALL preserve the reachable name of every entry for assistive input. The sidebar SHALL NOT carry a floating control rail: the sidebar presentation control and the console tail control both belong to the status bar, so no Launcher chrome floats above the active route or the Run guest.
 
 #### Scenario: User changes the active page
 
 - **WHEN** the user selects a sidebar entry
 - **THEN** the matching page becomes active without moving or reconfiguring any DSH-owned path
 
-#### Scenario: Hidden sidebar controls must not cover guest settings
+#### Scenario: Sidebar states leave the route plane unobstructed
 
-- **WHEN** the sidebar is hidden and the two floating controls overlay the Run guest
-- **THEN** both controls move upward together by 4rem from their ordinary rail position, preserving their size, spacing, and accessible actions
-- **AND** the guest's bottom-left footer remains free of Launcher controls and receives pointer input
-- **AND** expanded and collapsed sidebars keep the controls in their own rail without moving them over navigation entries
+- **WHEN** the sidebar is expanded, collapsed, or hidden
+- **THEN** no floating Launcher control overlays the route content, and the Run guest's bottom-left footer receives pointer input in every sidebar state
+- **AND** the hidden sidebar reserves no grid column and no overlay region for a control rail
+
+### Requirement: Status bar owns the sidebar and console tail controls
+
+The status bar SHALL be the single home for the two shell chrome controls. It SHALL place the sidebar presentation control and the console tail control as a leading control group before the read-only protocol, scope, and network text, keeping the read-only facts to the trailing side. Both controls SHALL fit the status bar's own height without increasing it, expose an accessible name that states their next action, and remain keyboard reachable in every sidebar state. The sidebar control SHALL cycle expanded to collapsed to hidden and then back to expanded. The console tail control SHALL advertise unseen output with a badge and reflect the tail's open state. While an operation is busy, the status bar SHALL keep both controls usable beside the busy strip rather than replacing them with it.
+
+#### Scenario: User cycles sidebar presentation from the status bar
+
+- **WHEN** the user activates the status bar's sidebar control while the sidebar is expanded
+- **THEN** the sidebar reduces to its compact navigation rail and the control's accessible name states the next action
+- **WHEN** the user activates it again
+- **THEN** the sidebar hides while the control stays in the status bar at an unchanged position
+- **WHEN** the user activates it while hidden
+- **THEN** the expanded card sidebar returns
+
+#### Scenario: Console tail opens from the status bar
+
+- **WHEN** the user activates the status bar's console control
+- **THEN** the shell-level console tail opens, and the control reports its expanded state
+- **AND** unseen output marks the control with a badge instead of opening the tail by itself
+
+#### Scenario: Busy operation keeps the controls reachable
+
+- **WHEN** an operation reports progress and the status bar shows its busy strip
+- **THEN** both controls remain visible and operable in the same leading group
+- **AND** the busy strip stays a separate console entry point without moving or hiding either control
 
 ### Requirement: Token usage supports range-scoped daily model analysis
 
@@ -62,16 +86,6 @@ The Token usage page SHALL provide Overview and Statistics tabs. Statistics SHAL
 - **THEN** the daily model table immediately shows only records within that inclusive range
 - **AND** the underlying DSH session logs are not reread solely because the range changed
 - **AND** the sidebar makes the selected entry distinguishable
-
-#### Scenario: User cycles sidebar presentation
-
-- **WHEN** the user activates the floating sidebar control while expanded
-- **THEN** the sidebar reduces to its compact navigation rail
-- **AND** each primary destination remains keyboard reachable with an accessible name
-- **WHEN** the user activates the control again
-- **THEN** the sidebar hides while the control remains available at the lower-left edge
-- **WHEN** the user activates the control while hidden
-- **THEN** the expanded card sidebar returns
 
 ### Requirement: Launch page foregrounds only launch-critical state
 
@@ -289,7 +303,7 @@ The Launch and Controller footers SHALL show valid start or stop controls for th
 #### Scenario: User watches operation output from another route
 
 - **WHEN** the user is on any route while an operation or launch appends console entries
-- **THEN** a shell-level read-only console tail can be opened from a control on the sidebar's floating rail beside the sidebar state control, and from the statusbar's busy strip
+- **THEN** a shell-level read-only console tail can be opened from the status bar's console control, and from the statusbar's busy strip while an operation runs
 - **AND** its control advertises unseen output with a badge instead of opening by itself
 - **AND** the tail renders only the newest bounded slice, hands off to the full Console route, collapses on Escape, and stays below transient error toasts
 

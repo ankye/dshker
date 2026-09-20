@@ -87,3 +87,8 @@ repositories.
 - [x] 10.3 Replace the shared launcher icon with the approved otter design. The sidebar, development window/Dock and package configuration reference the same PNG. Native icons in already installed executables require repackaging.
 
 - [x] 10.4 Refine hero copy and typography, soften card surfaces, and reduce secondary-button weight. Evidence: 22 focused tests, Electron build, native-window renderer screenshots at compact/standard/wide widths, no overflowing cards and public version-navigation click.
+
+## 11. Shell controls move into the status bar
+
+- [ ] 11.1 [Owner: Launcher] Move the sidebar presentation control and the console tail control from the sidebar's floating rail into the status bar as a leading control group, and remove the floating rail together with its `--sidebar-controls-offset` hidden-state clearance. Keep both controls inside the existing status bar height, keep their accessible names stating the next action, keep the console badge and expanded state, and keep both operable beside the busy strip. Dependencies: 8.1, 9.1. Verify with focused `ShellStatusbar`, `ShellSidebar`, and sidebar-state tests plus `npm run format:check`, `npm run type-check`, `npm run architecture:check`, `npm test -- --run`, and `npm run visual:smoke`; leave this task open until root records successful command output.
+- [ ] 11.2 [Owner: QA] Collect real macOS and Windows evidence that the status bar controls cycle the sidebar, open the console tail, and leave the Run guest's bottom-left footer clickable in every sidebar state. Dependencies: 11.1. This supersedes the floating-rail clearance workflow in `test-gates/sidebar-controls-interaction.json`; record the replacement gate and its ledger before checking this task.

@@ -48,7 +48,8 @@ import {
   type ExternalLinkErrorCode,
   type LauncherExternalLinkId,
   type TrayCloseBehavior,
-  type TrayCloseBehaviorView
+  type TrayCloseBehaviorView,
+  type CoreAutostartView
 } from '../src/shared/contracts'
 
 const desktopApi: DesktopApi = Object.freeze({
@@ -262,6 +263,12 @@ const desktopApi: DesktopApi = Object.freeze({
       closeBehavior: TrayCloseBehavior
     ): Promise<ApiResult<TrayCloseBehaviorView>> =>
       ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.traySetCloseBehavior, closeBehavior)
+  }),
+  autostart: Object.freeze({
+    getState: (): Promise<ApiResult<CoreAutostartView>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.autostartGetState),
+    setEnabled: (enabled: boolean): Promise<ApiResult<CoreAutostartView>> =>
+      ipcRenderer.invoke(DESKTOP_IPC_CHANNELS.autostartSetEnabled, enabled)
   }),
   externalLinks: Object.freeze({
     open: (linkId: LauncherExternalLinkId): Promise<ApiResult<void, ExternalLinkErrorCode>> =>

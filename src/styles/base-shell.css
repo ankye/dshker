@@ -110,22 +110,17 @@ button:focus-visible,
 }
 
 .sidebar-region {
-  --sidebar-controls-offset: 0rem;
   position: relative;
   min-width: 0;
   min-height: 0;
 }
 
 /* A hidden rail must leave the grid entirely. Keeping an empty first grid item
- * made the workbench move into a second row and placed the restore control at
- * the top of that new row. The overlay itself ignores pointers except for its
- * restore control. */
+ * made the workbench move into a second row. Nothing floats here any more —
+ * both shell controls live in the status bar — so the hidden region collapses
+ * to nothing instead of becoming a pointer-transparent overlay. */
 .shell-body[data-sidebar-state='hidden'] .sidebar-region {
-  /* Leave the guest's bottom-left settings/footer actions unobstructed. */
-  --sidebar-controls-offset: 4rem;
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
+  display: none;
 }
 
 .sidebar,
@@ -142,7 +137,9 @@ button:focus-visible,
   flex-direction: column;
   overflow: hidden;
   border-right: 1px solid var(--color-border);
-  padding: var(--space-3) var(--space-2) calc(var(--space-3) + 2.5rem);
+  /* No floating rail overlaps the rail's own bottom edge any more, so the
+   * navigation list uses the same padding on all sides. */
+  padding: var(--space-3) var(--space-2);
   transition: width var(--motion-emphasis) var(--ease-standard);
 }
 
@@ -199,44 +196,6 @@ button:focus-visible,
   font-size: var(--type-caption);
   line-height: 1.25;
   white-space: normal;
-}
-
-.sidebar-toggle {
-  display: grid;
-  position: absolute;
-  z-index: 2;
-  bottom: calc(var(--space-3) + var(--sidebar-controls-offset));
-  left: var(--space-3);
-  width: 2.5rem;
-  height: 2.5rem;
-  place-items: center;
-  border: 1px solid color-mix(in srgb, var(--color-border), var(--color-accent) 14%);
-  /* Circular like the rest of the floating chrome (pills, tracks, badges):
-   * the rail controls are single-glyph dots, and the unread badge nests on a
-   * circular rim most naturally. Rectangular buttons stay on the radius scale. */
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--color-surface-raised), var(--color-bg) 20%);
-  box-shadow: var(--shadow-float);
-  color: var(--color-text-muted);
-  cursor: pointer;
-  transition:
-    border-color var(--motion-fast) var(--ease-standard),
-    background-color var(--motion-fast) var(--ease-standard),
-    color var(--motion-fast) var(--ease-standard);
-}
-
-.sidebar-toggle svg {
-  width: 1rem;
-  height: 1rem;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.9;
-}
-
-.sidebar-toggle:hover {
-  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 40%);
-  background: var(--color-surface-raised);
-  color: var(--color-text);
 }
 
 .inspector-pane {
@@ -345,37 +304,6 @@ button:focus-visible,
 .sidebar[data-collapsed='true'] .sidebar-brand {
   justify-items: center;
   padding: 0;
-}
-
-.sidebar-region[data-state='collapsed'] .sidebar-toggle {
-  left: calc(50% - 1.25rem);
-}
-
-.sidebar-region[data-state='hidden'] .sidebar-toggle {
-  left: var(--space-3);
-  pointer-events: auto;
-}
-
-/* The console tail control stacks directly above the sidebar state control on
- * the same floating rail, so both remain reachable in every sidebar state. */
-.sidebar-console-toggle {
-  bottom: calc(var(--space-3) + var(--sidebar-controls-offset) + 2.5rem + var(--space-2));
-}
-
-.sidebar-console-toggle[aria-expanded='true'] {
-  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 40%);
-  color: var(--color-accent);
-}
-
-.sidebar-console-badge {
-  position: absolute;
-  top: -0.2rem;
-  right: -0.2rem;
-  width: 0.55rem;
-  height: 0.55rem;
-  border: 1px solid var(--color-surface-raised);
-  border-radius: 999px;
-  background: var(--color-accent);
 }
 
 .nav-item:disabled {

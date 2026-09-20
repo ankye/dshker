@@ -273,6 +273,15 @@ export const enUS: Record<MessageKey, string> = {
     'The app keeps running in the background. Reopen or quit it from the tray icon.',
   'settings.tray.quit': 'Quit the app',
   'settings.tray.quit.description': 'Ends the app as soon as the close button is pressed.',
+  'settings.autostart': 'Start at boot',
+  'settings.autostart.hint':
+    'Registers the networking core with the system so this computer can be reached after a restart without opening the Launcher.',
+  'settings.autostart.enable': 'Start the networking core at boot',
+  'settings.autostart.enable.description':
+    'Uses the operating system\u2019s own mechanism and the settings already saved on this computer. The same registration is shared with the dshkerd command line.',
+  'settings.autostart.unsupported':
+    'This operating system has no supported start-at-boot mechanism yet, or the networking core is not running.',
+  'settings.autostart.failed': 'The start-at-boot state could not be read.',
   'update.notice.title': 'A new DSHKer Launcher is available',
   'update.notice.version': 'Version',
   'update.notice.download': 'Download installer',

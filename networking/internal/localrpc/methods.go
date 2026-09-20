@@ -50,6 +50,12 @@ var Methods = []Method{
 	// address this host serves, and a headless core answers from the child it
 	// supervises. Additive within version 1.
 	{"core.runtime_binding", RoleShell},
+	// Start-at-boot registration, additive within version 1. The desktop settings
+	// control and the headless `autostart` subcommand are both clients of these, so
+	// one machine has one registration and both surfaces report it.
+	{"core.autostart_disable", RoleShell},
+	{"core.autostart_enable", RoleShell},
+	{"core.autostart_status", RoleShell},
 	{"core.secret_delete", RoleShell},
 	{"core.secret_get", RoleShell},
 	{"core.secret_set", RoleShell},
@@ -95,6 +101,11 @@ var Methods = []Method{
 	{"pairs.list", RoleShell},
 	{"pairs.pin", RoleShell},
 	{"pairs.share", RoleShell},
+	// Reconnection moved into the core, so the shell drives the core's engine
+	// instead of keeping a second copy of the schedule. Additive within version 1.
+	{"peer.autoconnect_reconcile", RoleShell},
+	{"peer.autoconnect_retry_now", RoleShell},
+	{"peer.autoconnect_clear_refusals", RoleShell},
 	{"peer.connect", RoleShell},
 	{"peer.disconnect", RoleShell},
 	// The SSH route moved into the core in 5.1. Additive within version 1, with

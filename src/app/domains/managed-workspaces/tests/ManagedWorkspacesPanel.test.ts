@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ApiResult,
+  CoreAutostartView,
   DesktopApi,
   DirectorySelectionPurpose,
   ExternalLinkErrorCode,
@@ -347,6 +348,12 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
       setCloseBehavior: async (): Promise<
         ApiResult<{ closeBehavior: 'minimize-to-tray' | 'quit' }>
       > => apiOk({ closeBehavior: 'minimize-to-tray' })
+    },
+    autostart: {
+      getState: async (): Promise<ApiResult<CoreAutostartView>> =>
+        apiOk({ installed: false, mechanism: 'launchd', supported: true }),
+      setEnabled: async (): Promise<ApiResult<CoreAutostartView>> =>
+        apiOk({ installed: true, mechanism: 'launchd', supported: true })
     }
   }
 }

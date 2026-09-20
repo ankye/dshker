@@ -257,6 +257,13 @@ export const zhCN = {
   'settings.tray.minimize.description': '程序继续在后台运行，可从托盘图标重新打开或退出。',
   'settings.tray.quit': '直接退出程序',
   'settings.tray.quit.description': '点击关闭按钮后立即结束程序。',
+  'settings.autostart': '开机自动启动',
+  'settings.autostart.hint': '把网络核心注册到系统，重启后无需打开 Launcher 也能连接到这台电脑。',
+  'settings.autostart.enable': '开机自动启动网络核心',
+  'settings.autostart.enable.description':
+    '使用操作系统自带机制，并沿用这台电脑上已保存的设置。该注册与 dshkerd 命令行共用同一份状态。',
+  'settings.autostart.unsupported': '当前操作系统暂不支持开机自启，或网络核心未在运行。',
+  'settings.autostart.failed': '无法读取开机自启状态。',
   'update.notice.title': '发现 DSHKer Launcher 新版本',
   'update.notice.version': '版本',
   'update.notice.download': '下载安装包',

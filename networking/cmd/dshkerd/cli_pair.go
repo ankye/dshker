@@ -29,18 +29,36 @@ func runPair(args []string, stdout io.Writer, stderr io.Writer) int {
 	if flags.Parse(args) != nil {
 		return 2
 	}
-	if *service == "" {
-		return fail(stderr, errors.New("p2p.invalid_arguments"))
-	}
-	if *invite != "" && *network == "" {
-		return fail(stderr, errors.New("p2p.invalid_arguments"))
-	}
 	if *share != "" && *invite != "" {
 		return fail(stderr, errors.New("p2p.invalid_arguments"))
 	}
 	directory, err := stateRoot(*state)
 	if err != nil {
 		return fail(stderr, err)
+	}
+	// The service id and the network are machine facts: configured once, reused
+	// by every later pairing command. A flag still wins and is recorded.
+	stored, err := LoadConfig(directory)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	effectiveService, serviceChanged := resolveString(*service, stored.Service)
+	effectiveNetwork, networkChanged := resolveString(*network, stored.Network)
+	// The service has no default: it names the coordinator account, and guessing
+	// one would sign this machine in somewhere the operator never chose.
+	if err := requireValue(effectiveService); err != nil {
+		return fail(stderr, err)
+	}
+	// Redeeming a code needs the network it belongs to, from the flag or the record.
+	if *invite != "" && effectiveNetwork == "" {
+		return fail(stderr, errors.New("p2p.invalid_arguments"))
+	}
+	if serviceChanged || networkChanged {
+		stored.Service = effectiveService
+		stored.Network = effectiveNetwork
+		if err := SaveConfig(directory, stored); err != nil {
+			return fail(stderr, err)
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -52,16 +70,16 @@ func runPair(args []string, stdout io.Writer, stderr io.Writer) int {
 	var answer json.RawMessage
 	switch {
 	case *share != "":
-		answer, err = client.Call(ctx, "pairs.share", scopedRequest(*service, struct {
+		answer, err = client.Call(ctx, "pairs.share", scopedRequest(effectiveService, struct {
 			NetworkID string `json:"networkId"`
 		}{*share}))
 	case *invite != "":
-		answer, err = client.Call(ctx, "pairs.invite", scopedRequest(*service, struct {
+		answer, err = client.Call(ctx, "pairs.invite", scopedRequest(effectiveService, struct {
 			Code      string `json:"code"`
 			NetworkID string `json:"networkId"`
-		}{*invite, *network}))
+		}{*invite, effectiveNetwork}))
 	default:
-		answer, err = client.Call(ctx, "pairs.list", scopedRequest(*service, struct{}{}))
+		answer, err = client.Call(ctx, "pairs.list", scopedRequest(effectiveService, struct{}{}))
 	}
 	if err != nil {
 		return fail(stderr, err)
@@ -84,12 +102,30 @@ func runConnect(args []string, stdout io.Writer, stderr io.Writer) int {
 	if flags.Parse(args) != nil {
 		return 2
 	}
-	if *service == "" || *pair == "" {
-		return fail(stderr, errors.New("p2p.invalid_arguments"))
-	}
 	directory, err := stateRoot(*state)
 	if err != nil {
 		return fail(stderr, err)
+	}
+	// Both the service and the peer are remembered, so reconnecting the same pair
+	// after a restart is `dshkerd connect` with no arguments.
+	stored, err := LoadConfig(directory)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	effectiveService, serviceChanged := resolveString(*service, stored.Service)
+	effectivePair, pairChanged := resolveString(*pair, stored.Pair)
+	if err := requireValue(effectiveService); err != nil {
+		return fail(stderr, err)
+	}
+	if err := requireValue(effectivePair); err != nil {
+		return fail(stderr, err)
+	}
+	if serviceChanged || pairChanged {
+		stored.Service = effectiveService
+		stored.Pair = effectivePair
+		if err := SaveConfig(directory, stored); err != nil {
+			return fail(stderr, err)
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
@@ -99,9 +135,9 @@ func runConnect(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	defer closeClient()
 	if *disconnect {
-		answer, err := client.Call(ctx, "peer.disconnect", scopedRequest(*service, struct {
+		answer, err := client.Call(ctx, "peer.disconnect", scopedRequest(effectiveService, struct {
 			PairID string `json:"pairId"`
-		}{*pair}))
+		}{effectivePair}))
 		if err != nil {
 			return fail(stderr, err)
 		}
@@ -110,10 +146,10 @@ func runConnect(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		return 0
 	}
-	answer, err := client.Call(ctx, "peer.connect", scopedRequest(*service, struct {
+	answer, err := client.Call(ctx, "peer.connect", scopedRequest(effectiveService, struct {
 		PairID     string `json:"pairId"`
 		Generation uint64 `json:"generation"`
-	}{*pair, *generation}))
+	}{effectivePair, *generation}))
 	if err != nil {
 		return fail(stderr, err)
 	}

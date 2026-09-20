@@ -16,14 +16,7 @@ function mountSidebar() {
       items,
       activeRoute: 'launch',
       state: 'expanded',
-      title: 'DSHKer Launcher',
-      collapseLabel: 'Collapse to icon rail',
-      hideLabel: 'Hide',
-      expandLabel: 'Expand',
-      consoleLabel: 'Live output',
-      consoleUnreadLabel: 'New output',
-      consoleOpen: false,
-      consoleUnread: false
+      title: 'DSHKer Launcher'
     }
   })
 }
@@ -34,15 +27,15 @@ describe('ShellSidebar', () => {
     document.body.innerHTML = ''
   })
 
-  it('raises the hidden controls together and restores the ordinary rail position', async () => {
+  it('carries no floating control rail in any state', async () => {
+    // Both shell controls moved to the status bar, so the sidebar must not
+    // reintroduce chrome that floats over the route plane or the Run guest.
     const sheet = document.createElement('style')
     sheet.dataset.sidebarLayoutTest = 'true'
     sheet.textContent = readFileSync('src/styles/base-shell.css', 'utf8')
     document.head.append(sheet)
     const shell = document.createElement('div')
     shell.className = 'shell-body'
-    shell.style.setProperty('--space-3', '12px')
-    shell.style.setProperty('--space-2', '8px')
     document.body.append(shell)
     const wrapper = mountSidebar()
     shell.append(wrapper.element)
@@ -50,24 +43,12 @@ describe('ShellSidebar', () => {
     for (const state of ['expanded', 'collapsed', 'hidden', 'expanded'] as const) {
       shell.dataset.sidebarState = state
       await wrapper.setProps({ state })
+      expect(wrapper.findAll('.sidebar-toggle')).toHaveLength(0)
+      expect(wrapper.find('.sidebar-console-badge').exists()).toBe(false)
       const region = wrapper.get('.sidebar-region').element
-      const offset = getComputedStyle(region).getPropertyValue('--sidebar-controls-offset')
-      expect(offset).toBe(state === 'hidden' ? '4rem' : '0rem')
-      const pixels = state === 'hidden' ? 64 : 0
-      expect(getComputedStyle(wrapper.get('.sidebar-state-toggle').element).bottom).toBe(
-        `calc(12px + ${pixels}px)`
-      )
-      expect(getComputedStyle(wrapper.get('.sidebar-console-toggle').element).bottom).toBe(
-        `calc(12px + ${pixels}px + 40px + 8px)`
-      )
-      const buttons = wrapper.findAll('.sidebar-toggle')
-      expect(buttons).toHaveLength(2)
-      for (const button of buttons) expect(button.attributes('disabled')).toBeUndefined()
-      if (state === 'hidden') {
-        expect(getComputedStyle(region).pointerEvents).toBe('none')
-        for (const button of buttons)
-          expect(getComputedStyle(button.element).pointerEvents).toBe('auto')
-      }
+      // A hidden sidebar leaves the layout entirely instead of becoming a
+      // pointer-transparent overlay that used to host the rail.
+      expect(getComputedStyle(region).display).toBe(state === 'hidden' ? 'none' : 'block')
     }
     wrapper.unmount()
   })
@@ -90,48 +71,14 @@ describe('ShellSidebar', () => {
     expect(wrapper.emitted('select')).toEqual([['settings']])
   })
 
-  it('keeps the floating sidebar control accessible and advances the state cycle', async () => {
-    const wrapper = mountSidebar()
-    const toggle = wrapper.get('.sidebar-state-toggle')
-
-    expect(toggle.attributes('aria-label')).toBe('Collapse to icon rail')
-    expect(toggle.find('svg').exists()).toBe(true)
-    await toggle.trigger('click')
-    expect(wrapper.emitted('advance')).toEqual([[]])
-  })
-
-  it('exposes the next action when the sidebar is collapsed or hidden', async () => {
+  it('keeps every destination reachable when collapsed and renders nothing when hidden', async () => {
     const wrapper = mountSidebar()
 
     await wrapper.setProps({ state: 'collapsed' })
-    expect(wrapper.get('.sidebar-state-toggle').attributes('aria-label')).toBe('Hide')
     expect(wrapper.find('.sidebar').attributes('data-collapsed')).toBe('true')
+    expect(wrapper.findAll('[data-testid^="nav-"]')).toHaveLength(APPLICATION_ROUTES.length)
 
     await wrapper.setProps({ state: 'hidden' })
-    expect(wrapper.get('.sidebar-state-toggle').attributes('aria-label')).toBe('Expand')
     expect(wrapper.find('.sidebar').exists()).toBe(false)
-  })
-
-  it('rides the console tail control on the same floating rail', async () => {
-    const wrapper = mountSidebar()
-    const consoleToggle = wrapper.get('.sidebar-console-toggle')
-
-    expect(consoleToggle.attributes('aria-expanded')).toBe('false')
-    expect(consoleToggle.attributes('aria-label')).toBe('Live output')
-    expect(wrapper.find('.sidebar-console-badge').exists()).toBe(false)
-
-    await consoleToggle.trigger('click')
-    expect(wrapper.emitted('toggleConsole')).toEqual([[]])
-  })
-
-  it('advertises unread output and its expanded state on the control', async () => {
-    const wrapper = mountSidebar()
-
-    await wrapper.setProps({ consoleUnread: true, consoleOpen: true })
-    const consoleToggle = wrapper.get('.sidebar-console-toggle')
-
-    expect(consoleToggle.attributes('aria-expanded')).toBe('true')
-    expect(consoleToggle.attributes('aria-label')).toBe('Live output · New output')
-    expect(wrapper.find('.sidebar-console-badge').exists()).toBe(true)
   })
 })

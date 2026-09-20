@@ -102,6 +102,24 @@ function fixture() {
   const attach = vi.fn()
   const detach = vi.fn()
   let unavailable: () => void = () => undefined
+  /*
+   * The codes the core's engine treats as final. Mirrored here only so this fake
+   * core stops retrying the way the real one does; the authoritative set lives in
+   * `networking/internal/autoconnect`.
+   */
+  const TERMINAL_REFUSALS = new Set([
+    'p2p.not_enabled',
+    'p2p.pair_unauthorized',
+    'p2p.network_revoked',
+    'p2p.pair_revoked',
+    'p2p.pair_not_found',
+    'p2p.identity_mismatch',
+    'p2p.trust_restore_rejected',
+    'p2p.lease_rejected',
+    'p2p.device_revoked',
+    'p2p.unauthorized'
+  ])
+  const refused = new Set<string>()
   const call = vi.fn(
     async (method: string, _payload: unknown, _signal: AbortSignal): Promise<unknown> => {
       if (method === 'user.login')
@@ -117,6 +135,41 @@ function fixture() {
       // coordinator heartbeat rides on.
       if (method === 'device.restore') return { deviceId: '3'.repeat(12) }
       if (method === 'pairs.list') return []
+      /*
+       * Reconnection now lives in the core, so this fake core has to behave like
+       * one: a reconcile means "connect every active pair of this service", and
+       * clearing refusals means a pair that was refused before is eligible again.
+       * Without this the shell's forwarding would be untestable here — the calls
+       * would succeed and nothing would ever connect, which is exactly how the
+       * behavior could silently disappear.
+       */
+      if (method === 'peer.autoconnect_clear_refusals') {
+        refused.clear()
+        return {}
+      }
+      if (method === 'peer.autoconnect_reconcile' || method === 'peer.autoconnect_retry_now') {
+        if (method === 'peer.autoconnect_retry_now') refused.clear()
+        const scopedService = (_payload as { serviceId?: string }).serviceId ?? ''
+        for (const computer of record.computers) {
+          if (computer.serviceId !== scopedService) continue
+          if (computer.pairState !== 'active') continue
+          const identifier = computer.serviceId + ':' + computer.pairId
+          if (refused.has(identifier)) continue
+          try {
+            await call(
+              'peer.connect',
+              { serviceId: computer.serviceId, data: { pairId: computer.pairId, generation: 1 } },
+              _signal
+            )
+          } catch (error) {
+            // The real engine stops retrying a pair whose authorization is gone.
+            if (error instanceof PeerHelperError && TERMINAL_REFUSALS.has(error.code)) {
+              refused.add(identifier)
+            }
+          }
+        }
+        return {}
+      }
       throw new PeerHelperError('p2p.invalid_operation')
     }
   )
@@ -167,7 +220,10 @@ function fixture() {
     directoryChanged: (payload: unknown) =>
       handler!('directory.changed', payload, new AbortController().signal),
     catalogChanged: (payload: unknown) =>
-      handler!('catalog.changed', payload, new AbortController().signal)
+      handler!('catalog.changed', payload, new AbortController().signal),
+    // The core announces every connection stage through this callback, which is how
+    // the shell learns a session it did not start has changed.
+    peerStage: (payload: unknown) => handler!('peer.state', payload, new AbortController().signal)
   }
 }
 
@@ -517,6 +573,28 @@ describe('bringing enrolled services online at startup', () => {
   })
 })
 
+/**
+ * The exact connection state the core announces. Every field is required and
+ * validated, so this is built in one place rather than spelled out per test.
+ */
+function helperState(pairId: string, attemptId: string, generation: number, stage: string) {
+  // A `ready` state is only valid with a resolved direct path and a bound runtime
+  // generation; anything earlier carries neither. The validator enforces both, so the
+  // builder follows the stage rather than emitting one shape for all of them.
+  const live = stage === 'ready'
+  return {
+    pairId,
+    attemptId,
+    generation,
+    stage,
+    error: '',
+    path: live
+      ? { localType: 'host', remoteType: 'host', protocol: 'udp' }
+      : { localType: '', remoteType: '', protocol: '' },
+    runtimeGeneration: live ? 1 : 0
+  }
+}
+
 describe('formal P2P management composition', () => {
   it('keeps construction idle and activates the saved service before account traffic', async () => {
     const f = fixture()
@@ -651,6 +729,119 @@ describe('formal P2P management composition', () => {
     expect(attempts.get(pairId)).toBe(1)
     await f.catalogChanged({ serviceId, revision: 'c'.repeat(64) })
     await vi.waitFor(() => expect(attempts.get(pairId)).toBe(2))
+  })
+
+  /**
+   * The workbench address after a reconnection the shell did not perform.
+   *
+   * Reconnection moved into the core, so a dropped pair is now re-established by the
+   * core's engine rather than by the shell's own `connect`. The shell's entry map is
+   * only written by that `connect`, so after a core-driven reconnect it still holds
+   * the *previous* attempt's gateway URL. A tab asking for an address then gets a
+   * stale one — or a `p2p.stale_generation` refusal — for a pair that is actually up.
+   *
+   * The rule this pins: a stage the shell did not cause must invalidate the cached
+   * address, so the answer is an honest "not found" that a caller can act on rather
+   * than a URL that no longer routes.
+   */
+  it('does not serve a stale workbench address after the core reconnects a pair', async () => {
+    const f = await loggedIn()
+    const pairId = '2'.repeat(12)
+    const url = 'http://127.0.0.1:3099/?token=first-attempt'
+    // A paired machine is an enrolled one: naming a pair at all goes through the
+    // device session first.
+    const credential = {
+      serviceId,
+      deviceId: '3'.repeat(12),
+      userId: user.userId,
+      name: 'This machine',
+      publicKey: Buffer.alloc(32, 1).toString('base64'),
+      certificate: 'test-only-credential-boundary',
+      privateKey: Buffer.alloc(32, 9).toString('base64')
+    }
+    vi.spyOn(PeerCredentialStore.prototype, 'load').mockResolvedValue({
+      revision: 'a'.repeat(64),
+      credential
+    } as Awaited<ReturnType<PeerCredentialStore['load']>>)
+    vi.spyOn(PeerCredentialStore.prototype, 'loadRegistration').mockResolvedValue({
+      kind: 'registered',
+      revision: 'a'.repeat(64),
+      credential
+    } as Awaited<ReturnType<PeerCredentialStore['loadRegistration']>>)
+    const base = f.call.getMockImplementation()
+    f.call.mockImplementation(async (method: string, payload: unknown, signal: AbortSignal) => {
+      if (method === 'peer.connect') {
+        const generation = (payload as { data?: { generation?: number } }).data?.generation ?? 0
+        return { state: helperState(pairId, 'b'.repeat(12), generation, 'punching'), url }
+      }
+      return base!(method, payload, signal)
+    })
+
+    // The shell's own connect records the address, which is the only path that does.
+    const accepted = await f.owner.connect(serviceId, pairId, new AbortController().signal)
+    expect(f.owner.entry(serviceId, pairId, accepted.generation).url).toBe(url)
+
+    // The pair drops and the core re-establishes it. The shell is told the stage, but
+    // it never ran connect, so nothing refreshed the address it is still holding.
+    await f.peerStage({
+      serviceId,
+      state: helperState(pairId, 'c'.repeat(12), accepted.generation + 1, 'ready')
+    })
+
+    expect(() => f.owner.entry(serviceId, pairId, accepted.generation)).toThrow(
+      'p2p.connection_not_found'
+    )
+  })
+
+  /**
+   * The other half of the retire rule.
+   *
+   * A stage announcement for the attempt the tab is currently using — or for one
+   * already superseded — must not delete its address. Retiring on any announcement
+   * would blank a working tab every time the core reported progress on the very
+   * connection it is showing.
+   */
+  it('keeps the address of the attempt a tab is using when its own stage is announced', async () => {
+    const f = await loggedIn()
+    const pairId = '2'.repeat(12)
+    const url = 'http://127.0.0.1:3099/?token=current-attempt'
+    const credential = {
+      serviceId,
+      deviceId: '3'.repeat(12),
+      userId: user.userId,
+      name: 'This machine',
+      publicKey: Buffer.alloc(32, 1).toString('base64'),
+      certificate: 'test-only-credential-boundary',
+      privateKey: Buffer.alloc(32, 9).toString('base64')
+    }
+    vi.spyOn(PeerCredentialStore.prototype, 'load').mockResolvedValue({
+      revision: 'a'.repeat(64),
+      credential
+    } as Awaited<ReturnType<PeerCredentialStore['load']>>)
+    vi.spyOn(PeerCredentialStore.prototype, 'loadRegistration').mockResolvedValue({
+      kind: 'registered',
+      revision: 'a'.repeat(64),
+      credential
+    } as Awaited<ReturnType<PeerCredentialStore['loadRegistration']>>)
+    const base = f.call.getMockImplementation()
+    f.call.mockImplementation(async (method: string, payload: unknown, signal: AbortSignal) => {
+      if (method === 'peer.connect') {
+        const generation = (payload as { data?: { generation?: number } }).data?.generation ?? 0
+        return { state: helperState(pairId, 'b'.repeat(12), generation, 'punching'), url }
+      }
+      return base!(method, payload, signal)
+    })
+
+    const accepted = await f.owner.connect(serviceId, pairId, new AbortController().signal)
+    expect(f.owner.entry(serviceId, pairId, accepted.generation).url).toBe(url)
+
+    // Progress on this very attempt: same generation, so the address still applies.
+    await f.peerStage({
+      serviceId,
+      state: helperState(pairId, 'b'.repeat(12), accepted.generation, 'ready')
+    })
+
+    expect(f.owner.entry(serviceId, pairId, accepted.generation).url).toBe(url)
   })
 
   it('announces the core catalog revision to subscribers and stops when released', async () => {

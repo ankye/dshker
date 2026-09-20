@@ -20,14 +20,31 @@ const DRAWER_ENTRY_LIMIT = 200
 const entries = computed(() => harnessConsole.value.slice(-DRAWER_ENTRY_LIMIT))
 
 const entryList = ref<HTMLElement>()
+
+/** Pins the view to the newest entry; the tail is only useful at its end. */
+async function scrollToNewest(): Promise<void> {
+  await nextTick()
+  const list = entryList.value
+  if (list !== undefined) list.scrollTop = list.scrollHeight
+}
+
+/*
+ * Two triggers, one behavior. Following appended output while open was already
+ * handled, but opening the drawer was not: the list mounts at scrollTop 0, so a
+ * user who opened it after a long operation landed on the oldest retained line
+ * and had to scroll down to find what just happened. Watching `open` as well
+ * puts every entry into the drawer at its newest end.
+ *
+ * `immediate` covers the case where the drawer is already open when this
+ * component mounts, which a plain watcher would miss for lack of a transition.
+ */
 watch(
-  () => harnessConsole.value.length,
-  async () => {
-    if (!drawer.open.value) return
-    await nextTick()
-    const list = entryList.value
-    if (list !== undefined) list.scrollTop = list.scrollHeight
-  }
+  [() => drawer.open.value, () => harnessConsole.value.length],
+  ([isOpen]) => {
+    if (!isOpen) return
+    void scrollToNewest()
+  },
+  { immediate: true }
 )
 
 /** Escape collapses the drawer without stealing other key handling. */

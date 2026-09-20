@@ -6,6 +6,7 @@ import { APP_METADATA } from '../../src/shared/contracts'
 import { createPreloadWebPreferences } from './preload'
 import { installWebviewPolicy, installWindowNavigationPolicy } from './security'
 import { type RuntimeBrowserController } from './runtime-browser-controller'
+import { placeInLayout } from './window-placement'
 
 /** Persisted window bounds, written on every move or resize. */
 interface SavedWindowBounds {
@@ -19,28 +20,34 @@ const DEFAULT_WIDTH = 1240
 const DEFAULT_HEIGHT = 820
 
 /**
- * Reads the saved window bounds from `userData`, discarding anything that sits
- * entirely outside every available display (a monitor that was disconnected, an
- * RDP session whose resolution changed).
+ * Reads the saved window bounds from `userData`, corrected for the display layout
+ * that exists right now.
+ *
+ * A remembered position is clamped onto a real display rather than discarded. The
+ * previous version returned `{}` whenever the saved spot was unreachable, which left
+ * `x`/`y` undefined and handed placement to the platform — so a window remembered on
+ * a monitor that is now unplugged reopened wherever the OS felt like, and the user's
+ * size was kept while their position was silently thrown away. Clamping preserves as
+ * much of the remembered placement as the current monitors allow.
  */
 function loadWindowBounds(): Partial<Electron.Rectangle> {
   try {
     const file = nodePath.join(app.getPath('userData'), 'launcher-window-state.json')
     const raw = readFileSync(file, 'utf8')
     const saved = JSON.parse(raw) as SavedWindowBounds
-    if (!Number.isFinite(saved.x) || !Number.isFinite(saved.y)) return {}
-    const rect = { x: saved.x, y: saved.y, width: saved.width, height: saved.height }
-    // At least one display must contain a meaningful part of the window.
-    const visible = screen.getAllDisplays().some((display) => {
-      const { x, y, width, height } = display.workArea
-      return (
-        rect.x + rect.width > x &&
-        rect.x < x + width &&
-        rect.y + rect.height > y &&
-        rect.y < y + height
-      )
-    })
-    return visible ? rect : {}
+    if (
+      !Number.isFinite(saved.x) ||
+      !Number.isFinite(saved.y) ||
+      !Number.isFinite(saved.width) ||
+      !Number.isFinite(saved.height) ||
+      saved.width <= 0 ||
+      saved.height <= 0
+    )
+      return {}
+    return placeInLayout(
+      { x: saved.x, y: saved.y, width: saved.width, height: saved.height },
+      screen.getAllDisplays().map((display) => display.workArea)
+    )
   } catch {
     return {}
   }
@@ -64,29 +71,30 @@ function saveWindowBounds(window: ElectronBrowserWindow): void {
 }
 
 /**
- * Brings a window back onto a visible display when the display configuration
- * changed (an external monitor was disconnected, or an RDP session ended).
+ * Brings a window back onto a reachable display when the display layout changed.
+ *
+ * The displays are read fresh on every call, never cached: on Windows the removal
+ * event can arrive before the display list settles, so the answer must come from
+ * whatever `screen` reports at the moment of the fix.
+ *
+ * A minimised or full-screen window is left alone. Moving a minimised window would
+ * write a position the user never chose into the saved state, and a full-screen
+ * window is owned by the platform's own display handling.
  */
 function ensureOnScreen(window: ElectronBrowserWindow): void {
+  if (window.isDestroyed() || window.isMinimized() || window.isFullScreen()) return
   const bounds = window.getBounds()
-  const onScreen = screen.getAllDisplays().some((display) => {
-    const { x, y, width, height } = display.workArea
-    return (
-      bounds.x + bounds.width > x &&
-      bounds.x < x + width &&
-      bounds.y + bounds.height > y &&
-      bounds.y < y + height
-    )
-  })
-  if (!onScreen) {
-    const workArea = screen.getPrimaryDisplay().workArea
-    window.setBounds({
-      x: Math.round(workArea.x + (workArea.width - bounds.width) / 2),
-      y: Math.round(workArea.y + (workArea.height - bounds.height) / 2),
-      width: bounds.width,
-      height: bounds.height
-    })
-  }
+  const placed = placeInLayout(
+    bounds,
+    screen.getAllDisplays().map((display) => display.workArea)
+  )
+  if (
+    placed.x !== bounds.x ||
+    placed.y !== bounds.y ||
+    placed.width !== bounds.width ||
+    placed.height !== bounds.height
+  )
+    window.setBounds(placed)
 }
 
 export function loadRenderer(window: ElectronBrowserWindow): Promise<void> {
@@ -151,22 +159,48 @@ export function createWindow(
     webPreferences: createPreloadWebPreferences(mainDirectory)
   })
 
-  // Keep the saved bounds up to date.
-  mainWindow.on('resize', () => saveWindowBounds(mainWindow))
-  mainWindow.on('move', () => saveWindowBounds(mainWindow))
+  // Keep the saved bounds up to date, but only once the window is really up.
+  //
+  // Creation and first paint emit their own move/resize events. Persisting those
+  // wrote the platform's startup placement over the position the user chose, so a
+  // window recovered from an unplugged monitor lost its remembered spot for good.
+  let placementSettled = false
+  mainWindow.on('resize', () => {
+    if (placementSettled) saveWindowBounds(mainWindow)
+  })
+  mainWindow.on('move', () => {
+    if (placementSettled) saveWindowBounds(mainWindow)
+  })
 
-  // A display change (monitor unplugged, RDP disconnect) can leave the window
-  // on a desktop that no longer exists. Re-centre it on whichever display is
-  // still visible when one appears, disappears or resizes.
-  screen.on('display-metrics-changed', () => ensureOnScreen(mainWindow))
+  // A display change can leave the window on a desktop that no longer exists.
+  //
+  // All three events matter and they are distinct: unplugging a monitor emits
+  // `display-removed`, attaching one emits `display-added`, and only a resolution or
+  // scale change emits `display-metrics-changed`. Subscribing to the last alone —
+  // which is what this did — meant the common case, pulling out a monitor, was never
+  // handled at all and the window stayed on coordinates that no longer existed.
+  const recover = (): void => ensureOnScreen(mainWindow)
+  screen.on('display-removed', recover)
+  screen.on('display-added', recover)
+  screen.on('display-metrics-changed', recover)
+  // The listeners outlive nothing: dropping them with the window keeps a closed
+  // window from being resized by a later display change.
+  mainWindow.on('closed', () => {
+    screen.off('display-removed', recover)
+    screen.off('display-added', recover)
+    screen.off('display-metrics-changed', recover)
+  })
 
   installWindowNavigationPolicy(mainWindow.webContents)
   installWebviewPolicy(mainWindow.webContents, runtimeBrowserController)
   void loadRenderer(mainWindow)
 
   mainWindow.once('ready-to-show', () => {
-    mainWindow.show()
-    // Check immediately too — the window may have been off-screen at startup.
+    // Correct the placement before showing, so the window never appears on a
+    // desktop that is gone and then jumps.
     ensureOnScreen(mainWindow)
+    mainWindow.show()
+    // From here on the window's geometry is the user's, so it is worth saving.
+    placementSettled = true
   })
 }

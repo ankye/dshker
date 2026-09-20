@@ -32,6 +32,14 @@ import (
 	"github.com/ankye/dshker/networking/internal/secret"
 )
 
+// reconnectInterval is how often a headless host re-examines its authorized pairs.
+//
+// The engine owns the per-pair backoff; this is only the sweep that notices a pair
+// which is authorized but has no session — a catalog change, a peer that came back,
+// a stage that ended while nothing was scheduled. Five seconds is short enough that
+// a recovery feels automatic and long enough that an idle host is not busy.
+const reconnectInterval = 5 * time.Second
+
 // HeadlessSubject is the launch subject the CLI owns. The launcher uses its own,
 // so a desktop and a headless core never fight over one child.
 const HeadlessSubject = "dshkerd-dsh"
@@ -40,16 +48,18 @@ const HeadlessSubject = "dshkerd-dsh"
 // parent-driven mode the shell starts, which stays the default so an existing
 // shell keeps working unchanged.
 var cliCommands = map[string]bool{
-	"serve":   true,
-	"status":  true,
-	"roots":   true,
-	"dsh":     true,
-	"call":    true,
-	"pair":    true,
-	"connect": true,
-	"proxy":   true,
-	"service": true,
-	"help":    true,
+	"serve":     true,
+	"status":    true,
+	"roots":     true,
+	"dsh":       true,
+	"call":      true,
+	"pair":      true,
+	"connect":   true,
+	"proxy":     true,
+	"service":   true,
+	"config":    true,
+	"autostart": true,
+	"help":      true,
 }
 
 // isCommand reports whether the first argument names a CLI subcommand.
@@ -76,6 +86,10 @@ func runCLI(args []string, stdout io.Writer, stderr io.Writer) int {
 		return runProxy(args[1:], stdout, stderr)
 	case "service":
 		return runService(args[1:], stdout, stderr)
+	case "config":
+		return runConfig(args[1:], stdout, stderr)
+	case "autostart":
+		return runAutostart(args[1:], stdout, stderr)
 	default:
 		writeUsage(stdout)
 		return 0
@@ -87,13 +101,18 @@ func writeUsage(stdout io.Writer) {
 	fmt.Fprintln(stdout, "  serve  [--state D] [--data D] [--catalog D] [--roots PEM]")
 	fmt.Fprintln(stdout, "  status [--state D] [--json]")
 	fmt.Fprintln(stdout, "  roots  --registry FILE --native-home DIR [--state D] [--json]")
-	fmt.Fprintln(stdout, "  dsh start --directory DIR --pnpm FILE [--pnpm-prefix A] [--patch FILE] [--port N] [--state D]")
+	fmt.Fprintln(stdout, "  dsh start [--directory DIR] [--pnpm FILE] [--pnpm-prefix A] [--patch FILE] [--port N] [--state D]")
 	fmt.Fprintln(stdout, "  dsh stop [--state D]")
 	fmt.Fprintln(stdout, "  call   <method> [json|-] [--state D]")
-	fmt.Fprintln(stdout, "  pair   --service ID [--share NETWORK] [--invite CODE --network NETWORK] [--state D]")
-	fmt.Fprintln(stdout, "  connect --service ID --pair ID [--generation N] [--disconnect] [--state D]")
+	fmt.Fprintln(stdout, "  pair   [--service ID] [--share NETWORK] [--invite CODE --network NETWORK] [--state D]")
+	fmt.Fprintln(stdout, "  connect [--service ID] [--pair ID] [--generation N] [--disconnect] [--state D]")
 	fmt.Fprintln(stdout, "  proxy  [--json] [--state D]")
-	fmt.Fprintln(stdout, "  service configure --origin URL [--wss URL] [--stun ADDR] [--pinned-key FILE] [--version V] [--state D]")
+	fmt.Fprintln(stdout, "  service configure [--origin URL] [--wss URL] [--stun ADDR] [--pinned-key FILE] [--version V] [--state D]")
+	fmt.Fprintln(stdout, "  config [--clear] [--state D]")
+	fmt.Fprintln(stdout, "  autostart enable|disable|status [--state D]")
+	fmt.Fprintln(stdout, "")
+	fmt.Fprintln(stdout, "Arguments are remembered per state directory: a value supplied once is reused,")
+	fmt.Fprintln(stdout, "a flag overrides and updates it, and `config` shows or clears what is stored.")
 	fmt.Fprintln(stdout, "With no command, dshkerd is the child of the shell and bootstraps from stdin.")
 }
 
@@ -197,6 +216,23 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return fail(stderr, errors.New("p2p.insecure_socket_directory"))
 	}
+	// The store roots are remembered so a boot-time start, which carries only the
+	// state directory, serves with the same stores the operator configured.
+	stored, configErr := LoadConfig(directory)
+	if configErr != nil {
+		return fail(stderr, configErr)
+	}
+	effectiveData, dataChanged := resolveString(*dataRoot, stored.DataRoot)
+	effectiveCatalog, catalogChanged := resolveString(*catalogRoot, stored.CatalogRoot)
+	effectiveRoots, rootsChanged := resolveString(*rootsPath, stored.Roots)
+	if dataChanged || catalogChanged || rootsChanged {
+		stored.DataRoot = effectiveData
+		stored.CatalogRoot = effectiveCatalog
+		stored.Roots = effectiveRoots
+		if err := SaveConfig(directory, stored); err != nil {
+			return fail(stderr, err)
+		}
+	}
 	if os.PathSeparator != 92 {
 		// The listener refuses a directory anyone else can reach.
 		if err := os.Chmod(directory, 0o700); err != nil {
@@ -207,16 +243,16 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	defer cancel()
 	server := core.Serve{}
 	var secrets secret.Store
-	if *dataRoot != "" {
-		store, err := secretStoreFor(secret.Open, *dataRoot)
+	if effectiveData != "" {
+		store, err := secretStoreFor(secret.Open, effectiveData)
 		if err != nil {
 			return fail(stderr, err)
 		}
 		server.Store = store
 		secrets = store
 	}
-	if *catalogRoot != "" {
-		store, err := catalog.Open(*catalogRoot)
+	if effectiveCatalog != "" {
+		store, err := catalog.Open(effectiveCatalog)
 		if err != nil {
 			return fail(stderr, err)
 		}
@@ -229,6 +265,10 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	// headless host serves its workbench with no shell and no display.
 	binding := &core.RuntimeBinding{Runtime: supervisor, Subject: HeadlessSubject}
 	server.RuntimeBinding = binding
+	// The desktop shell reads and writes start-at-boot over this channel, so the
+	// toggle in its settings panel and the `autostart` subcommand are two clients
+	// of the same registration rather than two competing ones.
+	server.Autostart = daemonAutostart{state: directory}
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute
@@ -245,8 +285,8 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	if server.Catalog != nil {
 		host.SetCatalog(server.Catalog)
 	}
-	if *rootsPath != "" {
-		roots, err := loadRoots(*rootsPath)
+	if effectiveRoots != "" {
+		roots, err := loadRoots(effectiveRoots)
 		if err != nil {
 			return fail(stderr, err)
 		}
@@ -254,6 +294,27 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	}
 	host.BindMain(headlessMain{binding: binding})
 	server.Peer = host
+
+	// Reconnection runs in the daemon, not in a shell: this is the machine that has
+	// nobody to click "connect" again. The engine holds every catalog-authorized
+	// pair up, and the ticker is what turns a dropped connection into a retry
+	// without waiting for an operator command to trigger a pass.
+	// The same engine the shell drives over the private channel: one machine, one
+	// schedule, one set of recorded refusals.
+	reconnect := host.AutoConnectEngine()
+	defer reconnect.Close()
+	go func() {
+		ticker := time.NewTicker(reconnectInterval)
+		defer ticker.Stop()
+		for {
+			reconnect.Reconcile(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+			}
+		}
+	}()
 
 	endpoint, err := endpointFor(directory)
 	if err != nil {
@@ -442,20 +503,46 @@ func runDshStart(args []string, stdout io.Writer, stderr io.Writer) int {
 	if flags.Parse(args) != nil {
 		return 2
 	}
-	if *directory == "" || *pnpm == "" {
-		return fail(stderr, errors.New("p2p.invalid_arguments"))
+	stateDirectory, err := stateRoot(*state)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	// Flag, then persisted value, then default. A machine configured once starts
+	// with `dshkerd dsh start` and nothing else.
+	stored, err := LoadConfig(stateDirectory)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	effectiveDirectory, directoryChanged := resolveString(*directory, stored.Directory)
+	effectivePnpm, pnpmChanged := resolveString(*pnpm, stored.Pnpm)
+	effectivePatch, patchChanged := resolveString(*patch, stored.Patch)
+	effectivePort, portChanged := resolveInt(*port, stored.Port)
+	effectivePrefix, prefixChanged := resolveList([]string(prefix), stored.PnpmPrefix)
+	// These two have no default: a checkout and a pnpm are the machine's own
+	// facts, and inferring either would start something the operator never named.
+	if err := requireValue(effectiveDirectory); err != nil {
+		return fail(stderr, err)
+	}
+	if err := requireValue(effectivePnpm); err != nil {
+		return fail(stderr, err)
+	}
+	if directoryChanged || pnpmChanged || patchChanged || portChanged || prefixChanged {
+		stored.Directory = effectiveDirectory
+		stored.Pnpm = effectivePnpm
+		stored.Patch = effectivePatch
+		stored.Port = effectivePort
+		stored.PnpmPrefix = effectivePrefix
+		if err := SaveConfig(stateDirectory, stored); err != nil {
+			return fail(stderr, err)
+		}
 	}
 	setting := harnessruntime.AutoPort()
-	if *port != 0 {
-		fixed, err := harnessruntime.FixedPort(*port)
+	if effectivePort != 0 {
+		fixed, err := harnessruntime.FixedPort(effectivePort)
 		if err != nil {
 			return fail(stderr, err)
 		}
 		setting = fixed
-	}
-	stateDirectory, err := stateRoot(*state)
-	if err != nil {
-		return fail(stderr, err)
 	}
 	request := struct {
 		LaunchID              string                     `json:"launchId"`
@@ -473,14 +560,14 @@ func runDshStart(args []string, stdout io.Writer, stderr io.Writer) int {
 	}{
 		LaunchID:  newIdentifier(),
 		SubjectID: HeadlessSubject,
-		Directory: *directory,
+		Directory: effectiveDirectory,
 		// The CLI starts the Launcher's own profile: pnpm resolving the active
 		// checkout. A managed installation's Node profile is the shell's to ask
 		// for, and it names the entry itself.
 		Profile:              harnessruntime.ProfilePnpm,
-		PnpmExecutable:       *pnpm,
-		PnpmPrefixArguments:  []string(prefix),
-		DiagnosticsPatchPath: *patch,
+		PnpmExecutable:       effectivePnpm,
+		PnpmPrefixArguments:  effectivePrefix,
+		DiagnosticsPatchPath: effectivePatch,
 		Port:                 setting,
 		LogPath:              filepath.Join(stateDirectory, "dsh-web.log"),
 	}

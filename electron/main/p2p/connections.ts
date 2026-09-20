@@ -104,6 +104,25 @@ export class PeerConnections {
     return found.url
   }
 
+  /**
+   * Drops a cached address that a newer attempt has superseded.
+   *
+   * Reconnection belongs to the core, so an attempt can be replaced without this
+   * process calling `connect` — and the address left behind points at a gateway the
+   * new attempt does not own. Retiring it keeps `entry` honest: the renderer re-asks
+   * whenever the generation moves, so a tab lands on the live address by itself,
+   * with no user action.
+   *
+   * Only a strictly newer generation retires the entry: a late announcement from the
+   * attempt being held, or from one already replaced, must not delete the address a
+   * tab is currently using.
+   */
+  retire(serviceId: string, pairId: string, generation: number): void {
+    const key = this.#key(serviceId, pairId)
+    const found = this.#entries.get(key)
+    if (found !== undefined && generation > found.generation) this.#entries.delete(key)
+  }
+
   /** Invalidates entry points for one pair, or for every pair of a service. */
   invalidate(serviceId: string, pairId?: string): void {
     if (pairId) {

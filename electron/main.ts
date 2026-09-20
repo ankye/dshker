@@ -29,6 +29,7 @@ import { CoreInstallCatalog, type CoreInstallCatalogPort } from './main/core/ins
 import { CoreCheckoutClient, type CoreCheckoutPort } from './main/core/checkout'
 import { CoreHarnessRuntime, type CoreHarnessRuntimePort } from './main/core/harness-runtime'
 import { CoreRoots, type CoreRootsPort } from './main/core/roots'
+import { CoreAutostart, type CoreAutostartPort } from './main/core/autostart'
 import { createLauncherQuitSequence, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
 import { beginForceQuit, createTray, destroyTray, isTrayActive } from './main/launcher-tray'
@@ -227,6 +228,9 @@ async function registerLauncherServices(
   // ordering explicit rather than handing the service a port that does not
   // exist yet.
   let coreRoots: CoreRootsPort | undefined
+  // Start-at-boot is served only when a core is running; without one the settings
+  // control reports the feature as unsupported rather than showing a dead switch.
+  let coreAutostart: CoreAutostartPort | undefined
   // The installation catalog moves the same way the registry did: the core owns
   // the file, and the shell only reaches it through the port below.
   let coreInstallCatalog: CoreInstallCatalogPort | undefined
@@ -333,6 +337,9 @@ async function registerLauncherServices(
     coreSecrets = new CoreSecrets(coreSupervisor.rpc)
     coreCatalog = new CoreCatalog(coreSupervisor.rpc)
     coreRoots = new CoreRoots(coreSupervisor.rpc)
+    // The settings toggle reads and writes the core registration itself, so the
+    // desktop control and `dshkerd autostart` never disagree about this machine.
+    coreAutostart = new CoreAutostart(coreSupervisor.rpc)
     coreRemoteRoute = new CoreRemoteRoute(coreSupervisor.rpc)
     // Publishing the endpoint is best effort: a host with no runtime yet still
     // serves the page, and the broker refuses to hand out a session until one is
@@ -382,6 +389,7 @@ async function registerLauncherServices(
     remoteConnectionService,
     launcherHarnessService,
     peerManagement,
+    coreAutostart,
     managedInstallationService: new ManagedInstallationService({
       workspaceService: managedWorkspaceService,
       executableCapabilities: new ExecutableSelectionCapabilities({

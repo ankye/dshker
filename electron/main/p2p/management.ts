@@ -17,7 +17,7 @@ import { P2PSelectionStore } from './selection-preferences'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
 import { memberAsPair } from './management-projection'
-import { PeerAutoConnect } from './auto-connect'
+import { CoreAutoConnect } from './auto-connect'
 import type { CoreCatalogPort } from '../core/catalog'
 import type { CoreSecretPort } from '../core/secrets'
 
@@ -38,6 +38,8 @@ interface Options {
 
 interface Session {
   rpc: PeerChannel
+  /** Drives the core's reconnection engine; the shell keeps no copy of it. */
+  autoConnect: CoreAutoConnect
   services: PeerServices
   accounts: PeerAccounts
   enrollment: PeerEnrollment
@@ -66,7 +68,6 @@ export class PeerManagement {
    */
   readonly #sessions = new PeerSessionRegistry()
   #sessionSweep: ReturnType<typeof setInterval> | undefined
-  readonly #autoConnect: PeerAutoConnect
   readonly #resolveSettingsRoot: () => Promise<string>
   readonly #selection: P2PSelectionStore
   /** The device directories the renderer reads, so the local marker has one source. */
@@ -109,8 +110,11 @@ export class PeerManagement {
       // A drop is retried at once rather than at the next sweep: the hole is
       // usually re-punchable within a second of a network change, and a tab the
       // user may switch back to at any moment must not sit dead in between.
-      onPeerStage: (_serviceId, _pairId, stage) => {
-        if (stage === 'disconnected' || stage === 'failed') void this.#autoConnect.reconcile()
+      onPeerStage: (serviceId, pairId, stage, generation) => {
+        // The core can replace an attempt without this process calling connect, so
+        // the address cached under the old one must go. See `retire`.
+        this.#session?.connections.retire(serviceId, pairId, generation)
+        if (stage === 'disconnected' || stage === 'failed') void this.#reconcile(serviceId)
       },
       // The core announces a directory revision instead of the shell discovering
       // one: the snapshot is the core's, and a page that already read it cannot
@@ -128,35 +132,16 @@ export class PeerManagement {
         // pointless — but it is also what a read that had not happened yet looks
         // like, and without this a pair refused in that window was never attempted
         // again, whatever the core did afterwards.
-        this.#autoConnect.clearRefusals()
-        void this.#autoConnect.reconcile()
+        void this.#session?.autoConnect.clearRefusals(serviceId)
+        void this.#reconcile(serviceId)
         for (const listener of this.#catalogListeners) listener(serviceId, revision)
       }
-    })
-    // An active pair is meant to be connected. Nothing about which tab the user
-    // is looking at takes part: the connection outlives the view, so switching
-    // back to a tab finds the hole still open instead of re-punching it.
-    this.#autoConnect = new PeerAutoConnect({
-      intents: async () => {
-        const snapshot = await this.#catalog.inspect()
-        if (!snapshot) return []
-        return snapshot.record.computers
-          .filter((computer) => computer.pairState === 'active')
-          .map((computer) => ({ serviceId: computer.serviceId, pairId: computer.pairId }))
-      },
-      stage: (serviceId, pairId) =>
-        this.#host
-          .snapshot()
-          .peers.find((peer) => peer.serviceId === serviceId && peer.state.pairId === pairId)?.state
-          .stage,
-      connect: (serviceId, pairId, signal) => this.connect(serviceId, pairId, signal)
     })
   }
 
   async close(): Promise<void> {
     if (this.#sessionSweep !== undefined) clearInterval(this.#sessionSweep)
     this.#sessionSweep = undefined
-    this.#autoConnect.close()
     this.#lifetime.abort()
     this.#clearSession()
     await this.#host.close()
@@ -232,7 +217,7 @@ export class PeerManagement {
     }
     // Once a coordinator session exists, bring the pairs up too: being online is
     // what the user asked for by having paired at all.
-    void this.#autoConnect.reconcile()
+    for (const result of results) if (result.online) void this.#reconcile(result.serviceId)
     return results
   }
 
@@ -308,9 +293,39 @@ export class PeerManagement {
    */
   resumeConnectivity(): void {
     if (this.#lifetime.signal.aborted) return
-    this.#autoConnect.clearRefusals()
-    this.#autoConnect.retryNow()
+    void this.#resumeEveryService()
     void this.#sweepSessions()
+  }
+
+  /**
+   * Asks the core to bring one service's authorized pairs up to intent.
+   *
+   * Best effort by design: this runs from stage transitions and catalog revisions,
+   * so a core with no session for the service yet must not turn a background sweep
+   * into a failed operation. The engine is idempotent, and the next event or the
+   * daemon's own periodic pass covers a skipped one.
+   */
+  async #reconcile(serviceId: string): Promise<void> {
+    if (this.#lifetime.signal.aborted) return
+    await this.#session?.autoConnect.reconcile(serviceId)
+  }
+
+  /**
+   * Clears every backoff and retries every paired service now.
+   *
+   * Used when the machine itself changed state — network back, waking from sleep —
+   * where waiting out the final delay would feel broken. The per-pair schedule stays
+   * the core's; this only reports that the situation changed.
+   */
+  async #resumeEveryService(): Promise<void> {
+    const session = this.#session
+    if (session === undefined) return
+    const snapshot = await this.#catalog.inspect().catch(() => undefined)
+    for (const service of snapshot?.record.services ?? []) {
+      if (this.#lifetime.signal.aborted) return
+      await session.autoConnect.clearRefusals(service.serviceId)
+      await session.autoConnect.retryNow(service.serviceId)
+    }
   }
 
   async #sweepSessions(): Promise<void> {
@@ -330,7 +345,7 @@ export class PeerManagement {
     }
     // The same sweep repairs pair connections: a drop that happened while the
     // coordinator session stayed up is retried here without any user action.
-    await this.#autoConnect.reconcile()
+    for (const service of snapshot.record.services) await this.#reconcile(service.serviceId)
   }
 
   /**
@@ -887,7 +902,9 @@ export class PeerManagement {
     const projects = new PeerRemoteProjects(rpc, (service, pair) =>
       this.#assertActivePair(service, pair)
     )
-    this.#session = { rpc, services, accounts, enrollment, pairing, connections, projects }
+    const autoConnect = new CoreAutoConnect(rpc)
+    // prettier-ignore
+    this.#session = { rpc, autoConnect, services, accounts, enrollment, pairing, connections, projects }
     return this.#session
   }
 

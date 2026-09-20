@@ -65,6 +65,9 @@ var served = map[string]bool{
 	"runtime.status":               true,
 	"runtime.stop":                 true,
 	"core.runtime_binding":         true,
+	"core.autostart_status":        true,
+	"core.autostart_enable":        true,
+	"core.autostart_disable":       true,
 }
 
 // Peer is the installed-peer half of the table: the coordinator, pairing,
@@ -99,6 +102,31 @@ type Serve struct {
 	// workbench: the loopback address of the running child and its generation.
 	// A composition without one refuses, exactly as a host with no child does.
 	RuntimeBinding *RuntimeBinding
+	// Autostart is the start-at-boot authority. It is injected rather than
+	// implemented here because the registration names the running executable and
+	// uses a per-platform facility, both of which belong to the daemon that owns
+	// the process. A composition without one refuses these methods instead of
+	// reporting a state it cannot verify, which is what keeps the desktop toggle
+	// and the CLI reading the same single registration.
+	Autostart Autostart
+}
+
+// Autostart is the start-at-boot registration this host can install for itself.
+//
+// Three verbs and one state: the desktop settings control and the headless CLI
+// are both clients of this, so neither can drift into its own idea of whether the
+// machine starts at boot.
+type Autostart interface {
+	Install(ctx context.Context) error
+	Remove(ctx context.Context) error
+	Status(ctx context.Context) (AutostartView, error)
+}
+
+// AutostartView is the shared answer both surfaces render.
+type AutostartView struct {
+	Installed bool   `json:"installed"`
+	Mechanism string `json:"mechanism"`
+	Path      string `json:"path,omitempty"`
 }
 
 // runtimeResult, runtimeStatusResult, runtimeConsoleResult and runtimePortResult
@@ -436,6 +464,34 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, err
 		}
 		return runtimeResult{Launch: &view}, nil
+	case "core.autostart_status", "core.autostart_enable", "core.autostart_disable":
+		// One shared registration for both surfaces. A composition without the
+		// authority refuses rather than answering "not installed", which a desktop
+		// toggle would otherwise render as a real off state.
+		if server.Autostart == nil {
+			return nil, errors.New("p2p.autostart_unavailable")
+		}
+		var request struct{}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		switch method {
+		case "core.autostart_enable":
+			if err := server.Autostart.Install(ctx); err != nil {
+				return nil, err
+			}
+		case "core.autostart_disable":
+			if err := server.Autostart.Remove(ctx); err != nil {
+				return nil, err
+			}
+		}
+		// Every verb answers with the state read back afterwards, so a caller never
+		// has to assume the write took effect.
+		view, err := server.Autostart.Status(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return view, nil
 	case "core.runtime_binding":
 		// The reverse-proxy half of hosting, asked directly rather than by a peer
 		// transport: a caller with no desktop session can see the address this

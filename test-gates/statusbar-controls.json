@@ -1,0 +1,90 @@
+{
+  "change": "Status bar owns the sidebar and console tail controls",
+  "risk": "interactive",
+  "production_files": [
+    "src/app/shell/components/ShellStatusbar.vue",
+    "src/app/shell/components/ShellSidebar.vue",
+    "src/app/shell/AppShell.vue",
+    "src/styles/base-shell.css",
+    "src/styles/controls.css"
+  ],
+  "test_files": [
+    "src/app/shell/tests/ShellStatusbar.test.ts",
+    "src/app/shell/tests/ShellSidebar.test.ts",
+    "src/app/shell/tests/sidebarState.test.ts",
+    "src/app/shell/tests/ConsoleDrawer.test.ts"
+  ],
+  "live_test_files": ["electron/main/smoke.ts", "electron/main/smoke-helpers.ts"],
+  "supersedes": "Hidden sidebar controls clearance. The floating rail and its --sidebar-controls-offset no longer exist, so the 4rem raise it required is not a reachable state.",
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "leads with the sidebar and console controls it took over from the rail"
+    },
+    {
+      "state": "no_op",
+      "test": "carries no floating control rail in any state",
+      "semantics": "Re-reading a sidebar state mutates nothing; the sidebar renders no control."
+    },
+    {
+      "state": "recovery",
+      "test": "states the sidebar control next action for every sidebar state",
+      "semantics": "Hidden back to expanded restores the sidebar without moving the control."
+    },
+    {
+      "state": "stale_timeout",
+      "test": "keeps both controls usable while the busy strip runs",
+      "semantics": "A long-running operation never removes or relocates either control."
+    },
+    {
+      "state": "reset",
+      "test": "advertises unread console output and the tail expanded state"
+    },
+    {
+      "state": "superseded",
+      "test": "carries no floating control rail in any state",
+      "semantics": "Expanded, collapsed, hidden, then expanded readback with no rail in any state."
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "src/app/shell/components/ShellStatusbar.vue",
+      "field": "statusbar-controls group position and both control actions",
+      "source": "sidebarState, consoleOpen, consoleUnread props",
+      "assertion": "expect(wrapper.get('.statusbar').element.firstElementChild).toBe(controls.element)",
+      "test": "leads with the sidebar and console controls it took over from the rail",
+      "state": "success",
+      "identity_keys": ["sidebar state", "statusbar-sidebar-toggle", "statusbar-console-toggle"],
+      "missing_semantics": "Both controls are always rendered from the explicit current sidebar and console state; no state hides or relocates them."
+    },
+    {
+      "production_file": "src/styles/base-shell.css",
+      "field": "hidden sidebar region display",
+      "source": ".shell-body[data-sidebar-state='hidden'] .sidebar-region",
+      "assertion": "expect(getComputedStyle(region).display).toBe(state === 'hidden' ? 'none' : 'block')",
+      "test": "carries no floating control rail in any state",
+      "state": "superseded",
+      "identity_keys": ["sidebar state"],
+      "missing_semantics": "A hidden sidebar leaves the layout entirely instead of becoming a pointer-transparent overlay hosting a rail."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "DESKTOP_APP_SMOKE_TEST=1 DESKTOP_APP_SMOKE_OUTPUT=\"$PWD/.run/statusbar-controls/native-smoke.json\" node_modules/.bin/electron .",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/statusbar-controls/native-smoke.json"
+    },
+    {
+      "artifact": ".run/statusbar-controls/interaction.jsonl"
+    }
+  ],
+  "interaction_gate": {
+    "contract": "test-gates/statusbar-controls-interaction.json",
+    "ledger": ".run/statusbar-controls/interaction.jsonl"
+  },
+  "acceptance_status": "Renderer tests, authored-CSS readback, and static visual checks pass. A live macOS/Windows DSH guest footer click with the sidebar hidden and a raw interaction ledger remain uncollected; task 11.2 stays open."
+}

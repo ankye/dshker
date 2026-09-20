@@ -79,7 +79,15 @@ func runCLICommand(t *testing.T, binary string, arguments ...string) (string, st
 // startHeadlessCore starts `dshkerd serve` and waits for its readiness line.
 func startHeadlessCore(t *testing.T, binary string, state string, dataRoot string) func() {
 	t.Helper()
-	command := exec.Command(binary, "serve", "--state", state, "--data", dataRoot)
+	return startHeadlessCoreWithArguments(t, binary, "serve", "--state", state, "--data", dataRoot)
+}
+
+// startHeadlessCoreWithArguments is the same start, with the arguments named by the
+// caller. Split out so a test that needs an extra CA bundle (see cli_account_test.go)
+// reuses one readiness-and-shutdown implementation instead of copying it.
+func startHeadlessCoreWithArguments(t *testing.T, binary string, arguments ...string) func() {
+	t.Helper()
+	command := exec.Command(binary, arguments...)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -341,10 +349,22 @@ func TestHeadlessCLIOperatesTheCore(t *testing.T) {
 	if code != 1 || strings.TrimSpace(stderr) != "p2p.service_unconfigured" {
 		t.Fatalf("connect = %q (%d)", stderr, code)
 	}
-	// A missing argument is refused before any call is made.
-	if _, stderr, code = runCLICommand(t, binary, "connect", "--service", "service_main", "--state", state); code != 1 ||
+	// A value that was never supplied is refused before any call is made. This uses
+	// a state directory of its own: arguments are now remembered per state
+	// directory, so the `--pair pair_main` above is legitimately reused by a later
+	// `connect` in the same state, and asserting the refusal there would be
+	// asserting that persistence does not work.
+	unconfigured := t.TempDir()
+	if _, stderr, code = runCLICommand(t, binary, "connect", "--service", "service_main", "--state", unconfigured); code != 1 ||
 		!strings.Contains(stderr, "p2p.invalid_arguments") {
 		t.Fatalf("connect without a pair = %q (%d)", stderr, code)
+	}
+	// The other half of the same rule: in a state where the peer *was* supplied
+	// once, a later `connect` with no --pair resolves it and reaches the service
+	// layer instead of refusing on arguments.
+	if _, stderr, code = runCLICommand(t, binary, "connect", "--service", "service_main", "--state", state); code != 1 ||
+		strings.TrimSpace(stderr) != "p2p.service_unconfigured" {
+		t.Fatalf("connect reusing the recorded pair = %q (%d)", stderr, code)
 	}
 
 	// With the daemon gone the CLI reports the unreachable endpoint by name
