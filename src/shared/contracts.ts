@@ -175,7 +175,8 @@ export type ManagedOperationErrorCode =
 
 /** Failures from the fixed external product-source link capability. */
 export type ExternalLinkErrorCode =
-  'launcher.external_link_invalid' | 'launcher.external_link_open_failed'
+  | 'launcher.external_link_invalid'
+  | 'launcher.external_link_open_failed'
 
 /** Stable Launcher update failures exposed without network or filesystem details. */
 export type LauncherUpdateErrorCode =
@@ -257,7 +258,9 @@ export type ManagedRootKind = 'harness' | 'plugins' | 'presets' | 'settings'
 
 /** Native picker purposes admitted from the renderer. */
 export type DirectorySelectionPurpose =
-  `managed-root:${ManagedRootKind}` | 'workspace-working-directory' | 'plugin-source'
+  | `managed-root:${ManagedRootKind}`
+  | 'workspace-working-directory'
+  | 'plugin-source'
 
 /** An opaque capability returned after one native directory selection. */
 export interface ManagedDirectorySelection {
@@ -593,7 +596,8 @@ export interface AdoptLauncherHarnessPluginRequest {
  * requested port was actually bound.
  */
 export type LauncherHarnessPortSetting =
-  { readonly mode: 'auto' } | { readonly mode: 'fixed'; readonly port: number }
+  | { readonly mode: 'auto' }
+  | { readonly mode: 'fixed'; readonly port: number }
 
 /** Lowest port accepted for a fixed selection; below this range binding needs privileges. */
 export const LAUNCHER_HARNESS_MIN_PORT = 1024 as const

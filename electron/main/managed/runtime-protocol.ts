@@ -89,7 +89,9 @@ export interface RuntimeLauncherShutdownFrame extends RuntimeFrameBase {
 
 /** Frames the launcher is permitted to send over the private Node IPC channel. */
 export type RuntimeLauncherFrame =
-  RuntimeLauncherAckFrame | RuntimeLauncherCredentialErrorFrame | RuntimeLauncherShutdownFrame
+  | RuntimeLauncherAckFrame
+  | RuntimeLauncherCredentialErrorFrame
+  | RuntimeLauncherShutdownFrame
 
 /** Parses one complete child IPC frame and rejects unknown, malformed, or oversized values. */
 export function parseRuntimeChildFrame(value: unknown): RuntimeChildFrame {

@@ -3,7 +3,14 @@ import type { RepositoryStorage } from './runtime'
 import { bridgeFail, bridgeOk } from './bridge'
 
 export type VfsRootId =
-  'app-data' | 'projects' | 'imports' | 'assets' | 'cache' | 'logs' | 'tmp' | 'exports'
+  | 'app-data'
+  | 'projects'
+  | 'imports'
+  | 'assets'
+  | 'cache'
+  | 'logs'
+  | 'tmp'
+  | 'exports'
 
 export type VfsOperation =
   | 'read'
@@ -140,7 +147,12 @@ export interface VfsImportPackageOptions {
 }
 
 export type ProjectResourceFolderKind =
-  'source' | 'imports' | 'generated' | 'packages' | 'metadata' | 'manifests'
+  | 'source'
+  | 'imports'
+  | 'generated'
+  | 'packages'
+  | 'metadata'
+  | 'manifests'
 
 export interface ProjectResourceFolderManifest {
   kind: ProjectResourceFolderKind
@@ -360,7 +372,12 @@ export interface ResourceDerivativeRecord {
 
 export interface ResourceImportProvenance {
   sourceKind:
-    'local-file' | 'browser-capture' | 'drag-drop' | 'clipboard' | 'watched-folder' | 'package'
+    | 'local-file'
+    | 'browser-capture'
+    | 'drag-drop'
+    | 'clipboard'
+    | 'watched-folder'
+    | 'package'
   importBatchId?: string
   originalPath?: string
   sourceUrl?: string

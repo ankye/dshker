@@ -35,8 +35,9 @@ describe('ManagedInstallationsPanel', () => {
   })
 
   it('keeps executable capability selection empty after native cancellation', async () => {
-    const selectExecutable = vi.fn(async (): Promise<ApiResult<ManagedExecutableSelection>> =>
-      apiFail('managed.selection_cancelled', 'Executable selection was cancelled.')
+    const selectExecutable = vi.fn(
+      async (): Promise<ApiResult<ManagedExecutableSelection>> =>
+        apiFail('managed.selection_cancelled', 'Executable selection was cancelled.')
     )
     installDesktopApi({
       getState: vi.fn(async () => apiOk(state({ toolchains: [], installations: [] }))),
@@ -245,8 +246,9 @@ describe('ManagedInstallationsPanel', () => {
   })
 
   it('preserves clone input and reports an authoritative rejection without inventing an installation', async () => {
-    const cloneHarness = vi.fn(async (): Promise<ApiResult<ManagedInstallationsState>> =>
-      apiFail('managed.git_operation_failed', 'Git failed.')
+    const cloneHarness = vi.fn(
+      async (): Promise<ApiResult<ManagedInstallationsState>> =>
+        apiFail('managed.git_operation_failed', 'Git failed.')
     )
     installDesktopApi({
       getState: vi.fn(async () => apiOk(state({ toolchains: [toolchain()], installations: [] }))),

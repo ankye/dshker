@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   LauncherUpdateRuntimeError,
@@ -221,7 +222,7 @@ describe('LauncherUpdateService', () => {
 
     expect(downloadInstaller).toHaveBeenCalledWith(
       'https://github.com/ankye/dshker/releases/download/v0.2.0/dshker-launcher-0.2.0-mac-arm64.dmg',
-      '/tmp/dshker-launcher-tests/dshker-launcher-0.2.0-mac-arm64.dmg',
+      path.join('/tmp/dshker-launcher-tests', 'dshker-launcher-0.2.0-mac-arm64.dmg'),
       expect.any(Function)
     )
     expect(fetchRelease).toHaveBeenCalledWith(
