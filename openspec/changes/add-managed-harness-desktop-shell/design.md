@@ -147,9 +147,9 @@ Current comparison evidence shows Chrome has a persisted `125` percent page zoom
 
 This is a pre-release format replacement. The launcher accepts only the four-root registry formats defined by this change. A persisted record that describes an unrecognized role, a launcher-managed `.dsh`, an unknown field, or an unsupported version is rejected and requires explicit fresh Launcher-root registration. Native Harness state is never part of that migration and remains untouched.
 
-## Hidden sidebar controls clearance (2026-09-07)
+## Hidden sidebar controls clearance (2026-09-07, superseded)
 
-Only the hidden sidebar overlays the Run guest. Its two floating controls share a 4rem upward offset, preserving the 2.5rem button size and 0.5rem gap. Expanded and collapsed rails retain their original bottom positions so navigation does not lose space. The hidden full-stage overlay remains pointer-transparent outside the two controls. No guest layout, zoom, IPC, or persistence changes are involved.
+Before the statusbar migration, only the hidden sidebar overlaid the Run guest. Its two floating controls shared a 4rem upward offset, preserving the 2.5rem button size and 0.5rem gap. This historical clearance is superseded: the sidebar presentation and command-line controls now live in the status bar, so no hidden-state offset or floating rail remains. No guest layout, zoom, IPC, or persistence changes are involved.
 
 ## Console severity presentation (2026-09-07)
 

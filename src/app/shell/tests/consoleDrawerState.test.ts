@@ -60,6 +60,16 @@ describe('console drawer state', () => {
     expect(drawer.unread.value).toBe(false)
   })
 
+  it('opens idempotently for a newly accepted operation', async () => {
+    drawer.closeConsoleDrawer()
+    drawer.openConsoleDrawer()
+    await nextTick()
+    expect(drawer.open.value).toBe(true)
+
+    drawer.openConsoleDrawer()
+    expect(drawer.open.value).toBe(true)
+  })
+
   it('marks the accumulated feed as unread again after closing unseen output', async () => {
     harnessConsole.value = [entry(1)]
     await nextTick()

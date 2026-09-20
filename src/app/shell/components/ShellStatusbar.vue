@@ -75,16 +75,14 @@ const emit = defineEmits<{
         "
         @click="emit('advanceSidebar')"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-          <template v-if="sidebarState === 'expanded'">
-            <rect x="3.5" y="4" width="17" height="16" rx="2" />
-            <path d="M9 4v16m6 5-3-3 3-3" />
-          </template>
-          <template v-else-if="sidebarState === 'collapsed'">
-            <rect x="3.5" y="4" width="17" height="16" rx="2" />
-            <path d="m11 9-3 3 3 3" />
-          </template>
-          <path v-else d="m9 5 7 7-7 7" />
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          data-icon="menu"
+          aria-hidden="true"
+        >
+          <path d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
       <button
@@ -95,7 +93,13 @@ const emit = defineEmits<{
         :title="consoleUnread ? `${consoleLabel} · ${consoleUnreadLabel}` : consoleLabel"
         @click="emit('toggleConsole')"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          data-icon="command-line"
+          aria-hidden="true"
+        >
           <path d="m5 7 4 4-4 4" />
           <path d="M12 17h7" />
         </svg>

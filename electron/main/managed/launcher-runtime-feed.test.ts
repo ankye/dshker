@@ -109,6 +109,37 @@ describe('launcher runtime feed', () => {
     expect(views.map((view) => view.state)).toEqual(['stopped'])
   })
 
+  it('does not resurrect a running state when an old status poll returns after stop', async () => {
+    const runtime = fakeRuntime()
+    let statusStarted!: () => void
+    let resolveStatus!: (view: CoreHarnessLaunchView) => void
+    const statusHasStarted = new Promise<void>((resolve) => {
+      statusStarted = resolve
+    })
+    const statusResult = new Promise<CoreHarnessLaunchView>((resolve) => {
+      resolveStatus = resolve
+    })
+    runtime.port.status = async () => {
+      statusStarted()
+      return statusResult
+    }
+    const views: CoreHarnessLaunchView[] = []
+    const feed = new LauncherRuntimeFeed({
+      runtime: async () => runtime.port,
+      subjectId: 'launcher-harness',
+      onConsole: () => undefined,
+      onLaunch: (view) => views.push(view)
+    })
+
+    const drain = feed.drain()
+    await statusHasStarted
+    feed.stop()
+    resolveStatus(runningView())
+    await drain
+
+    expect(views).toEqual([])
+  })
+
   it('treats a launch the core no longer knows as stopped rather than throwing', async () => {
     const runtime = fakeRuntime()
     runtime.view = undefined

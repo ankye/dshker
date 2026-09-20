@@ -10,7 +10,9 @@
 - **修复重连后远程工作台地址失效。** 由核心完成的重连会分配新的连接代次，桌面端不再把上一次连接的网关地址交给标签页；页面会自动改用新地址，无需用户操作。
 - **修复 `dshkerd service configure` 在不指定固定密钥时始终失败。** 请求里的空值会被核心的严格解码拒绝，命令因此报告"核心不可用"，而核心其实正在运行；现在会报告真实原因。
 - **修复拔掉显示器后窗口留在已消失的屏幕上。** 之前只处理了分辨率变化，没有处理显示器插拔，所以窗口会停在不存在的坐标上；重开 Launcher 也无法恢复，因为记住的位置会被丢弃并被启动过程覆盖。现在插拔显示器会把窗口移回可操作的屏幕，记住的位置会按当前显示器布局校正后再使用，并且只有标题栏真正可以抓取时才算窗口可见——跨屏摆放的窗口不会再停在屏幕边缘只露出一个像素。
-- **把左下角两个悬浮按钮移到底部状态栏。** 侧边栏折叠按钮和命令行（实时输出）按钮不再悬浮在界面左下角，而是作为状态栏最左侧的一组图标按钮；协议、作用域和网络信息保持在右侧。两个按钮在状态栏原有高度内显示，操作进行中也不会被进度条挤走或隐藏。隐藏侧边栏时不再需要为避让让位而上移，Run 页面左下角也不会再被遮挡。
+- **修复停止后再次启动仍提示“上一个内核操作尚未结束”。** 忽略停止前已经发出的异步运行状态回报，避免旧的 `running` 状态覆盖已确认的 `stopped` 状态；停止后可以立即重新启动 DSH Web。
+- **启动或更新时自动打开命令行日志。** 一键启动、Core 更新、版本切换和插件安装/更新/卸载等操作接受后，底部命令行日志自动展开，进度和失败原因无需再手动寻找；用户主动关闭后不会被每一行新日志反复打断。
+- **把左下角两个悬浮按钮移到底部状态栏。** 侧边栏按钮使用菜单图标，命令行（实时输出）按钮使用命令行图标，未读输出用小红点提示；两个按钮不再悬浮在界面左下角，而是作为状态栏最左侧的一组图标按钮。协议、作用域和网络信息保持在右侧。两个按钮在状态栏原有高度内显示，操作进行中也不会被进度条挤走或隐藏。隐藏侧边栏时不再需要为避让让位而上移，Run 页面左下角也不会再被遮挡。
 
 ### English (en-US)
 
@@ -20,7 +22,9 @@
 - **Fix the stale remote workbench address after a reconnection.** A reconnection performed by the core now carries a new attempt generation, so the desktop no longer hands a tab the previous attempt's gateway address; the page moves to the live address with no user action.
 - **Fix `dshkerd service configure` always failing without a pinned key.** The absent value was sent as a null the core's strict decoder refuses, so the command reported that the core was unavailable while it was in fact running and serving. It now reports the real cause.
 - **Fix the window staying on a monitor that was unplugged.** Only resolution changes were handled, not monitors being attached or removed, so the window stayed at coordinates that no longer existed — and reopening Launcher did not help, because the remembered position was discarded and then overwritten during startup. Attaching or removing a display now moves the window back onto a reachable screen, a remembered position is corrected against the current display layout before it is used, and a window counts as visible only when its title bar is genuinely grabbable, so one spanning two monitors no longer strands itself on a one-pixel sliver at the screen edge.
-- **Move the two lower-left floating buttons into the bottom status bar.** The sidebar toggle and the console (live output) toggle are now a leading icon-button group in the status bar instead of floating over the lower-left corner, while protocol, scope, and network facts stay on the trailing side. Both fit inside the status bar's existing height and stay operable beside a running operation's progress strip. Hiding the sidebar no longer needs a clearance offset, and the Run page's lower-left corner is never covered by Launcher controls.
+- **Fix relaunching DSH Web after an explicit stop being rejected as already in progress.** A runtime observation that began before stop can no longer overwrite the confirmed stopped state after it returns, so the next DSH Web launch is admitted immediately.
+- **Open command-line output automatically for accepted work.** One-click launch, Core updates, version switches, and plugin install/update/uninstall operations now reveal the bottom command-line log as soon as they are accepted; closing it remains respected until a later operation starts.
+- **Move the two lower-left floating buttons into the bottom status bar.** The sidebar control now uses a menu icon, the console (live output) control uses a command-line icon, and unseen output is marked with a small red dot. They form a leading icon-button group in the status bar instead of floating over the lower-left corner, while protocol, scope, and network facts stay on the trailing side. Both fit inside the status bar's existing height and stay operable beside a running operation's progress strip. Hiding the sidebar no longer needs a clearance offset, and the Run page's lower-left corner is never covered by Launcher controls.
 
 ## 0.1.63 — 2026-09-18
 

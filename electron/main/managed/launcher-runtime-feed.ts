@@ -32,6 +32,12 @@ export class LauncherRuntimeFeed {
   readonly #options: LauncherRuntimeFeedOptions
   #cursor = 0
   #timer: ReturnType<typeof setInterval> | undefined
+  /**
+   * Invalidates an in-flight drain when a launch is stopped or the feed is
+   * restarted. Without this fence, a status response that started before stop
+   * could arrive afterwards and resurrect the old running state.
+   */
+  #generation = 0
 
   constructor(options: LauncherRuntimeFeedOptions) {
     this.#options = options
@@ -40,6 +46,7 @@ export class LauncherRuntimeFeed {
   /** Starts polling; a second call while polling is a no-op. */
   start(): void {
     if (this.#timer !== undefined) return
+    this.#generation += 1
     const interval = this.#options.intervalMilliseconds ?? CONSOLE_POLL_MILLISECONDS
     this.#timer = setInterval(() => {
       void this.drain()
@@ -48,19 +55,26 @@ export class LauncherRuntimeFeed {
 
   /** Stops polling. The next start resumes from the cursor it reached. */
   stop(): void {
-    if (this.#timer === undefined) return
-    clearInterval(this.#timer)
-    this.#timer = undefined
+    this.#generation += 1
+    if (this.#timer !== undefined) {
+      clearInterval(this.#timer)
+      this.#timer = undefined
+    }
   }
 
   /** Reads one console page and one launch record. Never throws from a timer. */
-  async drain(): Promise<void> {
+  async drain(generation = this.#generation): Promise<void> {
     try {
       const runtime = await this.#options.runtime()
       const page = await runtime.console(this.#cursor)
+      if (generation !== this.#generation) return
       this.#cursor = page.cursor
-      for (const entry of page.entries) this.#forward(entry)
+      for (const entry of page.entries) {
+        if (generation !== this.#generation) return
+        this.#forward(entry)
+      }
       const view = await runtime.status(this.#options.subjectId)
+      if (generation !== this.#generation) return
       if (view === undefined) {
         this.stop()
         return

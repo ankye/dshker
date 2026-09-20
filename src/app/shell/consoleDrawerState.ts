@@ -30,6 +30,11 @@ function markConsoleSeen(): void {
   seenEntries = harnessConsole.value.length
 }
 
+/** Opens the tail for an accepted operation without toggling an existing state. */
+function openConsoleDrawer(): void {
+  open.value = true
+}
+
 function toggleConsoleDrawer(): void {
   open.value = !open.value
 }
@@ -44,6 +49,7 @@ export function useConsoleDrawer() {
     open,
     unread,
     markConsoleSeen,
+    openConsoleDrawer,
     toggleConsoleDrawer,
     closeConsoleDrawer
   }

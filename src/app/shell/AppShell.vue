@@ -155,6 +155,19 @@ watch(
   }
 )
 
+// Every accepted Launcher-owned operation streams its useful progress and
+// failure context into the same tail. Reveal it once when the operation starts;
+// if the user closes it while the work continues, do not fight that choice by
+// reopening it for every incoming line.
+watch(
+  () => harness.activeOperation.value,
+  (operation, previous) => {
+    if (operation !== undefined && operation !== previous) {
+      consoleDrawer.openConsoleDrawer()
+    }
+  }
+)
+
 // Launching moves the user to the console, because the outcome of a launch —
 // especially a failure — is only visible in that output. Watching the attempt
 // counter rather than the launch state means a start that fails immediately

@@ -108,6 +108,10 @@ describe('ShellStatusbar', () => {
       expect(button.attributes('disabled')).toBeUndefined()
       expect(button.find('svg').exists()).toBe(true)
     }
+    expect(wrapper.get('.statusbar-sidebar-toggle svg').attributes('data-icon')).toBe('menu')
+    expect(wrapper.get('.statusbar-console-toggle svg').attributes('data-icon')).toBe(
+      'command-line'
+    )
 
     await wrapper.get('.statusbar-sidebar-toggle').trigger('click')
     expect(wrapper.emitted('advanceSidebar')).toEqual([[]])

@@ -106,6 +106,8 @@ describe('statusbar chrome control wiring', () => {
     expect(appShell).toContain('@toggle-console="consoleDrawer.toggleConsoleDrawer"')
     expect(appShell).toContain('@progress-toggle="consoleDrawer.toggleConsoleDrawer"')
     expect(appShell).toContain(':sidebar-state="shell.sidebarState.value"')
+    expect(appShell).toContain('consoleDrawer.openConsoleDrawer()')
+    expect(appShell).toContain('() => harness.activeOperation.value')
     // The sidebar must not regain the controls or the labels they need.
     expect(sidebar).not.toContain('sidebar-toggle')
     expect(sidebar).not.toContain('toggleConsole')

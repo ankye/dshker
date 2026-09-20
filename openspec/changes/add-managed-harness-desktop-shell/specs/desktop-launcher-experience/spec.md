@@ -53,7 +53,7 @@ The launcher SHALL use a narrow persistent sidebar with three presentation state
 
 ### Requirement: Status bar owns the sidebar and console tail controls
 
-The status bar SHALL be the single home for the two shell chrome controls. It SHALL place the sidebar presentation control and the console tail control as a leading control group before the read-only protocol, scope, and network text, keeping the read-only facts to the trailing side. Both controls SHALL fit the status bar's own height without increasing it, expose an accessible name that states their next action, and remain keyboard reachable in every sidebar state. The sidebar control SHALL cycle expanded to collapsed to hidden and then back to expanded. The console tail control SHALL advertise unseen output with a badge and reflect the tail's open state. While an operation is busy, the status bar SHALL keep both controls usable beside the busy strip rather than replacing them with it.
+The status bar SHALL be the single home for the two shell chrome controls. It SHALL place the sidebar presentation control and the console tail control as a leading control group before the read-only protocol, scope, and network text, keeping the read-only facts to the trailing side. The sidebar presentation control SHALL use a menu icon and the console tail control SHALL use a command-line icon so their purpose is recognizable without relying on labels alone. Both controls SHALL fit the status bar's own height without increasing it, expose an accessible name that states their next action, and remain keyboard reachable in every sidebar state. The sidebar control SHALL cycle expanded to collapsed to hidden and then back to expanded. The console tail control SHALL advertise unseen output with a small red dot and an accessible label, and reflect the tail's open state. While an operation is busy, the status bar SHALL keep both controls usable beside the busy strip rather than replacing them with it.
 
 #### Scenario: User cycles sidebar presentation from the status bar
 
@@ -302,9 +302,10 @@ The Launch and Controller footers SHALL show valid start or stop controls for th
 
 #### Scenario: User watches operation output from another route
 
-- **WHEN** the user is on any route while an operation or launch appends console entries
-- **THEN** a shell-level read-only console tail can be opened from the status bar's console control, and from the statusbar's busy strip while an operation runs
-- **AND** its control advertises unseen output with a badge instead of opening by itself
+- **WHEN** the user accepts a Launcher-owned operation or launch from any route
+- **THEN** a shell-level read-only console tail opens automatically from the status bar surface so its progress and failure context are immediately visible
+- **AND** if the user closes the tail while the operation remains in flight, it stays closed until a later operation is accepted
+- **AND** console entries that arrive without a newly accepted operation advertise unseen output with a badge instead of opening by themselves
 - **AND** the tail renders only the newest bounded slice, hands off to the full Console route, collapses on Escape, and stays below transient error toasts
 
 ### Requirement: Console text color represents severity rather than output stream
@@ -370,6 +371,12 @@ The Launcher SHALL materialise each version in its own directory (a `git worktre
 - **WHEN** the user starts a managed DSH worktree from Controller
 - **THEN** the view reflects only the child lifecycle state confirmed by the trusted core
 - **AND** it exposes the exact managed revision that owns the process
+
+#### Scenario: User starts again after stopping the controller process
+
+- **WHEN** the user stops DSH Web and an older asynchronous runtime observation returns afterward
+- **THEN** the older observation is ignored rather than restoring a running state
+- **AND** a subsequent start is admitted once the trusted core has confirmed the child stopped
 
 #### Scenario: User opens a Run page
 
