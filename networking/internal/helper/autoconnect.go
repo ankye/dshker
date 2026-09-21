@@ -149,15 +149,29 @@ func (host *Host) autoConnectOperation(ctx context.Context, method string) (any,
 	return struct{}{}, nil
 }
 
+// generationEpochMillis is the origin every surface counts attempts from.
+//
+// It must equal GENERATION_EPOCH_MILLISECONDS in the shell's connections.ts. A
+// generation is compared across surfaces — a shell that reconnects after the core
+// did has to be able to mint a number the core has not already used — so the two
+// have to count from the same instant. Seeding from the raw Unix clock instead put
+// core-issued numbers about 79x higher than shell-issued ones, and once the core had
+// reconnected a pair the shell could not catch up for decades: every later manual
+// connect looked older than the attempt on record and was refused as
+// p2p.stale_generation.
+const generationEpochMillis = 1_767_225_600_000
+
 // nextGeneration mints the next attempt number for this host.
 //
-// Seeded from the wall clock on first use and strictly increasing thereafter, so a
-// restarted daemon does not reissue numbers an earlier run already used, and two
-// attempts on one machine can always be ordered.
+// Strictly increasing, and seeded from the shared epoch so a restarted daemon does
+// not reissue numbers an earlier run already used.
 func (host *Host) nextGeneration() uint64 {
 	host.mu.Lock()
 	defer host.mu.Unlock()
-	seeded := uint64(time.Now().UnixMilli())
+	seeded := uint64(1)
+	if now := time.Now().UnixMilli(); now > generationEpochMillis {
+		seeded = uint64(now - generationEpochMillis)
+	}
 	if seeded <= host.generation {
 		seeded = host.generation + 1
 	}

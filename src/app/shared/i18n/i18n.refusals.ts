@@ -91,6 +91,11 @@ export function refusalKeyForCode(code: string): keyof typeof zhCNRefusals {
     case 'p2p.connection_not_found':
     case 'p2p.connection_cancelled':
     case 'p2p.lease_expired':
+    // The named attempt was replaced by a newer one, so this computer no longer
+    // holds the connection the caller is asking about. Reconnecting is the fix,
+    // which is why it reads as "not connected" rather than as a fault: without
+    // this the user saw the generic failure text and had nothing to act on.
+    case 'p2p.stale_generation':
       return 'p2p.refusal.notConnected'
     // Refused on this side before anything reached the peer: P2P is off, this
     // device is not enrolled in that account, or the local core is gone. Saying

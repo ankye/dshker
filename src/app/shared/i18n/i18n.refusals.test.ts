@@ -32,6 +32,19 @@ describe('connection refusal copy', () => {
     expect(refusalKeyForCode('p2p.not_connected')).toBe('p2p.refusal.notConnected')
   })
 
+  /**
+   * A superseded attempt is an ordinary state of a tab, not a fault.
+   *
+   * `p2p.stale_generation` used to fall through to the generic failure text, which
+   * told the user nothing and offered no action. It belongs with the refusals that
+   * mean "this computer no longer holds that connection", because reconnecting is
+   * exactly what resolves it.
+   */
+  it('reads a superseded attempt as a lost connection rather than a fault', () => {
+    expect(refusalKeyForCode('p2p.stale_generation')).toBe('p2p.refusal.notConnected')
+    expect(refusalKeyForCode('p2p.stale_generation')).not.toBe('p2p.refusal.fault')
+  })
+
   /** The server that introduces the two computers is a third party to the failure. */
   it('separates a coordinator that cannot be reached from a network that cannot be crossed', () => {
     expect(refusalKeyForCode('p2p.server_unavailable')).toBe('p2p.refusal.coordinatorUnavailable')

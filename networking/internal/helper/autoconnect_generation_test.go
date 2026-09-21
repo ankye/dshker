@@ -10,6 +10,11 @@ package helper
 
 import (
 	"context"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,12 +53,16 @@ func TestGenerationNeverRepeats(t *testing.T) {
 // TestGenerationStartsFromTheClock keeps a restarted daemon from reissuing numbers an
 // earlier run already handed out, which would make an address from the previous
 // process look current to a surface that outlived it.
+//
+// The reading is taken in epoch-relative terms, because that is the scale both
+// surfaces count in; comparing against the raw Unix clock would only re-assert the
+// mismatch this file exists to prevent.
 func TestGenerationStartsFromTheClock(t *testing.T) {
-	before := uint64(time.Now().UnixMilli())
+	before := uint64(time.Now().UnixMilli() - generationEpochMillis)
 	host := New(context.Background())
 	first := host.nextGeneration()
 	if first < before {
-		t.Fatalf("first generation %d precedes the clock reading %d", first, before)
+		t.Fatalf("first generation %d precedes the epoch-relative clock reading %d", first, before)
 	}
 	// A second host standing in for a restart must not go backwards.
 	restarted := New(context.Background())
@@ -127,5 +136,43 @@ func TestConnectPairOnAnUnknownServiceIsNamed(t *testing.T) {
 	err := host.connectPair(context.Background(), protocol.NewID(), protocol.NewID())
 	if err == nil || err.Error() != "p2p.service_unconfigured" {
 		t.Fatalf("connect on an unknown service = %v, want p2p.service_unconfigured", err)
+	}
+}
+
+// TestGenerationSharesTheShellEpoch is a cross-language constraint, so it is checked
+// against the shell's source rather than restated as a second constant.
+//
+// A generation is compared across surfaces: after the core reconnects a pair, the
+// shell must still be able to mint a number the core has not used. Counting from
+// different origins broke exactly that — core numbers came out about 79x larger, and
+// a shell that had been overtaken would have needed decades of wall clock to catch
+// up, so every later manual connect was refused as p2p.stale_generation.
+func TestGenerationSharesTheShellEpoch(t *testing.T) {
+	source, err := os.ReadFile(filepath.Join("..", "..", "..", "electron", "main", "p2p", "connections.ts"))
+	if err != nil {
+		t.Skipf("the shell source is not present in this checkout: %v", err)
+	}
+	match := regexp.MustCompile(`GENERATION_EPOCH_MILLISECONDS\s*=\s*([0-9_]+)`).FindSubmatch(source)
+	if match == nil {
+		t.Fatal("the shell no longer declares GENERATION_EPOCH_MILLISECONDS; the epochs cannot be compared")
+	}
+	shellEpoch, convErr := strconv.ParseInt(strings.ReplaceAll(string(match[1]), "_", ""), 10, 64)
+	if convErr != nil {
+		t.Fatalf("the shell epoch is not a number: %v", convErr)
+	}
+	if shellEpoch != generationEpochMillis {
+		t.Fatalf("the core counts attempts from %d and the shell from %d; a generation minted by one surface would outrank the other forever",
+			generationEpochMillis, shellEpoch)
+	}
+}
+
+// TestGenerationStaysInTheShellSafeIntegerRange keeps the value usable on the other
+// side of the wire: the shell validates a generation with Number.isSafeInteger, so a
+// number beyond that range would be refused outright.
+func TestGenerationStaysInTheShellSafeIntegerRange(t *testing.T) {
+	const maxSafeInteger = uint64(9007199254740991)
+	host := New(context.Background())
+	if value := host.nextGeneration(); value == 0 || value > maxSafeInteger {
+		t.Fatalf("generation %d is outside the range the shell accepts", value)
 	}
 }

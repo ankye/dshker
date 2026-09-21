@@ -81,9 +81,8 @@ describe('ManagedWorkspacesPanel', () => {
   })
 
   it('keeps setup visible and reports a native cancellation without recording a path', async () => {
-    const selectDirectory = vi.fn(
-      async (): Promise<ApiResult<ManagedDirectorySelection>> =>
-        apiFail('managed.selection_cancelled', 'Directory selection was cancelled.')
+    const selectDirectory = vi.fn(async (): Promise<ApiResult<ManagedDirectorySelection>> =>
+      apiFail('managed.selection_cancelled', 'Directory selection was cancelled.')
     )
     installDesktopApi({
       getState: vi.fn(async (): Promise<ApiResult<ManagedLauncherState>> => apiOk(setupState())),
@@ -105,9 +104,8 @@ describe('ManagedWorkspacesPanel', () => {
 
   it('shows the main-process recovery state instead of replacing it with setup', async () => {
     installDesktopApi({
-      getState: vi.fn(
-        async (): Promise<ApiResult<ManagedLauncherState>> =>
-          apiOk({ kind: 'recovery-required', code: 'managed.invalid_bootstrap_locator' })
+      getState: vi.fn(async (): Promise<ApiResult<ManagedLauncherState>> =>
+        apiOk({ kind: 'recovery-required', code: 'managed.invalid_bootstrap_locator' })
       ),
       selectDirectory: vi.fn(),
       registerRoots: vi.fn(),
@@ -123,21 +121,20 @@ describe('ManagedWorkspacesPanel', () => {
   })
 
   it('requires a separately selected working-directory capability before it creates a workspace', async () => {
-    const createWorkspace = vi.fn(
-      async (): Promise<ApiResult<ManagedLauncherState>> =>
-        apiOk(
-          readyState([
-            {
-              workspaceId: 'workspace_alpha',
-              displayName: 'Alpha',
-              workingDirectoryCanonicalPath: '/work/alpha',
-              rootNamespaces: ROOT_KINDS.map((kind) => ({
-                rootId: `root_${kind}`,
-                namespace: 'workspaces/workspace_alpha'
-              }))
-            }
-          ])
-        )
+    const createWorkspace = vi.fn(async (): Promise<ApiResult<ManagedLauncherState>> =>
+      apiOk(
+        readyState([
+          {
+            workspaceId: 'workspace_alpha',
+            displayName: 'Alpha',
+            workingDirectoryCanonicalPath: '/work/alpha',
+            rootNamespaces: ROOT_KINDS.map((kind) => ({
+              rootId: `root_${kind}`,
+              namespace: 'workspaces/workspace_alpha'
+            }))
+          }
+        ])
+      )
     )
     const selectDirectory = vi.fn(
       async (purpose: DirectorySelectionPurpose): Promise<ApiResult<ManagedDirectorySelection>> =>

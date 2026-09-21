@@ -196,13 +196,11 @@ export class ManagedWorkspaceService {
           return { kind: selection.kind, capability, canonicalPath }
         })
       )
-      const roots = candidates.map(
-        ({ kind, canonicalPath }): ManagedRootRegistration => ({
-          rootId: newOpaqueId('root'),
-          kind,
-          canonicalPath
-        })
-      )
+      const roots = candidates.map(({ kind, canonicalPath }): ManagedRootRegistration => ({
+        rootId: newOpaqueId('root'),
+        kind,
+        canonicalPath
+      }))
       assertManagedRootLayout(roots, this.#pathStyle, this.#nativeDshHomePath)
       await Promise.all(roots.map((root) => assertEmptyManagedRoot(root.canonicalPath)))
 

@@ -5,9 +5,7 @@ import { assertOpaqueId } from './validation'
 
 /** Native directory-selection purposes that the renderer can request by name. */
 export type DirectorySelectionPurpose =
-  | `managed-root:${ManagedRootKind}`
-  | 'workspace-working-directory'
-  | 'plugin-source'
+  `managed-root:${ManagedRootKind}` | 'workspace-working-directory' | 'plugin-source'
 
 /** Opaque one-time authority to use a native-selected directory for one declared purpose. */
 export interface DirectorySelectionCapability {
