@@ -74,8 +74,19 @@ const IS_SMOKE_TEST =
 // start its own dshkerd (the data directory is taken) and shows nothing, which
 // reads as "the application cannot be opened". When another instance tries to
 // start, the existing one is brought to the front instead.
-if (!app.requestSingleInstanceLock()) {
+//
+// A smoke run is exempt, and has to be: it points every root at a disposable
+// directory, so it races nothing, and refusing it whenever a real Launcher happens
+// to be open made the packaged-app release gate unrunnable on a developer's own
+// machine.
+//
+// Losing the lock exits immediately. `app.quit()` only requests a quit, so control
+// used to continue into `app.whenReady()` — which never resolves for an app that is
+// already quitting — and the second instance hung there until the OS reaped it
+// rather than exiting cleanly.
+if (!IS_SMOKE_TEST && !app.requestSingleInstanceLock()) {
   app.quit()
+  process.exit(0)
 }
 
 const remoteDebuggingPort = process.env.ELECTRON_REMOTE_DEBUGGING_PORT

@@ -8,11 +8,13 @@
 
 - **修复核心自动重连后再也无法连接对端。** 0.1.64 让网络核心自己为每次连接尝试编号，但核心从 Unix 原始时钟起算，桌面端从另一个起点起算，两者相差约 79 倍。核心自动重连过一次后，记录在案的尝试编号远大于桌面端之后能产生的任何编号，于是每一次新的连接都被判定为"已过期"（`p2p.stale_generation`），Windows 侧表现为再也连不上这台 Mac。现在两端从同一个起点计数。
 - **改进连接被判定过期时的提示。** `p2p.stale_generation` 之前落到通用失败文案，用户看不出该做什么；现在归入"这条连接在本机已经不存在或已经失效"，明确提示重新连接即可。
+- **修复重复启动时第二个实例静默卡住。** 单实例锁被占用时只调用了 `app.quit()`，它仅仅是"请求"退出，代码会继续等待一个永远不会完成的就绪事件，于是第二个进程既不显示窗口也不退出，直到被系统回收。现在会立即退出。
 
 ### English (en-US)
 
 - **Fix being unable to reach a peer after the core reconnected on its own.** 0.1.64 gave the networking core its own numbering for connection attempts, but the core counted from the raw Unix clock while the desktop counts from a different origin, leaving core-issued numbers about 79x larger. Once the core had reconnected a pair, the attempt on record outranked anything the desktop could produce afterwards, so every fresh connection was refused as `p2p.stale_generation` — which showed up as a Windows peer no longer reaching this Mac. Both sides now count from one shared origin.
 - **Explain a connection that was superseded.** `p2p.stale_generation` previously reached the user as the generic failure text with nothing to act on. It now reads as a connection this computer no longer holds, and says that reconnecting resolves it.
+- **Fix a second launch hanging silently.** When the single-instance lock was already held, the new process called `app.quit()` — which only requests a quit — and then waited on a ready event that never arrives, so it neither showed a window nor exited until the OS reaped it. It now exits immediately.
 
 ## 0.1.65 — 2026-09-21
 
