@@ -8,7 +8,11 @@ import {
 } from './wire'
 
 export type PeerMainMethod =
-  'runtime.connect' | 'runtime.roots' | 'peer.state' | 'directory.changed' | 'catalog.changed'
+  | 'runtime.connect'
+  | 'runtime.roots'
+  | 'peer.state'
+  | 'directory.changed'
+  | 'catalog.changed'
 export type PeerMainHandler = (
   method: PeerMainMethod,
   payload: unknown,
