@@ -360,7 +360,10 @@ describe('RuntimeTabsPanel rendering controls', () => {
       computers: [peerComputer, offlinePeer],
       forgottenServiceIds: []
     }
-    p2pConnections.state.peers = [peerConnection]
+    p2pConnections.state.peers = [
+      peerConnection,
+      { ...peerConnection, pairId: offlinePeer.pairId, stage: 'disconnected' }
+    ]
     installRuntimeApi({})
     const wrapper = await mountRunningPanel()
     await wrapper.get('[data-testid="runtime-add-tab"]').trigger('click')
@@ -381,10 +384,26 @@ describe('RuntimeTabsPanel rendering controls', () => {
     const offlinePeerOption = menu.querySelector<HTMLButtonElement>(
       '[data-testid="runtime-add-peer-dddddddd-dddd-4ddd-8ddd-dddddddddddd"]'
     )
-    // An active pair is openable on its own: opening the tab is what starts the
-    // session, so a paired computer with no live connection must stay clickable.
+    // An active pair with a previously disconnected session is still ready to
+    // connect. Its label and color must not describe an error or offline peer.
     expect(offlinePeerOption?.disabled).toBe(false)
     expect(offlinePeerOption?.classList.contains('runtime-add-tab-option--disabled')).toBe(false)
+    expect(offlinePeerOption?.dataset.state).toBe('available')
+    expect(offlinePeerOption?.textContent).toContain('已配对，点击即可建立连接')
+    expect(
+      offlinePeerOption?.querySelector('.browser-tab-status')?.getAttribute('data-state')
+    ).toBe('available')
+    p2pConnections.state.peers = [
+      peerConnection,
+      { ...peerConnection, pairId: offlinePeer.pairId, stage: 'failed' }
+    ]
+    await nextTick()
+    expect(offlinePeerOption?.dataset.state).toBe('failed')
+    p2pConnections.state.peers = [
+      peerConnection,
+      { ...peerConnection, pairId: offlinePeer.pairId, stage: 'disconnected' }
+    ]
+    await nextTick()
     const offlineSshOption = menu.querySelector<HTMLButtonElement>(
       '[data-testid="runtime-add-ssh-22222222-2222-4222-8222-222222222222"]'
     )
@@ -408,7 +427,8 @@ describe('RuntimeTabsPanel rendering controls', () => {
     ])
     expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual(['local'])
 
-    peerOption?.click()
+    peerOption?.focus()
+    peerOption?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
     await nextTick()
     expect(runtimeBrowser.tabs.value.map((tab) => tab.id)).toEqual([
       'local',
@@ -457,19 +477,35 @@ describe('RuntimeTabsPanel rendering controls', () => {
     const wrapper = await mountRunningPanel()
     const trigger = wrapper.get('[data-testid="runtime-add-tab"]')
     await trigger.trigger('click')
+    await nextTick()
     const menu = getAddMenu()
     expect(menu.style.left).toMatch(/px$/u)
     expect(menu.style.width).toMatch(/px$/u)
     expect(menu.style.maxHeight).toMatch(/px$/u)
+    const close = menu.querySelector<HTMLButtonElement>('[data-testid="runtime-add-tab-close"]')
+    const manage = menu.querySelector<HTMLButtonElement>('[data-testid="runtime-add-tab-manage"]')
+    expect(close).not.toBeNull()
+    expect(manage).not.toBeNull()
+    expect(document.activeElement).toBe(close)
+
+    // The teleported layer owns its keyboard loop: reverse-tab from its first
+    // control reaches the last control, and Tab returns to the first.
+    close?.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true })
+    )
+    expect(document.activeElement).toBe(manage)
+    manage?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }))
+    expect(document.activeElement).toBe(close)
 
     document.dispatchEvent(new Event('pointerdown', { bubbles: true }))
     await nextTick()
     expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
 
     await trigger.trigger('click')
+    await nextTick()
     expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).not.toBeNull()
 
-    await trigger.trigger('keydown', { key: 'Escape' })
+    await getAddMenu().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await nextTick()
     expect(document.querySelector('[data-testid="runtime-add-tab-menu"]')).toBeNull()
     expect(document.activeElement).toBe(trigger.element)

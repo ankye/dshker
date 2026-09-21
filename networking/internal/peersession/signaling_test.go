@@ -38,7 +38,12 @@ func (fake *fakeSubscription) Send(_ context.Context, signal protocol.Signal) er
 	fake.sent <- signal
 	return nil
 }
-func (fake *fakeSubscription) Close() { fake.once.Do(func() { close(fake.done) }) }
+func (fake *fakeSubscription) Close() {
+	fake.once.Do(func() {
+		close(fake.done)
+		close(fake.events)
+	})
+}
 
 func (fake *fakeSubscription) Superseded() bool {
 	fake.mu.Lock()
@@ -212,5 +217,143 @@ func TestSignalingStandsDownWhenSuperseded(t *testing.T) {
 	}
 	if !owner.isDown() {
 		t.Fatal("a displaced supervisor reported signalling as healthy")
+	}
+}
+
+// A socket can finish between the first dial and supervise starting. That is
+// still a loss to repair, not a reason for the supervisor to exit silently.
+func TestSignalingRepairsSubscriptionClosedBeforeSupervisorStarts(t *testing.T) {
+	first, second := newFakeSubscription(), newFakeSubscription()
+	first.Close()
+	var mu sync.Mutex
+	dials := 0
+	owner, err := newSignaling(context.Background(), func(context.Context, string) (subscription, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		dials++
+		if dials == 1 {
+			return first, nil
+		}
+		return second, nil
+	}, "device", func(subscription) {})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer owner.close()
+
+	waitFor(t, "replacement of an immediately closed subscription", func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return dials == 2 && !owner.isDown()
+	})
+}
+
+// Reconnect is invoked by an RPC whose context ends after the reply. The
+// subscription's read loop and heartbeat must remain attached to the manager.
+func TestReconnectSignalsOutlivesRequestContext(t *testing.T) {
+	managerCtx, stopManager := context.WithCancel(context.Background())
+	defer stopManager()
+	first, second := newFakeSubscription(), newFakeSubscription()
+	var mu sync.Mutex
+	dials := 0
+	dial := func(ctx context.Context, _ string) (subscription, error) {
+		mu.Lock()
+		dials++
+		index := dials
+		mu.Unlock()
+		active := first
+		if index == 2 {
+			active = second
+		}
+		go func() {
+			<-ctx.Done()
+			active.Close()
+		}()
+		return active, nil
+	}
+	manager := &Manager{ctx: managerCtx, cancel: stopManager, config: Config{Device: controlplane.Device{DeviceID: "device"}}, subscribe: dial}
+	var err error
+	manager.signals, err = newSignaling(managerCtx, dial, "device", manager.receive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { manager.signals.close() }()
+	first.displace()
+	waitFor(t, "displaced subscription to go down", manager.signals.isDown)
+
+	requestCtx, finishRequest := context.WithCancel(context.Background())
+	if err := manager.ReconnectSignals(requestCtx); err != nil {
+		t.Fatal(err)
+	}
+	finishRequest()
+	select {
+	case <-second.Done():
+		t.Fatal("request cancellation closed the manager-owned subscription")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if err := manager.signals.send(context.Background(), protocol.Signal{Version: 1, Type: "offer"}); err != nil {
+		t.Fatalf("send after RPC ended: %v", err)
+	}
+	mu.Lock()
+	gotDials := dials
+	mu.Unlock()
+	if gotDials != 2 {
+		t.Fatalf("subscription dials = %d, want 2", gotDials)
+	}
+}
+
+// Two reconciliation calls for the same failed socket must install exactly one
+// replacement, or their sockets displace each other on the coordinator.
+func TestReconnectSignalsSerializesConcurrentRepairs(t *testing.T) {
+	managerCtx, stopManager := context.WithCancel(context.Background())
+	defer stopManager()
+	first, second := newFakeSubscription(), newFakeSubscription()
+	entered, release := make(chan struct{}), make(chan struct{})
+	var mu sync.Mutex
+	dials := 0
+	dial := func(context.Context, string) (subscription, error) {
+		mu.Lock()
+		dials++
+		index := dials
+		mu.Unlock()
+		if index == 1 {
+			return first, nil
+		}
+		if index == 2 {
+			close(entered)
+			<-release
+			return second, nil
+		}
+		return nil, errors.New("unexpected extra subscription")
+	}
+	manager := &Manager{ctx: managerCtx, cancel: stopManager, config: Config{Device: controlplane.Device{DeviceID: "device"}}, subscribe: dial}
+	var err error
+	manager.signals, err = newSignaling(managerCtx, dial, "device", manager.receive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { manager.signals.close() }()
+	first.displace()
+	waitFor(t, "displaced subscription to go down", manager.signals.isDown)
+
+	results := make(chan error, 2)
+	go func() { results <- manager.ReconnectSignals(context.Background()) }()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first repair never dialed")
+	}
+	go func() { results <- manager.ReconnectSignals(context.Background()) }()
+	close(release)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatal(err)
+		}
+	}
+	mu.Lock()
+	gotDials := dials
+	mu.Unlock()
+	if gotDials != 2 || manager.signals.isDown() {
+		t.Fatalf("repairs left %d dials and down=%v; want one live replacement", gotDials, manager.signals.isDown())
 	}
 }

@@ -20,7 +20,7 @@ func TestHandleAnswersVersion(t *testing.T) {
 	if version.Version != Version || version.MethodTableVersion != localrpc.MethodTableVersion {
 		t.Fatalf("version result %+v", version)
 	}
-	expected := []string{"core.version", "core.catalog_commit", "core.catalog_enable", "core.catalog_inspect", "core.catalog_remove_service", "core.install_catalog_commit", "core.install_catalog_inspect", "core.roots_commit", "core.roots_inspect", "core.runtime_binding", "core.autostart_disable", "core.autostart_enable", "core.autostart_status", "core.secret_delete", "core.secret_get", "core.secret_set", "managed.checkout_prepare", "managed.checkout_verify", "managed.git_register", "managed.repository_inspect", "remote.catalog_create", "remote.catalog_inspect", "remote.catalog_remove", "remote.catalog_update", "remote.broker_start", "remote.broker_status", "remote.broker_stop", "remote.connect", "remote.disconnect", "remote.status", "runtime.console", "runtime.port_get", "runtime.port_set", "runtime.start", "runtime.status", "runtime.stop"}
+	expected := []string{"core.version", "core.desktop_attach", "core.desktop_handoff", "core.catalog_commit", "core.catalog_enable", "core.catalog_inspect", "core.catalog_remove_service", "core.install_catalog_commit", "core.install_catalog_inspect", "core.roots_commit", "core.roots_inspect", "core.runtime_binding", "core.autostart_disable", "core.autostart_enable", "core.autostart_status", "core.secret_delete", "core.secret_get", "core.secret_set", "managed.checkout_prepare", "managed.checkout_verify", "managed.git_register", "managed.repository_inspect", "remote.catalog_create", "remote.catalog_inspect", "remote.catalog_remove", "remote.catalog_update", "remote.broker_start", "remote.broker_status", "remote.broker_stop", "remote.connect", "remote.disconnect", "remote.status", "runtime.console", "runtime.port_get", "runtime.port_set", "runtime.start", "runtime.status", "runtime.stop"}
 	if len(version.Methods) != len(expected) {
 		t.Fatalf("method table %v", version.Methods)
 	}
@@ -33,7 +33,7 @@ func TestHandleAnswersVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	const want = "{\"version\":1,\"methodTableVersion\":1,\"methods\":[\"core.version\",\"core.catalog_commit\",\"core.catalog_enable\",\"core.catalog_inspect\",\"core.catalog_remove_service\",\"core.install_catalog_commit\",\"core.install_catalog_inspect\",\"core.roots_commit\",\"core.roots_inspect\",\"core.runtime_binding\",\"core.autostart_disable\",\"core.autostart_enable\",\"core.autostart_status\",\"core.secret_delete\",\"core.secret_get\",\"core.secret_set\",\"managed.checkout_prepare\",\"managed.checkout_verify\",\"managed.git_register\",\"managed.repository_inspect\",\"remote.catalog_create\",\"remote.catalog_inspect\",\"remote.catalog_remove\",\"remote.catalog_update\",\"remote.broker_start\",\"remote.broker_status\",\"remote.broker_stop\",\"remote.connect\",\"remote.disconnect\",\"remote.status\",\"runtime.console\",\"runtime.port_get\",\"runtime.port_set\",\"runtime.start\",\"runtime.status\",\"runtime.stop\"]}"
+	const want = "{\"version\":1,\"methodTableVersion\":1,\"methods\":[\"core.version\",\"core.desktop_attach\",\"core.desktop_handoff\",\"core.catalog_commit\",\"core.catalog_enable\",\"core.catalog_inspect\",\"core.catalog_remove_service\",\"core.install_catalog_commit\",\"core.install_catalog_inspect\",\"core.roots_commit\",\"core.roots_inspect\",\"core.runtime_binding\",\"core.autostart_disable\",\"core.autostart_enable\",\"core.autostart_status\",\"core.secret_delete\",\"core.secret_get\",\"core.secret_set\",\"managed.checkout_prepare\",\"managed.checkout_verify\",\"managed.git_register\",\"managed.repository_inspect\",\"remote.catalog_create\",\"remote.catalog_inspect\",\"remote.catalog_remove\",\"remote.catalog_update\",\"remote.broker_start\",\"remote.broker_status\",\"remote.broker_stop\",\"remote.connect\",\"remote.disconnect\",\"remote.status\",\"runtime.console\",\"runtime.port_get\",\"runtime.port_set\",\"runtime.start\",\"runtime.status\",\"runtime.stop\"]}"
 	if string(data) != want {
 		t.Fatalf("version payload %s", data)
 	}
@@ -45,12 +45,14 @@ func TestHandleAnswersVersion(t *testing.T) {
 // invalid operation rather than something this core has yet to implement.
 func TestHandleRefusesUnservedAndUnknownMethods(t *testing.T) {
 	cases := map[string]string{
-		"devices.list":    "p2p.not_implemented",
-		"peer.connect":    "p2p.not_implemented",
-		"runtime.connect": "p2p.invalid_operation",
-		"peer.state":      "p2p.invalid_operation",
-		"nope.nope":       "p2p.invalid_operation",
-		"":                "p2p.invalid_operation",
+		"devices.list":         "p2p.not_implemented",
+		"peer.connect":         "p2p.not_implemented",
+		"runtime.connect":      "p2p.invalid_operation",
+		"core.desktop_attach":  "p2p.invalid_operation",
+		"core.desktop_handoff": "p2p.invalid_operation",
+		"peer.state":           "p2p.invalid_operation",
+		"nope.nope":            "p2p.invalid_operation",
+		"":                     "p2p.invalid_operation",
 	}
 	for method, expected := range cases {
 		if _, err := Handle(context.Background(), method, json.RawMessage("{}")); err == nil || err.Error() != expected {

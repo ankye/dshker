@@ -30,6 +30,12 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Set up Go for the headless core
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: networking/go.mod
+          cache-dependency-path: networking/go.sum
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -57,6 +63,7 @@ jobs:
       - name: Run tests and smoke checks
         run: |
           npm test -- --run
+          npm run test:dshkerd-distribution
           npm run service:smoke
           npm run visual:smoke
 

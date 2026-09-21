@@ -12,18 +12,19 @@ import (
 // not a code is refused rather than guessed at.
 func TestRefusal(t *testing.T) {
 	accepted := map[string]string{
-		"a bare code":                    "p2p.direct_unavailable",
-		"a wrapped code":                 "p2p.secret_write_failed: value too large",
-		"a wrapped Win32 detail":         "p2p.secret_write_failed: Access is denied.",
-		"a nested wrapper":               "p2p.runtime_unavailable: dial tcp: refused",
-		"dots and underscores":           "p2p.catalog_remove_service",
-		"a detail after an empty colon":  "p2p.not_connected:",
-		"exactly the longest code":       "p2p." + strings.Repeat("a", MaxRefusalBytes-len("p2p.")),
-		"a code with a missing runtime":  "p2p.direct_unavailable",
-		"a code whose detail has spaces": "p2p.pair_unauthorized: no pin for this pair",
-		"a managed code":                 "managed.missing_registry",
-		"a wrapped managed code":         "managed.root_overlap: two roots share a path",
-		"a launcher code":                "launcher.update_unavailable",
+		"a bare code":                     "p2p.direct_unavailable",
+		"a wrapped code":                  "p2p.secret_write_failed: value too large",
+		"a wrapped Win32 detail":          "p2p.secret_write_failed: Access is denied.",
+		"a nested wrapper":                "p2p.runtime_unavailable: dial tcp: refused",
+		"dots and underscores":            "p2p.catalog_remove_service",
+		"a detail after an empty colon":   "p2p.not_connected:",
+		"exactly the longest code":        "p2p." + strings.Repeat("a", MaxRefusalBytes-len("p2p.")),
+		"a code with a missing runtime":   "p2p.direct_unavailable",
+		"a conflicting boot registration": "p2p.autostart_conflict",
+		"a code whose detail has spaces":  "p2p.pair_unauthorized: no pin for this pair",
+		"a managed code":                  "managed.missing_registry",
+		"a wrapped managed code":          "managed.root_overlap: two roots share a path",
+		"a launcher code":                 "launcher.update_unavailable",
 	}
 	for name, message := range accepted {
 		t.Run("carries "+name, func(t *testing.T) {

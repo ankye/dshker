@@ -8,6 +8,7 @@ package integration
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -21,6 +22,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ankye/dshker/networking/internal/localrpc"
 )
 
 // stateDirectoryForCLI returns a state directory the endpoint accepts. A Unix
@@ -139,6 +142,58 @@ func startHeadlessCoreWithArguments(t *testing.T, binary string, arguments ...st
 			_ = command.Process.Kill()
 		}
 	}
+}
+
+func TestHeadlessDesktopHandoffReleasesSingleOwner(t *testing.T) {
+	binary := cliBinary(t)
+	state := stateDirectoryForCLI(t)
+	stop := startHeadlessCore(t, binary, state, t.TempDir())
+	defer stop()
+	record, err := localrpc.ReadEndpointRecord(filepath.Join(state, localrpc.EndpointFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	conn, err := localrpc.Connect(ctx, record.Socket, record.Secret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	peer := localrpc.New(ctx, conn, func(context.Context, string, json.RawMessage) (any, error) {
+		return struct{}{}, nil
+	})
+	defer peer.Close()
+	if _, err := peer.Call(ctx, "core.desktop_attach", struct{}{}); err != nil {
+		t.Fatalf("desktop attach: %v", err)
+	}
+	_, diagnostic, code := runCLICommand(t, binary, "autostart", "status", "--state", state)
+	if code != 0 && strings.Contains(diagnostic, "p2p.autostart_conflict") {
+		t.Skip("another installation owns this user's autostart label")
+	}
+	if code != 0 {
+		t.Fatalf("autostart status: %s", diagnostic)
+	}
+	if _, diagnostic, code = runCLICommand(t, binary, "autostart", "disable", "--state", state); code != 0 {
+		t.Fatalf("CLI disable interrupted attached owner: %s", diagnostic)
+	}
+	if _, err := peer.Call(ctx, "core.version", struct{}{}); err != nil {
+		t.Fatalf("attached desktop lost core after CLI disable: %v", err)
+	}
+	answer, err := peer.Call(ctx, "core.desktop_handoff", struct{}{})
+	if err != nil && err.Error() == "p2p.autostart_conflict" {
+		t.Skip("another installation owns this user's autostart label")
+	}
+	if err != nil || string(answer) != `{"handoff":true}` {
+		t.Fatalf("handoff = %s, %v", answer, err)
+	}
+	// The headless owner remains until the desktop closes its authenticated
+	// attachment after reading the response, then relinquishes the state lock.
+	peer.Close()
+	owner, err := localrpc.AcquireOwnerLock(ctx, state, true)
+	if err != nil {
+		t.Fatalf("owner did not release state after handoff: %v", err)
+	}
+	defer owner.Release()
 }
 
 // TestHeadlessCLIOperatesTheCore drives the whole command surface.

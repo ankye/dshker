@@ -15,14 +15,36 @@ function parseArgs(argv) {
   return { json: argv.includes('--json'), help: argv.includes('--help') }
 }
 
-// `app.css` is an aggregate of @import-ed sheets, so the layout assertions below
-// need the concatenated rules rather than the entry file's import list.
-const STYLE_SHEETS = [
-  'src/styles/base-shell.css',
-  'src/styles/routes.css',
-  'src/styles/controls.css',
-  'src/styles/responsive.css'
-]
+// Follow the renderer entry sheet's authored imports. Reading only the entry
+// file would silently omit route rules after a responsibility-based CSS split.
+export async function loadRendererCss(root) {
+  async function expand(relativePath, ancestors) {
+    if (ancestors.includes(relativePath)) {
+      throw new Error(`Circular renderer CSS import: ${[...ancestors, relativePath].join(' -> ')}`)
+    }
+    const source = await readFile(path.join(root, relativePath), 'utf8')
+    const lines = source.match(/[^\n]*\n|[^\n]+$/gu) ?? []
+    const expanded = []
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed.startsWith('@import')) {
+        expanded.push(line)
+        continue
+      }
+      const match = /^@import ['"](\.\/[^'"]+\.css)['"];$/u.exec(trimmed)
+      if (!match) throw new Error(`Unsupported renderer CSS import in ${relativePath}: ${trimmed}`)
+      const importedPath = path.posix.normalize(
+        path.posix.join(path.posix.dirname(relativePath), match[1])
+      )
+      if (!importedPath.startsWith('src/styles/')) {
+        throw new Error(`Renderer CSS import leaves src/styles: ${relativePath} -> ${match[1]}`)
+      }
+      expanded.push(await expand(importedPath, [...ancestors, relativePath]))
+    }
+    return expanded.join('')
+  }
+  return expand('src/styles/app.css', [])
+}
 
 async function readSources(root) {
   const files = [
@@ -40,16 +62,16 @@ async function readSources(root) {
     'src/styles/tokens.css',
     'src/app/shared/i18n/i18n.ts'
   ]
-  const [entries, styleSources] = await Promise.all([
+  const [entries, styleSource] = await Promise.all([
     Promise.all(
       files.map(async (relativePath) => ({
         relativePath,
         source: await readFile(path.join(root, relativePath), 'utf8')
       }))
     ),
-    Promise.all(STYLE_SHEETS.map((sheet) => readFile(path.join(root, sheet), 'utf8')))
+    loadRendererCss(root)
   ])
-  return [...entries, { relativePath: 'src/styles/app.css', source: styleSources.join('\n') }]
+  return [...entries, { relativePath: 'src/styles/app.css', source: styleSource }]
 }
 
 function finding(name, ok) {

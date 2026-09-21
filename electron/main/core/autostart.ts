@@ -14,6 +14,8 @@ import { PeerHelperError } from '../p2p/wire'
 export interface CoreAutostartState {
   /** Whether the registration is present right now. */
   readonly installed: boolean
+  /** Whether this client can safely change the registration. */
+  readonly supported: boolean
   /** The platform facility, for display and diagnostics. */
   readonly mechanism: string
   /** The registration this machine reads, when the platform has a path. */
@@ -43,12 +45,26 @@ function budget(signal?: AbortSignal): AbortSignal {
  */
 function stateOf(value: unknown): CoreAutostartState {
   if (typeof value !== 'object' || value === null) throw new PeerHelperError('p2p.invalid_payload')
-  const record = value as { installed?: unknown; mechanism?: unknown; path?: unknown }
-  if (typeof record.installed !== 'boolean' || typeof record.mechanism !== 'string') {
+  const record = value as {
+    installed?: unknown
+    supported?: unknown
+    mechanism?: unknown
+    path?: unknown
+  }
+  if (
+    typeof record.installed !== 'boolean' ||
+    typeof record.supported !== 'boolean' ||
+    typeof record.mechanism !== 'string'
+  ) {
     throw new PeerHelperError('p2p.invalid_payload')
   }
   const path = typeof record.path === 'string' && record.path !== '' ? record.path : undefined
-  return { installed: record.installed, mechanism: record.mechanism, path }
+  return {
+    installed: record.installed,
+    supported: record.supported,
+    mechanism: record.mechanism,
+    path
+  }
 }
 
 /** Calls the core.autostart_* methods of a live dshkerd over its private channel. */

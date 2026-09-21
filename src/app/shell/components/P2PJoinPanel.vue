@@ -11,11 +11,11 @@ import type { MessageKey } from '@/app/shared/i18n/i18n'
 import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
 
 /**
- * 「我的网络」 card (Connect tab).
+ * 「我的网络」 card (Network & account tab).
  *
  * The coordinator is always the built-in official server: there is no server
  * or endpoint configuration, and its endpoint fields are never shown. The card
- * displays this device's name with expandable identifier details, and offers a login-free
+ * displays this device's name and identifiers in the open, and offers a login-free
  * join by networkId. Only a server-confirmed result is shown as registered.
  *
  * Online here means this computer holds a coordinator session, which is the
@@ -96,6 +96,25 @@ const deviceId = computed(() =>
     ? registration.value.deviceId
     : (management.localDevice.value?.deviceId ?? '—')
 )
+/** The enrolled network is authoritative when present; legacy credentials stay explicit. */
+const joinedNetworkId = computed(() => {
+  const registered = registration.value
+  if (registered?.kind !== 'registered') return ''
+  if (registered.networkId) return registered.networkId
+  const draft = enrollmentState.value?.joinNetworkIdDraft.trim() ?? ''
+  if (draft) return draft
+
+  // Legacy credentials predate the persisted networkId field. The catalog is
+  // authoritative, so recover only when this device has exactly one distinct
+  // network in the current directory; multiple matches remain explicit rather
+  // than guessing which network a destructive Leave action should target.
+  const matches = new Set(
+    (catalog.value?.computers ?? [])
+      .filter((computer) => computer.localDeviceId === registered.deviceId)
+      .map((computer) => computer.networkId)
+  )
+  return matches.size === 1 ? [...matches][0] : ''
+})
 
 /**
  * Leaving needs a signed-in owner.
@@ -107,6 +126,10 @@ const deviceId = computed(() =>
 const signedIn = computed(() => {
   const id = serviceId.value
   return id ? !!accounts.state(id).user : false
+})
+const accountSignedOut = computed(() => {
+  const id = serviceId.value
+  return id ? accounts.state(id).user === null : false
 })
 
 /**
@@ -165,6 +188,15 @@ const networkStatus = computed<NetworkStatus>(() => {
 const sessionRefusal = computed(() => {
   const id = serviceId.value
   return id ? p2pNetwork.refusal(id) : ''
+})
+const statusLabelKey = computed<MessageKey>(() => {
+  if (accountSignedOut.value && registration.value?.kind === 'registered') {
+    return 'p2p.myNetwork.joinedSignedOut'
+  }
+  if (networkStatus.value === 'online') return 'p2p.myNetwork.serviceOnline'
+  if (networkStatus.value === 'offline') return 'p2p.myNetwork.serviceOffline'
+  if (networkStatus.value === 'unknown') return 'p2p.myNetwork.serviceStatusUnknown'
+  return STATUS_KEYS[networkStatus.value]
 })
 
 const JOIN_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -286,21 +318,57 @@ async function leave(): Promise<void> {
   const state = enrollmentState.value
   const reg = registration.value
   if (!id || !state || reg?.kind !== 'registered' || busy.value) return
-  const networkId = state.joinNetworkIdDraft.trim()
+  const networkId = joinedNetworkId.value
+  if (!networkId) return
   await enrollment.leave(id, networkId, reg.deviceId)
 }
 </script>
 <template>
-  <section
-    class="remote-add-card p2p-join"
-    aria-labelledby="p2p-my-network-title"
-    data-testid="p2p-join-panel"
-  >
+  <section class="p2p-join" aria-labelledby="p2p-my-network-title" data-testid="p2p-join-panel">
     <div class="remote-section-heading">
       <div>
         <h2 id="p2p-my-network-title">{{ t('p2p.myNetwork.title') }}</h2>
         <p>{{ t('p2p.myNetwork.officialServer') }}</p>
       </div>
+    </div>
+
+    <!-- Device identity is local and stable; keep it visible even while the
+         coordinator catalog or service session is loading/unavailable. -->
+    <div class="connect-device-summary">
+      <dl class="p2p-device-info" data-testid="p2p-device-info">
+        <div>
+          <dt>{{ t('p2p.myNetwork.deviceName') }}</dt>
+          <dd>{{ deviceName }}</dd>
+        </div>
+        <div>
+          <dt>{{ t('p2p.myNetwork.deviceId') }}</dt>
+          <dd>
+            <code>{{ deviceId }}</code>
+            <CopyPathButton :value="deviceId" />
+          </dd>
+        </div>
+        <div v-if="registration?.kind === 'registered'" data-testid="p2p-joined-network">
+          <dt>{{ t('p2p.myNetwork.joinedNetworkId') }}</dt>
+          <dd>
+            <template v-if="joinedNetworkId">
+              <code>{{ joinedNetworkId }}</code>
+              <CopyPathButton :value="joinedNetworkId" />
+            </template>
+            <span v-else class="p2p-network-id-missing">
+              {{ t('p2p.myNetwork.networkIdUnavailable') }}
+            </span>
+          </dd>
+        </div>
+      </dl>
+      <p
+        v-if="registration?.kind === 'registered'"
+        class="p2p-network-status"
+        role="status"
+        :data-state="networkStatus"
+        data-testid="p2p-network-status"
+      >
+        {{ t(statusLabelKey) }}
+      </p>
     </div>
 
     <div v-if="catalogError" role="alert" class="remote-error" data-testid="p2p-catalog-error">
@@ -346,36 +414,6 @@ async function leave(): Promise<void> {
       {{ t('p2p.myNetwork.serviceUnavailable') }}
     </p>
     <template v-else>
-      <!-- This device's identity leads: it is the one fact that is true in every
-           phase, and it answers "which machine am I looking at" before anything
-           asks the user to act. -->
-      <div class="connect-device-summary">
-        <dl class="p2p-device-info" data-testid="p2p-device-info">
-          <div>
-            <dt>{{ t('p2p.myNetwork.deviceName') }}</dt>
-            <dd>{{ deviceName }}</dd>
-          </div>
-          <!-- The machine's own id sits with its name, in the open, because it is the
-               one fact that is true in every phase and the one an owner reads out
-               loud or pastes into another machine. -->
-          <div>
-            <dt>{{ t('p2p.myNetwork.deviceId') }}</dt>
-            <dd>
-              <code>{{ deviceId }}</code>
-              <CopyPathButton :value="deviceId" />
-            </dd>
-          </div>
-        </dl>
-        <p
-          v-if="registration?.kind === 'registered'"
-          class="p2p-network-status"
-          role="status"
-          :data-state="networkStatus"
-          data-testid="p2p-network-status"
-        >
-          {{ t(STATUS_KEYS[networkStatus]) }}
-        </p>
-      </div>
       <!-- Said out loud, with the identity that is the cause: the alternative is a
            machine that fails every pairing for no stated reason. -->
       <p
@@ -386,21 +424,6 @@ async function leave(): Promise<void> {
       >
         {{ t('p2p.myNetwork.foreignIdentity') }}
       </p>
-      <details class="connect-device-details">
-        <summary>{{ t('remote.connectLayout.deviceDetails') }}</summary>
-        <p>{{ t('remote.connectLayout.deviceIdHint') }}</p>
-        <dl>
-          <dt>{{ t('p2p.myNetwork.deviceId') }}</dt>
-          <dd>
-            <!-- This machine's identity is what an owner needs to read or share, so
-                 it is shown with its own copy control instead of being selected by
-                 hand out of a monospace string. -->
-            <code>{{ deviceId }}</code>
-            <CopyPathButton :value="deviceId" />
-          </dd>
-        </dl>
-      </details>
-
       <!-- Joined: status and the one destructive action, no input to re-join. -->
       <div
         v-if="registration?.kind === 'registered'"
@@ -417,25 +440,29 @@ async function leave(): Promise<void> {
         <p v-if="leaveError" role="alert" class="remote-error" data-testid="p2p-leave-error">
           {{ t('p2p.myNetwork.leaveError') }} <code>{{ leaveError }}</code>
         </p>
-        <details class="connect-membership-details">
-          <summary>{{ t('remote.connectLayout.membership') }}</summary>
-          <div class="p2p-joined__actions">
-            <button
-              class="prototype-button prototype-button--danger"
-              type="button"
-              :disabled="busy || !signedIn"
-              data-testid="p2p-leave-network"
-              @click="leave"
-            >
-              {{ t('p2p.myNetwork.leave') }}
-            </button>
-            <!-- Stated rather than implied: a disabled button with no reason reads
-               as a defect. -->
-            <p v-if="!signedIn" class="remote-form-hint" data-testid="p2p-leave-requires-login">
-              {{ t('p2p.devices.leaveRequiresLogin') }}
-            </p>
-          </div>
-        </details>
+        <div class="p2p-joined__actions">
+          <button
+            class="prototype-button prototype-button--danger"
+            type="button"
+            :disabled="busy || !signedIn || !joinedNetworkId"
+            data-testid="p2p-leave-network"
+            @click="leave"
+          >
+            {{ t('p2p.myNetwork.leave') }}
+          </button>
+          <!-- Stated rather than implied: a disabled button with no reason reads
+             as a defect. -->
+          <p v-if="!signedIn" class="remote-form-hint" data-testid="p2p-leave-requires-login">
+            {{ t('p2p.devices.leaveRequiresLogin') }}
+          </p>
+          <p
+            v-else-if="!joinedNetworkId"
+            class="remote-form-hint"
+            data-testid="p2p-leave-network-id-missing"
+          >
+            {{ t('p2p.myNetwork.networkIdUnavailable') }}
+          </p>
+        </div>
       </div>
 
       <!-- Pending: input disabled, cancel action, awaiting approval. -->
@@ -506,30 +533,6 @@ async function leave(): Promise<void> {
   gap: var(--space-4);
   min-width: 0;
 }
-.connect-device-details {
-  color: var(--color-text-muted);
-  font-size: var(--type-caption);
-}
-.connect-device-details dd {
-  margin: var(--space-2) 0;
-  overflow-wrap: anywhere;
-}
-.connect-membership-details {
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-2);
-}
-.connect-membership-details > summary {
-  color: var(--color-accent);
-}
-.p2p-join summary {
-  cursor: pointer;
-  padding-block: var(--space-2);
-  width: fit-content;
-}
-.p2p-join summary:focus-visible {
-  outline: 2px solid var(--color-focus);
-  outline-offset: 2px;
-}
 /* Identity reads as a definition list: label above value at narrow widths, and
    two aligned columns once there is room to compare them. */
 .p2p-device-info {
@@ -544,9 +547,8 @@ async function leave(): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
+  padding-block: var(--space-2);
+  border-bottom: 1px solid var(--color-border);
 }
 .p2p-device-info > div {
   display: grid;
@@ -567,6 +569,15 @@ async function leave(): Promise<void> {
 .p2p-device-info dd {
   margin: 0;
   overflow-wrap: anywhere;
+}
+.p2p-device-info dd {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.p2p-network-id-missing {
+  color: var(--color-text-muted);
 }
 .p2p-join-form {
   display: grid;
@@ -620,6 +631,8 @@ async function leave(): Promise<void> {
   display: grid;
   justify-items: start;
   gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
 }
 .p2p-joined__actions .remote-form-hint {
   margin: 0;

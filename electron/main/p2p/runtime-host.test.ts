@@ -175,6 +175,28 @@ describe('formal main P2P runtime ownership', () => {
     expect(f.start).not.toHaveBeenCalled()
   })
 
+  it('shares concurrent startup attachment instead of surfacing helper busy', async () => {
+    const f = fixture()
+    let resolveInspect!: (value: Awaited<ReturnType<typeof f.inspect>>) => void
+    f.inspect.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveInspect = resolve
+        })
+    )
+    const first = f.host.start(signal())
+    const second = f.host.start(signal())
+    resolveInspect({ revision: 'e'.repeat(64), record: f.record })
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      expect.anything(),
+      expect.anything()
+    ])
+    const [firstChannel, secondChannel] = await Promise.all([first, second])
+    expect(firstChannel).toBe(secondChannel)
+    expect(f.attach).toHaveBeenCalledTimes(1)
+  })
+
   it('invalidates the real service manager on stop and never kills the DSH process on close', async () => {
     const f = fixture()
     await f.host.start(signal())

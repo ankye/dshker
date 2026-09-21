@@ -15,7 +15,11 @@ import path from 'node:path'
 const appRoot = path.resolve(import.meta.dirname, '../../../..')
 
 async function componentSource(name: string): Promise<string> {
-  return readFile(path.join(appRoot, 'src/app/shell/components', name), 'utf8')
+  const componentPath = path.join(appRoot, 'src/app/shell/components', name)
+  const source = await readFile(componentPath, 'utf8')
+  const linkedStyle = source.match(/<style[^>]*\bsrc=["']([^"']+)["']/u)?.[1]
+  if (!linkedStyle) return source
+  return `${source}\n${await readFile(path.resolve(path.dirname(componentPath), linkedStyle), 'utf8')}`
 }
 
 describe('remote connection visual hierarchy', () => {
@@ -32,13 +36,14 @@ describe('remote connection visual hierarchy', () => {
     expect(source).toMatch(/\.p2p-account-refresh\s*\{[^}]*justify-self:\s*start/u)
   })
 
-  it('ranks the account identity above its raw identifier', async () => {
+  it('keeps the signed-in identity compact without exposing account technical data', async () => {
     const source = await componentSource('P2PAccountPanel.vue')
     expect(source).toMatch(
       /\.p2p-account-identity-label\s*\{[^}]*font-size:\s*var\(--type-caption\)/u
     )
-    expect(source).toMatch(/\.p2p-account-identity-id\s*\{[^}]*color:\s*var\(--color-text-muted\)/u)
     expect(source).toMatch(/\.p2p-account-identity-name\s*\{[^}]*font-size:\s*var\(--type-body\)/u)
+    expect(source).not.toContain('p2p.account.accountDetails')
+    expect(source).not.toMatch(/class="p2p-account-identity-id"/u)
   })
 
   it('ranks enrollment fact labels below their values', async () => {
@@ -46,6 +51,18 @@ describe('remote connection visual hierarchy', () => {
     expect(source).toContain('p2p-enrollment-facts')
     expect(source).toMatch(/\.p2p-enrollment-facts dt\s*\{[^}]*font-size:\s*var\(--type-caption\)/u)
     expect(source).toMatch(/\.p2p-enrollment-facts dd\s*\{[^}]*color:\s*var\(--color-text\)/u)
+  })
+
+  it('uses one network picker and a focused network summary instead of stacked cards', async () => {
+    const source = await componentSource('P2PAccountPanel.vue')
+    expect(source).toContain('test-id="p2p-network-select"')
+    expect(source).toContain('data-testid="p2p-selected-network-summary"')
+    expect(source).toContain('data-testid="p2p-network-create-dialog"')
+    expect(source).toContain('data-testid="p2p-network-manage-dialog"')
+    expect(source).not.toMatch(/class="p2p-network-card"/u)
+    expect(source).not.toMatch(/class="p2p-network-toggle"/u)
+    expect(source).not.toContain('p2p-network-columns')
+    expect(source).not.toMatch(/p2p-network-columns[^\n]*aria-hidden/u)
   })
 
   it('states every hierarchy size through the type scale', async () => {

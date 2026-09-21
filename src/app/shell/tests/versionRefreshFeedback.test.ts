@@ -11,7 +11,7 @@ const contracts = readFileSync(path.join(appRoot, 'src/shared/contracts.ts'), 'u
 const managedErrors = readFileSync(path.join(appRoot, 'electron/main/managed/errors.ts'), 'utf8')
 const errors = readFileSync(path.join(appRoot, 'src/app/shared/i18n/i18n.errors.ts'), 'utf8')
 const controls = readFileSync(path.join(appRoot, 'src/styles/controls.css'), 'utf8')
-const routes = readFileSync(path.join(appRoot, 'src/styles/routes.css'), 'utf8')
+const routes = readFileSync(path.join(appRoot, 'src/styles/routes-versions.css'), 'utf8')
 const stageActions = readFileSync(
   path.join(appRoot, 'src/app/shell/components/VersionStageActions.vue'),
   'utf8'

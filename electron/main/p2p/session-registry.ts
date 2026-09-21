@@ -91,7 +91,12 @@ export async function restoreUserSession(
   signal: AbortSignal
 ): Promise<void> {
   if (session.accounts.hasSession(serviceId)) return
-  const persisted = await credentials.loadUserSession(serviceId).catch(() => undefined)
+  // A missing record is already represented by `undefined` from the credential
+  // store. Do not turn provider/transport failures into that same value: doing
+  // so makes the next `user.current` call report `user_login_required`, which is
+  // indistinguishable from a real logout and makes the renderer show a login form
+  // during a restart or installation while the durable session is still intact.
+  const persisted = await credentials.loadUserSession(serviceId)
   if (!persisted) return
   try {
     await session.accounts.adoptPersistedSession(

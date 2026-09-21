@@ -143,6 +143,26 @@ func endpointFor(state string) (string, error) {
 	return filepath.Join(state, "peer.sock"), nil
 }
 
+// prepareEndpointForListen removes only this state's stale Unix socket, after
+// the caller has acquired its exclusive owner lock. An unexpected file type
+// is a refusal: neither a symlink nor an ordinary user file may be deleted.
+func prepareEndpointForListen(endpoint string) error {
+	if os.PathSeparator == 92 {
+		return nil // Windows named pipes have no stale filesystem path.
+	}
+	info, err := os.Lstat(endpoint)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil || info.Mode()&os.ModeSocket == 0 {
+		return errors.New("p2p.insecure_socket")
+	}
+	if err := os.Remove(endpoint); err != nil {
+		return errors.New("p2p.insecure_socket")
+	}
+	return nil
+}
+
 // openEndpointRecord reads the published record for one state directory.
 func openEndpointRecord(state string) (localrpc.Bootstrap, error) {
 	return localrpc.ReadEndpointRecord(filepath.Join(state, localrpc.EndpointFileName))
@@ -213,9 +233,39 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, err)
 	}
+	if !filepath.IsAbs(directory) {
+		return fail(stderr, errors.New("p2p.invalid_arguments"))
+	}
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return fail(stderr, errors.New("p2p.insecure_socket_directory"))
 	}
+	stateInfo, statErr := os.Lstat(directory)
+	if statErr != nil || !stateInfo.IsDir() || stateInfo.Mode()&os.ModeSymlink != 0 {
+		return fail(stderr, errors.New("p2p.insecure_socket_directory"))
+	}
+	if os.PathSeparator != 92 {
+		// The listener and owner lock both require a private directory.
+		if err := os.Chmod(directory, 0o700); err != nil {
+			return fail(stderr, errors.New("p2p.insecure_socket_directory"))
+		}
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	// A boot-time service can start while the desktop is still open, but it
+	// must not even read the boot configuration until that desktop releases
+	// ownership: the desktop may have changed its exact roots before exit.
+	owner, err := localrpc.AcquireOwnerLock(ctx, directory, true)
+	if err != nil {
+		return fail(stderr, err)
+	}
+	// Register this before owner.Release so shutdown closes runtime/host and
+	// releases the state lease before retiring a disabled launchd job.
+	defer func() {
+		if err := retireDisabledAutostart(directory); err != nil {
+			log.Printf("autostart retirement: %v", err)
+		}
+	}()
+	defer owner.Release()
 	// The store roots are remembered so a boot-time start, which carries only the
 	// state directory, serves with the same stores the operator configured.
 	stored, configErr := LoadConfig(directory)
@@ -233,14 +283,6 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 			return fail(stderr, err)
 		}
 	}
-	if os.PathSeparator != 92 {
-		// The listener refuses a directory anyone else can reach.
-		if err := os.Chmod(directory, 0o700); err != nil {
-			return fail(stderr, errors.New("p2p.insecure_socket_directory"))
-		}
-	}
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 	server := core.Serve{}
 	var secrets secret.Store
 	if effectiveData != "" {
@@ -268,7 +310,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	// The desktop shell reads and writes start-at-boot over this channel, so the
 	// toggle in its settings panel and the `autostart` subcommand are two clients
 	// of the same registration rather than two competing ones.
-	server.Autostart = daemonAutostart{state: directory}
+	server.Autostart = headlessAutostart{daemonAutostart{state: directory}}
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute
@@ -292,8 +334,10 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		host.SetRoots(roots)
 	}
-	host.BindMain(headlessMain{binding: binding})
+	fallbackMain := headlessMain{binding: binding}
+	host.BindMain(fallbackMain)
 	server.Peer = host
+	attachment := newDesktopAttachment(host, fallbackMain, directory, cancel, server.Autostart)
 
 	// Reconnection runs in the daemon, not in a shell: this is the machine that has
 	// nobody to click "connect" again. The engine holds every catalog-authorized
@@ -320,6 +364,9 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	if err != nil {
 		return fail(stderr, err)
 	}
+	if err := prepareEndpointForListen(endpoint); err != nil {
+		return fail(stderr, err)
+	}
 	secretValue, err := localrpc.NewSecret()
 	if err != nil {
 		return fail(stderr, err)
@@ -335,6 +382,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	}); err != nil {
 		return fail(stderr, err)
 	}
+	defer os.Remove(recordPath)
 	readiness, err := json.Marshal(struct {
 		Version int    `json:"version"`
 		Serving bool   `json:"serving"`
@@ -347,16 +395,18 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 		return fail(stderr, err)
 	}
 	go func() { <-ctx.Done(); listener.Close() }()
-	if err := localrpc.ServeEndpoint(ctx, listener, secretValue, func(callCtx context.Context, method string, payload json.RawMessage) (any, error) {
-		result, err := server.Handle(callCtx, method, payload)
-		if err != nil {
-			// A headless host has no shell to render a failure, and the wire
-			// carries only the public code, so the operator's only diagnostic is
-			// this line.
-			log.Printf("%s: %v", method, err)
+	if err := localrpc.ServeEndpointWithPeers(ctx, listener, secretValue, func(peer *localrpc.Peer) localrpc.Handler {
+		handle := attachment.handlerFor(peer, &server)
+		return func(callCtx context.Context, method string, payload json.RawMessage) (any, error) {
+			result, err := handle(callCtx, method, payload)
+			if err != nil {
+				// A headless host has no shell to render a failure, and the wire
+				// carries only the public code, so the operator's diagnostic is here.
+				log.Printf("%s: %v", method, err)
+			}
+			return result, err
 		}
-		return result, err
-	}); err != nil {
+	}, attachment.disconnected); err != nil {
 		return fail(stderr, err)
 	}
 	return 0

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import {
   p2pAccounts as accounts,
   p2pEnrollment as enrollment,
@@ -7,21 +7,25 @@ import {
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import P2PAccountPanel from './P2PAccountPanel.vue'
-import P2PEnrollmentPanel from './P2PEnrollmentPanel.vue'
-import P2PPairingPanel from './P2PPairingPanel.vue'
-import type { AppRouteId } from '@/app/shared/navigation/routes'
+import P2PJoinPanel from './P2PJoinPanel.vue'
+import P2PAccountAuthForm from './P2PAccountAuthForm.vue'
 
 /**
  * Network & account sub-tab (login-gated).
  *
- * Requires a selected coordinator server (chosen in the Connect tab). The tab
- * never switches itself and never bounces the user back to Connect: without a
- * selected server it shows a static message, while signed out it composes the
- * login form with the login-free enrollment panel inline. After login it
- * composes the account, network, enrollment and pairing panels.
+ * Requires a selected coordinator server (provisioned by the built-in service).
+ * The full 「我的网络」 identity/membership card lives here, including its
+ * login-free join flow; the Connect tab only links here from its compact join
+ * entry. The tab never switches itself or bounces the user back to Connect.
+ * After login it composes the account/network workspace only; enrollment and
+ * explicit pairing workflows remain available as domain capabilities but are
+ * not repeated in this default page.
  */
 const t = useTranslator()
-const emit = defineEmits<{ navigate: [route: AppRouteId] }>()
+const unavailableUsername = ref('')
+
+function unavailableLogin(): void {}
+function unavailableRegister(): void {}
 
 // The built-in official server is provisioned and selected automatically, so
 // this tab works whether the user visited Connect first or not.
@@ -56,18 +60,28 @@ const joinedNotLoggedIn = computed(
     :aria-label="t('p2p.tabs.account')"
     data-testid="p2p-network-account-panel"
   >
-    <div class="remote-section-heading">
-      <div>
-        <h2>{{ t('p2p.tabs.account') }}</h2>
-        <p>{{ t('p2p.tabs.accountDescription') }}</p>
-      </div>
-    </div>
+    <!-- Keep the local identity card mounted even when the coordinator is still
+         loading or unavailable. Device name/ID are local facts and should not
+         disappear just because account management cannot run yet. -->
+    <P2PJoinPanel />
 
     <template v-if="catalog === undefined || catalog === null || !service">
-      <p>
-        <strong>{{ t('p2p.accountTab.noService') }}</strong>
-      </p>
-      <p class="remote-form-hint">{{ t('p2p.accountTab.noServiceDescription') }}</p>
+      <div class="p2p-service-gate" role="status" data-testid="p2p-account-service-gate">
+        <p>
+          <strong>{{ t('p2p.accountTab.noService') }}</strong>
+        </p>
+        <p class="remote-form-hint">{{ t('p2p.accountTab.noServiceDescription') }}</p>
+        <h3 class="p2p-login-register-heading">{{ t('p2p.accountTab.loginRegister') }}</h3>
+        <P2PAccountAuthForm
+          :username="unavailableUsername"
+          :busy="true"
+          :uncertain="false"
+          :disabled="true"
+          @login="unavailableLogin"
+          @register="unavailableRegister"
+          @update:username="unavailableUsername = $event"
+        />
+      </div>
     </template>
     <template v-else>
       <div
@@ -77,25 +91,11 @@ const joinedNotLoggedIn = computed(
         data-testid="p2p-account-mesh-gate"
       >
         <strong>{{ t('p2p.accountTab.meshGate') }}</strong>
-        <p class="remote-form-hint">{{ t('p2p.accountTab.meshGateDescription') }}</p>
       </div>
-      <h3
-        v-if="!loggedIn"
-        class="p2p-login-register-heading"
-        data-testid="p2p-login-register-heading"
-      >
-        {{ t('p2p.accountTab.loginRegister') }}
-      </h3>
-      <P2PAccountPanel :service-id="service.serviceId" :display-name="service.displayName" />
-      <!-- Enrollment needs a signed-in owner and a selected network, so it stays
-           out of the signed-out view instead of showing inert controls. -->
-      <P2PEnrollmentPanel v-if="loggedIn" :service-id="service.serviceId" />
-      <P2PPairingPanel
-        v-if="loggedIn"
-        :key="`pairing-${service.serviceId}`"
+      <P2PAccountPanel
+        :key="service.serviceId"
         :service-id="service.serviceId"
-        :network-id="accountState?.selectedNetworkId"
-        @navigate="emit('navigate', $event)"
+        :display-name="service.displayName"
       />
     </template>
   </section>

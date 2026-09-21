@@ -33,6 +33,8 @@ const Version = 1
 // older core with a method that does not exist at all.
 var served = map[string]bool{
 	"core.version":                 true,
+	"core.desktop_attach":          true,
+	"core.desktop_handoff":         true,
 	"core.catalog_commit":          true,
 	"core.catalog_enable":          true,
 	"core.catalog_inspect":         true,
@@ -113,9 +115,8 @@ type Serve struct {
 
 // Autostart is the start-at-boot registration this host can install for itself.
 //
-// Three verbs and one state: the desktop settings control and the headless CLI
-// are both clients of this, so neither can drift into its own idea of whether the
-// machine starts at boot.
+// Three verbs and one state: the desktop and headless CLI operate the same
+// registration while their cores share one exclusive state owner.
 type Autostart interface {
 	Install(ctx context.Context) error
 	Remove(ctx context.Context) error
@@ -124,7 +125,10 @@ type Autostart interface {
 
 // AutostartView is the shared answer both surfaces render.
 type AutostartView struct {
-	Installed bool   `json:"installed"`
+	Installed bool `json:"installed"`
+	// Supported is explicit so a consumer never infers mutability from the
+	// platform mechanism name.
+	Supported bool   `json:"supported"`
 	Mechanism string `json:"mechanism"`
 	Path      string `json:"path,omitempty"`
 }
@@ -171,6 +175,7 @@ type remoteCatalogConnection struct {
 	Host           string `json:"host"`
 	Port           int    `json:"port"`
 	User           string `json:"user"`
+	SSHKeyPath     string `json:"sshKeyPath"`
 	ConfigRevision string `json:"configRevision"`
 }
 
@@ -183,6 +188,7 @@ func remoteCatalogSnapshot(connections []remoteconnections.Computer) remoteCatal
 			Host:           connection.Host,
 			Port:           connection.Port,
 			User:           connection.User,
+			SSHKeyPath:     connection.SSHKeyPath,
 			ConfigRevision: remoteconnections.ConfigRevision(connection),
 		})
 	}
@@ -306,6 +312,15 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		return versionResult{Version: Version, MethodTableVersion: localrpc.MethodTableVersion, Methods: server.MethodTable()}, nil
 	}
 	switch method {
+	case "core.desktop_attach", "core.desktop_handoff":
+		var request struct{}
+		if err := protocol.Decode(payload, &request); err != nil {
+			return nil, err
+		}
+		// Only the authenticated headless endpoint can promote a particular
+		// connection to the callback owner. The parent-bootstrapped desktop core
+		// already has its sole parent and must not pretend to attach again.
+		return nil, errors.New("p2p.invalid_operation")
 	case "core.secret_get":
 		var request struct {
 			Key string `json:"key"`
@@ -559,6 +574,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			Host        string `json:"host"`
 			Port        int    `json:"port"`
 			User        string `json:"user"`
+			SSHKeyPath  string `json:"sshKeyPath"`
 		}
 		if err := protocol.Decode(payload, &request); err != nil {
 			return nil, err
@@ -567,7 +583,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if err != nil {
 			return nil, err
 		}
-		connections, err := store.Create(request.DisplayName, request.Host, request.Port, request.User)
+		connections, err := store.Create(request.DisplayName, request.Host, request.Port, request.User, request.SSHKeyPath)
 		if err != nil {
 			return nil, err
 		}
@@ -580,6 +596,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			Host                   string `json:"host"`
 			Port                   int    `json:"port"`
 			User                   string `json:"user"`
+			SSHKeyPath             string `json:"sshKeyPath"`
 			ExpectedConfigRevision string `json:"expectedConfigRevision"`
 		}
 		if err := protocol.Decode(payload, &request); err != nil {
@@ -589,7 +606,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if err != nil {
 			return nil, err
 		}
-		connections, err := store.Update(request.ConnectionID, request.DisplayName, request.Host, request.Port, request.User, request.ExpectedConfigRevision)
+		connections, err := store.Update(request.ConnectionID, request.DisplayName, request.Host, request.Port, request.User, request.SSHKeyPath, request.ExpectedConfigRevision)
 		if err != nil {
 			return nil, err
 		}
@@ -669,6 +686,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			Computer     remoteroute.Computer `json:"computer"`
 			SSH          string               `json:"ssh"`
 			SCP          string               `json:"scp"`
+			SSHKeyPath   string               `json:"sshKeyPath"`
 		}
 		if err := protocol.Decode(payload, &request); err != nil {
 			return nil, err
@@ -687,6 +705,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if request.SCP != "" {
 			connector.Executables.SCP = request.SCP
 		}
+		request.Computer.SSHKeyPath = request.SSHKeyPath
 		url, err := route.ConnectWith(ctx, request.ConnectionID, request.Computer, connector, nil)
 		if err != nil {
 			return nil, err

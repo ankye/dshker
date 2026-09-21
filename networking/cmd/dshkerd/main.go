@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/core"
@@ -61,13 +62,14 @@ func main() {
 // must be absolute directories the parent owns; every other spelling is a typed
 // refusal so a typo cannot silently start a core with the wrong state.
 type options struct {
+	stateRoot   string
 	dataRoot    string
 	catalogRoot string
 	rootsPath   string
 }
 
-// parseArguments accepts --data <absolute directory>, --catalog <absolute
-// directory> and --roots <absolute PEM file>, in any order, each at most once.
+// parseArguments accepts --state, --data and --catalog absolute directories and
+// --roots an absolute PEM file, in any order, each at most once.
 func parseArguments(args []string) (options, error) {
 	var parsed options
 	for index := 0; index < len(args); index += 2 {
@@ -79,6 +81,11 @@ func parseArguments(args []string) (options, error) {
 			return options{}, errors.New("p2p.invalid_arguments")
 		}
 		switch args[index] {
+		case "--state":
+			if parsed.stateRoot != "" {
+				return options{}, errors.New("p2p.invalid_arguments")
+			}
+			parsed.stateRoot = value
 		case "--data":
 			if parsed.dataRoot != "" {
 				return options{}, errors.New("p2p.invalid_arguments")
@@ -144,7 +151,39 @@ func secretStoreFor(open func(string) (secret.Store, error), dataRoot string) (s
 }
 
 func run(parsed options) error {
+	if parsed.stateRoot == "" {
+		return errors.New("p2p.invalid_arguments")
+	}
+	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer cancel()
+	// Ownership precedes every store and peer host. A just-closed attached GUI
+	// may still be handing its headless owner off; wait only for that bounded
+	// transition, then refuse a genuinely competing process.
+	acquireCtx, stopWaiting := context.WithTimeout(ctx, 5*time.Second)
+	defer stopWaiting()
+	owner, err := localrpc.AcquireOwnerLock(acquireCtx, parsed.stateRoot, true)
+	if err != nil {
+		if errors.Is(acquireCtx.Err(), context.DeadlineExceeded) {
+			return errors.New("p2p.owner_busy")
+		}
+		return err
+	}
+	defer owner.Release()
+	// A previous headless owner may have crashed after publishing core.json.
+	// This desktop now has the exclusive state lock, so the record is stale.
+	if err := clearStaleEndpointRecord(parsed.stateRoot); err != nil {
+		return err
+	}
 	server := core.Serve{}
+	// The shell must name every root explicitly before it can control its own
+	// boot registration. Guessing the state from --data or the user's home could
+	// register a different device identity or adopt another installation.
+	if parsed.stateRoot != "" && parsed.dataRoot != "" && parsed.catalogRoot != "" {
+		server.Autostart = desktopAutostart{
+			state: parsed.stateRoot, data: parsed.dataRoot,
+			catalog: parsed.catalogRoot, roots: parsed.rootsPath,
+		}
+	}
 	var secrets secret.Store
 	if parsed.dataRoot != "" {
 		store, err := secretStoreFor(secret.Open, parsed.dataRoot)
@@ -170,8 +209,6 @@ func run(parsed options) error {
 	// the runtime, remote-route and broker shutdowns below, orphaning the DSH Web
 	// process tree and leaving a published broker descriptor pointing at a port
 	// nothing listens on. The CLI path has always registered both.
-	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer cancel()
 	conn, err := localrpc.AcceptMain(ctx, os.Stdin, os.Stdout)
 	if err != nil {
 		return err
@@ -239,5 +276,17 @@ func run(parsed options) error {
 	cancel()
 	rpc.Close()
 	host.Close()
+	return nil
+}
+
+func clearStaleEndpointRecord(state string) error {
+	recordPath := filepath.Join(state, localrpc.EndpointFileName)
+	if record, err := os.Lstat(recordPath); err == nil {
+		if !record.Mode().IsRegular() || record.Mode()&os.ModeSymlink != 0 || os.Remove(recordPath) != nil {
+			return errors.New("p2p.insecure_socket")
+		}
+	} else if !os.IsNotExist(err) {
+		return errors.New("p2p.insecure_socket")
+	}
 	return nil
 }

@@ -57,9 +57,9 @@ window.dshLauncher = {
 const domain = await import('@/app/domains/remote-connections')
 domain.p2pManagement.catalog.value = catalog
 domain.p2pManagement.selectedServiceId.value = serviceId
-const { default: SSH } = await import('@/app/shell/components/RemoteSSHManagementPanel.vue')
-const { default: Join } = await import('@/app/shell/components/P2PJoinPanel.vue')
+const { default: RemoteConnectionsPanel } =
+  await import('@/app/shell/components/RemoteConnectionsPanel.vue')
 document.body.style.overflow = 'auto'
 const root = document.getElementById('review')!
 root.style.cssText = 'max-width:1092px;margin:24px auto;padding:16px;display:grid;gap:16px;'
-createApp({ render: () => [h(SSH), h(Join)] }).mount(root)
+createApp({ render: () => h(RemoteConnectionsPanel) }).mount(root)

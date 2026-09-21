@@ -30,16 +30,17 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 
 把多台电脑的 DSH 集中到同一个桌面入口，无需将 DSH Web 暴露到网络。当前桌面连接方式为 **SSH 隧道**，将 HTTP 与 WebSocket 流量转发到远端 DSH 实际使用的回环地址和端口。
 
-- **电脑管理**：添加名称、主机、SSH 端口与用户名，支持编辑连接记录、删除不再使用的电脑；修改连接参数前需先断开。
+- **电脑管理**：SSH 页面只保留电脑列表和一个明确的“添加电脑”入口；表单在带关闭按钮的弹窗中打开。可填写名称、主机、SSH 端口、用户名和可选的本机 SSH Key 路径，支持编辑连接记录、删除不再使用的电脑；修改 SSH 目标或 Key 路径前需先断开，修改后原测试结果失效，需要重新测试。
 - **先测试，再连接**：验证 SSH 认证、远端 DSHKer 握手及 DSH 访问。测试通过与正在连接是两个独立状态。
 - **状态一目了然**：绿色表示就绪或测试通过，红色表示失败，同时显示文字状态；已配对的计算机会自行连接与重连，需要时也可主动断开。
 - **按需运行页签**：保留一个本地页签；运行页点击“+”后从浮层中的“局域网电脑”或“SSH 连接”列表选择，才创建对应的不可关闭远程页签。可建立连接的设备排在前面，暂不可用的设备保留在底部并置灰，断开连接不会删除已打开的页签。
-- **无需手动复制 DSH Token**：通过已认证链路获取 DSH Web 凭据。仍需配置 SSH 认证；应用不接收 SSH 密码，也不传输私钥。
+- **无需手动复制 DSH Token**：通过已认证链路获取 DSH Web 凭据。仍需配置 SSH 认证；可为每台电脑指定本机 SSH Key 路径，应用不接收密码，也不读取或传输私钥内容。
+- **升级后保持登录**：账号会话保存在系统凭据存储中。启动或安装新版本后，界面先显示恢复进度并自动刷新；只有服务器明确判定会话失效时才需要重新登录。
 
 连接步骤：
 
 1. 在远端电脑运行 DSHKer，并确认它能够启动受管 DSH Web 会话。
-2. 配置远端 SSH 服务，通过系统 OpenSSH 配置或 agent 验证访问，并完成主机密钥信任校验。
+2. 配置远端 SSH 服务，通过系统 OpenSSH 配置、agent 或本机 Key 路径验证访问，并完成主机密钥信任校验。
 3. 打开**远程连接**，填写电脑信息，先点**测试**，再点**连接**；进入**运行**后点击页签栏“+”，从 SSH 列表选择这台电脑。
 
 表单填写的是 **SSH 端口**，不是 DSH Web 端口。DSHKer 获取实际 DSH 地址，不假定端口为 `3080`。若提示 `remote.peer_unavailable`，请检查远端 DSHKer 是否运行、能否提供 DSH 会话；仅 SSH 服务可访问还不够。
@@ -50,11 +51,21 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 
 桌面端实现与自动化测试已完成：同一网络内设备的自动配对、连接阶段状态、每台电脑独立隔离的浏览器会话、远端授权目录浏览与工程选择、共享服务器配置编辑，以及断线后的任务核对。
 
-在**远程连接 → 网络与账户**中，网络按紧凑列表展示。按名称选择网络后查看电脑；展开**管理网络**再修改名称、设备上限等设置。内部 ID 收在带说明的技术信息中，仅在排查问题时查看，不占据主要操作区域。
+在**远程连接 → 网络与账户**中，登录后只保留当前账号和网络工作台。网络通过一个下拉菜单选择，旁边的**创建网络**按钮打开弹窗；选中网络后直接查看网络 ID、设备上限和电脑列表，名称、上限与删除集中在**管理网络**弹窗中。账号技术 ID、本机登记恢复和配对面板不再重复占据主工作区。
 
-旁边的**连接**页采用一致的紧凑布局：已保存电脑和连接测试优先展示，添加与管理电脑按需展开。**我的网络**直接显示电脑名称和状态，设备 ID 与网络成员设置分别收在可展开区域中。
+工作台现在只保留一个清晰的主层级，内部用留白和行分隔代替重复的嵌套边框；网络 ID、在线状态和所有操作仍然完整保留。
 
-加入同一网络的设备会自动完成配对，无需邀请码，也无需逐台确认——加入网络本身即为授权。邀请并确认的流程保留给不在你网络内的设备。
+加入网络后，“我的网络”会直接显示当前加入的网络 ID，并提供复制按钮；设备标识与“离开网络”也在同一层级，避免在多个折叠区域里寻找当前作用域。
+
+网络与账户页会把状态收敛为“已加入 · 未登录”或“服务在线”等明确标签；登录区域只保留一个下一步，不再重复堆叠网络、账户和服务器说明。暂时忙碌的读取会显示为进行中，技术错误码收在诊断信息中。
+
+在**设置 → Launcher 设置**中可以开启或关闭网络核心的开机自启。该开关读取 dshkerd 的真实注册状态；如果核心暂不可用，会明确提示稍后重试，不会把失败误显示成“未安装”。
+
+即使协调服务尚未就绪或正在读取配置，本机设备名称、设备标识和登录/注册入口仍会保留；服务未就绪时认证控件会置灰，并明确说明原因。
+
+旁边的 **SSH 连接** 页采用一致的紧凑布局：已保存电脑和连接测试优先展示，点击 **添加电脑** 打开弹窗，不会在列表下方展开表单。该页只处理 SSH 连接；加入网络、完整的**我的网络**身份、登记状态、离开网络和设备信息统一放在**网络与账户**页，避免连接操作与账户管理混在一起。
+
+加入同一网络的设备会出现在该网络的电脑列表中；默认局域网成员可以直接进入连接流程，无需在账号页重复确认配对。需要跨网络授权时仍使用对应的安全授权流程。
 
 设备列表就是该网络的成员名单：每台电脑显示在线状态、最后在线时间与上报版本。**移除**会把设备移出该网络并带走它在其中的配对——解绑只影响该网络，设备仍保留自身身份、随时可以重新登记；**撤销**只结束某一条配对，设备留在原地。你选过的网络会按账号记住；本机已不在当前网络时，列表会明确说明原因。
 
@@ -66,7 +77,9 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 
 规划前需了解两条限制：直连无法建立时，连接会回退到你自己部署的服务器作为不透明中继（TURN，只转发端到端加密的报文流），仅当直连与中继都无法建立时才报 `direct_unavailable`；授权目录只限制本应用的目录选择器——工程打开后，对方电脑上 DSH 自身的权限与审批策略仍然管辖一切。
 
-同一个核心进程也能**完全脱离桌面会话运行**，因此只能通过 SSH 访问的机器同样可以作为可用的主机。`dshkerd serve` 会自行发布私有端点并应答整张方法表；`dshkerd dsh start`／`dshkerd dsh stop` 以独立 subject 运行 DSH Web 子进程；`status`、`pair`、`connect`、`proxy`、`service configure` 是应用同名操作的命令行形式，`call` 可调用任意已发布方法并原样输出拒绝码，便于脚本化。应用本身不受影响——仍然把核心作为自己的子进程启动，并保有自己的启动 subject。
+同一个核心进程也能**完全脱离桌面会话运行**，因此只能通过 SSH 访问的机器同样可以作为可用的主机。`dshkerd serve` 会自行发布私有端点并应答整张方法表；`dshkerd dsh start`／`dshkerd dsh stop` 以独立 subject 运行 DSH Web 子进程；`status`、`pair`、`connect`、`proxy`、`service configure` 是应用同名操作的命令行形式，`call` 可调用任意已发布方法并原样输出拒绝码，便于脚本化。应用本身不受影响——没有已登记的无界面核心时才会启动自己的核心子进程，并保有自己的启动 subject。
+
+开启网络核心自启后，Launcher 会通过带认证的本地端点附加到已经运行的无界面核心，不会再启动第二个设备身份。退出或关闭自启会先完成明确的交接；自启仍开启时，后台核心会继续为 SSH-only 主机提供服务。
 
 详见[使用说明](docs/p2p-connections.zh-CN.md)与[实现清单](openspec/changes/add-self-hosted-p2p-dsh-connections/tasks.md)。
 
@@ -89,6 +102,43 @@ Launcher 不会替换、迁移或重置 DSH 原生数据。你已有的 `$DSH_HO
 当前 Release 安装包尚未签名。macOS 可能需要在 Finder 中右键选择“打开”，Windows 可能显示 SmartScreen 提示。请只安装来自本仓库、且已核对校验和的资产；应用不会在后台静默替换自己。
 
 如果仓库尚未发布任何 Release，“最新版本”链接会明确没有可用的更新源。[GitHub Actions 打包记录](https://github.com/ankye/dshker/actions/workflows/package.yml)仍作为短期构建和诊断证据，但不是 Launcher 的更新源。
+
+### 只安装无界面的 `dshkerd` 命令行核心
+
+服务器或远程电脑不需要桌面时，可以只安装独立的 Go 核心，不安装 Electron Launcher。必须选择明确的已发布版本；安装脚本会从官方 Release 下载当前系统和架构对应的压缩包，校验 SHA256 与包内清单，确认无误后原子替换命令行文件。它**不会**自动配置协调服务器、复制凭据、建立配对或开启开机启动。
+
+macOS 和 Linux（一键安装）：
+
+下面的 `0.1.65` 只是示例，请替换成已经发布且包含 CLI 资产的准确版本。
+
+```bash
+VERSION=0.1.65
+curl -fsSL "https://raw.githubusercontent.com/ankye/dshker/v${VERSION}/tools/install-dshkerd.sh" \
+  | bash -s -- --version "$VERSION"
+```
+
+默认安装到 `~/.local/bin/dshkerd`；也可以通过 `--install-dir /绝对路径` 指定其他当前用户可写目录。需要审计时，先从同一个 `v${VERSION}` tag 下载脚本，再在本地执行。脚本需要 `curl`、`tar` 以及 `shasum` 或 `sha256sum`。
+
+Windows PowerShell：
+
+```powershell
+$Version = '0.1.65'
+$Script = Join-Path $env:TEMP 'install-dshkerd.ps1'
+Invoke-WebRequest "https://raw.githubusercontent.com/ankye/dshker/v$Version/tools/install-dshkerd.ps1" -OutFile $Script
+& powershell -ExecutionPolicy Bypass -File $Script -Version $Version
+```
+
+Windows 默认安装到 `%LOCALAPPDATA%\DSHKer\bin\dshkerd.exe`。如果希望在任意终端直接执行 `dshkerd`，请显式把该目录加入 `PATH`。安装完成后，先明确配置你的部署参数，再启动并查看无界面主机：
+
+```bash
+dshkerd --version
+dshkerd service configure --origin https://你的协调服务器 --wss wss://你的协调服务器/ws --stun stun:你的协调服务器:3478 --pinned-key /绝对路径/coordinator-ca.pem
+dshkerd serve --state ~/.dshkerd
+dshkerd status --state ~/.dshkerd --json
+dshkerd autostart enable --state ~/.dshkerd
+```
+
+升级时用新的明确版本重复运行安装脚本即可。卸载命令行文件前先停止正在运行的 `dshkerd`，然后只删除安装文件（POSIX 使用 `rm -f ~/.local/bin/dshkerd`，PowerShell 使用 `Remove-Item "$env:LOCALAPPDATA\DSHKer\bin\dshkerd.exe"`）；安装器不会删除独立的 `~/.dshkerd` 状态目录。服务、信任、配对、连接和 DSH Web 操作是分开的显式步骤。`pair`、`connect`、`dsh start|stop` 和 `proxy` 的方式见 `dshkerd --help` 与[无界面核心说明](docs/p2p-connections.zh-CN.md)；缺少必要值时会明确拒绝，不会猜测或静默走其他路径。
 
 ## 检查 Launcher 更新
 
@@ -145,7 +195,7 @@ npm run build:electron
 
 ## 打包与发布
 
-`package.json` 是 Launcher 版本号的唯一来源。`npm run dist:*` 脚本分别生成 macOS arm64/x64 与 Windows x64/arm64 的本机未签名安装包。稳定版 `v*` tag 必须与 `v${package.json.version}` 完全一致；四个目标全部构建通过并核验清单、校验和后，GitHub Actions 会创建公开的 latest Release，附带四个安装包、合并后的 `checksums.txt` 和按平台命名的清单。手动触发工作流只上传 Actions Artifact，不会发布 Release。
+`package.json` 是 Launcher 版本号的唯一来源。`npm run dist:*` 脚本分别生成 macOS arm64/x64 与 Windows x64/arm64 的本机未签名安装包。`npm run build:dshkerd` 生成六个目标的独立命令行压缩包与清单，也可以使用对应的 `npm run build:dshkerd:*` 单目标脚本。稳定版 `v*` tag 必须与 `v${package.json.version}` 完全一致；桌面端和 CLI 目标全部构建通过并核验清单、校验和后，GitHub Actions 会创建同时包含两条产品渠道的公开 latest Release。手动触发工作流只上传 Actions Artifact，不会发布 Release。
 
 详细交付流程见 [docs/release.md](docs/release.md)，CI 规则见 [docs/ci.md](docs/ci.md)。
 

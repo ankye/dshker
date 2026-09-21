@@ -46,6 +46,7 @@ describe('release readiness core', () => {
       'performance-check',
       'package',
       'core-headless-smoke',
+      'standalone-cli-distribution',
       'release-verify',
       'release-smoke'
     ])

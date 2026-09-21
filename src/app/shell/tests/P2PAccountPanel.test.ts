@@ -158,29 +158,25 @@ describe('P2P account public controls (component diagnostics)', () => {
     expect(refreshDirectory).toHaveBeenCalledTimes(2)
   })
 
-  it('shows the network id outright while the account identity stays folded away', async () => {
+  it('uses one network picker and keeps the selected network summary visible', async () => {
     const ui = await render({
       currentUser: async () => ({ ok: true, data: user }),
       networks: async () => ({ ok: true, data: [network] })
     })
-    const row = ui.get('.p2p-network-row')
-    expect(row.text()).toContain('Office')
-    expect(row.text()).toContain('10 台')
-    // The row itself stays scannable: the id is not in the collapsed summary.
-    expect(row.text()).not.toContain(network.networkId)
-    // The account's technical identity is still a disclosure, and closed.
-    expect(ui.get('.p2p-account-identity details').attributes('open')).toBeUndefined()
-    expect(ui.get('.p2p-network-toggle').attributes('aria-expanded')).toBe('false')
-    await ui.get('.p2p-network-toggle').trigger('click')
-    expect(ui.get('.p2p-network-toggle').attributes('aria-expanded')).toBe('true')
-    // Once the row is open the id is shown outright, not behind a second
-    // disclosure, and carries its own copy control.
+    expect(ui.get('[data-testid="p2p-network-select"]').attributes('role')).toBe('combobox')
+    expect(ui.get('[data-testid="p2p-selected-network-summary"]').text()).toContain('Office')
     expect(ui.get('[data-testid="p2p-network-id"]').text()).toBe(network.networkId)
-    expect(ui.find('.p2p-network-editor details').exists()).toBe(false)
-    expect(ui.find('.p2p-network-identity button').exists()).toBe(true)
-    expect(ui.get('.p2p-network-editor-body').isVisible()).toBe(true)
-    expect(ui.get('.p2p-network-create').attributes('open')).toBeUndefined()
-    expect(ui.findAll('.p2p-network-row button')).toHaveLength(0)
+    expect(ui.find('.p2p-account-identity details').exists()).toBe(false)
+    expect(ui.find('.p2p-network-card').exists()).toBe(false)
+    await ui.get('[data-testid="p2p-network-manage-open"]').trigger('click')
+    const manageDialog = ui.get('[data-testid="p2p-network-manage-dialog"]')
+    expect(manageDialog.text()).toContain(network.networkId)
+    await manageDialog
+      .findAll('button')
+      .find((node) => node.text() === '关闭')!
+      .trigger('click')
+    await ui.get('[data-testid="p2p-network-create-open"]').trigger('click')
+    expect(ui.find('[data-testid="p2p-network-create-dialog"]').exists()).toBe(true)
   })
 
   it('clears submitted passwords and selects the only network without a click', async () => {
@@ -210,21 +206,53 @@ describe('P2P account public controls (component diagnostics)', () => {
       })
     )
     expect(ui.find('input[type="password"]').exists()).toBe(false)
-    expect(ui.text()).toContain(user.userId)
+    expect(ui.text()).not.toContain(user.userId)
     // A confirmed session loads its own networks. The panel exists to show them,
     // so it must not require a click to display what the session already grants.
     expect(networks).toHaveBeenCalledTimes(1)
     expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-register-form"]').exists()).toBe(false)
-    expect(ui.get('.p2p-network-list').text()).toContain(network.networkId)
-    expect(ui.get('.p2p-network-list').text()).toContain(network.name)
-    // One network is not a choice, so the panel must not ask for a click whose
-    // answer it already knows.
-    expect((ui.get('input[type="radio"]').element as HTMLInputElement).checked).toBe(true)
-    expect(ui.text()).toContain('选定网络: Office')
+    expect(ui.get('[data-testid="p2p-selected-network-summary"]').text()).toContain(network.name)
+    // One network is selected authoritatively and its scope is visible without
+    // opening a technical disclosure.
+    expect(ui.get('[data-testid="p2p-network-select"]').text()).toContain('Office')
+    expect(ui.text()).toContain('已选网络Office')
+    expect(ui.get('[data-testid="p2p-network-id"]').text()).toBe(network.networkId)
     const { p2pAccounts } = await import('@/app/domains/remote-connections')
     expect(p2pAccounts.state('service-a').selectedNetworkId).toBe(network.networkId)
     expect(JSON.stringify(p2pAccounts.state('service-a'))).not.toContain('secret-login')
+  })
+
+  it('enters the signed-in state while a slow network list loads', async () => {
+    let resolveNetworks!: (value: Awaited<ReturnType<P2PManagementApi['networks']>>) => void
+    const networks = vi.fn<P2PManagementApi['networks']>().mockReturnValue(
+      new Promise((resolve) => {
+        resolveNetworks = resolve
+      })
+    )
+    const login = vi.fn<P2PManagementApi['login']>().mockResolvedValue({ ok: true, data: user })
+    const ui = await render({
+      currentUser: async () => ({
+        ok: false,
+        code: 'p2p.user_login_required',
+        message: 'required'
+      }),
+      login,
+      networks
+    })
+
+    await ui.get('[data-testid="p2p-login-form"] input[type="password"]').setValue('secret-login')
+    await ui.get('[data-testid="p2p-login-form"]').trigger('submit')
+    await flushPromises()
+
+    expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
+    expect(ui.text()).toContain(user.username)
+    expect(ui.text()).toContain(zhCN['p2p.account.networksLoading'])
+    expect(ui.find('[data-testid="p2p-network-load-state"]').exists()).toBe(true)
+
+    resolveNetworks({ ok: true, data: [network] })
+    await flushPromises()
+    expect(ui.get('[data-testid="p2p-selected-network-summary"]').text()).toContain(network.name)
   })
 
   it('previews exact network deletion, blocks unconfirmed re-submission and resolves through readback', async () => {
@@ -241,7 +269,7 @@ describe('P2P account public controls (component diagnostics)', () => {
       networks,
       deleteNetwork
     })
-    await ui.get('.p2p-network-toggle').trigger('click')
+    await ui.get('[data-testid="p2p-network-manage-open"]').trigger('click')
     expect(button(ui, '删除网络').isVisible()).toBe(true)
     await button(ui, '删除网络').trigger('click')
     expect(deleteNetwork).not.toHaveBeenCalled()
@@ -265,7 +293,7 @@ describe('P2P account public controls (component diagnostics)', () => {
     await flushPromises()
     expect(ui.find('.p2p-delete-confirm').exists()).toBe(false)
     expect(document.activeElement).toBe(ui.get('h3').element)
-    expect(ui.findAll('.p2p-network-list li')).toHaveLength(0)
+    expect(ui.find('[data-testid="p2p-selected-network-summary"]').exists()).toBe(false)
     expect(ui.text()).toContain('此用户没有网络')
     expect(deleteNetwork).toHaveBeenCalledTimes(1)
   })
@@ -285,8 +313,8 @@ describe('P2P account public controls (component diagnostics)', () => {
       renameNetwork,
       createNetwork
     })
-    await ui.get('.p2p-network-toggle').trigger('click')
-    const rename = ui.get('.p2p-network-list form')
+    await ui.get('[data-testid="p2p-network-manage-open"]').trigger('click')
+    const rename = ui.get('[data-testid="p2p-network-manage-dialog"] form')
     expect((rename.get('input').element as HTMLInputElement).value).toBe('Office')
     await rename.get('input').setValue('Office updated')
     await rename.trigger('submit')
@@ -298,23 +326,25 @@ describe('P2P account public controls (component diagnostics)', () => {
         name: 'Office updated'
       })
     )
-    const create = ui.findAll('form').at(-1)!
+    const manageDialog = ui.get('[data-testid="p2p-network-manage-dialog"]')
+    const closeManage = manageDialog.findAll('button').find((node) => node.text() === '关闭')
+    await closeManage!.trigger('click')
+    await ui.get('[data-testid="p2p-network-create-open"]').trigger('click')
+    const create = ui.get('[data-testid="p2p-network-create-dialog"] form')
     await create.get('input').setValue('Lab')
     await create.trigger('submit')
     await flushPromises()
     expect(createNetwork).toHaveBeenCalledWith(
       expect.objectContaining({ serviceId: 'service-a', name: 'Lab' })
     )
-    expect(ui.findAll('.p2p-network-list li').map((node) => node.get('label').text())).toEqual([
+    const { p2pAccounts } = await import('@/app/domains/remote-connections')
+    expect(p2pAccounts.state('service-a').networks?.map((entry) => entry.name)).toEqual([
       'Office updated',
       'Lab'
     ])
-    expect(ui.text()).toContain('net-new')
     // The selection stays on the network that was read first: adding a second one
     // neither clears it nor moves it to the newcomer.
-    expect(
-      ui.findAll('input[type="radio"]').map((node) => (node.element as HTMLInputElement).checked)
-    ).toEqual([true, false])
+    expect(p2pAccounts.state('service-a').selectedNetworkId).toBe(network.networkId)
   })
 
   describe('P2P network device capacity control', () => {
@@ -328,7 +358,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         networks: async () => ({ ok: true, data: [network] }),
         updateNetworkLimit
       })
-      await ui.get('.p2p-network-toggle').trigger('click')
+      await ui.get('[data-testid="p2p-network-manage-open"]').trigger('click')
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
       // The themed listbox renders its rows on open, so the trigger is opened first.
       await ui.get('[data-testid="p2p-limit"]').trigger('click')
@@ -352,6 +382,7 @@ describe('P2P account public controls (component diagnostics)', () => {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: true, data: [atMax] })
       })
+      await ui.get('[data-testid="p2p-network-manage-open"]').trigger('click')
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('30')
       expect(ui.find('[data-testid="p2p-limit"]').exists()).toBe(false)
       expect(ui.text()).toContain('已达最大上限 30')
@@ -363,12 +394,29 @@ describe('P2P account public controls (component diagnostics)', () => {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: true, data: [foreign] })
       })
+      await ui.get('[data-testid="p2p-network-manage-open"]').trigger('click')
       expect(ui.get('[data-testid="p2p-network-limit"]').text()).toContain('10')
       expect(ui.find('[data-testid="p2p-limit"]').exists()).toBe(false)
     })
   })
 
   describe('Account registration form', () => {
+    it('shows restoration progress instead of a login form while startup checks the saved session', async () => {
+      let release!: (value: Awaited<ReturnType<P2PManagementApi['currentUser']>>) => void
+      const currentUser = vi.fn<P2PManagementApi['currentUser']>().mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = resolve
+          })
+      )
+      const ui = await render({ currentUser })
+      expect(ui.text()).toContain(zhCN['p2p.account.restoring'])
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
+      release({ ok: false, code: 'p2p.user_login_required', message: 'none' })
+      await flushPromises()
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(true)
+    })
+
     it('treats being signed out as a fact, not a failed operation', async () => {
       const currentUser = vi.fn<P2PManagementApi['currentUser']>().mockResolvedValue({
         ok: false,
@@ -387,11 +435,18 @@ describe('P2P account public controls (component diagnostics)', () => {
     it('still reports a genuine failure and offers the user re-read once signed in', async () => {
       const ui = await render({
         currentUser: async () => ({ ok: true, data: user }),
-        networks: async () => ({ ok: false, code: 'p2p.helper_unavailable', message: 'down' })
+        networks: vi
+          .fn<P2PManagementApi['networks']>()
+          .mockResolvedValueOnce({ ok: false, code: 'p2p.helper_unavailable', message: 'down' })
+          .mockResolvedValueOnce({ ok: true, data: [network] })
       })
       expect(ui.find('[data-testid="p2p-account-read-user"]').exists()).toBe(true)
-      const error = ui.get('[data-testid="p2p-account-error"]')
-      expect(error.text()).toContain('p2p.helper_unavailable')
+      const error = ui.get('[data-testid="p2p-network-load-error"]')
+      expect(error.text()).toContain(zhCN['p2p.account.networksLoadFailed'])
+      expect(ui.text()).toContain('p2p.helper_unavailable')
+      await ui.get('[data-testid="p2p-network-retry"]').trigger('click')
+      await flushPromises()
+      expect(ui.get('[data-testid="p2p-selected-network-summary"]').text()).toContain(network.name)
     })
 
     it('explains a rejected value instead of blaming the configuration', async () => {
@@ -401,22 +456,21 @@ describe('P2P account public controls (component diagnostics)', () => {
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: false, code: 'p2p.invalid_request', message: 'refused' })
       })
-      const error = ui.get('[data-testid="p2p-account-error"]')
-      expect(error.text()).toContain(zhCN['p2p.account.invalidInput'])
-      expect(error.text()).not.toContain(zhCN['p2p.management.failed'])
-      // The code stays available for reporting, just no longer alone.
-      expect(error.text()).toContain('p2p.invalid_request')
+      const error = ui.get('[data-testid="p2p-network-load-error"]')
+      expect(error.text()).toContain(zhCN['p2p.account.networksLoadFailed'])
+      // The code stays available in diagnostics, but no longer becomes the
+      // primary account-level error after the identity is already accepted.
+      expect(ui.text()).toContain('p2p.invalid_request')
     })
 
-    it('offers a category message for a code that has no specific copy', async () => {
+    it('treats a transient busy refusal as neutral account loading', async () => {
       const ui = await render({
         currentUser: async () => ({ ok: true, data: user }),
         networks: async () => ({ ok: false, code: 'p2p.service_busy', message: 'busy' })
       })
-      // Transient refusals invite a retry rather than a configuration audit.
-      expect(ui.get('[data-testid="p2p-account-error"]').text()).toContain(
-        zhCN['p2p.refusal.retry']
-      )
+      expect(ui.text()).toContain(zhCN['p2p.account.reading'])
+      expect(ui.find('[data-testid="p2p-account-error"]').exists()).toBe(false)
+      expect(ui.text()).not.toContain('p2p.service_busy')
     })
 
     it('never asks for a password while the account state is unknown', async () => {
@@ -589,7 +643,7 @@ describe('P2P account public controls (component diagnostics)', () => {
           password: 'a-long-new-secret'
         })
       )
-      expect(ui.text()).toContain(user.userId)
+      expect(ui.text()).not.toContain(user.userId)
       expect(ui.find('[data-testid="p2p-register-password"]').exists()).toBe(false)
       const { p2pAccounts } = await import('@/app/domains/remote-connections')
       expect(JSON.stringify(p2pAccounts.state('service-a'))).not.toContain('a-long-new-secret')
@@ -606,7 +660,8 @@ describe('P2P account public controls (component diagnostics)', () => {
         networks: async () => ({ ok: true, data: [network] }),
         createNetwork
       })
-      const create = ui.findAll('form').at(-1)!
+      await ui.get('[data-testid="p2p-network-create-open"]').trigger('click')
+      const create = ui.get('[data-testid="p2p-network-create-dialog"] form')
       await create.get('input').setValue('Third')
       await create.trigger('submit')
       await flushPromises()

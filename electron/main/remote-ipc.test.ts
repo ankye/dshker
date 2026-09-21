@@ -53,7 +53,8 @@ describe('remote connection IPC', () => {
       displayName: 'Mac',
       host: 'mac',
       port: 22,
-      user: 'dev'
+      user: 'dev',
+      sshKeyPath: ''
     }
     expect(parseUpdateRemoteConnectionRequest(request)).toEqual(request)
     for (const field of ['privateKey', 'deviceId', 'pairId', 'mode', 'url', 'targetPort']) {
@@ -63,6 +64,15 @@ describe('remote connection IPC', () => {
     }
     expect(() =>
       parseUpdateRemoteConnectionRequest({ ...request, expectedConfigRevision: '' })
+    ).toThrow()
+    expect(
+      parseUpdateRemoteConnectionRequest({
+        ...request,
+        sshKeyPath: '/example/.ssh/id_ed25519'
+      }).sshKeyPath
+    ).toBe('/example/.ssh/id_ed25519')
+    expect(() =>
+      parseUpdateRemoteConnectionRequest({ ...request, sshKeyPath: 'id_ed25519' })
     ).toThrow()
     const { service } = remoteService()
     registerRemoteConnectionIpc(service)
@@ -108,7 +118,9 @@ describe('remote connection IPC', () => {
     const { service } = remoteService()
     registerRemoteConnectionIpc(service)
     const create = mocks.handlers.get(DESKTOP_IPC_CHANNELS.remoteConnectionsCreate)!
-    expect(await create({}, { displayName: 'Mac', host: 'mac', port: 22, user: 'dev' })).toEqual({
+    expect(
+      await create({}, { displayName: 'Mac', host: 'mac', port: 22, user: 'dev', sshKeyPath: '' })
+    ).toEqual({
       ok: true,
       data: { connections: [] }
     })
@@ -116,7 +128,8 @@ describe('remote connection IPC', () => {
       displayName: 'Mac',
       host: 'mac',
       port: 22,
-      user: 'dev'
+      user: 'dev',
+      sshKeyPath: ''
     })
     expect(
       await mocks.handlers.get(DESKTOP_IPC_CHANNELS.remoteConnectionsTest)?.(

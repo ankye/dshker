@@ -13,7 +13,7 @@ import { join } from 'node:path'
  */
 describe('button visual contract', () => {
   const css = readFileSync(
-    join(import.meta.dirname, '..', '..', '..', 'styles', 'routes.css'),
+    join(import.meta.dirname, '..', '..', '..', 'styles', 'routes-launch.css'),
     'utf8'
   )
   const rule = (selector: string): string => {

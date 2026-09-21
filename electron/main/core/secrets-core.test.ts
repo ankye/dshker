@@ -95,6 +95,7 @@ describe.skipIf(binary === undefined)('core secret migration against a real dshk
       {
         resourcesRoot: meta.resourcesRoot,
         dataRoot: meta.dataRoot,
+        stateRoot: join(meta.dataRoot, 'state'),
         onUnavailable: () => undefined
       },
       new AbortController().signal

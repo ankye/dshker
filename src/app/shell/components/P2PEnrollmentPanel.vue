@@ -72,7 +72,10 @@ const canSubmit = computed(
 // and left it reporting an unknown enrollment state. Entry reads are queued per
 // scope, so ordering is handled without skipping the read.
 onMounted(() => {
-  void enrollment.read(props.serviceId)
+  // The login-free join card may have already read this same durable record
+  // while the account panel was restoring. Reuse a confirmed projection rather
+  // than issuing a second coordinator/credential read during the same mount.
+  if (state.registration === undefined) void enrollment.read(props.serviceId)
 })
 
 async function submit() {

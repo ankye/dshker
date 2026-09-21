@@ -891,7 +891,7 @@ function registerAutostartIpc(autostart: CoreAutostartPort | undefined): void {
         return apiOk({
           installed: state.installed,
           mechanism: state.mechanism,
-          supported: state.mechanism !== 'unsupported'
+          supported: state.supported
         })
       } catch (error) {
         return apiFail(
@@ -913,7 +913,7 @@ function registerAutostartIpc(autostart: CoreAutostartPort | undefined): void {
         return apiOk({
           installed: state.installed,
           mechanism: state.mechanism,
-          supported: state.mechanism !== 'unsupported'
+          supported: state.supported
         })
       } catch (error) {
         return apiFail(

@@ -71,6 +71,7 @@ jobs:
           npm run type-check
           npm test -- --run
           npm run test:e2e
+          npm run test:dshkerd-distribution
           npm run service:smoke
           npm run visual:smoke
           npm run performance:check -- --mode release-readiness --json
@@ -277,10 +278,72 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  dshkerd-cli:
+    name: dshkerd CLI ${{ matrix.name }}
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS arm64
+            target: darwin-arm64
+            script: build:dshkerd:mac-arm64
+            artifact: dshkerd-cli-darwin-arm64
+          - name: macOS x64
+            target: darwin-x64
+            script: build:dshkerd:mac-x64
+            artifact: dshkerd-cli-darwin-x64
+          - name: Windows arm64
+            target: windows-arm64
+            script: build:dshkerd:win-arm64
+            artifact: dshkerd-cli-windows-arm64
+          - name: Windows x64
+            target: windows-x64
+            script: build:dshkerd:win-x64
+            artifact: dshkerd-cli-windows-x64
+          - name: Linux arm64
+            target: linux-arm64
+            script: build:dshkerd:linux-arm64
+            artifact: dshkerd-cli-linux-arm64
+          - name: Linux x64
+            target: linux-x64
+            script: build:dshkerd:linux-x64
+            artifact: dshkerd-cli-linux-x64
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Go for dshkerd
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: networking/go.mod
+          cache-dependency-path: networking/go.sum
+
+      - name: Build and verify standalone archive
+        shell: bash
+        run: |
+          npm run "${{ matrix.script }}"
+          node -e "const fs=require('node:fs'); const p='release/dshkerd'; const t='${{ matrix.target }}'; const v=require('./package.json').version; const e=t.startsWith('windows')?'zip':'tar.gz'; for (const f of ['dshkerd-'+v+'-'+t+'.'+e,'dshkerd-'+v+'-checksums.txt','dshkerd-'+v+'-manifest.json']) if (!fs.existsSync(p+'/'+f)) throw new Error('Missing '+p+'/'+f)"
+
+      - name: Upload standalone CLI archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: release/dshkerd/*
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
     name: Publish GitHub Release
     if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
-    needs: package
+    needs: [package, dshkerd-cli]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -325,10 +388,47 @@ jobs:
           name: dshker-launcher-linux-arm64
           path: release-input/linux-arm64
 
+      - name: Download standalone dshkerd macOS arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshkerd-cli-darwin-arm64
+          path: release-input/dshkerd-darwin-arm64
+
+      - name: Download standalone dshkerd macOS x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshkerd-cli-darwin-x64
+          path: release-input/dshkerd-darwin-x64
+
+      - name: Download standalone dshkerd Windows arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshkerd-cli-windows-arm64
+          path: release-input/dshkerd-windows-arm64
+
+      - name: Download standalone dshkerd Windows x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshkerd-cli-windows-x64
+          path: release-input/dshkerd-windows-x64
+
+      - name: Download standalone dshkerd Linux arm64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshkerd-cli-linux-arm64
+          path: release-input/dshkerd-linux-arm64
+
+      - name: Download standalone dshkerd Linux x64 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dshkerd-cli-linux-x64
+          path: release-input/dshkerd-linux-x64
+
       - name: Validate and assemble release assets
         shell: bash
         run: |
           node tools/assemble-release-assets.mjs
+          node tools/assemble-dshkerd-assets.mjs
 
       - name: Refuse an existing GitHub Release
         env:
@@ -353,7 +453,7 @@ jobs:
               ;;
           esac
 
-      - name: Create public prerelease GitHub Release (interop testing)
+      - name: Create public stable GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -380,7 +480,12 @@ jobs:
             publish/release-manifest-windows-arm64.json \
             publish/release-manifest-linux-x64.json \
             publish/release-manifest-linux-arm64.json \
+            publish/dshkerd-*.tar.gz \
+            publish/dshkerd-*.zip \
+            publish/dshkerd-*-checksums.txt \
+            publish/dshkerd-*-manifest.json \
+            publish/install-dshkerd.sh \
+            publish/install-dshkerd.ps1 \
             --verify-tag \
             --notes "$release_notes" \
-            --title "DSHKer Launcher ${GITHUB_REF_NAME}" \
-            --prerelease
+            --title "DSHKer Launcher ${GITHUB_REF_NAME}"

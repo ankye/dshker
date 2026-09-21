@@ -1,3 +1,9 @@
+## 2026-09-21 login feedback and network refresh
+
+- [x] Publish the signed-in identity as soon as the authenticated session is persisted and accepted; load the network list independently.
+- [x] Give the network section explicit loading, preserved-data failure, retry, and diagnostics states in zh-CN and en-US.
+- [x] Add domain and component regression coverage for a slow network read and a recoverable list failure.
+
 ## 0.1.62 follow-up — persisted account recovery at startup (2026-09-18)
 
 - [x] 修复启动恢复与首屏账户查询并发时的会话状态竞态：同一 coordinator 的持久会话恢复使用单服务 single-flight；`service_busy`、取消、helper/传输暂时不可用等非权威错误不再删除持久会话，只有明确的 `user_login_required`、`user_unauthorized` 或 `user_session_expired` 才清理。新增 `session-registry.test.ts` 与 `management.test.ts` 回归覆盖。Focused validation: `npm test -- --run electron/main/p2p/session-registry.test.ts electron/main/p2p/management.test.ts src/app/shell/tests/P2PAccountPanel.test.ts`（60/60）。
@@ -348,4 +354,80 @@ Helper 接入进展（2026-09-07）：新增 Go helper、私有 RPC、runtime HT
 | D28 `Exceed stream limits or inject another destination`             | 注入超预算 frame/streams/queue、跨 peer ID、任意 host/port、CONNECT/Origin    | 精确拒绝并清理适用流；无无限缓冲/越权 socket，正常独立连接继续                                   | A+I+R   |
 | D29 `Test succeeds`                                                  | disconnected 状态点测试，完成 HTTP/WS 后检查监听器和 UI                       | testStatus passed，但 live disconnected，无可用 URL/临时流/隧道；不是常驻 ready                  | A+I+R   |
 | D30 `Server reachable but DSH unavailable`                           | 服务可达、peer 可直连，但 DSH 启动/认证 HTTP/WS 分别失败                      | runtime/app 阶段精确报错，不变绿，不全折叠为 peer unavailable                                    | A+I+R   |
-| D31 `Duplicate attempt or stale event`                               | 快速双点测试/连接、双向同时拨号；旧 generation 成功晚到                       | 单一有效 attempt，其余 busy；旧结果不修改当前 live/test/tab，不泄漏临时资源                      | A+I+R   |
+| D31 `Duplicate attempt or stale event`                                | 快速双点测试/连接、双向同时拨号；旧 generation 成功晚到                       | 单一有效 attempt，其余 busy；旧结果不修改当前 live/test/tab，不泄漏临时资源                      | A+I+R   |
+
+## 0.1.64 follow-up — remote network information architecture (2026-09-20)
+
+- [x] 将完整「我的网络」卡片及加入/登记流程统一放在「网络与账户」页；「连接」页只保留 SSH 主机与连接操作，不再显示“加入网络”入口，避免连接页出现与当前任务无关的网络管理卡片。验证：`npm test -- --run src/app/shell/tests/P2PJoinPanel.test.ts src/app/shell/tests/RemoteConnectionsTabs.test.ts src/app/shell/tests/RemoteConnectionsPanel.test.ts src/app/shell/tests/remote-visual-hierarchy.test.ts`。
+
+## 0.1.64 follow-up — remote tab and network-list blockers (2026-09-20)
+
+- [x] 将“已配对、可建立连接”从 `disconnected` 拆成独立的 `available` 状态；可添加设备使用强调色，红色仅表示失败、撤销或明确离线。
+- [x] 为添加远程页签浮层补齐进入焦点、Tab/Shift+Tab 循环、Enter 激活、Esc 关闭和关闭/选择后的触发按钮焦点恢复。
+- [x] 将网络管理列表改为带明确字段标签的网络卡片；网络 ID 收入折叠的技术信息区域，提供复制操作并说明其用于加入网络。
+- [x] 验证：`npm test -- --run src/app/shell/tests/RuntimeTabsPanel.test.ts src/app/shell/tests/P2PAccountPanel.test.ts src/app/shell/tests/remote-visual-hierarchy.test.ts`（41/41），`npm run type-check`。
+
+## 0.1.64 follow-up — flatten joined-network identity (2026-09-20)
+
+- [x] 将“我的网络”中的设备名称、设备标识、当前加入网络 ID、复制操作和“离开网络”提升到同一可见层级，移除设备技术信息与网络成员设置的多层折叠；新登记凭据持久保存 networkId，旧凭据缺少该字段时明确提示且不猜测网络。验证：P2PJoinPanel、主进程凭据/登记/投影回归测试，类型检查与本地界面检查。
+- [x] 即使协调服务未就绪或目录读取失败，也保持本机设备信息与置灰的登录/注册框可见；旧凭据仅在目录明确匹配唯一网络时恢复网络 ID，否则继续明确提示。修复渲染层热更新重置请求序号导致的 `p2p.request_replayed`。
+
+## 0.1.64 follow-up — persisted account restoration after restart/install (2026-09-20)
+
+- [x] 不再把系统凭据提供方/传输失败吞成“无会话”；只有持久记录确实不存在或服务端明确拒绝会话时才进入登录态。
+- [x] 启动账号读取期间显示“正在恢复上次登录”，并监听主进程服务状态变化，恢复完成后自动重新读取账户；已确认登出状态不会被后台事件改回未知或反复重试。
+- [x] 增加主进程凭据-provider 失败回归测试、账号域启动恢复重读测试和界面恢复态/登录表单互斥测试。
+- [x] 并行启动的网络/账户/加入/登记面板共享内置服务 provisioning 与登记记录首读，避免启动竞态和重复读取。
+- [x] 只有凭据通过 provider 持久写入后才发布内存登录态；写入失败不再被吞掉为“登录成功”，并由 `PeerAccounts` 回归测试锁定该顺序，确保下一次启动不会无提示地回到登录框。
+
+## 0.1.64 follow-up — coordinator signal recovery after displacement (2026-09-20)
+
+- [x] `dshkerd` 在明确的配对 reconcile/retry/connect 操作前检查协调服务器信令订阅；已关闭或被新进程替换的订阅只重建一次，健康订阅不被替换，避免 `p2p.server_unavailable` 在服务可达时卡死到必须重启应用。
+- [x] `Signaling.current/isDown` 将已结束但尚未被 supervisor 标记的 socket 视为不可用；`Manager.Connect` 对缺失订阅返回 typed `p2p.server_unavailable`，不 panic 或猜测备用传输。
+- [x] 本地 networking internal tests 与本地 macOS arm64 核心重建通过；协调服务器 mTLS heartbeat、pair identity 与两端在线状态已读回，Windows 真机连接仍需联测。
+
+## 0.1.64 follow-up — persisted account startup single-flight (2026-09-21)
+
+- [x] 启动协调器与账户页同时读取服务时共享同一个核心通道附加、服务激活和 `currentUser` 请求，不再把正常的并发恢复误报为 `p2p.helper_busy`/`p2p.service_busy`。
+- [x] 服务会话恢复完成后，首个暂时返回登录要求的账户读取会自动重试；只有用户明确登出才保持登出，不会把临时错误当成权限丢失。
+- [x] 登录面板在无已接受账户身份时不再同时显示“正在读取账户状态”和登录表单；临时忙碌只对已接受身份显示中性读取状态。
+- [x] 验证：P2P 核心宿主、服务、主进程账户、渲染账户域和登录面板回归测试（119 项通过）。
+
+## 0.1.64 follow-up — reveal window after minimize-to-tray close (2026-09-21)
+
+- [x] Dock/桌面图标再次激活 Launcher 时，如果关闭按钮只是把窗口隐藏到托盘，现有窗口会恢复、显示并获得焦点；只有确实没有窗口时才创建新窗口。
+- [x] 第二实例唤醒与 Dock 激活共用同一个窗口恢复逻辑，避免进程仍在运行但界面不可见。
+- [x] 验证：窗口显示/布局回归测试和全量测试。
+
+## 0.1.64 follow-up — network account hierarchy and state copy (2026-09-20)
+
+- [x] 收敛“网络与账户”页的信息层级：保留设备名称、设备标识、已加入网络 ID、复制和离开操作，将页面说明、加入后登录提示与账户卡片改为单一下一步（登录后管理网络和配对设备）。
+- [x] 将协调服务状态明确标为“服务在线/离线”，加入后未登录状态显示为“已加入 · 未登录”，避免把服务会话误读为设备连接状态。
+- [x] 将 `p2p.helper_busy`、`p2p.service_busy` 等暂时忙碌拒绝归入中性账户读取状态；其余技术错误码收入折叠诊断信息，不再作为主界面红色产品文案。
+- [x] 验证：`npm test -- --run src/app/shell/tests/P2PJoinPanel.test.ts src/app/shell/tests/P2PNetworkAccountPanel.test.ts src/app/shell/tests/P2PAccountPanel.test.ts src/app/shell/tests/RemoteConnectionsTabs.test.ts src/app/shared/i18n`、`npm run type-check`。
+
+## 0.1.64 follow-up — network account workspace simplification (2026-09-20)
+
+- [x] 从登录后的默认工作台移除账号技术信息，只保留当前账号和可执行操作；网络不再以多张卡片堆叠，而是使用单个网络选择器。
+- [x] 在网络选择器旁提供创建网络按钮，创建通过弹窗完成；选中网络后显示网络名称、网络 ID、设备上限和设备目录，管理名称/上限/删除收进管理弹窗。
+- [x] 默认“网络与账户”页不再重复挂载本机登记恢复和设备配对面板；这些领域组件与连接能力保留，由设备目录和连接工作台承接局域网成员操作。
+- [x] 验证：`npm test -- --run src/app/shell/tests/P2PAccountPanel.test.ts src/app/shell/tests/P2PNetworkAccountPanel.test.ts src/app/shell/tests/RemoteConnectionsTabs.test.ts src/app/shell/tests/remote-visual-hierarchy.test.ts`、`npm run type-check`。
+- [x] 优化登录后工作台文案层级：使用“网络与设备 / 网络 / 设备”的短标题链，账户标签改为“登录账号”，并缩短网络选择说明；保留网络 ID、上限和设备状态等必要信息。
+
+## 0.1.64 follow-up — SSH add-computer dialog boundary (2026-09-20)
+
+- [x] SSH 连接页只保留已管理电脑列表和明确的“添加电脑”入口；添加表单不再以内嵌 disclosure 常驻页面，改为带遮罩、标题、右上角关闭按钮和取消操作的 modal dialog。
+- [x] 打开添加电脑弹层后焦点进入第一个字段；Esc、遮罩、右上角关闭和取消均关闭并恢复到“添加电脑”触发按钮；提交成功才关闭并清空草稿，失败保留输入。
+- [x] 网络与账户页的“创建网络/管理网络”弹层补齐标题栏关闭按钮，避免把底部取消当作唯一退出路径；SSH 页不挂载网络管理控件。
+- [x] 验证：`npm test -- --run src/app/shell/tests/RemoteConnectionsPanel.test.ts src/app/shell/tests/RemoteConnectionsTabs.test.ts src/app/shell/tests/P2PAccountPanel.test.ts src/app/shared/i18n`（53 项）。
+
+## 0.1.64 follow-up — network account visual density (2026-09-20)
+
+- [x] 收敛网络与账户页的视觉容器：移除网络账户外层与账户工作区的重复卡片边框，设备摘要只保留必要分隔线，网络选择区改为留白布局，设备目录改为行分隔而非整块边框。
+- [x] 不改变网络 ID、设备名称、在线状态、刷新、创建、管理、移除等字段和操作；仅调整层级、留白和分隔关系，保留键盘焦点与可访问标签。
+- [x] 修正视觉层级回归测试读取外置 scoped CSS 的方式，并验证 P2P 账户/网络/加入、远程页签与视觉层级测试（58 项）。
+
+## 0.1.64 follow-up — autostart state error projection (2026-09-20)
+
+- [x] 修正开机自启设置读取对扁平 `ApiResult` 失败结构的解析；主进程返回的 `code/message` 不再被误读为嵌套 `error.message`，核心暂不可用时显示明确的本地化提示，而不是无上下文地覆盖成“无法读取”。
+- [x] 增加设置页回归用例，覆盖真实 IPC 失败结构和开机自启拒绝后的禁用状态；保留核心状态读回语义，不把失败猜测成“未安装”。失败时提供显式“重新读取状态”操作，不在后台无限重试。

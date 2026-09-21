@@ -1,5 +1,92 @@
 # Changelog
 
+## Unreleased
+
+## 0.1.65 — 2026-09-21
+
+### 简体中文 (zh-CN)
+
+- **增强左下角状态栏入口可见性。** 菜单和命令行按钮现在同时显示图标与文字，保留未读红点、焦点态和原有键盘/无障碍名称，窄窗口下也不会撑破状态栏。
+- **加快登录后的可用反馈。** 认证和安全存储确认后立即显示已登录账号；网络列表改为独立加载，加载中、读取失败和重试都在网络区域内反馈，不再让网络请求拖住登录界面或把网络错误误报成登录失败。
+- **修复 macOS 登录会话无法持久化。** 桌面启动的 `dshkerd` 写入 Keychain 时不再卡在继承的控制终端；登录确认后的会话会真正保存，重启后可以恢复账号，不再无故回到登录框。
+- **恢复网络与账户页的内容容器。** 移除重复的页内“网络与账户”标题，保留远程连接页签作为导航名称，同时恢复统一的表面、边框和内边距，让“我的网络”和账户操作回到清晰的工作区层级。
+- **修复后台核心的单实例交接。** 开启网络核心自启时，Launcher 会附加到已经运行的 `dshkerd`，不会再启动第二个设备身份；退出、禁用自启和异常断开都使用明确的交接/释放流程，避免 `owner_busy`、白屏或下次启动无法恢复。
+- **拆分基础 VFS 模块。** 路径、安全策略、资源目录和内存存储分离为独立模块，保持原有导出兼容，同时让每个源文件都留在维护和审查上限内。
+
+- **修复 SSH Key 编辑后的连接状态错位。** 已连接或测试中的电脑不能更改 SSH Key 路径；断开并保存新路径后，旧测试结果清除，需使用新身份重新测试，避免列表显示新 Key、隧道却仍用旧 Key。
+- **修复协调服务器恢复后再次掉线。** 重建的 P2P 信令订阅不再随一次操作返回而关闭；同时发起的恢复也不会留下互相覆盖的订阅。
+- **修复切换服务器时账号信息串台。** 切换协调服务器后，账号和网络内容跟随所选服务器更新，不再显示上一台服务器的信息却对新服务器执行操作。
+- **区分可连接与失败设备。** 尚未连接但可以点击连接的电脑使用强调色状态；红色只表示明确失败、撤销或离线，状态仍有文字说明。
+
+- **将 SSH 添加电脑改为明确弹层。** SSH 连接页只显示电脑列表和“添加电脑”入口；表单不再嵌在列表底部，改为带遮罩、标题栏关闭按钮、取消操作和焦点恢复的对话框。网络创建/管理弹层也补齐标题栏关闭按钮。
+- **降低网络与账户页的线框密度。** 移除重复的外层/内层卡片边框，网络选择器改用留白布局，设备目录改为行分隔；网络 ID、设备状态和所有操作保持不变。
+- **收紧远程 SSH 工作台入口。** “连接”标签页改名为“SSH 连接”，电脑列表提供明确的“添加电脑”操作；新增和编辑表单支持指定本机 SSH Key 路径，核心会把路径作为 OpenSSH 参数传入，私钥内容不会进入渲染器、目录或远端。
+
+- **压缩网络与账户页头部。** 标题、刷新/登出操作合并到同一行，登录账号独占第二行，减少信息散落和垂直占用。
+
+- **收敛网络与账户工作台。** 登录后不再展示账号技术 ID，也不再在同一页重复本机登记恢复和设备配对面板。网络改为单个下拉选择器，创建网络使用旁侧按钮打开弹窗；选中网络后直接查看网络 ID、设备上限和设备列表，名称、上限与删除集中在管理弹窗中。
+
+- **优化网络工作台文案。** 将登录账号、网络选择、已选网络和设备列表改为短标题层级，减少“当前/我的/网络设备”等重复表达；网络 ID、设备上限和在线状态仍然保留。
+
+- **简化“我的网络”信息层级。** 设备名称、设备标识、当前加入的网络 ID、复制操作和“离开网络”现在直接展示，不再需要展开多层折叠；旧凭据若没有保存网络 ID 会明确提示，应用不会猜测目标网络。
+
+- **未就绪状态仍保留本机信息。** 协调服务读取失败或仍在启动时，“我的网络”的设备信息和登录/注册框仍然显示；登录控件会明确置灰，不会把本机身份误报成不存在。开发热更新也不会因请求序号重置而触发 `p2p.request_replayed`。
+
+- **调整远程连接信息架构。** “我的网络”完整卡片（本机身份、登记状态、加入网络和网络成员操作）现在统一放在“网络与账户”页；“连接”页只保留 SSH 连接任务，避免连接操作和账户管理混在同一列表中。
+
+- **修复远程页签和网络列表的可用性。** 已配对但尚未建立连接的电脑现在显示为可连接状态，不再误显示红色离线点；添加页签浮层支持完整键盘焦点进入、循环、Enter、Esc 和焦点恢复；网络管理改为带字段标签的卡片，网络 ID 收入可复制的技术信息区域并说明加入用途。
+
+- **新增独立 `dshkerd` 命令行安装模式。** 服务器和远程电脑现在可以只下载无界面的 Go 核心，不安装 Launcher；Release 提供 macOS、Windows、Linux 六个架构的压缩包、SHA256 清单，以及 macOS/Linux `curl` 和 Windows PowerShell 一键安装脚本。安装必须指定明确版本，校验通过后才会原子替换本地文件，不会偷偷配置服务、复制凭据、建立配对或开启自启动。
+
+- **修复重启/安装后误回到登录框。** 登录只有在系统凭据成功写入并读回后才算完成；凭据 provider 写入失败会明确返回错误，不再先显示登录成功、重启后才回到登录框。启动时账号页会显示正在恢复上次登录，并在服务恢复后自动刷新；只有持久记录不存在或协调器明确拒绝会话时才显示登录表单。
+- **修复协调信令被替换后的 `p2p.server_unavailable`。** 配对重试或连接前会修复已关闭/被替换的协调服务器订阅，健康订阅不会被反复重建；无需重启整个 Launcher 才能恢复。
+
+- **收敛网络与账户页的信息层级。** 保留设备名称、设备标识、已加入网络 ID、复制和离开操作；加入后未登录状态显示为“已加入 · 未登录”，下一步只提示登录管理网络和配对设备。服务会话显示为“服务在线”，暂时忙碌的 P2P 错误不再以红色技术码占据主界面。
+- **修复开机自启状态误报。** 设置页现在按主进程真实的扁平 IPC 失败结构读取状态；核心暂不可用时显示明确提示，并提供一次显式重新读取，不再把真实拒绝统一显示成“无法读取开机自启状态”。
+- **修复启动后登录状态偶尔消失。** 网络状态栏和账户页现在共享核心通道附加、服务激活和当前用户读取，不会把并发恢复误报成 `p2p.helper_busy`/`p2p.service_busy`；服务会话恢复后会自动重读暂时的登录要求，明确登出仍保持登出，登录表单也不再与“正在读取账户状态”同时出现。
+- **修复关闭后点击桌面图标无法恢复窗口。** 关闭按钮最小化到托盘后，Dock/桌面图标重新激活会恢复并聚焦已有窗口，不再只有菜单栏图标可以唤回界面。
+
+### English (en-US)
+
+- **Make the bottom-left status-bar actions easier to discover.** Menu and Console controls now pair their icons with short visible labels while retaining the unread dot, focus states, and existing keyboard/accessibility names without widening the supported compact layout.
+- **Make sign-in feel immediately usable.** Once authentication and secure session persistence are confirmed, the signed-in account appears immediately; network discovery now owns its loading, failure and retry feedback inside the Network section instead of holding the login screen open or presenting a network error as an account failure.
+- **Restore the Network & account content surface.** Remove the duplicate in-page “Network & account” heading while keeping the remote tab as navigation, and restore one consistent surface, border, and inset so My network and account actions read as one workspace.
+- **Fix single-owner handoff for the headless core.** When networking autostart is enabled, Launcher attaches to the existing `dshkerd` instead of starting a second device identity; quit, autostart changes, and abnormal disconnects use an explicit handoff/release path so `owner_busy`, blank screens, and unrecoverable next launches do not recur.
+- **Split the foundation VFS module.** Path/security policy, resource catalog, and in-memory storage now live in separate modules with the same barrel exports, keeping each source file within the maintenance and review budget.
+
+- **Keep SSH identity edits and connection state in sync.** A computer being tested or connected cannot change its SSH key path; after disconnecting and saving a new path, its previous test result is cleared so the new identity must be tested again.
+- **Keep coordinator signaling alive after recovery.** A repaired P2P subscription no longer closes when the operation that requested it returns, and concurrent repairs do not replace one another with orphaned subscriptions.
+- **Keep account actions scoped to the selected server.** Switching coordination servers replaces the account and network view for that server, rather than showing the previous server's data while sending actions to the new one.
+- **Distinguish connectable computers from failures.** A computer ready for a connection now uses an accent indicator; red is reserved for confirmed failures, revocations, or offline states, alongside a written label.
+
+- **Make SSH add-computer a deliberate dialog.** The SSH tab now keeps only the computer list and one Add computer entry point; the form no longer sits inline below the list and instead has a backdrop, title-bar close action, Cancel action and focus restoration. Network create/manage dialogs also have visible title-bar close actions.
+- **Reduce wireframe density in Network & account.** Repeated outer and inner card borders are removed, the network picker uses spacing instead of a boxed surface, and the device directory uses row separators; network IDs, presence and actions remain unchanged.
+- **Make the remote SSH workspace explicit.** The first tab is now “SSH connections” and the managed-computer list has a clear Add computer action. Add and edit forms accept an optional local SSH key path; the core passes that path to OpenSSH without exposing or transferring private-key contents.
+
+- **Compress the Network & account header.** The title and refresh/sign-out actions share one row, with the signed-in account on the second row so the page starts with a compact identity block.
+
+- **Simplify the Network & account workspace.** Signed-in users no longer see account technical IDs or duplicate enrollment/recovery and pairing panels on the same page. Networks use one labelled picker, Create network opens a nearby modal, and the selected network exposes its ID, device limit, and member directory; rename, limit, and deletion live in the management modal.
+
+- **Tighten Network & account copy.** The signed-in account, network picker, selected network, and device directory now use a shorter title chain without repeated “current/my/network” wording; network IDs, limits, and presence remain visible.
+
+- **Flatten the My network hierarchy.** The device name, device ID, joined network ID, copy actions, and Leave network action are now visible together instead of hidden behind nested disclosures; legacy credentials without a stored network ID are stated explicitly rather than guessed.
+
+- **Keep local identity visible before readiness.** If the coordinator is still starting or its catalog read fails, My network still shows the device information and a clearly disabled sign-in/register form. Renderer hot reloads also keep request IDs monotonic instead of producing `p2p.request_replayed`.
+
+- **Refine the remote-connection information architecture.** The complete My network card (local identity, enrollment status, network joining, and membership actions) now lives under Network & account; Connect is limited to SSH connection tasks so connection and account management do not compete in one list.
+
+- **Fix remote-tab and network-list usability.** Paired computers without a live session now show as available instead of a misleading red disconnected dot; the add-tab popover has complete keyboard entry, looping, Enter, Escape, and focus restoration; network management uses labelled cards with copyable technical network IDs and a clear join explanation.
+
+- **Add standalone `dshkerd` CLI installation.** Servers and remote peers can install the headless Go core without Electron; releases provide archives for all six macOS, Windows, and Linux targets, SHA256 metadata, and one-command POSIX/PowerShell installers. Installation requires an explicit version, verifies the archive and manifest before atomic replacement, and never silently configures a service, copies credentials, pairs a device, or enables autostart.
+
+- **Keep the account signed in after restart or installation.** Sign-in is published only after the credential provider accepts and reads back the session; a provider write failure is surfaced instead of looking successful until the next launch. The account page shows restoration progress and refreshes automatically when the service comes back. Sign-in is requested only when the durable record is absent or the server explicitly rejects the session.
+- **Recover coordinator signalling after a socket is displaced.** Pair retry or connect repairs a closed or superseded coordinator subscription without replacing a healthy one, so `p2p.server_unavailable` no longer requires restarting the entire Launcher.
+
+- **Clarify the Network & account hierarchy.** Device name, device ID, joined network ID, copy actions, and Leave remain visible; a joined signed-out device reads “Joined · signed out”, and the next step is simply to sign in before managing networks and paired devices. Coordinator presence is labelled “Service online”, while transient P2P busy codes no longer dominate the page as red technical errors.
+- **Fix false start-at-boot errors.** Settings now reads the main-process flat IPC failure shape correctly; a temporarily unavailable core gets explicit copy and a deliberate retry instead of every real refusal being shown as “could not read start-at-boot state”.
+- **Keep the account visible after a concurrent startup restore.** Core attachment, service activation, and current-user reads now share one in-flight request, so normal startup races no longer become `p2p.helper_busy`/`p2p.service_busy`. A provisional login-required response is retried after the service session is restored, explicit sign-out remains final, and the login form no longer appears beside an account-loading state.
+- **Reveal the window when the app icon is clicked again.** After the close button hides the window to the tray, Dock/desktop activation now restores and focuses the existing window instead of leaving it visible only through the menu-bar icon.
+
 ## 0.1.64 — 2026-09-19
 
 ### 简体中文 (zh-CN)

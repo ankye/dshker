@@ -14,6 +14,7 @@ export interface CoreRemoteConnection {
   readonly host: string
   readonly port: number
   readonly user: string
+  readonly sshKeyPath?: string
   readonly configRevision: string
 }
 
@@ -32,6 +33,7 @@ export interface CoreRemoteRoutePort {
       host: string
       port: number
       user: string
+      sshKeyPath: string
     }>,
     signal?: AbortSignal
   ): Promise<readonly CoreRemoteConnection[]>
@@ -43,6 +45,7 @@ export interface CoreRemoteRoutePort {
       host: string
       port: number
       user: string
+      sshKeyPath: string
       expectedConfigRevision: string
     }>,
     signal?: AbortSignal
@@ -52,7 +55,13 @@ export interface CoreRemoteRoutePort {
     signal?: AbortSignal
   ): Promise<readonly CoreRemoteConnection[]>
   connect(
-    request: Readonly<{ connectionId: string; host: string; port: number; user: string }>,
+    request: Readonly<{
+      connectionId: string
+      host: string
+      port: number
+      user: string
+      sshKeyPath: string
+    }>,
     signal?: AbortSignal
   ): Promise<CoreRemoteStatus>
   disconnect(connectionId: string, signal?: AbortSignal): Promise<void>
@@ -87,6 +96,7 @@ function connectionsOf(value: unknown): readonly CoreRemoteConnection[] {
       typeof entry.host !== 'string' ||
       typeof entry.port !== 'number' ||
       typeof entry.user !== 'string' ||
+      (entry.sshKeyPath !== undefined && typeof entry.sshKeyPath !== 'string') ||
       typeof entry.configRevision !== 'string'
     ) {
       throw new PeerHelperError('p2p.invalid_payload')
@@ -97,6 +107,7 @@ function connectionsOf(value: unknown): readonly CoreRemoteConnection[] {
       host: entry.host,
       port: entry.port,
       user: entry.user,
+      sshKeyPath: entry.sshKeyPath ?? '',
       configRevision: entry.configRevision
     }
   })
@@ -166,16 +177,27 @@ export class CoreRemoteRoute implements CoreRemoteRoutePort {
   }
 
   async connect(
-    request: Readonly<{ connectionId: string; host: string; port: number; user: string }>,
+    request: Readonly<{
+      connectionId: string
+      host: string
+      port: number
+      user: string
+      sshKeyPath: string
+    }>,
     signal?: AbortSignal
   ): Promise<CoreRemoteStatus> {
     const answer = await this.#rpc.call(
       'remote.connect',
       {
         connectionId: request.connectionId,
-        computer: { host: request.host, port: request.port, user: request.user },
+        computer: {
+          host: request.host,
+          port: request.port,
+          user: request.user
+        },
         ssh: '',
-        scp: ''
+        scp: '',
+        sshKeyPath: request.sshKeyPath
       },
       budget(signal)
     )

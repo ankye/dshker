@@ -34,7 +34,8 @@ export function launcherTelemetry(): { version: string; platform: string; archit
 /** Owns the catalog-to-helper trust boundary; never accepts caller-supplied keys. */
 export class PeerServices {
   readonly #active = new Map<string, string>()
-  readonly #activating = new Set<string>()
+  /** Concurrent startup/account reads share one activation instead of racing. */
+  readonly #activating = new Map<string, Promise<PeerServiceRecord>>()
   #adding = false
   #closed = false
 
@@ -46,6 +47,7 @@ export class PeerServices {
   close(): void {
     this.#closed = true
     this.#active.clear()
+    this.#activating.clear()
   }
 
   async add(
@@ -173,34 +175,40 @@ export class PeerServices {
   async activate(serviceId: string, signal: AbortSignal): Promise<PeerServiceRecord> {
     assertAccountId(serviceId, 12)
     this.#admit(signal)
-    if (this.#activating.has(serviceId)) throw new PeerHelperError('p2p.service_busy')
-    this.#activating.add(serviceId)
+    const previous = this.#activating.get(serviceId)
+    if (previous) return previous
+    const pending = this.#activate(serviceId, signal)
+    this.#activating.set(serviceId, pending)
     try {
-      const service = await this.requireSaved(serviceId)
-      this.#admit(signal)
-      if (this.#active.get(serviceId) === serviceBinding(service)) return service
-      const identity = await this.rpc.call(
-        'service.configure',
-        {
-          endpoints: endpoints(service),
-          pinnedKey: service.publicKey,
-          telemetry: launcherTelemetry()
-        },
-        signal
-      )
-      this.#admit(signal)
-      const verified = verifiedService(identity, service)
-      if (verified.serviceId !== serviceId || verified.publicKey !== service.publicKey)
-        throw new PeerHelperError('p2p.identity_mismatch')
-      const current = await this.requireSaved(serviceId)
-      this.#admit(signal)
-      if (serviceBinding(current) !== serviceBinding(service))
-        throw new PeerHelperError('p2p.catalog_conflict')
-      this.#active.set(serviceId, serviceBinding(current))
-      return current
+      return await pending
     } finally {
-      this.#activating.delete(serviceId)
+      if (this.#activating.get(serviceId) === pending) this.#activating.delete(serviceId)
     }
+  }
+
+  async #activate(serviceId: string, signal: AbortSignal): Promise<PeerServiceRecord> {
+    const service = await this.requireSaved(serviceId)
+    this.#admit(signal)
+    if (this.#active.get(serviceId) === serviceBinding(service)) return service
+    const identity = await this.rpc.call(
+      'service.configure',
+      {
+        endpoints: endpoints(service),
+        pinnedKey: service.publicKey,
+        telemetry: launcherTelemetry()
+      },
+      signal
+    )
+    this.#admit(signal)
+    const verified = verifiedService(identity, service)
+    if (verified.serviceId !== serviceId || verified.publicKey !== service.publicKey)
+      throw new PeerHelperError('p2p.identity_mismatch')
+    const current = await this.requireSaved(serviceId)
+    this.#admit(signal)
+    if (serviceBinding(current) !== serviceBinding(service))
+      throw new PeerHelperError('p2p.catalog_conflict')
+    this.#active.set(serviceId, serviceBinding(current))
+    return current
   }
 
   async requireSaved(serviceId: string): Promise<PeerServiceRecord> {

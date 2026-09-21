@@ -5,13 +5,9 @@ import { P2P_BUILTIN_SERVICE, type P2PManagementApi } from '@/shared/p2p-managem
 import { zhCN } from '@/app/shared/i18n/messages.zh-CN'
 
 /**
- * The signed-in card mounts the account, enrollment and pairing panels together
- * and each one reads on entry. Reads for the same service share one busy scope,
- * so a concurrent read is refused with p2p.service_busy and the domain returns
- * without recording anything, leaving the surface claiming it holds no data.
- *
- * No existing test mounted these panels together, which is how the interaction
- * between their entry reads stayed unverified.
+ * The signed-in card owns the account/network workflow. Enrollment recovery and
+ * pairing are not default surfaces: network membership already supplies the
+ * device directory, while connection actions remain in the connection workflow.
  */
 const user = { userId: 'user-a', username: 'alice' }
 const network = { networkId: 'net-a', userId: user.userId, name: 'Office', maxDevices: 10 }
@@ -57,6 +53,39 @@ async function renderCard(api: Partial<P2PManagementApi>) {
 }
 
 describe('signed-in card concurrent entry reads', () => {
+  it('keeps the account tab as one surfaced card without a duplicate page heading', async () => {
+    const ui = await renderCard({
+      catalog: async () => ({ ok: true, data: null }),
+      localDevice: async () => ({
+        ok: true,
+        data: { deviceId: 'local-device-a', name: 'This Mac' }
+      }),
+      serviceSessions: async () => ({ ok: true, data: [] })
+    })
+
+    const panel = ui.get('[data-testid="p2p-network-account-panel"]')
+    expect(panel.classes()).toContain('remote-add-card')
+    expect(panel.text()).not.toContain(zhCN['p2p.tabs.account'])
+  })
+
+  it('keeps device identity and a disabled login form visible while the service is unavailable', async () => {
+    const ui = await renderCard({
+      catalog: async () => ({ ok: true, data: null }),
+      localDevice: async () => ({
+        ok: true,
+        data: { deviceId: 'local-device-a', name: 'This Mac' }
+      }),
+      serviceSessions: async () => ({ ok: true, data: [] })
+    })
+
+    expect(ui.find('[data-testid="p2p-device-info"]').exists()).toBe(true)
+    expect(ui.get('[data-testid="p2p-device-info"]').text()).toContain('This Mac')
+    expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(true)
+    expect(
+      (ui.get('[data-testid="p2p-login-form"] fieldset').element as HTMLFieldSetElement).disabled
+    ).toBe(true)
+  })
+
   it('records every entry read instead of losing one to a busy refusal', async () => {
     const networks = vi
       .fn<P2PManagementApi['networks']>()
@@ -73,14 +102,11 @@ describe('signed-in card concurrent entry reads', () => {
         revision: 'rev-1'
       }
     })
-    const pairs = vi.fn<P2PManagementApi['pairs']>().mockResolvedValue({ ok: true, data: [] })
-
     const ui = await renderCard({
       catalog: async () => ({ ok: true, data: catalog }),
       currentUser: async () => ({ ok: true, data: user }),
       networks,
       registration,
-      pairs,
       connections: async () => ({ ok: true, data: { error: '', peers: [] } })
     })
 
@@ -89,8 +115,11 @@ describe('signed-in card concurrent entry reads', () => {
     expect(ui.text()).toContain(user.username)
     expect(networks).toHaveBeenCalledTimes(1)
     expect(registration).toHaveBeenCalledTimes(1)
-    expect(pairs).toHaveBeenCalledTimes(1)
-    // The surfaces show loaded data rather than an "not loaded yet" notice.
+    // Membership is loaded into the account workflow; enrollment and pairing are
+    // deliberately not mounted as duplicate full-page panels.
+    expect(ui.find('[data-testid="p2p-enrollment"]').exists()).toBe(false)
+    expect(ui.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
+    // The account surface shows loaded data rather than an "not loaded yet" notice.
     expect(ui.text()).toContain(network.name)
     expect(ui.text()).not.toContain(zhCN['p2p.enrollment.unknown'])
     expect(ui.text()).not.toContain(zhCN['p2p.account.networksUnknown'])

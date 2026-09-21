@@ -1,0 +1,683 @@
+/* The three version tabs are full-height surfaces, not cards that stop at their
+ * content. Without `flex: 1`, a short list left the rest of the stage blank and
+ * the panel border cut across the middle of the window. */
+.source-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin-top: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+}
+
+.version-tabs-row {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.version-tabs-row .page-tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.version-tabs-row .version-toolbar-actions {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-bottom: var(--space-2);
+}
+
+.page-tabs,
+.settings-tabs {
+  display: flex;
+  align-items: end;
+  gap: var(--space-1);
+  min-height: 3rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.page-tab {
+  position: relative;
+  min-height: var(--size-control-lg);
+  padding: 0 var(--space-4);
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-semibold);
+}
+
+.page-tab[data-active='true'] {
+  color: var(--color-text);
+}
+
+.page-tab[data-active='true']::after {
+  position: absolute;
+  right: var(--space-4);
+  bottom: -1px;
+  left: var(--space-4);
+  height: 0.1875rem;
+  border-radius: 999px;
+  background: var(--color-accent);
+  content: '';
+}
+
+.version-tab-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding-top: var(--space-3);
+}
+
+.catalog-tab-panel {
+  padding-top: var(--space-4);
+}
+
+.version-toolbar-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.version-toolbar-group {
+  display: flex;
+  align-items: center;
+}
+
+.version-toolbar-group + .version-toolbar-group {
+  margin-left: var(--space-1);
+  padding-left: var(--space-3);
+  border-left: 1px solid var(--color-border);
+}
+
+.version-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: var(--type-caption);
+}
+
+.version-action-button--icon {
+  gap: var(--space-2);
+}
+
+.version-action-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.8;
+}
+
+.version-action-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 45%);
+}
+
+.version-action-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.version-action-button--primary {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 40%);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+  color: var(--color-text);
+}
+
+.version-meta-line {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The recovery notice above the version list when history is readable but the
+ * active version is not built; it wraps because the reason sentence matters
+ * more than the single-line chrome around it. */
+.core-not-built-notice {
+  display: block;
+  overflow-wrap: anywhere;
+  color: var(--color-warning);
+  white-space: normal;
+}
+
+.version-meta-line code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.version-scope-row {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.version-scope-row .version-meta-line {
+  flex: 1 1 auto;
+}
+
+.core-scope-actions {
+  flex: 0 0 auto;
+  margin-top: var(--space-2);
+}
+
+.version-tab-summary {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.version-tab-summary strong {
+  flex: 0 0 auto;
+  color: var(--color-text);
+  font-weight: var(--font-weight-semibold);
+}
+
+.version-tab-summary span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.core-branch-picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.core-branch-picker select {
+  min-height: var(--size-row);
+  min-width: 15rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+
+.core-version-tabs {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.core-version-tabs--content {
+  margin-top: var(--space-3);
+}
+
+.core-version-tab {
+  min-width: 5.5rem;
+  min-height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+}
+
+.core-version-tab[data-active='true'] {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 40%);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+  color: var(--color-text);
+}
+
+.source-panel h3,
+.source-panel h3,
+.settings-panel h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-section);
+}
+
+.source-panel > p {
+  margin: var(--space-2) 0 0;
+}
+
+.source-path-list {
+  margin: var(--space-4) 0;
+}
+
+.source-path-list div {
+  display: grid;
+  grid-template-columns: 7rem minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.source-path-list dt {
+  color: var(--color-text-muted);
+}
+
+.source-path-list dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-actions {
+  display: flex;
+  justify-content: end;
+  margin-top: var(--space-3);
+}
+
+.catalog-table td {
+  max-width: 32rem;
+}
+
+.catalog-table a {
+  color: var(--color-accent);
+  overflow-wrap: anywhere;
+}
+
+/* --- "Install new extension" toolbar ---
+ * Search, result count and category tabs previously had no rules at all, so
+ * they rendered as raw native controls against a dark panel. They are grouped
+ * into one toolbar because they are one task: narrowing thousands of catalog
+ * entries down to the one to install. */
+.catalog-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.catalog-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+/* The label owns the border so the icon sits inside the field and the whole
+ * field shows one focus ring, rather than the icon appearing to float beside a
+ * separately outlined input. */
+.catalog-search-field {
+  position: relative;
+  display: flex;
+  min-width: 12rem;
+  flex: 1 1 22rem;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+}
+
+.catalog-search-field:focus-within {
+  border-color: var(--color-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-focus) 35%, transparent);
+}
+
+.catalog-search-icon {
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 auto;
+}
+
+/* Native search inputs carry a platform background, inner shadow and a
+ * decoration widget that all ignore the app theme, so each is reset here. */
+.catalog-search-input {
+  width: 100%;
+  min-width: 0;
+  min-height: var(--size-control-md);
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: var(--type-ui);
+  appearance: none;
+}
+
+.catalog-search-input:focus {
+  outline: none;
+}
+
+.catalog-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.catalog-search-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Tabular figures keep the count from shifting width as the user types. */
+.catalog-result-count {
+  flex: 0 0 auto;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-variant-numeric: tabular-nums;
+  line-height: var(--size-control-sm);
+}
+
+/* Provenance, not a control: it stays legible but never competes with search,
+ * and truncates first when the row runs out of room. */
+.catalog-source-line {
+  overflow: hidden;
+  min-width: 0;
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-source-line code {
+  font-family: var(--font-mono);
+}
+
+/* Categories are a persistent vertical rail: browsing a long plugin catalog
+ * should not require horizontal tag scrolling. */
+.catalog-workspace {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(9rem, 12rem) minmax(0, 1fr);
+  gap: var(--space-3);
+}
+
+.catalog-category-sidebar {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  padding-right: var(--space-3);
+  border-right: 1px solid var(--color-border);
+}
+
+.catalog-category-heading {
+  margin: 0 0 var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+}
+
+.catalog-category-list {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-1);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.catalog-results-panel {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.catalog-category-tab {
+  width: 100%;
+  min-height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: var(--type-caption);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.catalog-category-tab:hover {
+  border-color: var(--color-accent);
+  color: var(--color-text);
+}
+
+.catalog-category-tab[data-active='true'] {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 35%);
+  background: color-mix(in srgb, var(--color-accent), transparent 86%);
+  color: var(--color-text);
+  font-weight: var(--font-weight-medium);
+}
+
+.catalog-category-tab:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Sits below the scrolling table, so it must not be dragged into the scroll
+ * area or it would be unreachable until the user scrolled to the very end. */
+.catalog-more-button {
+  flex: 0 0 auto;
+  align-self: center;
+  margin-top: var(--space-3);
+}
+
+/* Checkbox and action are the two columns the user acts on, so they lead the
+ * row and stay at their natural width instead of absorbing slack. */
+.version-action-column {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.version-action-placeholder {
+  color: var(--color-text-muted);
+}
+
+/* Takes the height the panel actually has and scrolls inside itself. The old
+ * `max-height: min(56vh, 30rem)` is why a maximized window showed a table
+ * ending halfway down with dead space beneath it: the cap ignored the space
+ * available. `flex-basis: 0` (not `auto`) keeps a long list from inflating the
+ * panel instead of scrolling within it. */
+.version-table-wrap {
+  overflow: auto;
+  min-height: 6rem;
+  flex: 1 1 0;
+  margin-top: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overscroll-behavior: contain;
+}
+
+.version-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.version-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 680px;
+  font-size: 13px;
+}
+
+.version-table th,
+.version-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.version-table th {
+  color: var(--color-text-muted);
+  font-weight: 600;
+  background: var(--color-surface-muted);
+}
+
+.version-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.version-table--core td:last-child {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.version-current-mark {
+  display: inline-flex;
+  min-width: 1.5rem;
+  min-height: 1.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--color-accent);
+  border-radius: 50%;
+  color: var(--color-accent);
+  font-size: 0;
+}
+
+.version-current-mark::after {
+  font-size: var(--type-caption);
+  content: '✓';
+}
+
+.version-select-column {
+  width: 1%;
+  white-space: nowrap;
+}
+
+.version-select-check {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.version-select-check:disabled {
+  cursor: default;
+}
+
+.catalog-table {
+  /* The columns below carry an explicit minimum so the auto table layout can
+   * never crush the description into a one-character-per-line tower on narrow
+   * windows; below this width the panel scrolls instead of squeezing. */
+  min-width: 880px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.catalog-table th,
+.catalog-table td {
+  padding: 6px 10px;
+}
+
+.catalog-name-cell {
+  min-width: 8rem;
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-category-cell {
+  min-width: 4.5rem;
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+/* Catalog descriptions remain readable in place; the user must not infer a
+ * plugin's purpose from a clipped summary. A real minimum width keeps the
+ * auto table layout from collapsing this column into a one-character tower on
+ * narrow windows, where the table instead scrolls horizontally. */
+.catalog-desc-cell {
+  min-width: 16rem;
+  max-width: 34rem;
+  color: var(--color-text-muted);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.catalog-url-cell {
+  min-width: 12rem;
+  max-width: 16rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-url-cell a {
+  color: var(--color-accent);
+}
+
+.catalog-action-cell,
+.plugin-action-cell {
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* On narrow windows the persistent category rail steals width the install
+ * table needs to stay readable. Tighten it (category labels stay legible) so
+ * the results panel keeps more of the viewport and scrolls less. */
+@media (max-width: 980px) {
+  .catalog-workspace {
+    grid-template-columns: minmax(7rem, 9rem) minmax(0, 1fr);
+  }
+}
+
+.plugin-version-cell {
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+
+.plugin-origin-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.plugin-origin-badge[data-origin='user'] {
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-border) 45%);
+  color: var(--color-accent);
+}
+
+.plugin-origin-badge[data-origin='default'] {
+  color: var(--color-text-muted);
+}

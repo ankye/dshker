@@ -24,6 +24,8 @@ export interface P2PEnrollmentState {
 /** Public registration state only. Keys, CSR, certificates and grants remain in main. */
 export class P2PEnrollmentDomain {
   readonly #states = reactive<Record<string, P2PEnrollmentState>>({})
+  /** Concurrent panel mounts share one durable registration read. */
+  readonly #registrationReads = new Map<string, Promise<void>>()
   #unsubscribe: (() => void) | undefined
   /** The coordinator whose announcements this domain currently follows. */
   #serviceId: string | undefined
@@ -44,13 +46,25 @@ export class P2PEnrollmentDomain {
   }
 
   async read(serviceId: string): Promise<void> {
-    const result = await this.management.runRead('registration', { serviceId })
-    if (result.ok) {
-      const state = this.state(serviceId)
-      state.registration = result.data
-      state.retryRevision = undefined
-      state.resultUnconfirmed = result.data.kind === 'pending'
+    const previous = this.#registrationReads.get(serviceId)
+    if (previous) return previous
+    const pending = this.#read(serviceId)
+    this.#registrationReads.set(serviceId, pending)
+    try {
+      await pending
+    } finally {
+      if (this.#registrationReads.get(serviceId) === pending)
+        this.#registrationReads.delete(serviceId)
     }
+  }
+
+  async #read(serviceId: string): Promise<void> {
+    const result = await this.management.runRead('registration', { serviceId })
+    if (!result.ok) return
+    const state = this.state(serviceId)
+    state.registration = result.data
+    state.retryRevision = undefined
+    state.resultUnconfirmed = result.data.kind === 'pending'
     // A missing/unreadable record is an error, never an inferred unregistered state.
   }
 
@@ -104,6 +118,7 @@ export class P2PEnrollmentDomain {
   stop(): void {
     this.#unsubscribe?.()
     this.#unsubscribe = undefined
+    this.#registrationReads.clear()
   }
 
   async register(serviceId: string, networkId: string): Promise<void> {

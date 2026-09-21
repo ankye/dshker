@@ -42,9 +42,10 @@ var (
 
 // Computer is the remote account the route connects to.
 type Computer struct {
-	Host string `json:"host"`
-	Port int    `json:"port"`
-	User string `json:"user"`
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	User       string `json:"user"`
+	SSHKeyPath string `json:"sshKeyPath"`
 }
 
 // AssertComputer refuses anything that could not be one SSH destination.
@@ -52,7 +53,8 @@ func AssertComputer(computer Computer) error {
 	if computer.Host == "" || computer.User == "" ||
 		strings.ContainsAny(computer.Host, " \t@:/") ||
 		strings.ContainsAny(computer.User, " \t@:/") ||
-		computer.Port < 1 || computer.Port > 65535 {
+		computer.Port < 1 || computer.Port > 65535 ||
+		(computer.SSHKeyPath != "" && (!filepath.IsAbs(computer.SSHKeyPath) || len(computer.SSHKeyPath) > 4096 || strings.ContainsAny(computer.SSHKeyPath, "\x00\x01\x02\x03\x04\x05\x06\x07\x08\x09\x0a\x0b\x0c\x0d\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f\x7f"))) {
 		return fmt.Errorf("%w: the remote computer is invalid.", ErrInputInvalid)
 	}
 	return nil
@@ -76,7 +78,7 @@ func ResolveExecutables(platform string) Executables {
 
 // BuildScpArguments renders the exact file transfer of one descriptor.
 func BuildScpArguments(computer Computer, destinationPath string) []string {
-	return []string{
+	args := []string{
 		"-q",
 		"-B",
 		"-o",
@@ -86,13 +88,14 @@ func BuildScpArguments(computer Computer, destinationPath string) []string {
 		computer.User + "@" + computer.Host + ":" + DescriptorRelativePath,
 		filepath.Clean(destinationPath),
 	}
+	return withIdentity(args, computer.SSHKeyPath)
 }
 
 // BuildSshForwardArguments renders one non-interactive loopback forward. Batch
 // mode and exit-on-forward-failure are what keep a refused tunnel a failure
 // rather than an invisible password prompt or a silently unforwarded port.
 func BuildSshForwardArguments(computer Computer, localPort int, remotePort int) []string {
-	return []string{
+	args := []string{
 		"-N",
 		"-T",
 		"-o",
@@ -107,6 +110,16 @@ func BuildSshForwardArguments(computer Computer, localPort int, remotePort int) 
 		"127.0.0.1:" + strconv.Itoa(localPort) + ":127.0.0.1:" + strconv.Itoa(remotePort),
 		computer.User + "@" + computer.Host,
 	}
+	return withIdentity(args, computer.SSHKeyPath)
+}
+
+func withIdentity(args []string, keyPath string) []string {
+	if keyPath == "" {
+		return args
+	}
+	// Keep the identity file an argument value, never part of a shell command.
+	// The caller has already validated that it is an absolute path.
+	return append([]string{"-i", keyPath}, args...)
 }
 
 // Descriptor is what one remote peer publishes for this route.

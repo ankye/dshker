@@ -26,9 +26,7 @@ const EXPECTED_BUNDLES = ['@deepseek-ai/dsh-base', '@deepseek-ai/dsh-web-app'] a
 
 /** Stable errors while loading the package-only bundled DSH seed. */
 export type BundledSeedRuntimeErrorCode =
-  | 'bundled_seed.unavailable'
-  | 'bundled_seed.invalid'
-  | 'bundled_seed.integrity_failed'
+  'bundled_seed.unavailable' | 'bundled_seed.invalid' | 'bundled_seed.integrity_failed'
 
 /** A non-secret failure proving that no valid bundled seed can be imported. */
 export class BundledSeedRuntimeError extends Error {

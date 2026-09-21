@@ -83,7 +83,8 @@ export class PeerRuntimeHost {
    */
   readonly #attempts = new Map<string, string[]>()
   #detach: (() => void) | undefined
-  #pending = false
+  /** Concurrent shell startup reads share the same core attachment. */
+  #starting: Promise<PeerChannel> | undefined
   #closing: Promise<void> | undefined
   #failure: PeerHelperError | undefined
 
@@ -98,22 +99,26 @@ export class PeerRuntimeHost {
   /** Private main channel only; never register this method directly as renderer IPC. */
   async start(signal: AbortSignal): Promise<PeerChannel> {
     this.#admit(signal)
-    // The guard is set before the first await: a second caller retries rather
-    // than racing the attach.
-    if (this.#pending) throw new PeerHelperError('p2p.helper_busy')
-    this.#pending = true
+    const previous = this.#starting
+    if (previous) return previous
+    const pending = this.#start(signal)
+    this.#starting = pending
     try {
-      if (!(await this.options.catalog.inspect())) throw new PeerHelperError('p2p.not_enabled')
-      this.#admit(signal)
-      const channel = this.options.channel
-      // A shell that could not start a core has no transport: P2P is unavailable
-      // rather than silently degraded to a second process that no longer exists.
-      if (channel === undefined) throw new PeerHelperError('p2p.helper_unavailable')
-      this.#attach(channel)
-      return channel
+      return await pending
     } finally {
-      this.#pending = false
+      if (this.#starting === pending) this.#starting = undefined
     }
+  }
+
+  async #start(signal: AbortSignal): Promise<PeerChannel> {
+    if (!(await this.options.catalog.inspect())) throw new PeerHelperError('p2p.not_enabled')
+    this.#admit(signal)
+    const channel = this.options.channel
+    // A shell that could not start a core has no transport: P2P is unavailable
+    // rather than silently degraded to a second process that no longer exists.
+    if (channel === undefined) throw new PeerHelperError('p2p.helper_unavailable')
+    this.#attach(channel)
+    return channel
   }
 
   #attach(channel: PeerChannel): void {

@@ -58,4 +58,16 @@ describe('restoreUserSession', () => {
     )
     expect(f.removeUserSession).not.toHaveBeenCalled()
   })
+
+  it('does not turn a credential-provider failure into a signed-out session', async () => {
+    const failure = new PeerHelperError('p2p.secret_provider_unavailable')
+    const f = fixture()
+    f.credentials.loadUserSession.mockRejectedValueOnce(failure)
+
+    await expect(
+      restoreUserSession(f.credentials, f.session, serviceId, new AbortController().signal)
+    ).rejects.toMatchObject({ code: 'p2p.secret_provider_unavailable' })
+    expect(f.adoptPersistedSession).not.toHaveBeenCalled()
+    expect(f.removeUserSession).not.toHaveBeenCalled()
+  })
 })

@@ -23,14 +23,19 @@ export async function shutdownLauncherOwners(owners: LauncherShutdownOwners): Pr
   const connectionResults = await Promise.allSettled([
     Promise.resolve().then(() => owners.peerManagement.close()),
     Promise.resolve().then(() => owners.remoteConnectionService.shutdown()),
-    Promise.resolve().then(() => owners.remotePeerBroker.shutdown()),
-    ...(owners.coreSupervisor ? [Promise.resolve().then(() => owners.coreSupervisor!.close())] : [])
+    Promise.resolve().then(() => owners.remotePeerBroker.shutdown())
   ])
+  // The attached desktop must stop issuing core calls before it hands the
+  // headless owner back. Keeping this after the connection phase also makes
+  // Cmd+Q deterministic when a peer reconnect is in flight.
+  const coreResults = owners.coreSupervisor
+    ? await Promise.allSettled([Promise.resolve().then(() => owners.coreSupervisor!.close())])
+    : []
   // Close incoming admission and forwarding before stopping the actual DSH child.
   const runtimeResults = await Promise.allSettled([
     Promise.resolve().then(() => owners.launcherHarnessService.shutdown())
   ])
-  const errors = [...connectionResults, ...runtimeResults]
+  const errors = [...connectionResults, ...coreResults, ...runtimeResults]
     .filter((result): result is PromiseRejectedResult => result.status === 'rejected')
     .map((result) => result.reason as unknown)
   if (errors.length) throw new LauncherShutdownError(errors)

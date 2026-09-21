@@ -100,6 +100,21 @@ describe('settings start-at-boot control', () => {
     wrapper.unmount()
   })
 
+  it('shows a truthful read-only desktop state without offering a duplicate core', async () => {
+    const bridge = installBridge({
+      getState: { ok: true, data: { installed: true, mechanism: 'launchd', supported: false } }
+    })
+    const wrapper = mount(SettingsPanel)
+    await flushPromises()
+    await openLauncherTab(wrapper)
+
+    expect((toggle(wrapper).element as HTMLInputElement).checked).toBe(true)
+    expect((toggle(wrapper).element as HTMLInputElement).disabled).toBe(true)
+    expect(wrapper.text()).toContain('避免同一设备启动两个网络核心')
+    expect(bridge.setEnabled).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('adopts the state the core reports back instead of the requested value', async () => {
     // The click asks to enable; the core answers that nothing was installed. The
     // switch must follow the machine, not the request.
@@ -122,7 +137,11 @@ describe('settings start-at-boot control', () => {
   it('surfaces a refusal instead of silently leaving the switch wrong', async () => {
     installBridge({
       getState: { ok: true, data: { installed: false, mechanism: 'launchd', supported: true } },
-      setEnabled: { ok: false, error: { message: 'p2p.autostart_unavailable' } }
+      setEnabled: {
+        ok: false,
+        code: 'managed.selection_invalid',
+        message: 'p2p.autostart_unavailable'
+      }
     })
     const wrapper = mount(SettingsPanel)
     await flushPromises()
@@ -131,8 +150,75 @@ describe('settings start-at-boot control', () => {
     await toggle(wrapper).trigger('change')
     await flushPromises()
 
-    expect(wrapper.find('.settings-autostart-error').text()).toContain('p2p.autostart_unavailable')
+    expect(wrapper.find('.settings-autostart-error').text()).toContain('网络核心暂不可用')
     expect((toggle(wrapper).element as HTMLInputElement).checked).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('reads the flat IPC failure shape instead of replacing it with the generic error', async () => {
+    installBridge({
+      getState: {
+        ok: false,
+        code: 'managed.selection_invalid',
+        message: 'p2p.autostart_unavailable'
+      }
+    })
+    const wrapper = mount(SettingsPanel)
+    await flushPromises()
+    await openLauncherTab(wrapper)
+
+    expect(wrapper.find('.settings-autostart-error').text()).toContain('网络核心暂不可用')
+    expect(wrapper.find('.settings-autostart-error').text()).not.toContain('无法读取开机自启状态')
+    expect((toggle(wrapper).element as HTMLInputElement).disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('offers an explicit retry after a transient core refusal', async () => {
+    const bridge = installBridge({
+      getState: {
+        ok: false,
+        code: 'managed.selection_invalid',
+        message: 'p2p.autostart_unavailable'
+      }
+    })
+    bridge.getState
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 'managed.selection_invalid',
+        message: 'p2p.autostart_unavailable'
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        data: { installed: true, mechanism: 'launchd', supported: true }
+      })
+    const wrapper = mount(SettingsPanel)
+    await flushPromises()
+    await openLauncherTab(wrapper)
+
+    const retry = wrapper.find('.settings-autostart-feedback button')
+    expect(retry.exists()).toBe(true)
+    await retry.trigger('click')
+    await flushPromises()
+
+    expect((toggle(wrapper).element as HTMLInputElement).checked).toBe(true)
+    expect(wrapper.find('.settings-autostart-error').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('turns a rejected bridge write into a visible error and disables stale controls', async () => {
+    const bridge = installBridge({
+      getState: { ok: true, data: { installed: true, mechanism: 'launchd', supported: true } }
+    })
+    const wrapper = mount(SettingsPanel)
+    await flushPromises()
+    await openLauncherTab(wrapper)
+    expect((toggle(wrapper).element as HTMLInputElement).disabled).toBe(false)
+
+    bridge.setEnabled.mockRejectedValueOnce(new Error('closed'))
+    await toggle(wrapper).trigger('change')
+    await flushPromises()
+    expect((toggle(wrapper).element as HTMLInputElement).disabled).toBe(true)
+    expect(wrapper.find('.settings-autostart-error').text()).toContain('网络核心暂不可用')
     wrapper.unmount()
   })
 

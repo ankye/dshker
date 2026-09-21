@@ -1,13 +1,16 @@
-import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readStylesheet, readStylesheets } from './readStylesheets'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
-const tokens = readFileSync(path.join(appRoot, 'src/styles/tokens.css'), 'utf8')
-const styles = ['base-shell', 'routes', 'controls', 'responsive']
-  .map((sheet) => readFileSync(path.join(appRoot, `src/styles/${sheet}.css`), 'utf8'))
-  .join('\n')
+const tokens = readStylesheet(path.join(appRoot, 'src/styles/tokens.css'))
+const styles = readStylesheets(appRoot + '/src/styles', [
+  'base-shell',
+  'routes',
+  'controls',
+  'responsive'
+])
 
 /** Declaration block of one exact top-level selector. */
 function ruleBlock(selector: string): string {

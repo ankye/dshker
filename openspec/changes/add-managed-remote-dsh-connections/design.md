@@ -28,7 +28,7 @@ The user already has ordinary SSH access to each target computer. The missing pi
 
 The trusted core owns this route and launches the platform OpenSSH `scp` and `ssh` clients directly with argument arrays and no shell; until that port lands (go-owned-headless-core P4) the shell hosts the connector behind the same typed boundary, and the shell never gains a second implementation of the resolution, validation, or broker rules. macOS uses the fixed system executable paths. Windows uses the fixed OpenSSH command names supplied by the operating system. Both run in batch mode and require strict host-key verification, so an unknown host or missing non-interactive identity is an error rather than a password prompt or trust downgrade.
 
-The connection record contains separate validated `host`, `port`, and `user` fields. None can inject an option because each is passed after the fixed option set and host/user syntax rejects control characters, whitespace, leading dashes, separators, and URL syntax.
+The connection record contains separate validated `host`, `port`, and `user` fields plus an optional absolute local `sshKeyPath`. None can inject an option because each is passed as an argument value after the fixed option set; host/user syntax rejects control characters, whitespace, leading dashes, separators, and URL syntax, while a key path rejects relative paths and control characters. The key file is never opened by the renderer or copied to the peer; the trusted core passes the path to the local OpenSSH `-i` option.
 
 Alternative considered: embed an SSH library. Rejected for this change because it adds native authentication and agent compatibility surface while the user's existing OpenSSH command already proves the intended transport.
 
@@ -60,7 +60,7 @@ Alternative considered: expose remote DSH with `--host 0.0.0.0`. Rejected becaus
 
 ### Decision: Catalog persistence excludes authority-bearing runtime state
 
-`remote-connections.json` below the Launcher settings root is a strictly versioned record with exact-field validation and atomic writes. It persists only stable ids, display names, hosts, ports, and users. Missing files create the initial empty catalog; malformed, unsupported, or unknown-field records fail the entire capability and are never repaired or partially accepted.
+`remote-connections.json` below the Launcher settings root is a strictly versioned record with exact-field validation and atomic writes. It persists only stable ids, display names, hosts, ports, users, and the optional local key path. Missing files create the initial empty catalog; malformed, unsupported, or unknown-field records fail the entire capability and are never repaired or partially accepted. Legacy entries without `sshKeyPath` remain valid and mean the user explicitly chose system OpenSSH configuration or an agent.
 
 All restored records begin disconnected. Broker secrets, copied descriptors, DSH URLs/tokens, local ports, SSH PIDs, and errors are process memory only. Removing a computer is admitted only after its tunnel generation is stopped.
 
@@ -76,7 +76,7 @@ Alternative considered: keep disposable browser tabs and add remote URLs to them
 
 ### Decision: Renderer authority remains named and versioned
 
-The preload adds only `getState`, `create`, `connect`, `disconnect`, and `remove`, plus a state-change subscription. Requests contain either the four catalog fields or one stable connection id. Strict parsers reject arrays, nulls, unknown keys, and authority-bearing fields. The main process never sends the peer secret or the remote child-announced URL; ready state contains only the local loopback forwarding URL needed by the constrained Run guest.
+The preload adds only `getState`, `create`, `connect`, `disconnect`, and `remove`, plus a state-change subscription. Requests contain the five catalog fields (including an optional key path) or one stable connection id. Strict parsers reject arrays, nulls, unknown keys, and authority-bearing fields. The main process never sends the peer secret or the remote child-announced URL; ready state contains only the local loopback forwarding URL needed by the constrained Run guest.
 
 The browser continues accepting only loopback HTTP(S) navigation. External links remain outside the guest and use the existing named external-link path.
 

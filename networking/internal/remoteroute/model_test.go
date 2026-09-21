@@ -27,6 +27,17 @@ func TestBuildArgumentsMatchTheShell(t *testing.T) {
 	}
 }
 
+func TestBuildArgumentsCarryAnExplicitIdentityFile(t *testing.T) {
+	value := computer()
+	value.SSHKeyPath = "/Users/test/.ssh/id_ed25519"
+	if got := strings.Join(BuildScpArguments(value, "/tmp/remote-peer.json"), " "); !strings.HasPrefix(got, "-i /Users/test/.ssh/id_ed25519 ") {
+		t.Fatalf("scp identity = %s", got)
+	}
+	if got := strings.Join(BuildSshForwardArguments(value, 51000, 3088), " "); !strings.HasPrefix(got, "-i /Users/test/.ssh/id_ed25519 ") {
+		t.Fatalf("ssh identity = %s", got)
+	}
+}
+
 func TestResolveExecutablesMatchesThePlatforms(t *testing.T) {
 	mac := ResolveExecutables("darwin")
 	if mac.SSH != "/usr/bin/ssh" || mac.SCP != "/usr/bin/scp" {
@@ -40,12 +51,14 @@ func TestResolveExecutablesMatchesThePlatforms(t *testing.T) {
 
 func TestAssertComputerRefusesAnythingElse(t *testing.T) {
 	for name, value := range map[string]Computer{
-		"no host":        {Port: 22, User: "deploy"},
-		"no user":        {Host: "build.example", Port: 22},
-		"a port in host": {Host: "build.example:22", Port: 22, User: "deploy"},
-		"a user in host": {Host: "deploy@build.example", Port: 22, User: "deploy"},
-		"no port":        {Host: "build.example", User: "deploy"},
-		"a huge port":    {Host: "build.example", Port: 70000, User: "deploy"},
+		"no host":             {Port: 22, User: "deploy"},
+		"no user":             {Host: "build.example", Port: 22},
+		"a port in host":      {Host: "build.example:22", Port: 22, User: "deploy"},
+		"a user in host":      {Host: "deploy@build.example", Port: 22, User: "deploy"},
+		"no port":             {Host: "build.example", User: "deploy"},
+		"a huge port":         {Host: "build.example", Port: 70000, User: "deploy"},
+		"a relative key path": {Host: "build.example", Port: 22, User: "deploy", SSHKeyPath: "id_ed25519"},
+		"a control key path":  {Host: "build.example", Port: 22, User: "deploy", SSHKeyPath: "/tmp/id\n"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := AssertComputer(value); !errors.Is(err, ErrInputInvalid) {

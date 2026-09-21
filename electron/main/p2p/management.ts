@@ -17,6 +17,7 @@ import { P2PSelectionStore } from './selection-preferences'
 import { PeerServices, type PeerServiceInput } from './services'
 import { exactPeerObject, PeerHelperError } from './wire'
 import { memberAsPair } from './management-projection'
+import { removeNetworkAuthority, removePairAuthority } from './management-authority'
 import { CoreAutoConnect } from './auto-connect'
 import type { CoreCatalogPort } from '../core/catalog'
 import type { CoreSecretPort } from '../core/secrets'
@@ -797,6 +798,11 @@ export class PeerManagement {
   }
   async connect(serviceId: string, pairId: string, signal: AbortSignal) {
     const session = await this.#readyAsDevice(serviceId, signal)
+    // A coordinator socket can have been displaced while the helper process
+    // stayed alive. Ask the core to repair that subscription before dispatching
+    // the user-visible connect; otherwise the pair attempt would fail instantly
+    // with p2p.server_unavailable even though the coordinator is reachable.
+    await session.autoConnect.retryNow(serviceId, signal)
     return session.connections.connect(serviceId, pairId, this.#signal(signal))
   }
   async disconnect(serviceId: string, pairId: string, signal: AbortSignal) {
@@ -878,10 +884,17 @@ export class PeerManagement {
     const services = new PeerServices(this.#catalog, rpc)
     const accounts = new PeerAccounts(
       rpc,
-      (serviceId, networkId) => this.#removeNetworkAuthority(rpc, serviceId, networkId),
-      async (serviceId, session) => {
-        await this.#credentials.saveUserSession(serviceId, session).catch(() => undefined)
-      }
+      (serviceId, networkId) =>
+        removeNetworkAuthority({
+          rpc,
+          catalog: this.#catalog,
+          host: this.#host,
+          lifetime: this.#lifetime.signal,
+          connections: this.#session?.connections,
+          serviceId,
+          networkId
+        }),
+      (serviceId, session) => this.#credentials.saveUserSession(serviceId, session)
     )
     const enrollment = new PeerEnrollment({
       services,
@@ -896,7 +909,7 @@ export class PeerManagement {
         if (registration.kind !== 'registered') throw new PeerHelperError('p2p.device_unregistered')
         return registration.deviceId
       },
-      (serviceId, pairId) => this.#removePairAuthority(serviceId, pairId)
+      (serviceId, pairId) => removePairAuthority(this.#catalog, serviceId, pairId)
     )
     const connections = new PeerConnections(rpc)
     const projects = new PeerRemoteProjects(rpc, (service, pair) =>
@@ -923,57 +936,6 @@ export class PeerManagement {
     await this.#restoreUserSession(serviceId, session, active)
     this.#admit()
     return operation(session.accounts, active)
-  }
-
-  async #removeNetworkAuthority(
-    rpc: PeerChannel,
-    serviceId: string,
-    networkId: string
-  ): Promise<void> {
-    // Server deletion has already committed. User cancellation must not cancel cleanup.
-    try {
-      exactPeerObject(
-        await rpc.call(
-          'network.invalidate',
-          { serviceId, data: { networkId } },
-          this.#lifetime.signal
-        ),
-        []
-      )
-    } catch (error) {
-      await this.#host.failClosed(new PeerHelperError('p2p.authorization_cleanup_failed'))
-      throw error
-    }
-    const saved = await this.#catalog.inspect()
-    if (!saved) throw new PeerHelperError('p2p.not_enabled')
-    const computers = saved.record.computers.map((computer) =>
-      computer.serviceId === serviceId && computer.networkId === networkId
-        ? { ...computer, pairState: 'revoked' as const }
-        : computer
-    )
-    // Authorization for this network is gone; drop its local entry points too.
-    for (const computer of saved.record.computers)
-      if (computer.serviceId === serviceId && computer.networkId === networkId)
-        this.#session?.connections.invalidate(serviceId, computer.pairId)
-    // Persistence failure does not undo server revocation or restore helper pins.
-    await this.#catalog.commit(saved.revision, { ...saved.record, computers })
-  }
-
-  /**
-   * Marks the paired computer revoked after the server accepted the revocation.
-   *
-   * The authorization is already gone at this point, so a persistence failure
-   * must surface rather than resurrect the pair as usable.
-   */
-  async #removePairAuthority(serviceId: string, pairId: string): Promise<void> {
-    const saved = await this.#catalog.inspect()
-    if (!saved) throw new PeerHelperError('p2p.not_enabled')
-    const computers = saved.record.computers.map((computer) =>
-      computer.serviceId === serviceId && computer.pairId === pairId
-        ? { ...computer, pairState: 'revoked' as const }
-        : computer
-    )
-    await this.#catalog.commit(saved.revision, { ...saved.record, computers })
   }
 
   #clearSession(): void {

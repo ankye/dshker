@@ -37,7 +37,7 @@ func TestCoreDaemonOwnsTheRemoteRoute(t *testing.T) {
 	// A missing OpenSSH client is its own code, not a generic failure. The route
 	// resolves the platform pair itself, so the test names a path that cannot
 	// work rather than pretending a machine is reachable.
-	request := json.RawMessage(`{"connectionId":"connection_main","computer":{"host":"127.0.0.1","port":1,"user":"nobody"},"ssh":"/nonexistent/ssh","scp":"/nonexistent/scp"}`)
+	request := json.RawMessage(`{"connectionId":"connection_main","computer":{"host":"127.0.0.1","port":1,"user":"nobody","sshKeyPath":""},"ssh":"/nonexistent/ssh","scp":"/nonexistent/scp","sshKeyPath":""}`)
 	if _, err := parent.Call(ctx, "remote.connect", request); err == nil || err.Error() != "remote.ssh_unavailable" {
 		t.Fatalf("connect = %v", err)
 	}

@@ -117,7 +117,8 @@ async function update(request: UpdateRemoteConnectionRequest): Promise<boolean> 
         saved.displayName === request.displayName &&
         saved.host === request.host &&
         saved.port === request.port &&
-        saved.user === request.user
+        saved.user === request.user &&
+        (saved.sshKeyPath ?? '') === request.sshKeyPath
       if (!confirmed) error.value = 'unconfirmed'
       return confirmed
     } catch {

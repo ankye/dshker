@@ -34,7 +34,9 @@ defineProps<{
   readonly collapseLabel: string
   readonly hideLabel: string
   readonly expandLabel: string
+  readonly menuLabel: string
   readonly consoleLabel: string
+  readonly consoleControlLabel: string
   readonly consoleUnreadLabel: string
   readonly consoleOpen: boolean
   readonly consoleUnread: boolean
@@ -84,6 +86,7 @@ const emit = defineEmits<{
         >
           <path d="M4 6h16M4 12h16M4 18h16" />
         </svg>
+        <span class="statusbar-control-label" aria-hidden="true">{{ menuLabel }}</span>
       </button>
       <button
         class="statusbar-control statusbar-console-toggle"
@@ -103,6 +106,7 @@ const emit = defineEmits<{
           <path d="m5 7 4 4-4 4" />
           <path d="M12 17h7" />
         </svg>
+        <span class="statusbar-control-label" aria-hidden="true">{{ consoleControlLabel }}</span>
         <span v-if="consoleUnread" class="statusbar-console-badge" aria-hidden="true" />
       </button>
     </div>

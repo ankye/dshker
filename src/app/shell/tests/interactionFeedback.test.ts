@@ -1,16 +1,17 @@
-import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readStylesheet, readStylesheets } from './readStylesheets'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 
-function sheet(name: string): string {
-  return readFileSync(path.join(appRoot, `src/styles/${name}.css`), 'utf8')
-}
-
-const styles = ['base-shell', 'routes', 'controls', 'responsive'].map(sheet).join('\n')
-const tokens = sheet('tokens')
+const styles = readStylesheets(appRoot + '/src/styles', [
+  'base-shell',
+  'routes',
+  'controls',
+  'responsive'
+])
+const tokens = readStylesheet(path.join(appRoot, 'src/styles/tokens.css'))
 
 /**
  * Interaction feedback and the reduced-motion contract.

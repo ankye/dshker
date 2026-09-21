@@ -24,7 +24,9 @@ export const enUS: Record<MessageKey, string> = {
   'nav.collapse': 'Collapse to icon rail',
   'nav.hide': 'Hide sidebar',
   'nav.expand': 'Expand sidebar',
+  'nav.menu': 'Menu',
   'nav.console': 'Live output',
+  'nav.commandLine': 'Console',
   'nav.consoleUnread': 'New output',
   'nav.workspace': 'Selected workspace',
   'nav.overview': 'Overview',
@@ -281,6 +283,11 @@ export const enUS: Record<MessageKey, string> = {
     'Uses the operating system\u2019s own mechanism and the settings already saved on this computer. The same registration is shared with the dshkerd command line.',
   'settings.autostart.unsupported':
     'This operating system has no supported start-at-boot mechanism yet, or the networking core is not running.',
+  'settings.autostart.desktopReadOnly':
+    'The desktop app can read this registration but cannot change it safely yet. Use standalone dshkerd to avoid starting two cores for one device.',
+  'settings.autostart.unavailable':
+    'The networking core is temporarily unavailable. Try again shortly.',
+  'settings.autostart.retry': 'Read status again',
   'settings.autostart.failed': 'The start-at-boot state could not be read.',
   'update.notice.title': 'A new DSHKer Launcher is available',
   'update.notice.version': 'Version',
@@ -346,13 +353,16 @@ export const enUS: Record<MessageKey, string> = {
   'remote.description':
     'Connect several computers through DSHKer-managed SSH tunnels without exposing DSH to the LAN.',
   'remote.add.title': 'Add computer',
-  'remote.add.description':
-    'Enter an existing SSH connection; every field is explicit and required.',
+  'remote.add.open': 'Add computer',
+  'remote.add.close': 'Close add computer dialog',
+  'remote.add.description': 'Enter an existing SSH connection; the key path is optional.',
   'remote.security.badge': 'Loopback SSH only',
   'remote.field.name': 'Computer name',
   'remote.field.host': 'SSH host',
   'remote.field.port': 'SSH port',
   'remote.field.user': 'SSH user',
+  'remote.field.sshKeyPath': 'SSH key path (optional)',
+  'remote.field.sshKeyPathPlaceholder': 'For example ~/.ssh/id_ed25519',
   'remote.edit.action': 'Edit',
   'remote.edit.title': 'Edit remote computer',
   'remote.edit.hint':
@@ -369,7 +379,7 @@ export const enUS: Record<MessageKey, string> = {
   'remote.add.action': 'Add computer',
   'remote.add.saving': 'Saving…',
   'remote.add.hint':
-    'Uses system OpenSSH and existing SSH config or agent. DSHKer never accepts passwords or transfers private keys.',
+    'Optionally point to a local private-key file; leave empty to use SSH config or an agent. DSHKer never reads or transfers private-key contents.',
   'remote.error': 'Remote connection operation failed',
   'remote.error.bridge': 'The Launcher remote connection bridge is unavailable.',
   'remote.error.invalidRequest': 'Connection details are incomplete or invalid.',

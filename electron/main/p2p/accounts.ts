@@ -21,6 +21,8 @@ import {
 /** Named main-only account operations. Tokens never enter return values or persistence. */
 export class PeerAccounts {
   readonly #sessions = new Map<string, PeerUserSession>()
+  /** Repeated startup reads share one server read instead of returning busy. */
+  readonly #currentUserInFlight = new Map<string, Promise<PeerUser>>()
   readonly #busy = new Set<string>()
   #closed = false
 
@@ -38,6 +40,7 @@ export class PeerAccounts {
   close(): void {
     this.#closed = true
     this.#sessions.clear()
+    this.#currentUserInFlight.clear()
   }
 
   login(
@@ -108,12 +111,16 @@ export class PeerAccounts {
       throw new PeerHelperError('p2p.user_scope_mismatch')
     this.#checkExpiry(session)
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
-    this.#sessions.set(serviceId, session)
-    // Persist so a restart does not ask for the password again.
+    // Persist before publishing the in-memory session. A login that cannot be
+    // restored after restart is not a successful login for this product: the old
+    // ordering marked the account signed in first and the management layer then
+    // swallowed a secret-provider failure, so every relaunch showed the login
+    // form again with no diagnostic.
     await this.onSessionPersisted?.(serviceId, {
       token: session.token,
       expiresAt: session.expiresAt
     })
+    this.#sessions.set(serviceId, session)
     return { ...user }
   }
 
@@ -151,7 +158,9 @@ export class PeerAccounts {
   }
 
   currentUser(serviceId: string, signal: AbortSignal): Promise<PeerUser> {
-    return this.#operation(serviceId, signal, async () => {
+    const previous = this.#currentUserInFlight.get(serviceId)
+    if (previous) return previous
+    const pending = this.#operation(serviceId, signal, async () => {
       const session = this.#session(serviceId)
       const current = peerUser(
         await this.#call(serviceId, 'user.current', { token: session.token }, signal)
@@ -159,6 +168,11 @@ export class PeerAccounts {
       if (current.userId !== session.user.userId)
         throw new PeerHelperError('p2p.user_scope_mismatch')
       return current
+    })
+    this.#currentUserInFlight.set(serviceId, pending)
+    return pending.finally(() => {
+      if (this.#currentUserInFlight.get(serviceId) === pending)
+        this.#currentUserInFlight.delete(serviceId)
     })
   }
 

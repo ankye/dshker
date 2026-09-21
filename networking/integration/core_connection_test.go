@@ -198,7 +198,8 @@ func startCoreDaemon(t *testing.T, handler localrpc.Handler, args ...string) (*l
 
 	endpoint := coreEndpoint(t)
 	secret := strings.Repeat("b", 64)
-	cmd := exec.Command(binary, args...)
+	cmd := exec.Command(binary, append([]string{"--state", desktopStateRoot(t)}, args...)...)
+	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
 	must(t, err)
 	stdout, err := cmd.StdoutPipe()

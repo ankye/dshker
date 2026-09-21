@@ -44,12 +44,20 @@ onMounted(async () => {
  */
 const autostartInstalled = ref(false)
 const autostartSupported = ref(false)
+const autostartDesktopReadOnly = ref(false)
 const autostartBusy = ref(false)
 const autostartError = ref('')
 
 interface AutostartBridge {
   getState(): Promise<unknown>
   setEnabled(enabled: boolean): Promise<unknown>
+}
+
+interface AutostartResult {
+  readonly ok?: boolean
+  readonly code?: string
+  readonly message?: string
+  readonly data?: { installed?: boolean; supported?: boolean; mechanism?: string }
 }
 
 function autostartApi(): AutostartBridge | undefined {
@@ -59,24 +67,46 @@ function autostartApi(): AutostartBridge | undefined {
 
 /** Applies one answer, keeping the switch and the machine in agreement. */
 function applyAutostart(result: unknown): void {
-  const answer = result as {
-    ok?: boolean
-    data?: { installed?: boolean; supported?: boolean }
-    error?: { message?: string }
-  }
+  const answer = result as AutostartResult
   if (answer?.ok !== true || answer.data === undefined) {
-    autostartError.value = answer?.error?.message ?? t('settings.autostart.failed')
+    autostartSupported.value = false
+    autostartDesktopReadOnly.value = false
+    // ApiResult failures are deliberately flat (`code` + `message`) across the
+    // preload boundary. Reading a nested `error.message` here used to hide every
+    // real core refusal behind the generic "could not be read" copy.
+    autostartError.value =
+      answer?.message === 'p2p.autostart_unavailable'
+        ? t('settings.autostart.unavailable')
+        : answer?.message === 'p2p.autostart_unsupported'
+          ? t('settings.autostart.unsupported')
+          : t('settings.autostart.failed')
     return
   }
   autostartError.value = ''
   autostartInstalled.value = answer.data.installed === true
   autostartSupported.value = answer.data.supported === true
+  autostartDesktopReadOnly.value =
+    answer.data.supported === false &&
+    answer.data.mechanism !== undefined &&
+    answer.data.mechanism !== 'unsupported'
 }
 
-onMounted(async () => {
+async function readAutostart(): Promise<void> {
   const api = autostartApi()
   if (api === undefined) return
-  applyAutostart(await api.getState())
+  if (autostartBusy.value) return
+  autostartBusy.value = true
+  try {
+    applyAutostart(await api.getState())
+  } catch {
+    applyAutostart({ ok: false, message: 'p2p.autostart_unavailable' })
+  } finally {
+    autostartBusy.value = false
+  }
+}
+
+onMounted(() => {
+  void readAutostart()
 })
 
 async function updateAutostart(enabled: boolean): Promise<void> {
@@ -87,6 +117,8 @@ async function updateAutostart(enabled: boolean): Promise<void> {
     // Registering touches the filesystem and a platform tool, so the answer is
     // the state read back rather than the value that was requested.
     applyAutostart(await api.setEnabled(enabled))
+  } catch {
+    applyAutostart({ ok: false, message: 'p2p.autostart_unavailable' })
   } finally {
     autostartBusy.value = false
   }
@@ -372,13 +404,26 @@ const selectedLocale = computed<SupportedLocale>({
             />
             <span class="settings-port-mode-copy">
               <strong>{{ t('settings.autostart.enable') }}</strong>
-              <small v-if="!autostartSupported">{{ t('settings.autostart.unsupported') }}</small>
+              <small v-if="autostartDesktopReadOnly">{{
+                t('settings.autostart.desktopReadOnly')
+              }}</small>
+              <small v-else-if="!autostartSupported">{{
+                t('settings.autostart.unsupported')
+              }}</small>
               <small v-else>{{ t('settings.autostart.enable.description') }}</small>
             </span>
           </label>
-          <p v-if="autostartError" class="settings-autostart-error" role="status">
-            {{ autostartError }}
-          </p>
+          <div v-if="autostartError" class="settings-autostart-feedback">
+            <p class="settings-autostart-error" role="status">{{ autostartError }}</p>
+            <button
+              class="prototype-button prototype-button--secondary"
+              type="button"
+              :disabled="autostartBusy"
+              @click="readAutostart"
+            >
+              {{ t('settings.autostart.retry') }}
+            </button>
+          </div>
         </div>
       </section>
 

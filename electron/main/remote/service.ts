@@ -50,7 +50,8 @@ export class RemoteConnectionService {
       displayName: request.displayName,
       host: request.host,
       port: request.port,
-      user: request.user
+      user: request.user,
+      sshKeyPath: request.sshKeyPath
     })
     const state = this.#project(connections)
     this.#emit(state)
@@ -77,7 +78,8 @@ export class RemoteConnectionService {
         connectionId,
         host: computer.host,
         port: computer.port,
-        user: computer.user
+        user: computer.user,
+        sshKeyPath: computer.sshKeyPath ?? ''
       })
       this.#status.set(connectionId, { kind: 'ready', url: live.url })
       this.#testStatus.set(connectionId, { kind: 'passed' })
@@ -124,7 +126,8 @@ export class RemoteConnectionService {
         connectionId,
         host: computer.host,
         port: computer.port,
-        user: computer.user
+        user: computer.user,
+        sshKeyPath: computer.sshKeyPath ?? ''
       })
       await port.disconnect(connectionId)
       this.#testStatus.set(connectionId, { kind: 'passed' })
@@ -181,17 +184,19 @@ export class RemoteConnectionService {
     try {
       const { port, filePath } = await this.#core()
       const computer = await this.#find(connectionId, port, filePath)
-      const changedDestination =
+      const changedConnectionParameters =
         computer.host !== request.host ||
         computer.port !== request.port ||
-        computer.user !== request.user
+        computer.user !== request.user ||
+        (computer.sshKeyPath ?? '') !== request.sshKeyPath
       if (
-        changedDestination &&
-        (this.#status.get(connectionId)?.kind ?? 'disconnected') !== 'disconnected'
+        changedConnectionParameters &&
+        (this.#busy.has(connectionId) ||
+          (this.#status.get(connectionId)?.kind ?? 'disconnected') !== 'disconnected')
       ) {
         throw new RemoteConnectionError(
           'remote.connection_not_disconnected',
-          'Disconnect before changing SSH parameters.'
+          'Disconnect and finish any active test before changing SSH parameters.'
         )
       }
       const connections = await port.updateConnection({
@@ -201,9 +206,10 @@ export class RemoteConnectionService {
         host: request.host,
         port: request.port,
         user: request.user,
+        sshKeyPath: request.sshKeyPath,
         expectedConfigRevision: request.expectedConfigRevision
       })
-      if (changedDestination) {
+      if (changedConnectionParameters) {
         this.#status.set(connectionId, { kind: 'disconnected' })
         this.#testStatus.set(connectionId, { kind: 'untested' })
       }
@@ -332,6 +338,7 @@ export class RemoteConnectionService {
         host: computer.host,
         port: computer.port,
         user: computer.user,
+        sshKeyPath: computer.sshKeyPath ?? '',
         configRevision: computer.configRevision,
         status: this.#status.get(computer.connectionId) ?? { kind: 'disconnected' },
         testStatus: this.#testStatus.get(computer.connectionId) ?? { kind: 'untested' }

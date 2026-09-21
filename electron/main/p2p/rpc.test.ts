@@ -157,4 +157,31 @@ describe('private helper RPC lifecycle', () => {
     })
     expect(handler).toHaveBeenCalledTimes(2)
   })
+
+  it('admits the named remote-root callback for an attached headless core', async () => {
+    const handler = vi.fn(async () => ({ roots: [] }))
+    const { remote } = await channel(handler)
+    const answer = once(remote, 'data')
+    remote.write(
+      JSON.stringify({
+        version: 1,
+        id: 1,
+        method: 'runtime.roots',
+        payload: { serviceId: 'a'.repeat(12), pairId: 'b'.repeat(12) },
+        error: ''
+      }) + '\n'
+    )
+    const [data] = await answer
+    expect(decodePeerFrame(data.toString().trim())).toMatchObject({
+      id: 1,
+      method: '',
+      payload: { roots: [] },
+      error: ''
+    })
+    expect(handler).toHaveBeenCalledWith(
+      'runtime.roots',
+      expect.any(Object),
+      expect.any(AbortSignal)
+    )
+  })
 })

@@ -19,10 +19,61 @@ import (
 	"errors"
 	"os/exec"
 	"strings"
+
+	"golang.org/x/sys/windows/registry"
 )
 
 // runKeyPath is the current user's autorun key.
 const runKeyPath = `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`
+
+const runKeyRegistryPath = `Software\Microsoft\Windows\CurrentVersion\Run`
+
+// registeredAutostartTarget reads the value through the native registry API so
+// Unicode paths and localized reg.exe output cannot change ownership checks.
+func registeredAutostartTarget() (autostartTarget, bool, error) {
+	key, err := registry.OpenKey(registry.CURRENT_USER, runKeyRegistryPath, registry.QUERY_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return autostartTarget{}, false, nil
+	}
+	if err != nil {
+		return autostartTarget{}, false, errors.New("p2p.autostart_unavailable")
+	}
+	defer key.Close()
+	command, valueType, err := key.GetStringValue(autostartLabel)
+	if errors.Is(err, registry.ErrNotExist) {
+		return autostartTarget{}, false, nil
+	}
+	if err != nil {
+		return autostartTarget{}, false, errors.New("p2p.autostart_unavailable")
+	}
+	if valueType != registry.SZ {
+		return autostartTarget{}, false, errors.New("p2p.autostart_conflict")
+	}
+	target, err := parseWindowsRunCommand(command)
+	return target, err == nil, err
+}
+
+func parseWindowsRunCommand(command string) (autostartTarget, error) {
+	// The registration writer emits exactly this four-argument spelling. A
+	// differently quoted or extended command is not this installation's value.
+	if !strings.HasPrefix(command, `"`) {
+		return autostartTarget{}, errors.New("p2p.autostart_conflict")
+	}
+	endExecutable := strings.Index(command[1:], `"`)
+	if endExecutable < 0 {
+		return autostartTarget{}, errors.New("p2p.autostart_conflict")
+	}
+	endExecutable++
+	const middle = ` serve --state "`
+	if !strings.HasPrefix(command[endExecutable+1:], middle) || !strings.HasSuffix(command, `"`) {
+		return autostartTarget{}, errors.New("p2p.autostart_conflict")
+	}
+	state := command[endExecutable+1+len(middle) : len(command)-1]
+	if endExecutable == 1 || state == "" || strings.Contains(state, `"`) {
+		return autostartTarget{}, errors.New("p2p.autostart_conflict")
+	}
+	return autostartTarget{executable: command[1:endExecutable], state: state}, nil
+}
 
 // installAutostart writes the run-key value.
 //
@@ -48,33 +99,31 @@ func installAutostart(executable string, state string) error {
 // removeAutostart deletes the run-key value. A value that is already absent is
 // not a failure, so disabling twice is idempotent.
 func removeAutostart() error {
-	binary, err := exec.LookPath("reg.exe")
+	key, err := registry.OpenKey(registry.CURRENT_USER, runKeyRegistryPath, registry.SET_VALUE)
+	if errors.Is(err, registry.ErrNotExist) {
+		return nil
+	}
 	if err != nil {
 		return errors.New("p2p.autostart_unavailable")
 	}
-	output, runErr := exec.Command(binary, "delete", runKeyPath, "/v", autostartLabel, "/f").CombinedOutput()
-	if runErr != nil {
-		if strings.Contains(strings.ToLower(string(output)), "unable to find") {
-			return nil
-		}
+	defer key.Close()
+	if err := key.DeleteValue(autostartLabel); err != nil && !errors.Is(err, registry.ErrNotExist) {
 		return errors.New("p2p.autostart_unavailable")
 	}
 	return nil
 }
 
+func removeAutostartPreservingProcess() error { return removeAutostart() }
+
+func retireDisabledAutostart(string) error { return nil }
+
 // autostartStatus queries the run key.
 func autostartStatus() (AutostartState, error) {
 	state := AutostartState{Mechanism: "registry-run-key", Path: runKeyPath + `\` + autostartLabel}
-	binary, err := exec.LookPath("reg.exe")
+	_, installed, err := registeredAutostartTarget()
 	if err != nil {
-		return AutostartState{}, errors.New("p2p.autostart_unavailable")
+		return AutostartState{}, err
 	}
-	output, runErr := exec.Command(binary, "query", runKeyPath, "/v", autostartLabel).CombinedOutput()
-	if runErr != nil {
-		// A missing value is the ordinary "not installed" answer, not a failure.
-		state.Installed = false
-		return state, nil
-	}
-	state.Installed = strings.Contains(string(output), autostartLabel)
+	state.Installed = installed
 	return state, nil
 }

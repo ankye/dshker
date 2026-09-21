@@ -31,6 +31,13 @@ type Method struct {
 // against the shipped dispatch by methods_test.go.
 var Methods = []Method{
 	{"core.version", RoleShell},
+	// A desktop attaching to an already-running headless owner promotes this
+	// authenticated connection to the reverse-callback channel. Closing it
+	// restores the headless callback owner without ending the core.
+	{"core.desktop_attach", RoleShell},
+	// An attached desktop asks the headless owner to exit after it receives
+	// the response and closes its authenticated socket.
+	{"core.desktop_handoff", RoleShell},
 	// The device catalog moved into the core in 3.6b. These are additive to the
 	// version 1 table: the shell answers the same way it did while it owned the
 	// file, and the revision it passes back is the same sha256 of the bytes.
@@ -139,6 +146,7 @@ var Methods = []Method{
 	{"user.register", RoleShell},
 	{"peer.state", RoleParent},
 	{"runtime.connect", RoleParent},
+	{"runtime.roots", RoleParent},
 	// Sent when the core's directory snapshot for a service changes, so a shell
 	// mirrors one maintained list instead of polling every list it renders.
 	{"directory.changed", RoleParent},

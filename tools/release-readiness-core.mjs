@@ -91,6 +91,14 @@ export const defaultStages = [
     evidence: '.run/headless-core/latest.json'
   },
   {
+    id: 'standalone-cli-distribution',
+    label: 'Standalone dshkerd distribution',
+    command: 'npm',
+    args: ['run', 'build:dshkerd', '--', '--output-dir', '.run/dshkerd-release', '--overwrite'],
+    hardGate: true,
+    evidence: '.run/dshkerd-release'
+  },
+  {
     id: 'release-verify',
     label: 'Release metadata verify',
     command: 'npm',
@@ -153,9 +161,13 @@ export function createReadinessPlan(options = {}) {
     ? [
         ...defaultStages.filter(
           (stage) =>
-            !['package', 'core-headless-smoke', 'release-verify', 'release-smoke'].includes(
-              stage.id
-            )
+            ![
+              'package',
+              'core-headless-smoke',
+              'standalone-cli-distribution',
+              'release-verify',
+              'release-smoke'
+            ].includes(stage.id)
         ),
         templatePackageStage
       ]

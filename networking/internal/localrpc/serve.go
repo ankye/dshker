@@ -119,6 +119,14 @@ func AcceptClient(ctx context.Context, listener net.Listener, secret string) (ne
 // shell, which owns exactly one. Each admitted client gets its own peer, and the
 // shared handler is what makes them equivalent.
 func ServeEndpoint(ctx context.Context, listener net.Listener, secret string, handler Handler) error {
+	return ServeEndpointWithPeers(ctx, listener, secret, func(*Peer) Handler { return handler }, nil)
+}
+
+// ServeEndpointWithPeers gives an authenticated long-lived desktop client a
+// per-connection handler and a detach notification. Ordinary short-lived CLI
+// clients still use ServeEndpoint and cannot become a callback owner by merely
+// connecting; the endpoint handler must explicitly admit an attach request.
+func ServeEndpointWithPeers(ctx context.Context, listener net.Listener, secret string, handlerFor func(*Peer) Handler, onDisconnect func(*Peer)) error {
 	var mutex sync.Mutex
 	peers := map[*Peer]bool{}
 	defer func() {
@@ -141,12 +149,15 @@ func ServeEndpoint(ctx context.Context, listener net.Listener, secret string, ha
 			}
 			return err
 		}
-		peer := New(ctx, conn, handler)
+		peer := NewWithPeer(ctx, conn, handlerFor)
 		mutex.Lock()
 		peers[peer] = true
 		mutex.Unlock()
 		go func() {
 			<-peer.Done()
+			if onDisconnect != nil {
+				onDisconnect(peer)
+			}
 			mutex.Lock()
 			delete(peers, peer)
 			mutex.Unlock()

@@ -132,6 +132,24 @@ func TestCreateUpdateAndRemoveKeepTheRevisionContract(t *testing.T) {
 	}
 }
 
+func TestCatalogPersistsAnExplicitSSHKeyPath(t *testing.T) {
+	store, _ := storeIn(t)
+	if _, err := store.Load(); err != nil {
+		t.Fatal(err)
+	}
+	connections, err := store.Create("Keyed box", "build.example", 22, "deploy", "/Users/test/.ssh/id_ed25519")
+	if err != nil || len(connections) != 1 {
+		t.Fatalf("create = %+v, %v", connections, err)
+	}
+	if connections[0].SSHKeyPath != "/Users/test/.ssh/id_ed25519" {
+		t.Fatalf("key path = %q", connections[0].SSHKeyPath)
+	}
+	reloaded, err := store.Load()
+	if err != nil || reloaded.Connections[0].SSHKeyPath != connections[0].SSHKeyPath {
+		t.Fatalf("reload = %+v, %v", reloaded, err)
+	}
+}
+
 // TestParseRefusesEveryBrokenShape covers the strict document rules.
 func TestParseRefusesEveryBrokenShape(t *testing.T) {
 	for name, document := range map[string]string{

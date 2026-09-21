@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
-import P2PJoinPanel from './P2PJoinPanel.vue'
 import P2PNetworkAccountPanel from './P2PNetworkAccountPanel.vue'
 import RemoteSSHManagementPanel from './RemoteSSHManagementPanel.vue'
 import type { AppRouteId } from '@/app/shared/navigation/routes'
@@ -11,11 +10,13 @@ type RemoteTab = 'connect' | 'account'
 /**
  * Two operational sub-tabs of the remote route.
  *
- * Tab 1 「连接」 is login-free (SSH hosts, plus the「我的网络」card that joins
- * a P2P network through the built-in official server). Tab 2 「网络与账户」
- * is login-gated and carries account, network, enrollment and pairing
- * management. Tabs never switch by themselves; cross-tab guidance asks the
- * user to switch explicitly.
+ * Tab 1 「SSH 连接」 is login-free and task-focused: SSH hosts and their connection
+ * actions. Tab 2 「网络与账户」 owns the full 「我的网络」 identity/membership
+ * card as well as account, network, enrollment and pairing management. Keeping
+ * the complete card in one place prevents a connection list and an
+ * account-management surface from competing in the same pane.
+ * Tabs never switch by themselves; cross-tab guidance asks the user to switch
+ * explicitly.
  */
 const t = useTranslator()
 const activeTab = ref<RemoteTab>('connect')
@@ -60,7 +61,6 @@ const emit = defineEmits<{ navigate: [route: AppRouteId] }>()
     >
       <p class="remote-tab-description">{{ t('p2p.tabs.connectDescription') }}</p>
       <RemoteSSHManagementPanel @navigate="emit('navigate', $event)" />
-      <P2PJoinPanel />
     </section>
 
     <section

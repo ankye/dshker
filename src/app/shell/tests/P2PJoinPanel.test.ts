@@ -32,7 +32,8 @@ const registered: P2PRegistrationView = {
   name: 'My computer',
   publicKey: 'public-key',
   revision: 'b'.repeat(64),
-  deviceId: 'device-a'
+  deviceId: 'device-a',
+  networkId: 'network-a'
 }
 const pending: P2PRegistrationView = {
   kind: 'pending',
@@ -147,11 +148,8 @@ describe('P2P 「我的网络」 card', () => {
     expect(info.text()).toContain('设备标识')
     expect(info.text()).toContain('local-device-a')
     expect(info.find('.copy-path-button').exists()).toBe(true)
-    const technical = ui.get('.connect-device-details')
-    expect(technical.attributes('open')).toBeUndefined()
-    expect(technical.text()).toContain('设备标识')
-    // Before joining, the card shows this machine's generated local device id.
-    expect(technical.text()).toContain('local-device-a')
+    expect(ui.find('.connect-device-details').exists()).toBe(false)
+    expect(ui.find('.connect-membership-details').exists()).toBe(false)
     expect(ui.find('input[name]').exists()).toBe(false)
     expect(ui.findAll('input')).toHaveLength(1)
     expect((ui.get('[data-testid="p2p-join-network"]').element as HTMLInputElement).type).toBe(
@@ -215,13 +213,49 @@ describe('P2P 「我的网络」 card', () => {
     await flushPromises()
     const info = ui.get('[data-testid="p2p-device-info"]')
     expect(info.text()).toContain('My computer')
-    expect(ui.get('.connect-device-details').text()).toContain('device-a')
-    expect(ui.get('.connect-membership-details').attributes('open')).toBeUndefined()
+    expect(ui.get('[data-testid="p2p-joined-network"]').text()).toContain('network-a')
+    expect(ui.get('[data-testid="p2p-joined-network"]').find('.copy-path-button').exists()).toBe(
+      true
+    )
+    expect(ui.find('.connect-device-details').exists()).toBe(false)
+    expect(ui.find('.connect-membership-details').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(false)
     // Offline unless a live ready connection stage proves otherwise.
     expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('离线')
     expect(ui.find('[data-testid="p2p-leave-network"]').exists()).toBe(true)
+  })
+
+  it('recovers one legacy joined network id from the authoritative local directory', async () => {
+    const ui = await render({
+      directory: directoryReader(['device-a'])
+    })
+    const domain = await import('@/app/domains/remote-connections')
+    domain.p2pManagement.catalog.value = {
+      ...saved,
+      computers: [
+        {
+          connectionId: 'connection-a',
+          serviceId,
+          displayName: 'This machine',
+          pairId: 'pair-a',
+          networkId: 'network-a',
+          localDeviceId: 'device-a',
+          remoteDeviceId: 'remote-a',
+          userId: 'user-a',
+          localPublicKey: 'local-key',
+          remotePublicKey: 'remote-key',
+          pairRevision: 1,
+          pairState: 'active'
+        }
+      ]
+    }
+    domain.p2pEnrollment.state(serviceId).registration = {
+      ...registered,
+      networkId: undefined
+    }
+    await flushPromises()
+    expect(ui.get('[data-testid="p2p-joined-network"]').text()).toContain('network-a')
   })
 
   it('reports online from the coordinator session, with no paired computer', async () => {

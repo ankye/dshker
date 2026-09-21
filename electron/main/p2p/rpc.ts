@@ -8,11 +8,7 @@ import {
 } from './wire'
 
 export type PeerMainMethod =
-  | 'runtime.connect'
-  | 'runtime.roots'
-  | 'peer.state'
-  | 'directory.changed'
-  | 'catalog.changed'
+  'runtime.connect' | 'runtime.roots' | 'peer.state' | 'directory.changed' | 'catalog.changed'
 export type PeerMainHandler = (
   method: PeerMainMethod,
   payload: unknown,
@@ -131,6 +127,7 @@ export class PeerRpc {
     this.#lastIncoming = frame.id
     if (
       frame.method !== 'runtime.connect' &&
+      frame.method !== 'runtime.roots' &&
       frame.method !== 'peer.state' &&
       frame.method !== 'directory.changed' &&
       frame.method !== 'catalog.changed'

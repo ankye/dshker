@@ -26,10 +26,22 @@ export interface P2POperationState {
 }
 
 // One sequence for the whole document, never reset by component mount or service changes.
-let sequence = 0
+// Keep the counter on the renderer global as well: Vite HMR re-evaluates this
+// module without replacing the WebContents, while the main-process replay guard
+// quite correctly keeps the same request scope. Resetting to 1 after HMR makes a
+// healthy catalog read look like p2p.request_replayed.
+const sequenceHost = globalThis as typeof globalThis & {
+  __dshkerP2PRequestSequence?: number
+}
 function nextRequestId(): number {
-  if (sequence === Number.MAX_SAFE_INTEGER) throw new Error('p2p.request_limit')
-  return ++sequence
+  // A renderer that was already hot-reloaded before this counter existed may
+  // have consumed low ids in the main-process replay window. Start a fresh
+  // document at a time-based high range once, then keep it monotonic on HMR.
+  const current = Math.max(sequenceHost.__dshkerP2PRequestSequence ?? 0, Date.now() * 1000)
+  if (current === Number.MAX_SAFE_INTEGER) throw new Error('p2p.request_limit')
+  const next = current + 1
+  sequenceHost.__dshkerP2PRequestSequence = next
+  return next
 }
 const reads = new Set<Operation>([
   'catalog',
@@ -95,7 +107,7 @@ export class P2PManagementDomain {
   readonly serviceDraft = reactive<P2PServiceInput>({
     ...P2P_BUILTIN_SERVICE
   })
-  #ensuringBuiltin = false
+  #ensuringBuiltin: Promise<void> | undefined
 
   constructor(private readonly bridge: () => P2PManagementApi | undefined) {}
 
@@ -309,39 +321,45 @@ export class P2PManagementDomain {
    * mount: nothing is marked done unless a readback confirmed it.
    */
   async ensureBuiltinService(): Promise<void> {
-    if (this.builtinProvisioned.value || this.builtinRemoved.value || this.#ensuringBuiltin) return
-    this.#ensuringBuiltin = true
+    if (this.builtinProvisioned.value || this.builtinRemoved.value) return
+    if (this.#ensuringBuiltin) return this.#ensuringBuiltin
+    const pending = this.#ensureBuiltinService()
+    this.#ensuringBuiltin = pending
     try {
-      if (this.catalog.value === undefined) await this.readCatalog()
-      let saved = this.catalog.value
-      if (saved === null) {
-        await this.enable()
-        saved = this.catalog.value
-      }
-      if (!saved) return
-      const existing = saved.services.find(
-        (entry) => entry.httpsOrigin === P2P_BUILTIN_SERVICE.httpsOrigin
-      )
-      if (existing) {
-        this.selectedServiceId.value = existing.serviceId
-        this.builtinProvisioned.value = true
-        return
-      }
-      await this.addService()
-      const added = this.catalog.value?.services.find(
-        (entry) => entry.httpsOrigin === P2P_BUILTIN_SERVICE.httpsOrigin
-      )
-      if (added) {
-        this.selectedServiceId.value = added.serviceId
-        this.builtinProvisioned.value = true
-        return
-      }
-      const outcome = this.operations.catalog
-      if (outcome?.phase === 'failed' && outcome.error === 'p2p.trust_restore_rejected')
-        this.builtinRemoved.value = true
+      await pending
     } finally {
-      this.#ensuringBuiltin = false
+      if (this.#ensuringBuiltin === pending) this.#ensuringBuiltin = undefined
     }
+  }
+
+  async #ensureBuiltinService(): Promise<void> {
+    if (this.catalog.value === undefined) await this.readCatalog()
+    let saved = this.catalog.value
+    if (saved === null) {
+      await this.enable()
+      saved = this.catalog.value
+    }
+    if (!saved) return
+    const existing = saved.services.find(
+      (entry) => entry.httpsOrigin === P2P_BUILTIN_SERVICE.httpsOrigin
+    )
+    if (existing) {
+      this.selectedServiceId.value = existing.serviceId
+      this.builtinProvisioned.value = true
+      return
+    }
+    await this.addService()
+    const added = this.catalog.value?.services.find(
+      (entry) => entry.httpsOrigin === P2P_BUILTIN_SERVICE.httpsOrigin
+    )
+    if (added) {
+      this.selectedServiceId.value = added.serviceId
+      this.builtinProvisioned.value = true
+      return
+    }
+    const outcome = this.operations.catalog
+    if (outcome?.phase === 'failed' && outcome.error === 'p2p.trust_restore_rejected')
+      this.builtinRemoved.value = true
   }
 
   #fail<K extends Operation>(scope: string, requestId: number, code: Failure): P2PDomainResult<K> {

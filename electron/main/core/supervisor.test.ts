@@ -12,6 +12,7 @@ const coreName = () => (process.platform === 'win32' ? 'dshkerd.exe' : 'dshkerd'
 interface Launch {
   readonly resourcesRoot: string
   readonly dataRoot: string
+  readonly stateRoot: string
 }
 
 // On win32 the fake executable cannot be a script, so the suite uses the real
@@ -59,10 +60,16 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
         sha256: createHash('sha256').update(bytes).digest('hex')
       }
       await writeFile(join(directory, 'dshkerd-manifest.json'), JSON.stringify(manifest) + '\n')
-      return { resourcesRoot, dataRoot }
+      return { resourcesRoot, dataRoot, stateRoot: join(dataRoot, 'state') }
     }
 
-    function launch(meta: Launch, argvOut?: string, catalogRoot?: string, callbackOut?: string) {
+    function launch(
+      meta: Launch,
+      argvOut?: string,
+      catalogRoot?: string,
+      callbackOut?: string,
+      stateRoot = meta.stateRoot
+    ) {
       if (argvOut) process.env.FAKE_CORE_ARGV_OUT = argvOut
       delete process.env.FAKE_CORE_CALLBACK_OUT
       if (callbackOut) process.env.FAKE_CORE_CALLBACK_OUT = callbackOut
@@ -75,6 +82,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
           resourcesRoot: meta.resourcesRoot,
           dataRoot: meta.dataRoot,
           catalogRoot,
+          stateRoot,
           onUnavailable: capture
         },
         AbortSignal.timeout(30_000)
@@ -107,7 +115,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
         const argv = JSON.parse(
           String(await readFile(join(argvOut, 'argv.json'), 'utf8'))
         ) as string[]
-        expect(argv).toEqual(['--data', meta.dataRoot])
+        expect(argv).toEqual(['--data', meta.dataRoot, '--state', meta.stateRoot])
       }
       await supervisor.close()
       await expect(processAlive(supervisor.pid)).resolves.toBe(false)
@@ -126,10 +134,41 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
         const argv = JSON.parse(
           String(await readFile(join(argvOut, 'argv.json'), 'utf8'))
         ) as string[]
-        expect(argv).toEqual(['--data', meta.dataRoot, '--catalog', catalogRoot])
+        expect(argv).toEqual([
+          '--data',
+          meta.dataRoot,
+          '--catalog',
+          catalogRoot,
+          '--state',
+          meta.stateRoot
+        ])
       }
       expect((await lstat(catalogRoot)).isDirectory()).toBe(true)
       await supervisor.close()
+    })
+
+    it('passes an explicit --state root and creates it before startup', async () => {
+      const meta = await harness()
+      const stateRoot = join(meta.dataRoot, 'core-state')
+      const argvOut = await mkdtemp(join(tmpdir(), 'core-argv-'))
+      const { supervisor: started } = launch(meta, argvOut, undefined, undefined, stateRoot)
+      const supervisor = await started
+      supervisors.push(supervisor)
+      if (process.platform !== 'win32') {
+        const argv = JSON.parse(
+          String(await readFile(join(argvOut, 'argv.json'), 'utf8'))
+        ) as string[]
+        expect(argv).toEqual(['--data', meta.dataRoot, '--state', stateRoot])
+      }
+      expect((await lstat(stateRoot)).isDirectory()).toBe(true)
+      await supervisor.close()
+    })
+
+    it('refuses a relative state root', async () => {
+      const meta = await harness()
+      await expect(
+        launch(meta, undefined, undefined, undefined, 'core-state').supervisor
+      ).rejects.toThrow('p2p.invalid_arguments')
     })
 
     it('refuses a catalog root that is not a directory', async () => {
@@ -224,7 +263,12 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       const dataRoot = await mkdtemp(join(tmpdir(), 'core-data-'))
       await expect(
         CoreSupervisor.start(
-          { resourcesRoot: join(dataRoot, 'absent'), dataRoot, onUnavailable: () => undefined },
+          {
+            resourcesRoot: join(dataRoot, 'absent'),
+            dataRoot,
+            stateRoot: join(dataRoot, 'state'),
+            onUnavailable: () => undefined
+          },
           AbortSignal.timeout(10_000)
         )
       ).rejects.toThrow('p2p.helper_resource_unavailable')
@@ -237,7 +281,12 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       await writeFile(blocker, 'x')
       await expect(
         CoreSupervisor.start(
-          { resourcesRoot: meta.resourcesRoot, dataRoot: blocker, onUnavailable: () => undefined },
+          {
+            resourcesRoot: meta.resourcesRoot,
+            dataRoot: blocker,
+            stateRoot: meta.stateRoot,
+            onUnavailable: () => undefined
+          },
           AbortSignal.timeout(10_000)
         )
       ).rejects.toThrow('p2p.invalid_arguments')

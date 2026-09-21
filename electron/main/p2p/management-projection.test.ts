@@ -35,8 +35,14 @@ describe('management public projections', () => {
       revision: 'revision'
     }
     expect(
-      projectPeerRegistration({ ...identity, kind: 'registered', deviceId: 'device', ...secrets })
-    ).toEqual({ ...identity, kind: 'registered', deviceId: 'device' })
+      projectPeerRegistration({
+        ...identity,
+        kind: 'registered',
+        deviceId: 'device',
+        networkId: 'network',
+        ...secrets
+      })
+    ).toEqual({ ...identity, kind: 'registered', deviceId: 'device', networkId: 'network' })
     expect(
       projectPeerRegistration({
         ...identity,

@@ -5,7 +5,7 @@ import outputSource from '../components/ConsoleOutputText.vue?raw'
 import ConsoleOutputText from '../components/ConsoleOutputText.vue'
 
 // Vitest disables CSS imports; read the real sheet so the cascade is exercised.
-const routesCss = readFileSync('src/styles/routes.css', 'utf8')
+const routesCss = readFileSync('src/styles/routes-console.css', 'utf8')
 
 /** Check the authored cascade against both existing stream-colored log containers. */
 describe('console text color cascade', () => {

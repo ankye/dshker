@@ -14,7 +14,7 @@ const routeStage = readFileSync(
   path.join(appRoot, 'src/app/shell/components/RouteStage.vue'),
   'utf8'
 )
-const styles = readFileSync(path.join(appRoot, 'src/styles/routes.css'), 'utf8')
+const styles = readFileSync(path.join(appRoot, 'src/styles/routes-launch.css'), 'utf8')
 const shellStyles = readFileSync(path.join(appRoot, 'src/styles/base-shell.css'), 'utf8')
 
 describe('launch home hierarchy', () => {

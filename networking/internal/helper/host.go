@@ -77,6 +77,20 @@ type scopedRequest struct {
 func New(ctx context.Context) *Host   { return &Host{ctx: ctx, accounts: make(map[string]*account)} }
 func (host *Host) BindMain(main Main) { host.mu.Lock(); host.main = main; host.mu.Unlock() }
 
+// callMain resolves the current callback owner for every call. An already
+// restored peer session must follow a desktop attach/detach; capturing the
+// headless callback at restore time would keep sending state and runtime
+// requests to the old owner after the UI attaches.
+func (host *Host) callMain(ctx context.Context, method string, payload any) (json.RawMessage, error) {
+	host.mu.Lock()
+	main := host.main
+	host.mu.Unlock()
+	if main == nil {
+		return nil, errors.New("p2p.helper_parent_unavailable")
+	}
+	return main.Call(ctx, method, payload)
+}
+
 // SetDeviceKeys names the store this machine's own device key lives in.
 //
 // It is the same OS-backed store the shell's credentials use, opened from the
@@ -229,6 +243,20 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	}
 	if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" ||
 		method == "peer.autoconnect_clear_refusals" {
+		// The coordinator subscription is owned by the restored account, not by
+		// the pair retry engine. Reconcile is also the daemon's periodic liveness
+		// pass, so repair a displaced/closed signal socket here before asking the
+		// engine to reconnect pairs. A healthy socket is left untouched.
+		if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" {
+			account.mu.Lock()
+			manager := account.manager
+			account.mu.Unlock()
+			if manager != nil {
+				if err := manager.ReconnectSignals(ctx); err != nil {
+					return nil, err
+				}
+			}
+		}
 		return host.autoConnectOperation(ctx, method)
 	}
 	if method == "peer.connect" || method == "peer.disconnect" || method == "runtime.invalidate" || method == "network.invalidate" || method == "remote.roots" || method == "remote.directory" {
@@ -390,7 +418,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		return nil, errors.New("p2p.helper_parent_unavailable")
 	}
 	owner := func(ctx context.Context, pairID string) (runtimebridge.Binding, error) {
-		data, err := main.Call(ctx, "runtime.connect", struct {
+		data, err := host.callMain(ctx, "runtime.connect", struct {
 			ServiceID string `json:"serviceId"`
 			PairID    string `json:"pairId"`
 		}{account.identity.ServiceID, pairID})
@@ -401,7 +429,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		return binding, err
 	}
 	roots := func(ctx context.Context) ([]runtimebridge.Root, error) {
-		data, err := main.Call(ctx, "runtime.roots", struct {
+		data, err := host.callMain(ctx, "runtime.roots", struct {
 			ServiceID string `json:"serviceId"`
 		}{account.identity.ServiceID})
 		if err != nil {
@@ -426,7 +454,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		account.mu.Unlock()
 		ctx, cancel := context.WithTimeout(host.ctx, 5*time.Second)
 		defer cancel()
-		main.Call(ctx, "peer.state", struct {
+		_, _ = host.callMain(ctx, "peer.state", struct {
 			ServiceID string            `json:"serviceId"`
 			State     peersession.State `json:"state"`
 		}{account.identity.ServiceID, state})

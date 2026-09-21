@@ -193,6 +193,11 @@ function fixture() {
     }
   }
   const runtimeStart = vi.fn(async () => ({ launch: { kind: 'stopped' } }) as LauncherHarnessState)
+  // The fixture has no on-disk settings root. Model the explicit first-run
+  // state for persisted user sessions; individual restore tests override this
+  // spy with a durable token instead of relying on a missing test directory.
+  vi.spyOn(PeerCredentialStore.prototype, 'loadUserSession').mockResolvedValue(undefined)
+  vi.spyOn(PeerCredentialStore.prototype, 'saveUserSession').mockResolvedValue(undefined)
   const owner = new PeerManagement({
     channel,
     resolveSettingsRoot: async () => '/test-owned-settings',

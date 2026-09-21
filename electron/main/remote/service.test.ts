@@ -9,6 +9,7 @@ const connection: CoreRemoteConnection = {
   host: 'studio-mac',
   port: 22,
   user: 'dev',
+  sshKeyPath: '',
   configRevision: 'revision-1'
 }
 
@@ -23,7 +24,20 @@ function route(options: { readonly failConnect?: boolean } = {}) {
     async createConnection() {
       return records
     },
-    async updateConnection() {
+    async updateConnection(request) {
+      records = records.map((entry) =>
+        entry.connectionId === request.connectionId
+          ? {
+              ...entry,
+              displayName: request.displayName,
+              host: request.host,
+              port: request.port,
+              user: request.user,
+              sshKeyPath: request.sshKeyPath,
+              configRevision: 'revision-2'
+            }
+          : entry
+      )
       return records
     },
     async removeConnection(request: Readonly<{ filePath: string; connectionId: string }>) {
@@ -136,5 +150,67 @@ describe('RemoteConnectionService', () => {
     await expect(service.connect(connection.connectionId)).rejects.toMatchObject({
       code: 'remote.persistence_failed'
     })
+  })
+
+  it('invalidates a passed test when only the SSH identity path changes', async () => {
+    const { port } = route()
+    const service = serviceFor(port)
+    await service.test(connection.connectionId)
+    const updated = await service.update({
+      ...connection,
+      sshKeyPath: '/example/.ssh/new_identity',
+      expectedConfigRevision: connection.configRevision
+    })
+    expect(updated.connections[0]).toMatchObject({
+      sshKeyPath: '/example/.ssh/new_identity',
+      status: { kind: 'disconnected' },
+      testStatus: { kind: 'untested' }
+    })
+  })
+
+  it('rejects an SSH identity path change while connected without writing the catalog', async () => {
+    const { port } = route()
+    const service = serviceFor(port)
+    await service.connect(connection.connectionId)
+    await expect(
+      service.update({
+        ...connection,
+        sshKeyPath: '/example/.ssh/new_identity',
+        expectedConfigRevision: connection.configRevision
+      })
+    ).rejects.toMatchObject({ code: 'remote.connection_not_disconnected' })
+    expect((await service.getState()).connections[0]).toMatchObject({
+      sshKeyPath: '',
+      status: { kind: 'ready' }
+    })
+  })
+
+  it('rejects an SSH identity path change while a connection test is in flight', async () => {
+    let release: (() => void) | undefined
+    const { port } = route()
+    const slow: CoreRemoteRoutePort = {
+      ...port,
+      connect: () =>
+        new Promise((resolve) => {
+          release = () => resolve({ url: 'http://127.0.0.1:41000/' })
+        }),
+      disconnect: async () => undefined
+    }
+    const service = serviceFor(slow)
+    const testing = service.test(connection.connectionId)
+    for (let attempt = 0; attempt < 50 && release === undefined; attempt += 1) {
+      await Promise.resolve()
+    }
+    expect(release).toBeDefined()
+    await expect(
+      service.update({
+        ...connection,
+        sshKeyPath: '/example/.ssh/new_identity',
+        expectedConfigRevision: connection.configRevision
+      })
+    ).rejects.toMatchObject({ code: 'remote.connection_not_disconnected' })
+    expect((await service.getState()).connections[0]?.sshKeyPath).toBe('')
+    release?.()
+    await testing
   })
 })

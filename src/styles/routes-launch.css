@@ -1,0 +1,357 @@
+/* Per-route surfaces: launch, versions, catalog tables, and console. */
+
+.launch-panel,
+.version-management,
+.controller-panel,
+.settings-panel,
+/* Inherits the height the stage actually has, rather than recomputing it from
+ * `100vh` minus chrome — that arithmetic drifts whenever padding or chrome
+ * heights change, and it ignores the stage's own scroll state. */
+.runtime-tabs-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-5);
+}
+
+.launch-hero {
+  position: relative;
+  display: grid;
+  min-height: 15rem;
+  overflow: hidden;
+  align-items: end;
+  padding: var(--space-6);
+  border: 1px solid color-mix(in srgb, var(--color-accent), var(--color-border) 55%);
+  border-radius: var(--radius-lg);
+  background:
+    #0d0c0b
+      linear-gradient(90deg, rgb(9 9 10 / 94%) 0%, rgb(15 12 8 / 82%) 45%, rgb(18 10 2 / 20%) 100%),
+    var(--launch-hero-art) center / cover no-repeat;
+}
+
+.launch-hero-orbit {
+  position: absolute;
+  top: -7rem;
+  right: 7%;
+  width: 24rem;
+  height: 24rem;
+  border: 1px solid color-mix(in srgb, var(--color-accent), transparent 40%);
+  border-radius: 50%;
+  transform: rotate(-25deg) scaleY(0.42);
+}
+
+.launch-hero-icon {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-5);
+  width: 5.5rem;
+  height: 5.5rem;
+  border-radius: 1.25rem;
+  box-shadow: 0 1rem 3rem rgb(0 0 0 / 25%);
+}
+
+.launch-hero-content {
+  position: relative;
+}
+
+.launch-hero h3 {
+  margin: 0;
+  font-size: clamp(1.75rem, 4vw, 3rem);
+  text-wrap: balance;
+}
+
+.launch-hero p:last-child {
+  max-width: 36rem;
+  margin: var(--space-2) 0 0;
+  color: color-mix(in srgb, var(--color-text), transparent 18%);
+  font-size: var(--type-section);
+}
+
+.launch-workbench {
+  margin-top: var(--space-4);
+}
+
+.launch-introduction {
+  display: grid;
+  grid-template-columns: minmax(13rem, 1fr) minmax(14rem, 1fr) minmax(17rem, 1.15fr);
+  gap: var(--space-4);
+  align-items: start;
+  margin-top: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.launch-introduction h4,
+.launch-open-source strong {
+  color: var(--color-text);
+}
+
+.launch-introduction h4 {
+  margin: 0;
+  font-size: var(--type-section);
+}
+
+.launch-introduction-copy > p:last-child,
+.launch-open-source p {
+  margin: var(--space-2) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  line-height: 1.55;
+}
+
+.launch-introduction-facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0;
+}
+
+.launch-introduction-facts div {
+  min-width: 0;
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--color-border), transparent 22%);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+}
+
+.launch-introduction-facts dt {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.launch-introduction-facts dd {
+  margin: var(--space-1) 0 0;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.launch-open-source {
+  min-width: 0;
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--color-border);
+}
+
+.launch-open-source-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.launch-open-source-error {
+  color: var(--color-danger) !important;
+}
+
+.launch-version,
+.controller-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+/* Not interactive: this is the single managed version, not a picker. It carried
+ * `cursor: pointer` while nothing handled a click, promising an affordance the
+ * card does not have. */
+.launch-version {
+  width: 100%;
+  min-height: 14rem;
+  align-items: flex-start;
+  color: var(--color-text);
+  text-align: left;
+}
+
+/* The identity block may hold a long harness path; it must be the part that
+ * shrinks, never the action beside it. */
+.launch-version-identity {
+  min-width: 0;
+}
+
+.launch-version-identity h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-section);
+}
+
+.launch-version[data-selected='true'] {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.launch-version-label,
+.controller-row p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.launch-version strong,
+.controller-row strong {
+  display: block;
+  margin-top: var(--space-1);
+  overflow-wrap: anywhere;
+}
+
+.launch-version-manage {
+  flex: 0 0 auto;
+}
+
+.launch-footer-action {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+
+.launch-footer-context {
+  display: grid;
+  max-width: min(24rem, 36vw);
+  margin-right: auto;
+  gap: 0.125rem;
+}
+
+.launch-footer-context strong {
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-semibold);
+}
+
+.launch-footer-context span {
+  overflow: hidden;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.launch-primary-action {
+  display: inline-flex;
+  min-width: 12rem;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  border-color: color-mix(in srgb, var(--color-accent), var(--color-text) 18%);
+  border-radius: var(--radius);
+  box-shadow: 0 0.75rem 1.75rem color-mix(in srgb, var(--color-accent), transparent 78%);
+  font-size: var(--type-section);
+  letter-spacing: 0.02em;
+}
+
+.launch-primary-action:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+/* The same primary control becomes a healthy-process control once it owns a
+ * running child. The stop glyph keeps the next action explicit. */
+.launch-primary-action[data-running='true'] {
+  background: var(--color-success);
+}
+
+.launch-primary-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+.launch-source-action {
+  background: transparent;
+}
+
+.launch-status {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.launch-status[data-running='true'] {
+  color: var(--color-success);
+}
+
+/* The base class is the complete secondary control, not a shape waiting for a
+ * variant. Without its own surface and text colour, 41 buttons across 12 panels
+ * fell back to the user-agent grey (rgb(107 107 107)), a value the token system
+ * does not contain: primary and secondary actions looked identical and nothing
+ * matched the surrounding dark surfaces. */
+.prototype-button {
+  min-height: var(--size-control-md);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  cursor: pointer;
+  font-size: var(--type-ui);
+  font-weight: var(--font-weight-semibold);
+  transition:
+    border-color var(--motion-fast) var(--ease-standard),
+    background-color var(--motion-fast) var(--ease-standard),
+    filter var(--motion-fast) var(--ease-standard),
+    transform var(--motion-instant) var(--ease-standard);
+}
+
+/* Filter rather than a hand-picked colour per variant: one rule covers primary,
+ * secondary, and any later variant without re-deriving each palette. */
+.prototype-button:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+/* A press must register even when the click starts a slow operation. */
+.prototype-button:active:not(:disabled) {
+  transform: translateY(1px);
+  filter: brightness(0.96);
+}
+
+/* `wait` belongs to an operation in flight, not to every unavailable button;
+ * a disabled control is simply not available. */
+.prototype-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.prototype-button[aria-busy='true'] {
+  cursor: wait;
+}
+
+/* A filled action carries its own weight, so it drops the outline the secondary
+ * base needs to separate from the surface behind it. */
+.prototype-button--primary {
+  border-color: transparent;
+  background: var(--color-accent);
+  color: var(--color-on-accent);
+}
+
+/* Destructive actions were styled in seven places but never defined, so deleting
+ * a network looked exactly like reading one. The outline carries the warning
+ * while the surface stays quiet: a row of filled red buttons reads as an alarm
+ * and stops conveying which single action is dangerous. */
+.prototype-button--danger {
+  border-color: var(--color-danger);
+  background: transparent;
+  color: var(--color-danger);
+}
+
+.prototype-button--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+}
+
+/* Keyboard focus must be visible on every variant, including filled ones where a
+ * border change alone would not register. */
+.prototype-button:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+.prototype-button--secondary {
+  border-color: var(--color-border);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}

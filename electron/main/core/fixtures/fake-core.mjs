@@ -8,6 +8,13 @@
 import { createServer } from 'node:net'
 import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs'
 
+if (process.argv[2] === 'autostart') {
+  if (process.argv[3] !== 'status' || process.argv[4] !== '--state' || !process.argv[5])
+    throw new Error('p2p.invalid_arguments')
+  process.stdout.write(JSON.stringify({ installed: false, mechanism: 'launchd' }) + '\n')
+  process.exit(0)
+}
+
 const collect = (stream) =>
   new Promise((resolve, reject) => {
     const chunks = []

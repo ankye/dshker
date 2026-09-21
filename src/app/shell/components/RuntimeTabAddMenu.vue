@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import {
   p2pConnections,
   p2pManagement,
@@ -19,7 +19,7 @@ const trigger = ref<HTMLButtonElement>()
 const menu = ref<HTMLElement>()
 const menuStyle = ref<Record<string, string>>()
 
-type AddTabOptionState = 'ready' | 'connecting' | 'failed' | 'disconnected'
+type AddTabOptionState = 'available' | 'ready' | 'connecting' | 'failed' | 'disconnected'
 interface AddTabOption {
   readonly id: RuntimeRemoteTabId
   readonly title: string
@@ -55,7 +55,7 @@ function peerStatusLabel(computer: P2PComputerView): string {
   const connection = p2pConnections.find(computer.serviceId, computer.pairId)
   // An active pair is openable on its own: creating the tab is what starts the
   // session, so "no connection yet" is a hint, not a failure.
-  return connection === undefined
+  return connection === undefined || connection.stage === 'disconnected'
     ? t('p2p.connection.openable')
     : t(peerStageLabels[connection.stage])
 }
@@ -63,7 +63,7 @@ function peerStatusLabel(computer: P2PComputerView): string {
 function peerStatusState(computer: P2PComputerView): AddTabOptionState {
   if (computer.pairState === 'revoked') return 'disconnected'
   const connection = p2pConnections.find(computer.serviceId, computer.pairId)
-  if (connection === undefined) return 'disconnected'
+  if (connection === undefined) return 'available'
   switch (connection.stage) {
     case 'punching':
     case 'starting-runtime':
@@ -73,7 +73,7 @@ function peerStatusState(computer: P2PComputerView): AddTabOptionState {
     case 'failed':
       return 'failed'
     case 'disconnected':
-      return 'disconnected'
+      return 'available'
   }
 }
 
@@ -128,6 +128,26 @@ const hasAddableWorkspaces = computed(
   () => peerOptions.value.length > 0 || remoteOptions.value.length > 0
 )
 
+const menuClose = ref<HTMLButtonElement>()
+
+function focusableMenuElements(): HTMLElement[] {
+  const root = menu.value
+  if (root === undefined) return []
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+  )
+}
+
+async function focusMenu(): Promise<void> {
+  await nextTick()
+  if (!open.value) return
+  // The close button is stable while the coordinator read is in flight. Entering
+  // here makes the teleported dialog reachable to keyboard and assistive users.
+  menuClose.value?.focus()
+}
+
 function updateMenuPosition(): void {
   const element = trigger.value
   if (element === undefined) return
@@ -180,6 +200,38 @@ function close(): void {
   trigger.value?.focus()
 }
 
+function onMenuKeydown(event: KeyboardEvent): void {
+  if (!open.value) return
+  if (event.key === 'Escape') {
+    event.preventDefault()
+    close()
+    return
+  }
+  if (event.key === 'Enter' && event.target instanceof HTMLButtonElement) {
+    if (event.target.disabled) return
+    // Suppress the browser's follow-up synthetic click so activation happens once.
+    event.preventDefault()
+    event.target.click()
+    return
+  }
+  if (event.key !== 'Tab') return
+
+  const elements = focusableMenuElements()
+  if (elements.length === 0) {
+    event.preventDefault()
+    return
+  }
+  const current = document.activeElement
+  const index = current instanceof HTMLElement ? elements.indexOf(current) : -1
+  if (event.shiftKey && (index <= 0 || index === -1)) {
+    event.preventDefault()
+    elements[elements.length - 1]?.focus()
+  } else if (!event.shiftKey && (index === elements.length - 1 || index === -1)) {
+    event.preventDefault()
+    elements[0]?.focus()
+  }
+}
+
 function toggle(): void {
   if (open.value) close()
   else {
@@ -194,6 +246,7 @@ function toggle(): void {
     updateMenuPosition()
     open.value = true
     addGlobalListeners()
+    void focusMenu()
   }
 }
 
@@ -281,13 +334,13 @@ function onEscape(event: KeyboardEvent): void {
         id="runtime-add-tab-menu"
         class="runtime-add-tab-menu"
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-labelledby="runtime-add-tab-title"
         aria-describedby="runtime-add-tab-description"
         :style="menuStyle"
         :aria-label="t('runtime.addTab.title')"
         data-testid="runtime-add-tab-menu"
-        @keydown="onEscape"
+        @keydown="onMenuKeydown"
       >
         <header>
           <div>
@@ -295,6 +348,7 @@ function onEscape(event: KeyboardEvent): void {
             <p id="runtime-add-tab-description">{{ t('runtime.addTab.description') }}</p>
           </div>
           <button
+            ref="menuClose"
             class="runtime-add-tab-close"
             type="button"
             :aria-label="t('runtime.addTab.close')"
@@ -593,6 +647,10 @@ function onEscape(event: KeyboardEvent): void {
 
 .runtime-add-tab-option .browser-tab-status[data-state='ready'] {
   background: var(--color-success);
+}
+
+.runtime-add-tab-option .browser-tab-status[data-state='available'] {
+  background: var(--color-accent);
 }
 
 .runtime-add-tab-option .browser-tab-status[data-state='connecting'] {

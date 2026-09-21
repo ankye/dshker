@@ -14,10 +14,11 @@ import { useTranslator } from '@/app/shared/i18n/useLocale'
  * switch, so returning to the form does not ask for it again.
  */
 const props = defineProps<{
-  serviceId: string
+  serviceId?: string
   username: string
   busy: boolean
   uncertain: boolean
+  disabled?: boolean
 }>()
 const emit = defineEmits<{
   login: [username: string, password: string]
@@ -52,6 +53,7 @@ const registerBlocked = computed(
     registerTooShort.value ||
     registerPassword.value.length < P2P_ACCOUNT_PASSWORD_MIN
 )
+const fieldsDisabled = computed(() => props.disabled === true || props.busy || props.uncertain)
 
 function submitLogin(): void {
   const supplied = password.value
@@ -77,12 +79,12 @@ function switchMode(next: 'login' | 'register'): void {
 
 <template>
   <form v-if="mode === 'login'" data-testid="p2p-login-form" @submit.prevent="submitLogin">
-    <fieldset :disabled="busy || uncertain" class="p2p-account-fields p2p-account-fields--stacked">
+    <fieldset :disabled="fieldsDisabled" class="p2p-account-fields p2p-account-fields--stacked">
       <legend>{{ t('p2p.account.login') }}</legend>
       <label
         ><span>{{ t('p2p.account.email') }}</span
         ><input
-          :id="`p2p-login-email-${serviceId}`"
+          :id="serviceId ? `p2p-login-email-${serviceId}` : undefined"
           :value="username"
           type="email"
           required
@@ -112,12 +114,12 @@ function switchMode(next: 'login' | 'register'): void {
     </p>
   </form>
   <form v-else data-testid="p2p-register-form" @submit.prevent="submitRegister">
-    <fieldset :disabled="busy || uncertain" class="p2p-account-fields p2p-account-fields--stacked">
+    <fieldset :disabled="fieldsDisabled" class="p2p-account-fields p2p-account-fields--stacked">
       <legend>{{ t('p2p.account.register') }}</legend>
       <label
         ><span>{{ t('p2p.account.email') }}</span
         ><input
-          :id="`p2p-register-email-${serviceId}`"
+          :id="serviceId ? `p2p-register-email-${serviceId}` : undefined"
           v-model="registerEmail"
           type="email"
           required
@@ -133,10 +135,10 @@ function switchMode(next: 'login' | 'register'): void {
           required
           autocomplete="new-password"
           :minlength="P2P_ACCOUNT_PASSWORD_MIN"
-          :aria-describedby="`p2p-password-rule-${serviceId}`"
+          :aria-describedby="serviceId ? `p2p-password-rule-${serviceId}` : undefined"
           data-testid="p2p-register-password"
       /></label>
-      <p :id="`p2p-password-rule-${serviceId}`" class="p2p-account-rule">
+      <p :id="serviceId ? `p2p-password-rule-${serviceId}` : undefined" class="p2p-account-rule">
         {{ t('p2p.account.passwordRule') }}
       </p>
       <p

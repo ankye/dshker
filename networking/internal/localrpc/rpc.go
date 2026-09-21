@@ -21,6 +21,7 @@ type Frame struct {
 	Error   string          `json:"error"`
 }
 type Handler func(context.Context, string, json.RawMessage) (any, error)
+
 type Peer struct {
 	conn       net.Conn
 	ctx        context.Context
@@ -36,8 +37,16 @@ type Peer struct {
 }
 
 func New(parent context.Context, conn net.Conn, handler Handler) *Peer {
+	return NewWithPeer(parent, conn, func(*Peer) Handler { return handler })
+}
+
+// NewWithPeer builds a handler that knows which authenticated connection sent
+// a request. The factory runs before the reader starts, so an attach request
+// can safely register this exact peer as a reverse-callback target.
+func NewWithPeer(parent context.Context, conn net.Conn, handlerFor func(*Peer) Handler) *Peer {
 	ctx, cancel := context.WithCancel(parent)
-	peer := &Peer{conn: conn, ctx: ctx, cancel: cancel, pending: make(map[uint64]chan Frame), slots: make(chan struct{}, 16), handler: handler, done: make(chan struct{})}
+	peer := &Peer{conn: conn, ctx: ctx, cancel: cancel, pending: make(map[uint64]chan Frame), slots: make(chan struct{}, 16), done: make(chan struct{})}
+	peer.handler = handlerFor(peer)
 	go peer.read()
 	go func() { <-ctx.Done(); conn.Close() }()
 	return peer

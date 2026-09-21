@@ -134,6 +134,98 @@ describe('P2P user and network domain', () => {
     }
   })
 
+  it('rechecks an unknown account when startup finishes restoring the service session', async () => {
+    let notify: (() => void) | undefined
+    const currentUser = vi
+      .fn<P2PManagementApi['currentUser']>()
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.helper_resource_unavailable',
+        message: 'starting'
+      })
+      .mockResolvedValue({ ok: true, data: user })
+    const previous = window.dshLauncher
+    window.dshLauncher = {
+      p2pManagement: {
+        currentUser,
+        onServiceSessionsChange: (listener: () => void) => {
+          notify = listener
+          return () => {
+            notify = undefined
+          }
+        }
+      }
+    } as unknown as DesktopApi
+    const { accounts, management } = setup({ currentUser })
+    management.selectedServiceId.value = 'service-a'
+    try {
+      accounts.subscribe()
+      await accounts.currentUser('service-a')
+      expect(accounts.state('service-a').user).toBeUndefined()
+      notify?.()
+      await flushPromises()
+      expect(accounts.state('service-a').user).toEqual(user)
+      expect(currentUser).toHaveBeenCalledTimes(2)
+    } finally {
+      accounts.stop()
+      window.dshLauncher = previous
+    }
+  })
+
+  it('rechecks a provisional login-required reply after startup restore', async () => {
+    let notify: (() => void) | undefined
+    const currentUser = vi
+      .fn<P2PManagementApi['currentUser']>()
+      .mockResolvedValueOnce({
+        ok: false,
+        code: 'p2p.user_login_required',
+        message: 'restore not finished'
+      })
+      .mockResolvedValue({ ok: true, data: user })
+    const previous = window.dshLauncher
+    window.dshLauncher = {
+      p2pManagement: {
+        currentUser,
+        onServiceSessionsChange: (listener: () => void) => {
+          notify = listener
+          return () => {
+            notify = undefined
+          }
+        }
+      }
+    } as unknown as DesktopApi
+    const { accounts, management } = setup({ currentUser })
+    management.selectedServiceId.value = 'service-a'
+    try {
+      accounts.subscribe()
+      await accounts.currentUser('service-a')
+      expect(accounts.state('service-a').user).toBeNull()
+      notify?.()
+      await flushPromises()
+      expect(accounts.state('service-a').user).toEqual(user)
+      expect(currentUser).toHaveBeenCalledTimes(2)
+    } finally {
+      accounts.stop()
+      window.dshLauncher = previous
+    }
+  })
+
+  it('shares concurrent current-user reads instead of surfacing service busy', async () => {
+    let resolve!: (value: Awaited<ReturnType<P2PManagementApi['currentUser']>>) => void
+    const currentUser = vi.fn<P2PManagementApi['currentUser']>().mockReturnValue(
+      new Promise((done) => {
+        resolve = done
+      })
+    )
+    const { accounts } = setup({ currentUser })
+    const first = accounts.currentUser('service-a')
+    const second = accounts.currentUser('service-a')
+    resolve({ ok: true, data: user })
+    await Promise.all([first, second])
+    expect(currentUser).toHaveBeenCalledTimes(1)
+    expect(accounts.state('service-a').user).toEqual(user)
+  })
+
   /**
    * A refused read is a fact about the rows on the page, not about the account.
    *
@@ -328,6 +420,29 @@ describe('P2P user and network domain', () => {
     expect(accounts.state('service-a').selectedNetworkId).toBeUndefined()
   })
 
+  it('publishes a confirmed login before the network list finishes loading', async () => {
+    let resolveNetworks!: (value: Awaited<ReturnType<P2PManagementApi['networks']>>) => void
+    const networks = vi.fn<P2PManagementApi['networks']>().mockReturnValue(
+      new Promise((resolve) => {
+        resolveNetworks = resolve
+      })
+    )
+    const login = vi.fn<P2PManagementApi['login']>().mockResolvedValue({ ok: true, data: user })
+    const { accounts } = setup({ login, networks })
+
+    await accounts.login('service-a', 'alice@example.com', 'login-secret')
+
+    // The session is authoritative now; a slow list must not keep the account
+    // looking signed out or keep the password form mounted.
+    expect(accounts.state('service-a').user).toEqual(user)
+    expect(accounts.state('service-a').networks).toBeUndefined()
+    expect(networks).toHaveBeenCalledTimes(1)
+
+    resolveNetworks({ ok: true, data: [network] })
+    await flushPromises()
+    expect(accounts.state('service-a').networks).toEqual([network])
+  })
+
   it('registers an account and adopts the returned user like a login', async () => {
     const register = vi.fn<P2PManagementApi['register']>().mockResolvedValue({
       ok: true,
@@ -335,6 +450,7 @@ describe('P2P user and network domain', () => {
     })
     const { accounts } = setup({ register })
     await accounts.register('service-a', 'alice@example.com', 'new-secret')
+    await flushPromises()
     expect(register).toHaveBeenCalledWith(
       expect.objectContaining({
         serviceId: 'service-a',

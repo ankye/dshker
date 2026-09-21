@@ -72,7 +72,7 @@ func remotePayload(t *testing.T, value any) json.RawMessage {
 // SSH route does not pretend a connection exists.
 func TestRemoteMethodsNeedARoute(t *testing.T) {
 	payloads := map[string]string{
-		"remote.connect":    `{"connectionId":"connection_main","computer":{"host":"build.example","port":22,"user":"deploy"},"ssh":"","scp":""}`,
+		"remote.connect":    `{"connectionId":"connection_main","computer":{"host":"build.example","port":22,"user":"deploy","sshKeyPath":""},"ssh":"","scp":"","sshKeyPath":""}`,
 		"remote.disconnect": `{"connectionId":"connection_main"}`,
 		"remote.status":     `{"connectionId":"connection_main"}`,
 	}
@@ -95,7 +95,8 @@ func TestRemoteConnectAndDisconnectThroughTheCore(t *testing.T) {
 		Computer     remoteroute.Computer `json:"computer"`
 		SSH          string               `json:"ssh"`
 		SCP          string               `json:"scp"`
-	}{"connection_main", remoteroute.Computer{Host: "build.example", Port: 22, User: "deploy"}, "", ""}))
+		SSHKeyPath   string               `json:"sshKeyPath"`
+	}{"connection_main", remoteroute.Computer{Host: "build.example", Port: 22, User: "deploy", SSHKeyPath: ""}, "", "", ""}))
 	if err != nil {
 		t.Fatalf("connect: %v", err)
 	}
@@ -138,7 +139,8 @@ func TestRemoteConnectCarriesItsRefusal(t *testing.T) {
 		Computer     remoteroute.Computer `json:"computer"`
 		SSH          string               `json:"ssh"`
 		SCP          string               `json:"scp"`
-	}{"connection_main", remoteroute.Computer{Host: "build.example", Port: 22, User: "deploy"}, "", ""}))
+		SSHKeyPath   string               `json:"sshKeyPath"`
+	}{"connection_main", remoteroute.Computer{Host: "build.example", Port: 22, User: "deploy", SSHKeyPath: ""}, "", "", ""}))
 	if !errors.Is(err, remoteroute.ErrAuthenticationFailed) {
 		t.Fatalf("connect = %v", err)
 	}

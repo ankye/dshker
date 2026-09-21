@@ -2,11 +2,26 @@ import { access, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { runVisualSmoke } from './visual-smoke.mjs'
+import { loadRendererCss, runVisualSmoke } from './visual-smoke.mjs'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
 describe('visual smoke', () => {
+  it('follows nested route imports in their authored cascade order', async () => {
+    const css = await loadRendererCss(appRoot)
+    const selectors = [
+      '.launch-hero {',
+      '.catalog-category-list {',
+      '.controller-output {',
+      '.settings-panel {',
+      '.remote-connections-layout {'
+    ]
+    const positions = selectors.map((selector) => css.indexOf(selector))
+    expect(positions.every((position) => position >= 0)).toBe(true)
+    expect(positions).toEqual([...positions].sort((a, b) => a - b))
+    expect(css).not.toContain("@import './routes-")
+  })
+
   it('records the source visual contract and real renderer capture command', async () => {
     const result = await runVisualSmoke(appRoot)
 

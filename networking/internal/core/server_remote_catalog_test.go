@@ -53,7 +53,8 @@ func TestRemoteCatalogThroughTheCore(t *testing.T) {
 		Host        string `json:"host"`
 		Port        int    `json:"port"`
 		User        string `json:"user"`
-	}{filePath, "Build box", "build.example", 22, "deploy"}))
+		SSHKeyPath  string `json:"sshKeyPath"`
+	}{filePath, "Build box", "build.example", 22, "deploy", ""}))
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -71,8 +72,9 @@ func TestRemoteCatalogThroughTheCore(t *testing.T) {
 		Host                   string `json:"host"`
 		Port                   int    `json:"port"`
 		User                   string `json:"user"`
+		SSHKeyPath             string `json:"sshKeyPath"`
 		ExpectedConfigRevision string `json:"expectedConfigRevision"`
-	}{filePath, connection.ConnectionID, "Build box two", "build.example", 2222, "deploy", "stale"}
+	}{filePath, connection.ConnectionID, "Build box two", "build.example", 2222, "deploy", "", "stale"}
 	if _, err := Handle(ctx, "remote.catalog_update", remoteCatalogPayload(t, update)); !errors.Is(err, remoteconnections.ErrConfigConflict) {
 		t.Fatalf("stale update = %v", err)
 	}

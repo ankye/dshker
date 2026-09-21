@@ -37,6 +37,7 @@ const (
 	MaxDisplayNameBytes = 64
 	MaxHostBytes        = 253
 	MaxUserBytes        = 64
+	MaxSSHKeyPathBytes  = 4096
 )
 
 // Refusal codes the shell already maps. They cross the private channel
@@ -58,6 +59,7 @@ type Computer struct {
 	Host         string `json:"host"`
 	Port         int    `json:"port"`
 	User         string `json:"user"`
+	SSHKeyPath   string `json:"sshKeyPath,omitempty"`
 }
 
 // Record is the whole document.
@@ -83,10 +85,10 @@ var (
 
 // AssertComputer refuses anything that is not one storable definition.
 func AssertComputer(computer Computer) error {
-	return assertRequest(computer.DisplayName, computer.Host, computer.Port, computer.User)
+	return assertRequest(computer.DisplayName, computer.Host, computer.Port, computer.User, computer.SSHKeyPath)
 }
 
-func assertRequest(displayName string, host string, port int, user string) error {
+func assertRequest(displayName string, host string, port int, user string, sshKeyPath string) error {
 	if displayName != strings.TrimSpace(displayName) || len(displayName) < 1 ||
 		len(displayName) > MaxDisplayNameBytes || controlPattern.MatchString(displayName) {
 		return fmt.Errorf("%w: the display name is invalid.", ErrInvalidRequest)
@@ -99,6 +101,9 @@ func assertRequest(displayName string, host string, port int, user string) error
 	}
 	if len(user) > MaxUserBytes || !userPattern.MatchString(user) {
 		return fmt.Errorf("%w: the SSH user is invalid.", ErrInvalidRequest)
+	}
+	if sshKeyPath != "" && (!filepath.IsAbs(sshKeyPath) || len(sshKeyPath) > MaxSSHKeyPathBytes || controlPattern.MatchString(sshKeyPath)) {
+		return fmt.Errorf("%w: the SSH key path is invalid.", ErrInvalidRequest)
 	}
 	return nil
 }
@@ -117,6 +122,9 @@ func AssertConnectionID(connectionID string) error {
 // so this string is a contract, not an implementation detail.
 func ConfigRevision(computer Computer) string {
 	fields := []any{computer.ConnectionID, computer.DisplayName, computer.Host, computer.Port, computer.User}
+	if computer.SSHKeyPath != "" {
+		fields = append(fields, computer.SSHKeyPath)
+	}
 	encoded, err := json.Marshal(fields)
 	if err != nil {
 		encoded = []byte("[]")
@@ -168,7 +176,7 @@ func Parse(data []byte) (Record, error) {
 	for _, entry := range entries {
 		var entryFields map[string]json.RawMessage
 		if json.Unmarshal(entry, &entryFields) != nil || entryFields == nil ||
-			!exactKeys(entryFields, "connectionId", "displayName", "host", "port", "user") {
+			!validComputerKeys(entryFields) {
 			return Record{}, fmt.Errorf("%w: the remote computer entry fields are invalid.", ErrInvalidRecord)
 		}
 		var computer Computer
@@ -187,6 +195,13 @@ func Parse(data []byte) (Record, error) {
 		connections = append(connections, computer)
 	}
 	return Record{Format: Format, Version: Version, Connections: connections}, nil
+}
+
+func validComputerKeys(fields map[string]json.RawMessage) bool {
+	if exactKeys(fields, "connectionId", "displayName", "host", "port", "user", "sshKeyPath") {
+		return true
+	}
+	return exactKeys(fields, "connectionId", "displayName", "host", "port", "user")
 }
 
 // Encode renders the document the shell wrote: two-space indentation, a trailing

@@ -17,6 +17,7 @@ const disconnected: RemoteConnectionsState = {
       host: '10.147.17.251',
       port: 22,
       user: 'a1021500932',
+      sshKeyPath: '',
       status: { kind: 'disconnected' },
       testStatus: { kind: 'untested' }
     }
@@ -37,6 +38,7 @@ function installApi(state: RemoteConnectionsState = { connections: [] }) {
                 host: request.host,
                 port: request.port,
                 user: request.user,
+                sshKeyPath: request.sshKeyPath,
                 configRevision: 'b'.repeat(64)
               }
             : entry
@@ -93,18 +95,24 @@ describe('RemoteConnectionsPanel', () => {
     const { api } = installApi()
     const wrapper = mount(RemoteConnectionsPanel)
     await flushPromises()
+    expect(wrapper.find('[data-testid="remote-add-form"]').exists()).toBe(false)
+    await wrapper.get('[data-testid="remote-add-open"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[data-testid="remote-add-dialog"]').attributes('role')).toBe('dialog')
     const inputs = wrapper.findAll('input')
     await inputs[0]!.setValue('工作室 Mac')
     await inputs[1]!.setValue('10.147.17.251')
     await inputs[2]!.setValue('22')
     await inputs[3]!.setValue('a1021500932')
+    await inputs[4]!.setValue('/example/.ssh/id_ed25519')
     await wrapper.get('[data-testid="remote-add-form"]').trigger('submit')
     await flushPromises()
     expect(api.create).toHaveBeenCalledWith({
       displayName: '工作室 Mac',
       host: '10.147.17.251',
       port: 22,
-      user: 'a1021500932'
+      user: 'a1021500932',
+      sshKeyPath: '/example/.ssh/id_ed25519'
     })
     expect(wrapper.text()).toContain('工作室 Mac')
     expect(wrapper.text()).toContain('a1021500932@10.147.17.251:22')
@@ -114,7 +122,7 @@ describe('RemoteConnectionsPanel', () => {
     const { api } = installApi(disconnected)
     const wrapper = mount(RemoteConnectionsPanel)
     await flushPromises()
-    expect(wrapper.get('.connect-add-disclosure').attributes('open')).toBeUndefined()
+    expect(wrapper.find('[data-testid="remote-add-dialog"]').exists()).toBe(false)
     expect(wrapper.get('.connect-row-management').attributes('open')).toBeUndefined()
     await wrapper.get('.connect-row-management summary').trigger('click')
     await wrapper.get('#remote-edit-11111111-1111-4111-8111-111111111111').trigger('click')
@@ -122,6 +130,8 @@ describe('RemoteConnectionsPanel', () => {
     const inputs = form.findAll('input')
     expect((inputs[0]!.element as HTMLInputElement).value).toBe('工作室 Mac')
     expect((inputs[1]!.element as HTMLInputElement).value).toBe('10.147.17.251')
+    expect((inputs[4]!.element as HTMLInputElement).value).toBe('')
+    await inputs[4]!.setValue('/example/.ssh/id_ed25519')
     await inputs[0]!.setValue('新版工作室')
     await form.trigger('submit')
     await flushPromises()
@@ -131,12 +141,40 @@ describe('RemoteConnectionsPanel', () => {
       displayName: '新版工作室',
       host: '10.147.17.251',
       port: 22,
-      user: 'a1021500932'
+      user: 'a1021500932',
+      sshKeyPath: '/example/.ssh/id_ed25519'
     })
     expect(wrapper.find('[data-testid="remote-edit-form"]').exists()).toBe(false)
     expect(wrapper.get('.remote-computer-title').text()).toContain('新版工作室')
     expect(api.remove).not.toHaveBeenCalled()
     expect(api.create).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('keeps the add-computer form in a modal and restores focus on Escape', async () => {
+    installApi()
+    const wrapper = mount(RemoteConnectionsPanel, { attachTo: document.body })
+    await flushPromises()
+    const trigger = wrapper.get('[data-testid="remote-add-open"]').element as HTMLButtonElement
+    await wrapper.get('[data-testid="remote-add-open"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="remote-add-dialog"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="remote-add-close"]').attributes('aria-label')).toBe(
+      '关闭添加电脑窗口'
+    )
+    expect(document.activeElement).toBe(
+      wrapper.get('[data-testid="remote-add-form"] input').element
+    )
+    await wrapper.get('[data-testid="remote-add-close"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="remote-add-dialog"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(trigger)
+    await wrapper.get('[data-testid="remote-add-open"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('[data-testid="remote-add-dialog"]').trigger('keydown', { key: 'Escape' })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="remote-add-dialog"]').exists()).toBe(false)
+    expect(document.activeElement).toBe(trigger)
     wrapper.unmount()
   })
 

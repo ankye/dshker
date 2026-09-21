@@ -2,13 +2,17 @@ import { readFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { readStylesheets } from './readStylesheets'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
 // `app.css` only aggregates @import-ed sheets, so the rules are read from the
 // sheets themselves in the same order the entry file imports them.
-const styles = ['base-shell', 'routes', 'controls', 'responsive']
-  .map((sheet) => readFileSync(path.join(appRoot, `src/styles/${sheet}.css`), 'utf8'))
-  .join('\n')
+const styles = readStylesheets(appRoot + '/src/styles', [
+  'base-shell',
+  'routes',
+  'controls',
+  'responsive'
+])
 const runtimePanel = readFileSync(
   path.join(appRoot, 'src/app/shell/components/RuntimeTabsPanel.vue'),
   'utf8'

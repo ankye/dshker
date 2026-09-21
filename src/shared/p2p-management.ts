@@ -205,7 +205,7 @@ export type P2PRegistrationView = {
   revision: string
 } & (
   | { kind: 'pending'; requestId: string; networkId: string }
-  | { kind: 'registered'; deviceId: string }
+  | { kind: 'registered'; deviceId: string; networkId?: string }
 )
 
 /**

@@ -100,6 +100,33 @@ describe('saved P2P service admission', () => {
     expect(call).toHaveBeenCalledTimes(2)
   })
 
+  it('shares concurrent startup activations instead of surfacing service busy', async () => {
+    const { catalog, call, services } = await fixture()
+    const enabled = await catalog.enable()
+    call.mockResolvedValue(identity)
+    const saved = await services.add(enabled.revision, input, signal())
+    const restarted = new PeerServices(catalog, { call })
+
+    let resolveConfigure!: (value: typeof identity) => void
+    call.mockClear()
+    call.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveConfigure = resolve as (value: typeof identity) => void
+        })
+    )
+    const first = restarted.activate(serviceId, signal())
+    const second = restarted.activate(serviceId, signal())
+    await vi.waitFor(() => expect(call).toHaveBeenCalledTimes(1))
+    resolveConfigure(identity)
+
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      saved.record.services[0],
+      saved.record.services[0]
+    ])
+    expect(call).toHaveBeenCalledTimes(1)
+  })
+
   it('rejects stale revisions before a network operation', async () => {
     const { catalog, call, services } = await fixture()
     const enabled = await catalog.enable()

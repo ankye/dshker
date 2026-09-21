@@ -102,6 +102,17 @@ async function save(): Promise<void> {
         ><span>{{ t('remote.field.user') }}</span
         ><input v-model="editor.draft.value.user" type="text" required :disabled="busy"
       /></label>
+      <label class="remote-edit-form-wide"
+        ><span>{{ t('remote.field.sshKeyPath') }}</span
+        ><input
+          v-model="editor.draft.value.sshKeyPath"
+          type="text"
+          spellcheck="false"
+          autocomplete="off"
+          :placeholder="t('remote.field.sshKeyPathPlaceholder')"
+          :disabled="busy"
+        />
+      </label>
       <button class="prototype-button prototype-button--primary" type="submit" :disabled="busy">
         {{ busy ? t('remote.add.saving') : t('remote.edit.save') }}
       </button>
@@ -130,3 +141,9 @@ async function save(): Promise<void> {
     </div>
   </section>
 </template>
+
+<style scoped>
+.remote-edit-form-wide {
+  grid-column: 1 / -1;
+}
+</style>

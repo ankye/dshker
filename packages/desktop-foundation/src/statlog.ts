@@ -364,12 +364,10 @@ function configFromLaunchArgs(
       'statlog-capabilities-endpoint'
     ) as string | undefined,
     projectKey: launchArg(launchArgs, 'statlogProjectKey', 'statlog-project-key') as
-      | string
-      | undefined,
+      string | undefined,
     appId: launchArg(launchArgs, 'statlogAppId', 'statlog-app-id') as string | undefined,
     ingestToken: launchArg(launchArgs, 'statlogIngestToken', 'statlog-ingest-token') as
-      | string
-      | undefined,
+      string | undefined,
     platform: launchArg(launchArgs, 'statlogPlatform', 'statlog-platform') as string | undefined,
     reporter: launchArg(launchArgs, 'statlogReporter', 'statlog-reporter') as string | undefined,
     projectId: numberFromUnknown(launchArg(launchArgs, 'statlogProjectId', 'statlog-project-id')),

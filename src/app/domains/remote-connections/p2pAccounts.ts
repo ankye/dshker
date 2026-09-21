@@ -11,6 +11,8 @@ import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
 export interface P2PAccountState {
   user: P2PUserView | null | undefined
   networks: P2PNetworkView[] | undefined
+  /** Last network-list read failure; existing rows remain usable when present. */
+  networksError: string | undefined
   selectedNetworkId: string | undefined
   usernameDraft: string
   networkNameDraft: string
@@ -29,7 +31,14 @@ export interface P2PAccountState {
 /** Account state is partitioned by the pinned service identity, never by its name. */
 export class P2PAccountsDomain {
   readonly #states = reactive<Record<string, P2PAccountState>>({})
+  /** Startup and the mounted account panel share one current-user read. */
+  readonly #currentUserInFlight = new Map<string, Promise<void>>()
   #unsubscribe: (() => void) | undefined
+  #sessionUnsubscribe: (() => void) | undefined
+  /** A login-required reply during startup is provisional until service restore runs. */
+  readonly #retryAfterSession = new Set<string>()
+  /** Explicit logout is the only state that must not be reopened by a session event. */
+  readonly #explicitSignOut = new Set<string>()
   constructor(private readonly management: P2PManagementDomain) {}
 
   state(serviceId: string): P2PAccountState {
@@ -37,6 +46,7 @@ export class P2PAccountsDomain {
       this.#states[serviceId] = {
         user: undefined,
         networks: undefined,
+        networksError: undefined,
         selectedNetworkId: undefined,
         usernameDraft: '',
         networkNameDraft: '',
@@ -72,10 +82,23 @@ export class P2PAccountsDomain {
     await this.readDirectory(serviceId)
   }
 
-  async currentUser(serviceId: string): Promise<void> {
+  currentUser(serviceId: string): Promise<void> {
+    const previous = this.#currentUserInFlight.get(serviceId)
+    if (previous) return previous
+    const pending = this.#readCurrentUser(serviceId)
+    this.#currentUserInFlight.set(serviceId, pending)
+    return pending.finally(() => {
+      if (this.#currentUserInFlight.get(serviceId) === pending)
+        this.#currentUserInFlight.delete(serviceId)
+    })
+  }
+
+  async #readCurrentUser(serviceId: string): Promise<void> {
     const result = await this.management.runRead('currentUser', { serviceId })
     const state = this.state(serviceId)
     if (result.ok) {
+      this.#retryAfterSession.delete(serviceId)
+      this.#explicitSignOut.delete(serviceId)
       this.#acceptUser(state, result.data)
       return this.#readNetworksForSession(serviceId)
     }
@@ -83,14 +106,31 @@ export class P2PAccountsDomain {
     // codes this used to name. A hard-coded list left every other refusal in a
     // half state: the user was neither accepted nor cleared, so the panel showed
     // the password form again while still believing a read was in progress.
-    if (p2pRefusalKind(result.code) === 'signedOut') this.#signedOut(state)
+    if (p2pRefusalKind(result.code) === 'signedOut') {
+      this.#signedOut(state)
+      if (this.#explicitSignOut.has(serviceId)) this.#retryAfterSession.delete(serviceId)
+      else this.#retryAfterSession.add(serviceId)
+    } else {
+      // A helper/service race is not proof that the user signed out. Keep the
+      // last accepted identity (or the initial unknown state) so a
+      // service-session announcement can retry it without discarding authority.
+      this.#retryAfterSession.add(serviceId)
+    }
   }
 
   async login(serviceId: string, username: string, password: string): Promise<void> {
     const result = await this.management.run('login', { serviceId, username, password })
     if (!result.ok) return
+    this.#explicitSignOut.delete(serviceId)
+    this.#retryAfterSession.delete(serviceId)
     this.#acceptUser(this.state(serviceId), result.data)
-    await this.#readNetworksForSession(serviceId)
+    // Authentication is authoritative as soon as the main process has persisted
+    // and published the session. Network discovery is a separate, recoverable
+    // read: keeping it out of this promise lets the panel show the signed-in
+    // identity immediately while the network section reports its own loading or
+    // retry state. The read still starts here so the list is ready without a
+    // second click in the common case.
+    void this.#readNetworksForSession(serviceId)
   }
 
   /**
@@ -103,12 +143,16 @@ export class P2PAccountsDomain {
   async register(serviceId: string, email: string, password: string): Promise<void> {
     const result = await this.management.run('register', { serviceId, email, password })
     if (!result.ok) return
+    this.#explicitSignOut.delete(serviceId)
+    this.#retryAfterSession.delete(serviceId)
     this.#acceptUser(this.state(serviceId), result.data)
-    await this.#readNetworksForSession(serviceId)
+    void this.#readNetworksForSession(serviceId)
   }
 
   async logout(serviceId: string): Promise<void> {
     if (this.management.busy(serviceId)) return
+    this.#explicitSignOut.add(serviceId)
+    this.#retryAfterSession.delete(serviceId)
     const result = await this.management.run('logout', { serviceId })
     // Main discards local login authority before attempting server revocation.
     // A lost response is unknown; do not keep displaying usable account authority.
@@ -121,8 +165,19 @@ export class P2PAccountsDomain {
 
   async networks(serviceId: string): Promise<void> {
     const result = await this.management.runRead('networks', { serviceId })
-    if (!result.ok) return
     const state = this.state(serviceId)
+    if (!result.ok) {
+      // A sibling read already owns the helper channel. It is not a failed
+      // network list, and the existing operation status already communicates
+      // that the panel is waiting for the read path to settle.
+      if (result.code === 'p2p.service_busy' || result.code === 'p2p.helper_busy') return
+      // Keep a last known list visible, but make the failed refresh actionable.
+      // An undefined list remains an explicit loading/failed state rather than
+      // being mistaken for an empty account.
+      state.networksError = result.code
+      return
+    }
+    state.networksError = undefined
     state.networks = result.data
     state.networkWriteUnconfirmed = false
     if (!result.data.some((network) => network.networkId === state.selectedNetworkId))
@@ -217,16 +272,34 @@ export class P2PAccountsDomain {
    * ended up disagreeing about who was in the same network.
    */
   subscribe(): void {
-    if (this.#unsubscribe !== undefined) return
     const api = window.dshLauncher?.p2pManagement
-    if (api?.onDirectoryChange === undefined) return
-    this.#unsubscribe = api.onDirectoryChange((event) => void this.readDirectory(event.serviceId))
+    if (api === undefined) return
+    if (this.#unsubscribe === undefined && api.onDirectoryChange !== undefined)
+      this.#unsubscribe = api.onDirectoryChange((event) => void this.readDirectory(event.serviceId))
+    if (this.#sessionUnsubscribe === undefined && api.onServiceSessionsChange !== undefined) {
+      this.#sessionUnsubscribe = api.onServiceSessionsChange(() => {
+        const serviceId = this.management.selectedServiceId.value
+        if (serviceId === undefined) return
+        // The main process establishes coordinator/device sessions after the
+        // window exists. A first account read can therefore finish before that
+        // restore. A login-required reply from that window is provisional; an
+        // explicit user logout is the only state that must stay signed out.
+        const state = this.state(serviceId)
+        if (state.user !== null || this.#retryAfterSession.has(serviceId))
+          void this.currentUser(serviceId)
+      })
+    }
   }
 
   /** Releases the subscription; used by tests and any future shell teardown. */
   stop(): void {
     this.#unsubscribe?.()
     this.#unsubscribe = undefined
+    this.#sessionUnsubscribe?.()
+    this.#sessionUnsubscribe = undefined
+    this.#currentUserInFlight.clear()
+    this.#retryAfterSession.clear()
+    this.#explicitSignOut.clear()
   }
 
   /**
@@ -342,8 +415,11 @@ export class P2PAccountsDomain {
    * "networks are not loaded yet" until the user asked for what the panel exists
    * to display.
    *
-   * A failure stays unreported here because the domain leaves the list undefined,
-   * which the panel already presents as unread rather than empty.
+   * Login and registration deliberately start this read without awaiting it:
+   * authentication has already settled, and the panel owns the list's loading
+   * and retry feedback. A failure leaves the list undefined (or preserves an
+   * existing list) and records a typed error for that region rather than
+   * reopening the credential form.
    */
   async #readNetworksForSession(serviceId: string): Promise<void> {
     if (this.state(serviceId).networks !== undefined) return
@@ -352,6 +428,7 @@ export class P2PAccountsDomain {
   #acceptUser(state: P2PAccountState, user: P2PUserView): void {
     if (state.user?.userId !== user.userId) {
       state.networks = undefined
+      state.networksError = undefined
       state.selectedNetworkId = undefined
       state.renameDrafts = {}
       state.networkWriteUnconfirmed = false
@@ -361,6 +438,7 @@ export class P2PAccountsDomain {
   #signedOut(state: P2PAccountState): void {
     state.user = null
     state.networks = undefined
+    state.networksError = undefined
     state.selectedNetworkId = undefined
     state.renameDrafts = {}
     state.networkWriteUnconfirmed = false

@@ -72,6 +72,11 @@ func newSignaling(ctx context.Context, dial subscribeFunc, deviceID string, rece
 		cancel()
 		return nil, err
 	}
+	if err := child.Err(); err != nil {
+		first.Close()
+		cancel()
+		return nil, err
+	}
 	owner.mu.Lock()
 	owner.active = first
 	owner.mu.Unlock()
@@ -83,11 +88,17 @@ func newSignaling(ctx context.Context, dial subscribeFunc, deviceID string, rece
 // current reports the live subscription, and whether signalling is usable.
 func (owner *signaling) current() (subscription, bool) {
 	owner.mu.Lock()
-	defer owner.mu.Unlock()
-	if owner.closed || owner.down || owner.active == nil {
+	closed, down, active := owner.closed, owner.down, owner.active
+	owner.mu.Unlock()
+	if closed || down || active == nil {
 		return nil, false
 	}
-	return owner.active, true
+	select {
+	case <-active.Done():
+		return nil, false
+	default:
+		return active, true
+	}
 }
 
 // send refuses at once while signalling is down, so a connect attempt the
@@ -120,8 +131,13 @@ func (owner *signaling) close() {
 // supervise replaces a lost subscription with backoff until the manager ends.
 func (owner *signaling) supervise() {
 	for {
-		active, ok := owner.current()
-		if !ok {
+		// current() intentionally rejects an already-finished subscription for
+		// sends. The supervisor must still observe that same subscription's Done:
+		// it can close between installation and this goroutine starting.
+		owner.mu.Lock()
+		active, closed := owner.active, owner.closed
+		owner.mu.Unlock()
+		if closed || active == nil {
 			return
 		}
 		select {
@@ -129,7 +145,13 @@ func (owner *signaling) supervise() {
 			return
 		case <-active.Done():
 		}
-		owner.markDown()
+		owner.mu.Lock()
+		if owner.closed || owner.active != active || owner.ctx.Err() != nil {
+			owner.mu.Unlock()
+			return
+		}
+		owner.down = true
+		owner.mu.Unlock()
 		// A displaced subscription must not be replaced. One device holds exactly
 		// one signalling socket, so the coordinator closing this one means a newer
 		// socket for this same device is already live — normally this process's own
@@ -166,7 +188,7 @@ func (owner *signaling) replace() bool {
 			continue
 		}
 		owner.mu.Lock()
-		if owner.closed {
+		if owner.closed || owner.ctx.Err() != nil {
 			owner.mu.Unlock()
 			next.Close()
 			return false
@@ -179,15 +201,19 @@ func (owner *signaling) replace() bool {
 	}
 }
 
-func (owner *signaling) markDown() {
-	owner.mu.Lock()
-	owner.down = true
-	owner.mu.Unlock()
-}
-
 // isDown reports whether the coordinator connection is currently lost.
 func (owner *signaling) isDown() bool {
 	owner.mu.Lock()
-	defer owner.mu.Unlock()
-	return owner.down
+	down := owner.down
+	active := owner.active
+	owner.mu.Unlock()
+	if down || active == nil {
+		return true
+	}
+	select {
+	case <-active.Done():
+		return true
+	default:
+		return false
+	}
 }

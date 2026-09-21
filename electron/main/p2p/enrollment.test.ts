@@ -240,7 +240,8 @@ describe('main enrollment orchestration (test-only dependency doubles)', () => {
       userId: user.userId,
       name: f.device.name,
       publicKey: f.device.publicKey,
-      revision: '2'.repeat(64)
+      revision: '2'.repeat(64),
+      networkId
     })
     expect(JSON.stringify(result)).not.toContain(f.privateKey)
     expect(JSON.stringify(result)).not.toContain('certificate')

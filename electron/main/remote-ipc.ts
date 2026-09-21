@@ -1,4 +1,5 @@
 import { BrowserWindow, ipcMain } from 'electron'
+import { isAbsolute } from 'node:path'
 import {
   DESKTOP_IPC_CHANNELS,
   apiFail,
@@ -73,19 +74,22 @@ export function registerRemoteConnectionIpc(service: RemoteConnectionService): v
 export function parseCreateRemoteConnectionRequest(
   payload: unknown
 ): CreateRemoteConnectionRequest {
-  const record = exactRecord(payload, ['displayName', 'host', 'port', 'user'])
+  const record = exactRecord(payload, ['displayName', 'host', 'port', 'user', 'sshKeyPath'])
   if (
     typeof record.displayName !== 'string' ||
     typeof record.host !== 'string' ||
     typeof record.port !== 'number' ||
-    typeof record.user !== 'string'
+    typeof record.user !== 'string' ||
+    typeof record.sshKeyPath !== 'string' ||
+    !validSSHKeyPath(record.sshKeyPath)
   )
     throw new RemoteConnectionError('remote.invalid_request', 'Remote computer request is invalid.')
   return {
     displayName: record.displayName,
     host: record.host,
     port: record.port,
-    user: record.user
+    user: record.user,
+    sshKeyPath: record.sshKeyPath
   }
 }
 
@@ -111,7 +115,8 @@ export function parseUpdateRemoteConnectionRequest(
     'displayName',
     'host',
     'port',
-    'user'
+    'user',
+    'sshKeyPath'
   ])
   if (
     typeof record.connectionId !== 'string' ||
@@ -127,7 +132,8 @@ export function parseUpdateRemoteConnectionRequest(
     displayName: record.displayName,
     host: record.host,
     port: record.port,
-    user: record.user
+    user: record.user,
+    sshKeyPath: record.sshKeyPath
   })
   return {
     ...fields,
@@ -174,4 +180,11 @@ function exactRecord(value: unknown, expected: readonly string[]): Record<string
     )
   }
   return record
+}
+
+function validSSHKeyPath(value: string): boolean {
+  return (
+    value === '' ||
+    (isAbsolute(value) && value.length <= 4096 && !/[\u0000-\u001f\u007f]/u.test(value))
+  )
 }

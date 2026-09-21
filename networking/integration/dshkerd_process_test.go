@@ -26,6 +26,13 @@ const (
 	corePackage       = "github.com/ankye/dshker/networking/cmd/dshkerd"
 )
 
+func desktopStateRoot(t *testing.T) string {
+	t.Helper()
+	state := t.TempDir()
+	must(t, os.Chmod(state, 0o700))
+	return state
+}
+
 // TestCoreDaemonServesThePrivateChannel runs the real dshkerd binary through the
 // contract in networking/docs/shell-core-protocol.md: bootstrap, readiness,
 // authentication, one call, a typed refusal, a refused second client, and an
@@ -50,10 +57,14 @@ func TestCoreDaemonServesThePrivateChannel(t *testing.T) {
 	if exec.Command(binary, "serve-unknown").Run() == nil {
 		t.Fatal("dshkerd accepted an unknown argument")
 	}
+	if exec.Command(binary).Run() == nil {
+		t.Fatal("desktop core accepted missing --state without owner arbitration")
+	}
 
 	endpoint := coreEndpoint(t)
 	secret := strings.Repeat("a", 64)
-	cmd := exec.Command(binary)
+	cmd := exec.Command(binary, "--state", desktopStateRoot(t))
+	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
 	must(t, err)
 	stdout, err := cmd.StdoutPipe()
@@ -175,7 +186,8 @@ func TestCoreDaemonServesWithADataRoot(t *testing.T) {
 	endpoint := coreEndpoint(t)
 	secretValue := strings.Repeat("b", 64)
 	catalogRoot := t.TempDir()
-	cmd := exec.Command(binary, "--data", t.TempDir(), "--catalog", catalogRoot)
+	cmd := exec.Command(binary, "--state", desktopStateRoot(t), "--data", t.TempDir(), "--catalog", catalogRoot)
+	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
 	must(t, err)
 	stdout, err := cmd.StdoutPipe()
@@ -251,7 +263,8 @@ func bootCore(t *testing.T, binary string, args ...string) *coreSession {
 	t.Helper()
 	endpoint := coreEndpoint(t)
 	secretValue := strings.Repeat("c", 64)
-	cmd := exec.Command(binary, args...)
+	cmd := exec.Command(binary, append([]string{"--state", desktopStateRoot(t)}, args...)...)
+	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
 	must(t, err)
 	stdout, err := cmd.StdoutPipe()

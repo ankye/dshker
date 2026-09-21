@@ -1,0 +1,274 @@
+.controller-command {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.controller-command span {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+/* The log file path and its actions. The path is the artifact a user pastes
+ * into a bug report, so it stays visible and selectable rather than living
+ * behind a menu, and the actions sit next to it instead of in a far corner. */
+.controller-log-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+
+.controller-log-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+/* Shrinks before the buttons do: a deep path must not push the actions out of
+ * the window, so the path truncates and keeps its full value in the tooltip. */
+.controller-log-path {
+  overflow: hidden;
+  min-width: 6rem;
+  flex: 1 1 12rem;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.controller-log-hint {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+/* Explains a not-ready harness (preparing, missing, invalid) in one line above
+ * the retained output. Without it, the readiness reason would either replace
+ * the output or be nowhere on the route at all. */
+.controller-state-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-top: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+
+.controller-state-label {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.controller-state-notice p {
+  min-width: 0;
+  flex: 1 1 12rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: var(--type-caption);
+}
+
+.controller-log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+/* A transient success state on the action itself, so confirmation appears where
+ * the user just clicked rather than as a separate notification. */
+.controller-log-actions .prototype-button[data-confirmed='true'] {
+  border-color: var(--color-success);
+  color: var(--color-success);
+}
+
+/* The log stream scrolls inside a bounded box. Without a max height and its own
+ * overflow, a long-running child's output would keep growing the Console route
+ * and push its controls out of reach. */
+.controller-output {
+  display: grid;
+  gap: var(--space-3);
+  /* Fills the stage instead of stopping at a fixed fraction of the viewport.
+   * `flex-basis: 0` (not `auto`) is what keeps a long log from inflating the
+   * stage's scroll height: the box takes leftover space and scrolls inside
+   * itself, so the route never grows past the window. */
+  min-height: 8rem;
+  flex: 1 1 0;
+  align-content: start;
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: #050709;
+  color: #dce7f5;
+  list-style: none;
+}
+
+.controller-output li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.controller-output li[data-stream='stderr'] {
+  color: #ffaba5;
+}
+
+.controller-output li[data-stream='launcher'] {
+  color: #85d5ff;
+}
+
+.controller-output li[data-stream='command'] {
+  color: #b7d9f4;
+}
+
+.controller-output time,
+.controller-output span {
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.controller-output pre {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* The shell-level console tail: a bottom-docked overlay drawer on the stage,
+ * so every route can watch operation and launch output without navigating.
+ * It reuses the Console route's dark log vocabulary while staying read-only. */
+.console-drawer {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
+  display: flex;
+  height: min(40vh, 24rem);
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 1px solid var(--color-border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: color-mix(in srgb, #050709, transparent 2%);
+  box-shadow: 0 -0.75rem 1.5rem color-mix(in srgb, #000000, transparent 70%);
+  color: #dce7f5;
+}
+
+.console-drawer-heading {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, #dce7f5, transparent 88%);
+}
+
+.console-drawer-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-semibold);
+}
+
+.console-drawer-actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* Same bounded scroll box contract as the Console route's output. */
+.console-drawer-entries {
+  min-height: 0;
+  flex: 1 1 auto;
+  margin: 0;
+  padding: var(--space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  list-style: none;
+}
+
+.console-drawer-entries li {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: var(--space-2);
+  align-items: start;
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+
+.console-drawer-entries li[data-stream='stderr'] {
+  color: #ffaba5;
+}
+
+.console-drawer-entries li[data-stream='launcher'] {
+  color: #85d5ff;
+}
+
+.console-drawer-entries li[data-stream='command'] {
+  color: #b7d9f4;
+}
+
+.console-drawer-entries time,
+.console-drawer-entries span {
+  color: #7d8ea3;
+  white-space: nowrap;
+}
+
+.console-drawer-entries pre {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+/* The runtime action remains at the bottom of Console while output scrolls in
+ * its own box above it, so starting or stopping does not require returning to
+ * the Launch page. */
+.controller-bottom-action {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+}
+
+.controller-runtime-status {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+
+.controller-runtime-status[data-state='running'] {
+  color: var(--color-success);
+}
+
+.controller-runtime-status[data-state='starting'] {
+  color: var(--color-accent);
+}
+
+.controller-runtime-status[data-state='failed'] {
+  color: var(--color-danger);
+}

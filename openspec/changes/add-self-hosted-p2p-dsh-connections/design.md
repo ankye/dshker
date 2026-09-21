@@ -1,5 +1,13 @@
 ## Context
 
+2026-09-21 login interaction refinement: a confirmed account session is now a
+settled authentication result and is rendered immediately. Network discovery is
+an independent, recoverable read owned by the Network section: it exposes
+loading, preserved-data failure, empty and retry states without turning a
+successful login into an account error. Password/session validation and secure
+credential persistence remain authoritative prerequisites; no request is
+removed or guessed away.
+
 2026-09-10 Connect-tab alignment: the saved SSH computer list precedes its
 in-card add disclosure. Testing, connection actions, status and errors remain
 visible; edit/remove are grouped under per-computer management. P2P local

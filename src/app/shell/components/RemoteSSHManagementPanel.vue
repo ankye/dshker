@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive } from 'vue'
+import { nextTick, reactive, ref } from 'vue'
 import { remoteConnectionEditor, useRemoteConnections } from '@/app/domains/remote-connections'
 import RemoteConnectionEditor from './RemoteConnectionEditor.vue'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
@@ -11,7 +11,10 @@ import type { AppRouteId } from '@/app/shared/navigation/routes'
 const t = useTranslator()
 const remote = useRemoteConnections()
 const emit = defineEmits<{ navigate: [route: AppRouteId] }>()
-const form = reactive({ displayName: '', host: '', port: '', user: '' })
+const form = reactive({ displayName: '', host: '', port: '', user: '', sshKeyPath: '' })
+const addOpen = ref(false)
+const addTrigger = ref<HTMLButtonElement>()
+const addFirstInput = ref<HTMLInputElement>()
 
 const REMOTE_ERROR_KEYS: Readonly<Record<RemoteConnectionErrorCode, MessageKey>> = {
   'remote.invalid_request': 'remote.error.invalidRequest',
@@ -31,18 +34,38 @@ const REMOTE_ERROR_KEYS: Readonly<Record<RemoteConnectionErrorCode, MessageKey>>
   'remote.tunnel_failed': 'remote.error.tunnel'
 }
 
+function resetForm(): void {
+  form.displayName = ''
+  form.host = ''
+  form.port = ''
+  form.user = ''
+  form.sshKeyPath = ''
+}
+
+async function openAdd(): Promise<void> {
+  addOpen.value = true
+  await nextTick()
+  addFirstInput.value?.focus()
+}
+
+async function closeAdd(): Promise<void> {
+  if (remote.loading.value) return
+  addOpen.value = false
+  await nextTick()
+  addTrigger.value?.focus()
+}
+
 async function submit(): Promise<void> {
   const created = await remote.create({
     displayName: form.displayName,
     host: form.host,
     port: Number(form.port),
-    user: form.user
+    user: form.user,
+    sshKeyPath: form.sshKeyPath
   })
   if (!created) return
-  form.displayName = ''
-  form.host = ''
-  form.port = ''
-  form.user = ''
+  resetForm()
+  await closeAdd()
 }
 
 function statusLabel(kind: 'disconnected' | 'connecting' | 'ready' | 'failed'): string {
@@ -89,7 +112,18 @@ function openWorkbench(connectionId: string): void {
           <h2 id="remote-list-title">{{ t('remote.list.title') }}</h2>
           <p>{{ t('remote.list.description') }}</p>
         </div>
-        <span class="remote-count">{{ remote.state.value.connections.length }}</span>
+        <div class="remote-list-heading-actions">
+          <span class="remote-count">{{ remote.state.value.connections.length }}</span>
+          <button
+            ref="addTrigger"
+            class="prototype-button prototype-button--primary"
+            type="button"
+            data-testid="remote-add-open"
+            @click="openAdd"
+          >
+            {{ t('remote.add.open') }}
+          </button>
+        </div>
       </div>
       <div v-if="remote.state.value.connections.length === 0" class="remote-empty">
         <strong>{{ t('remote.empty') }}</strong>
@@ -206,41 +240,100 @@ function openWorkbench(connectionId: string): void {
       <p v-if="remote.error.value" class="remote-error" role="alert">
         {{ errorLabel(remote.error.value) }} · {{ remote.error.value }}
       </p>
-      <details class="connect-add-disclosure" :open="remote.state.value.connections.length === 0">
-        <summary>{{ t('remote.add.title') }}</summary>
-        <div class="remote-section-heading">
-          <p>{{ t('remote.add.description') }}</p>
-          <span class="remote-security-badge">{{ t('remote.security.badge') }}</span>
+    </section>
+    <RemoteConnectionEditor />
+    <div v-if="addOpen" class="remote-dialog-layer" @click.self="closeAdd">
+      <section
+        class="remote-add-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="remote-add-title"
+        data-testid="remote-add-dialog"
+        @keydown.esc.prevent="closeAdd"
+      >
+        <div class="remote-dialog-header">
+          <div>
+            <h2 id="remote-add-title">{{ t('remote.add.title') }}</h2>
+            <p>{{ t('remote.add.description') }}</p>
+          </div>
+          <div class="remote-dialog-header-actions">
+            <span class="remote-security-badge">{{ t('remote.security.badge') }}</span>
+            <button
+              class="remote-dialog-close prototype-button"
+              type="button"
+              :aria-label="t('remote.add.close')"
+              :disabled="remote.loading.value"
+              data-testid="remote-add-close"
+              @click="closeAdd"
+            >
+              {{ t('remote.edit.cancel') }}
+            </button>
+          </div>
         </div>
         <form class="remote-add-form" data-testid="remote-add-form" @submit.prevent="submit">
           <label
             ><span>{{ t('remote.field.name') }}</span
-            ><input v-model="form.displayName" type="text" autocomplete="off"
+            ><input
+              ref="addFirstInput"
+              v-model="form.displayName"
+              type="text"
+              required
+              autocomplete="off"
           /></label>
           <label
             ><span>{{ t('remote.field.host') }}</span
-            ><input v-model="form.host" type="text" spellcheck="false" autocomplete="off"
+            ><input v-model="form.host" type="text" required spellcheck="false" autocomplete="off"
           /></label>
           <label
             ><span>{{ t('remote.field.port') }}</span
-            ><input v-model="form.port" type="number" min="1" max="65535" inputmode="numeric"
+            ><input
+              v-model="form.port"
+              type="number"
+              required
+              min="1"
+              max="65535"
+              inputmode="numeric"
           /></label>
           <label
             ><span>{{ t('remote.field.user') }}</span
-            ><input v-model="form.user" type="text" spellcheck="false" autocomplete="username"
+            ><input
+              v-model="form.user"
+              type="text"
+              required
+              spellcheck="false"
+              autocomplete="username"
           /></label>
-          <button
-            class="prototype-button prototype-button--primary"
-            type="submit"
-            :disabled="remote.loading.value"
-          >
-            {{ remote.loading.value ? t('remote.add.saving') : t('remote.add.action') }}
-          </button>
+          <label class="remote-add-form-wide"
+            ><span>{{ t('remote.field.sshKeyPath') }}</span
+            ><input
+              v-model="form.sshKeyPath"
+              type="text"
+              spellcheck="false"
+              autocomplete="off"
+              :placeholder="t('remote.field.sshKeyPathPlaceholder')"
+            />
+          </label>
+          <div class="remote-dialog-actions">
+            <button
+              class="prototype-button prototype-button--primary"
+              type="submit"
+              :disabled="remote.loading.value"
+            >
+              {{ remote.loading.value ? t('remote.add.saving') : t('remote.add.action') }}
+            </button>
+            <button
+              class="prototype-button"
+              type="button"
+              :disabled="remote.loading.value"
+              @click="closeAdd"
+            >
+              {{ t('remote.edit.cancel') }}
+            </button>
+          </div>
         </form>
         <p class="remote-form-hint">{{ t('remote.add.hint') }}</p>
-      </details>
-    </section>
-    <RemoteConnectionEditor />
+      </section>
+    </div>
   </div>
 </template>
 
@@ -249,6 +342,13 @@ function openWorkbench(connectionId: string): void {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   overflow: hidden;
+}
+.remote-list-heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
 }
 .remote-computer-row {
   padding: var(--space-3) var(--space-4);
@@ -281,16 +381,76 @@ summary:focus-visible {
   outline: 2px solid var(--color-focus);
   outline-offset: 2px;
 }
-.connect-add-disclosure > summary {
+.remote-add-form-wide {
+  grid-column: 1 / -1;
+}
+.remote-dialog-layer {
+  position: fixed;
+  z-index: 30;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  overflow: auto;
+  background: rgb(4 9 16 / 68%);
+}
+.remote-add-dialog {
+  display: grid;
+  width: min(42rem, 100%);
+  min-width: 0;
+  max-height: calc(100vh - 2 * var(--space-6));
+  gap: var(--space-3);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border-strong, var(--color-border));
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg, 0 1rem 3rem rgb(0 0 0 / 35%));
+}
+.remote-add-dialog .remote-add-form {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
+.remote-add-dialog .remote-add-form label,
+.remote-add-dialog .remote-add-form input {
+  min-width: 0;
+}
+.remote-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+.remote-dialog-header p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.remote-dialog-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.remote-dialog-close {
+  flex: 0 0 auto;
+}
+.remote-add-dialog .remote-section-heading {
+  margin: 0;
+}
+.remote-add-dialog h2 {
+  margin: 0;
   font-size: var(--type-section);
-  font-weight: var(--font-weight-semibold);
 }
-.connect-add-disclosure {
-  border-top: 1px solid var(--color-border);
-  padding-top: var(--space-2);
-}
-.connect-add-disclosure > .remote-section-heading {
-  margin-block: var(--space-3);
+.remote-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  grid-column: 1 / -1;
 }
 @media (max-width: 880px) {
   .remote-computer-row {
@@ -300,6 +460,24 @@ summary:focus-visible {
     grid-column: 2;
     flex-wrap: wrap;
     justify-content: flex-start;
+  }
+}
+@media (max-width: 560px) {
+  .remote-dialog-layer {
+    padding: var(--space-3);
+  }
+  .remote-dialog-header {
+    flex-direction: column;
+  }
+  .remote-dialog-header-actions {
+    justify-content: flex-start;
+  }
+  .remote-add-dialog .remote-add-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .remote-add-dialog .remote-add-form-wide,
+  .remote-dialog-actions {
+    grid-column: 1;
   }
 }
 </style>

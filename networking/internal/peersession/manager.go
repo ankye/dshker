@@ -49,7 +49,9 @@ type Manager struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	client          *controlplane.Client
+	subscribe       subscribeFunc
 	signals         *signaling
+	reconnectMu     sync.Mutex
 	config          Config
 	owner           runtimebridge.RuntimeOwner
 	rootProvider    runtimebridge.RootProvider
@@ -120,15 +122,16 @@ func New(ctx context.Context, client *controlplane.Client, config Config, pins [
 	}
 	child, cancel := context.WithCancel(ctx)
 	manager := &Manager{ctx: child, cancel: cancel, client: client, config: config, owner: owner, rootProvider: config.Roots, emit: emit, pins: make(map[string]controlplane.PairIdentity), sessions: make(map[string]*session), inbound: make(map[string]*session), endpoints: make(map[string]*runtimebridge.Endpoint), inboundEndpoints: make(map[string]*runtimebridge.Endpoint)}
+	manager.subscribe = func(ctx context.Context, deviceID string) (subscription, error) {
+		return client.Subscribe(ctx, deviceID)
+	}
 	for _, pin := range pins {
 		if err := manager.Pin(pin); err != nil {
 			cancel()
 			return nil, err
 		}
 	}
-	signals, err := newSignaling(child, func(ctx context.Context, deviceID string) (subscription, error) {
-		return client.Subscribe(ctx, deviceID)
-	}, config.Device.DeviceID, manager.receive)
+	signals, err := newSignaling(child, manager.subscribe, config.Device.DeviceID, manager.receive)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -226,7 +229,14 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 	deadline, cancel := context.WithTimeout(connection.ctx, 30*time.Second)
 	offer, err := connection.transport.Offer(deadline)
 	if err == nil {
-		err = manager.signals.send(deadline, offer)
+		manager.mu.Lock()
+		signals := manager.signals
+		manager.mu.Unlock()
+		if signals == nil {
+			err = errors.New("p2p.server_unavailable")
+		} else {
+			err = signals.send(deadline, offer)
+		}
 	}
 	cancel()
 	if err != nil {
@@ -368,6 +378,7 @@ func (manager *Manager) InvalidateRuntime(generation uint64) {
 func (manager *Manager) Close() {
 	manager.mu.Lock()
 	manager.closed = true
+	signals := manager.signals
 	pending := make([]<-chan struct{}, 0, len(manager.sessions)+len(manager.inbound))
 	for _, connection := range manager.sessions {
 		pending = append(pending, connection.done)
@@ -386,7 +397,9 @@ func (manager *Manager) Close() {
 	manager.inboundEndpoints = make(map[string]*runtimebridge.Endpoint)
 	manager.mu.Unlock()
 	manager.cancel()
-	manager.signals.close()
+	if signals != nil {
+		signals.close()
+	}
 	for _, done := range pending {
 		<-done
 	}

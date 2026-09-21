@@ -31,6 +31,7 @@ export type PeerRegistrationView =
       name: string
       publicKey: string
       revision: string
+      networkId?: string
     }
 
 interface Dependencies {
@@ -411,13 +412,23 @@ function issuedCredential(value: unknown, pending: PeerPendingEnrollment): PeerC
     name: pending.name,
     publicKey: pending.publicKey,
     privateKey: pending.privateKey,
-    certificate: base64(device.certificate, 1, 16 * 1024)
+    certificate: base64(device.certificate, 1, 16 * 1024),
+    networkId: pending.networkId
   }
 }
 
 function registeredView(credential: PeerCredential, revision: string): PeerRegistrationView {
-  const { serviceId, deviceId, userId, name, publicKey } = credential
-  return { kind: 'registered', serviceId, deviceId, userId, name, publicKey, revision }
+  const { serviceId, deviceId, userId, name, publicKey, networkId } = credential
+  return {
+    kind: 'registered',
+    serviceId,
+    deviceId,
+    userId,
+    name,
+    publicKey,
+    revision,
+    ...(networkId === undefined ? {} : { networkId })
+  }
 }
 
 function sameCredential(left: PeerCredential, right: PeerCredential): boolean {

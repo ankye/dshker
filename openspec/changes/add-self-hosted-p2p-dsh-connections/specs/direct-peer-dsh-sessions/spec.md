@@ -27,14 +27,14 @@ The Launcher SHALL 提供显式 P2P 服务配置和设备登记，使用已登�
 
 The Launcher SHALL 在左侧远程连接 Tab 内部提供两个子 Tab，按“是否需要登录”划分边界：
 
-- **Tab 1「连接」（默认，免登录）** SHALL 承载 SSH 主机管理（新增/测试/连接/断开/编辑/移除/固定标签）以及**加入网络**：在一个表单中输入服务器地址（`https://域名:端口`）和 networkId，点击「加入」按钮后登记本机设备（本机设备身份已在启动时生成），无需登录。加入后按钮变为「取消」，状态显示为「等待审核」；审核通过后状态变为「online/offline」，按钮变为「离开网络」。免去独立配置服务器步骤，服务器地址和 networkId 在同一表单。
-- **Tab 2「网络与账户」（需登录）** SHALL 在未登录时显示**登录注册页面**，使用**邮箱 + 密码**登录（密码提交即清空）；登录后显示当前用户与登出和**网络管理**（每个用户最多创建 2 个网络，支持 CRUD：创建/改名/删除/选择/组网设备数上限）。点击网络进入该网络的管理界面，进行**设备 CRUD 和认证**（查看设备列表、批准/拒绝/撤销配对、绑定/解绑设备）。
+- **Tab 1「连接」（默认，免登录）** SHALL 只承载 SSH 主机管理（新增/测试/连接/断开/编辑/移除/固定标签），不显示网络加入、设备登记或账户管理控件。
+- **Tab 2「网络与账户」（需登录）** SHALL 承载完整的本机网络加入/登记流程以及账户管理：未登录时显示**登录注册页面**，使用**邮箱 + 密码**登录（密码提交即清空）；登录后显示当前用户与登出、按 networkId 加入网络、登记本机和**网络管理**（每个用户最多创建 2 个网络，支持 CRUD：创建/改名/删除/选择/组网设备数上限）。点击网络进入该网络的管理界面，进行**设备 CRUD 和认证**（查看设备列表、批准/拒绝/撤销配对、绑定/解绑设备）。
 
-电脑列表 SHALL 按 SSH/P2P 模式提供明确的新增、测试、连接/取消/断开、编辑、打开固定标签、撤销配对及移除操作，并显示适用条件和实际操作状态，不能要求用户手工编辑配置文件完成这些流程。网络必须显式选择，SHALL NOT 猜测默认网络或把用户会话作为设备身份。跨子 Tab 依赖 SHALL 以引导态处理：Tab 1 中需要登录/已选网络才能进行的操作（登记后的组网）显示“请先在「网络与账户」登录并选择网络”并带跳转入口，不自动切 Tab、不要求重复输入。
+电脑列表 SHALL 按 SSH/P2P 模式提供明确的新增、测试、连接/取消/断开、编辑、打开固定标签、撤销配对及移除操作，并显示适用条件和实际操作状态，不能要求用户手工编辑配置文件完成这些流程。网络必须显式选择，SHALL NOT 猜测默认网络或把用户会话作为设备身份。连接页不因缺少账户/网络状态显示伪造的“加入网络”卡片；用户需要组网时应主动打开「网络与账户」完成登录、选网和登记。
 
-#### Scenario: Join a network from the connection tab without login
+#### Scenario: Join a network from the Network & account tab without login
 
-- **WHEN** 用户在 Tab 1「连接」输入有效 networkId，本机设备身份已生成，网络未达设备数上限
+- **WHEN** 用户在 Tab 2「网络与账户」输入有效 networkId，本机设备身份已生成，网络未达设备数上限
 - **THEN** 本机设备自动登记加入该网络，显示已登记状态；无需登录即可完成本步骤，设备处于已登记但未组网状态
 
 #### Scenario: Group devices after login grants authorization
@@ -49,7 +49,7 @@ The Launcher SHALL 在左侧远程连接 Tab 内部提供两个子 Tab，按“�
 
 #### Scenario: Join a network that has reached its capacity
 
-- **WHEN** 用户在 Tab 1 输入 networkId 登记，但该网络已登记设备数等于其组网设备数上限
+- **WHEN** 用户在 Tab 2 输入 networkId 登记，但该网络已登记设备数等于其组网设备数上限
 - **THEN** 登记被拒绝并返回明确“网络已满”错误，设备不加入网络；网络创建者登录后可在 Tab 2 提高上限（10 → 20/30）后重新加入
 
 #### Scenario: Remove network authorization
@@ -57,9 +57,9 @@ The Launcher SHALL 在左侧远程连接 Tab 内部提供两个子 Tab，按“�
 - **WHEN** 用户明确删除网络或解绑设备并获服务端确认
 - **THEN** 相关 P2P 标签不再保持 ready，固定本地标签与其他网络/SSH 连接不变；重绑仍需重新配对，不恢复已撤销授权
 
-#### Scenario: Configure and pair from the remote tab
+#### Scenario: Configure and pair from the Network & account tab
 
-- **WHEN** 用户尚未配置 P2P，并从远程 Tab 提供服务器信息、登记本机并完成双方配对确认
+- **WHEN** 用户尚未配置 P2P，并从「网络与账户」提供服务器信息、登记本机并完成双方配对确认
 - **THEN** 每一步有界面入口及真实结果，成功配对后出现对应电脑记录与固定标签，不要求复制设备私钥或 DSH Token
 
 #### Scenario: Server is reachable but no peer session is ready
@@ -70,7 +70,12 @@ The Launcher SHALL 在左侧远程连接 Tab 内部提供两个子 Tab，按“�
 #### Scenario: Data is loading or failed
 
 - **WHEN** 远程记录正在加载、读取失败或确实为空
-- **THEN** 分别显示加载、带重试的错误或新增/配对入口；不能将失败伪装为空列表，刷新保留仍存在的目标选择与滚动位置
+- **THEN** 分别显示加载、带重试的错误或新增/配对入口；不能将失败伪装为空列表，刷新保留仍存在的目标选择与滚动位置；本机设备信息和登录/注册入口始终保留，服务未就绪时认证控件明确置灰
+
+#### Scenario: Authentication settles before network discovery
+
+- **WHEN** 用户提交合法账号密码，服务器确认登录且本机安全存储已持久化会话，但网络列表仍在读取
+- **THEN** Launcher 立即显示已登录账号；网络区域独立显示加载状态，读取失败保留已有列表或明确显示未读取并提供重试；网络读取结果不得把已确认的账号改回登录表单或伪装成账号认证失败
 
 ### Requirement: Explicit record editing preserves identity and sessions
 
@@ -289,7 +294,7 @@ The Run page SHALL 保留一个不可关闭的 Local 标签和每个已登记远
 
 ### Requirement: Named IPC confines network and secret authority
 
-管理入口 v1 SHALL 分别命名为 enable、catalog、addService、login、currentUser、logout、networks、createNetwork、renameNetwork、deleteNetwork、registration、registerDevice、submitEnrollment、recoverEnrollment 和 cancel。每次请求携带 version=1 与当前顶层页面内严格递增的正整数 requestId；cancel 指向同页面的原 requestId，不能取消其他窗口。每页最多 16 个进行中请求，页面退役时终止等待，不自动重试。写操作已接受后取消/超时 SHALL 报告结果未确认并要求读回，不承诺回滚。目录 projection 不包含证书、密文或运行地址；登记 projection 仅含公开身份与 revision。密码只允许 login。registerDevice 由 renderer 提交 networkId 与本机公钥持有证明、在未登录状态下完成登记（免登录加入），登记凭证不作为通用 renderer 参数；登录仅约束需要授权的组网/配对/网络管理操作。
+管理入口 v1 SHALL 分别命名为 enable、catalog、addService、login、currentUser、logout、networks、createNetwork、renameNetwork、deleteNetwork、registration、registerDevice、submitEnrollment、recoverEnrollment 和 cancel。每次请求携带 version=1 与当前顶层页面内严格递增的正整数 requestId；渲染层热更新或重新挂载模块时也不得把同一页面的 requestId 重置到主进程已见过的值；cancel 指向同页面的原 requestId，不能取消其他窗口。每页最多 16 个进行中请求，页面退役时终止等待，不自动重试。写操作已接受后取消/超时 SHALL 报告结果未确认并要求读回，不承诺回滚。目录 projection 不包含证书、密文或运行地址；登记 projection 仅含公开身份、revision 和已登记网络 ID。新登记凭据 SHALL 持久保存 networkId 并在重启后读回；无法读取该字段的旧凭据 SHALL 明确显示未记录，不能从账户网络列表猜测；如果当前目录对本机只有一个明确网络匹配，可以恢复展示该网络 ID，否则保持未记录提示。密码只允许 login。registerDevice 由 renderer 提交 networkId 与本机公钥持有证明、在未登录状态下完成登记（免登录加入），登记凭证不作为通用 renderer 参数；登录仅约束需要授权的组网/配对/网络管理操作。
 
 #### Scenario: Cancel an owned management request
 

@@ -21,7 +21,9 @@ describe('ShellStatusbar', () => {
     collapseLabel: 'Collapse to icon rail',
     hideLabel: 'Hide',
     expandLabel: 'Expand',
+    menuLabel: 'Menu',
     consoleLabel: 'Live output',
+    consoleControlLabel: 'Console',
     consoleUnreadLabel: 'New output',
     consoleOpen: false,
     consoleUnread: false
@@ -109,9 +111,11 @@ describe('ShellStatusbar', () => {
       expect(button.find('svg').exists()).toBe(true)
     }
     expect(wrapper.get('.statusbar-sidebar-toggle svg').attributes('data-icon')).toBe('menu')
+    expect(wrapper.get('.statusbar-sidebar-toggle .statusbar-control-label').text()).toBe('Menu')
     expect(wrapper.get('.statusbar-console-toggle svg').attributes('data-icon')).toBe(
       'command-line'
     )
+    expect(wrapper.get('.statusbar-console-toggle .statusbar-control-label').text()).toBe('Console')
 
     await wrapper.get('.statusbar-sidebar-toggle').trigger('click')
     expect(wrapper.emitted('advanceSidebar')).toEqual([[]])

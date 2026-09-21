@@ -251,14 +251,12 @@ function build(device: P2PNetworkDeviceView): string {
 }
 .p2p-devices__list {
   display: grid;
-  gap: 1px;
+  gap: 0;
   margin: 0;
   padding: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  background: var(--color-border);
+  border: 0;
+  background: transparent;
   list-style: none;
-  overflow: hidden;
 }
 /* One row per device. The name column flexes; the two meta columns stay put so
    values line up vertically and can be compared down the list. */
@@ -270,6 +268,9 @@ function build(device: P2PNetworkDeviceView): string {
   min-height: var(--size-row);
   padding: var(--space-2) var(--space-3);
   background: var(--color-surface);
+}
+.p2p-devices__row + .p2p-devices__row {
+  border-top: 1px solid var(--color-border);
 }
 .p2p-devices__identity {
   display: flex;

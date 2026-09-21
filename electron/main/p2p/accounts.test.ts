@@ -21,6 +21,15 @@ function fixture() {
   return { call, cleanup, accounts: new PeerAccounts({ call }, cleanup) }
 }
 
+function persistentFixture() {
+  const call = vi.fn<(method: string, payload: unknown, signal: AbortSignal) => Promise<unknown>>()
+  const cleanup = vi.fn(async (_service: string, _network: string) => undefined)
+  const persist = vi.fn(
+    async (_service: string, _session: { token: string; expiresAt: number }) => undefined
+  )
+  return { call, cleanup, persist, accounts: new PeerAccounts({ call }, cleanup, persist) }
+}
+
 async function loggedIn() {
   const f = fixture()
   f.call.mockResolvedValueOnce(session()).mockResolvedValueOnce(user)
@@ -60,6 +69,19 @@ function directoryReply(
 describe('main-owned P2P accounts', () => {
   const email = 'alice@example.com'
   const registered = { userId: user.userId, username: email }
+
+  it('does not report login success before the session is durably persisted', async () => {
+    const f = persistentFixture()
+    f.call.mockResolvedValueOnce(session()).mockResolvedValueOnce(user)
+    f.persist.mockRejectedValueOnce(new PeerHelperError('p2p.secret_write_failed'))
+
+    await expect(
+      f.accounts.login(serviceId, user.username, 'test-password', signal())
+    ).rejects.toMatchObject({
+      code: 'p2p.secret_write_failed'
+    })
+    expect(f.accounts.hasSession(serviceId)).toBe(false)
+  })
 
   it('registers, confirms the session by readback and signs the user in', async () => {
     const f = fixture()

@@ -104,6 +104,15 @@ export function loadRenderer(window: ElectronBrowserWindow): Promise<void> {
     : window.loadURL('dsh-app://launcher/index.html')
 }
 
+/** Reveals an existing hidden/minimised window when the app is activated again. */
+export function revealWindow(window: ElectronBrowserWindow): boolean {
+  if (window.isDestroyed()) return false
+  if (window.isMinimized()) window.restore()
+  window.show()
+  window.focus()
+  return true
+}
+
 /**
  * Resolves the app icon for an unpackaged run.
  *

@@ -4,17 +4,18 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../..')
-const routes = readFileSync(path.join(appRoot, 'src/styles/routes.css'), 'utf8')
+const sharedRoutes = readFileSync(path.join(appRoot, 'src/styles/routes-launch.css'), 'utf8')
+const routes = readFileSync(path.join(appRoot, 'src/styles/routes-settings.css'), 'utf8')
 const settingsPanel = readFileSync(
   path.join(appRoot, 'src/app/shell/components/SettingsPanel.vue'),
   'utf8'
 )
 
-/** Declaration block of one exact top-level selector in routes.css. */
+/** Declaration block of one exact top-level settings selector. */
 function ruleBlock(selector: string): string {
   const marker = `${selector} {`
   const start = routes.indexOf(marker)
-  expect(start, `${selector} must exist in routes.css`).toBeGreaterThan(-1)
+  expect(start, `${selector} must exist in routes-settings.css`).toBeGreaterThan(-1)
   return routes.slice(start + marker.length, routes.indexOf('}', start))
 }
 
@@ -33,7 +34,7 @@ describe('settings route layout', () => {
 
   it('shares the route padding that every other panel uses', () => {
     // .settings-panel is part of the grouped per-route surface rule.
-    const grouped = routes.slice(0, routes.indexOf('.launch-hero'))
+    const grouped = sharedRoutes.slice(0, sharedRoutes.indexOf('.launch-hero'))
     expect(grouped).toContain('.settings-panel')
   })
 

@@ -37,6 +37,35 @@ in the same commit range as the change itself:
 The release body should be the `CHANGELOG.md` entry for that version, so the two
 cannot drift.
 
+## Standalone `dshkerd` CLI distribution
+
+Every published version also carries a headless CLI channel, separate from the
+Electron Launcher updater. The package workflow builds the same Go-owned
+`dshkerd` entry point for these six targets:
+
+| Target        | Archive                                 |
+| ------------- | --------------------------------------- |
+| macOS arm64   | `dshkerd-<version>-darwin-arm64.tar.gz` |
+| macOS x64     | `dshkerd-<version>-darwin-x64.tar.gz`   |
+| Windows arm64 | `dshkerd-<version>-windows-arm64.zip`   |
+| Windows x64   | `dshkerd-<version>-windows-x64.zip`     |
+| Linux arm64   | `dshkerd-<version>-linux-arm64.tar.gz`  |
+| Linux x64     | `dshkerd-<version>-linux-x64.tar.gz`    |
+
+The Release includes `dshkerd-<version>-checksums.txt`, a combined
+`dshkerd-<version>-manifest.json`, and the POSIX/PowerShell installers. Each
+CLI job cross-compiles with `CGO_ENABLED=0`, verifies the embedded executable
+manifest, and uploads only its own target. The publish job validates all six
+archives again before attaching them; a missing target or checksum blocks the
+Release.
+
+The installers require an explicit stable version and use only the matching
+official GitHub Release asset. They verify the archive and embedded manifest,
+stage the new binary, and atomically replace the existing user-local binary.
+They do not edit shell profiles, configure a service, copy credentials, pair a
+device, or enable autostart. Those operations remain explicit `dshkerd`
+commands so a server cannot silently join an unintended network.
+
 The public update feed is the fixed
 [DSHKer GitHub Releases page](https://github.com/ankye/dshker/releases/latest).
 The Launcher reads its latest stable release in Electron main, downloads the
@@ -57,20 +86,21 @@ instead of scrollback.
 
 Stages, in execution order:
 
-| Stage                | Command                      |
-| -------------------- | ---------------------------- |
-| `environment-check`  | `npm run environment:check`  |
-| `architecture-check` | `npm run architecture:check` |
-| `format-check`       | `npm run format:check`       |
-| `type-check`         | `npm run type-check`         |
-| `unit-tests`         | `npm test -- --run`          |
-| `e2e-tests`          | `npm run test:e2e`           |
-| `service-smoke`      | `npm run service:smoke`      |
-| `visual-smoke`       | `npm run visual:smoke`       |
-| `performance-check`  | `npm run performance:check`  |
-| `package`            | `npm run package`            |
-| `release-verify`     | `npm run release:verify`     |
-| `release-smoke`      | `npm run release:smoke`      |
+| Stage                         | Command                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------ |
+| `environment-check`           | `npm run environment:check`                                              |
+| `architecture-check`          | `npm run architecture:check`                                             |
+| `format-check`                | `npm run format:check`                                                   |
+| `type-check`                  | `npm run type-check`                                                     |
+| `unit-tests`                  | `npm test -- --run`                                                      |
+| `e2e-tests`                   | `npm run test:e2e`                                                       |
+| `service-smoke`               | `npm run service:smoke`                                                  |
+| `visual-smoke`                | `npm run visual:smoke`                                                   |
+| `performance-check`           | `npm run performance:check`                                              |
+| `package`                     | `npm run package`                                                        |
+| `standalone-cli-distribution` | `npm run build:dshkerd -- --output-dir .run/dshkerd-release --overwrite` |
+| `release-verify`              | `npm run release:verify`                                                 |
+| `release-smoke`               | `npm run release:smoke`                                                  |
 
 Every stage is a hard gate. The `package` stage builds only the current
 platform, so a complete release needs one readiness run per target operating
@@ -122,20 +152,21 @@ type checks, tests, smoke checks, and both renderer and Electron builds.
 
 `.github/workflows/package.yml` runs for a push to `main`, a `v*` tag, or a
 manual dispatch. It first repeats the release-input quality gates, then builds
-macOS arm64/x64 DMGs and Windows x64/arm64 NSIS installers independently. Every
+macOS arm64/x64 DMGs and Windows x64/arm64 NSIS installers independently. In a
+separate matrix it cross-builds the six standalone `dshkerd` archives. Every
 run verifies its release metadata and runs the packaged application smoke on its
-native runner. It then uploads each installer with `release-manifest.json` and
-`checksums.txt` as a 14-day GitHub Actions artifact.
+native runner. It then uploads each installer and CLI archive with its manifest
+and checksum as a 14-day GitHub Actions artifact.
 The packaged smoke launch budget is explicit per native runner: 20 seconds on
 macOS and 60 seconds on Windows. Timeout and child-process error details are
 retained in the diagnostic artifact.
 
 Only a tag run publishes. Before any package job starts, the workflow requires
-a stable tag equal to `v${package.json.version}`. After all four platform jobs
-succeed, a minimal `contents: write` job downloads the four named artifacts,
-requires one DMG and one EXE for each architecture, checks each installer
-against its platform manifest and checksum, writes one installer-only
-`checksums.txt`, and preserves the four manifests as
+a stable tag equal to `v${package.json.version}`. After all desktop and CLI jobs
+succeed, a minimal `contents: write` job downloads the named artifacts, requires
+one DMG and one EXE for each desktop architecture plus all six CLI archives,
+checks every asset against its manifest and checksum, writes the installer-only
+`checksums.txt` and the combined CLI checksum/manifest pair, and preserves the four manifests as
 `release-manifest-macos-arm64.json`, `release-manifest-macos-x64.json`,
 `release-manifest-windows-x64.json`, and `release-manifest-windows-arm64.json`.
 It refuses to continue if the tag already

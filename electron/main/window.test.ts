@@ -38,6 +38,8 @@ vi.mock('electron', () => {
     readonly handlers = new Map<string, ((...args: unknown[]) => void)[]>()
     setBoundsCalls: Electron.Rectangle[] = []
     showCalls = 0
+    restoreCalls = 0
+    focusCalls = 0
     constructor(readonly options: Record<string, unknown>) {
       FakeBrowserWindow.instances.push(this)
     }
@@ -62,6 +64,12 @@ vi.mock('electron', () => {
     }
     show(): void {
       this.showCalls += 1
+    }
+    restore(): void {
+      this.restoreCalls += 1
+    }
+    focus(): void {
+      this.focusCalls += 1
     }
     isDestroyed(): boolean {
       return false
@@ -136,6 +144,8 @@ async function build() {
   return instances[instances.length - 1] as unknown as {
     setBoundsCalls: Electron.Rectangle[]
     showCalls: number
+    restoreCalls: number
+    focusCalls: number
     emit(event: string): void
     options: Record<string, unknown>
   }
@@ -192,6 +202,17 @@ describe('launcher window display wiring', () => {
     mocks.windowBounds = { x: 100, y: 100, width: 1240, height: 820 }
     emitDisplayEvent('display-metrics-changed')
     expect(window.setBoundsCalls).toEqual([])
+  })
+
+  it('reveals a hidden window when the app is activated from its desktop icon', async () => {
+    const { revealWindow } = await import('./window')
+    const window = await build()
+    mocks.minimized = true
+
+    expect(revealWindow(window as never)).toBe(true)
+    expect(window.restoreCalls).toBe(1)
+    expect(window.showCalls).toBe(1)
+    expect(window.focusCalls).toBe(1)
   })
 
   /**

@@ -7,6 +7,7 @@ interface RemoteDraft {
   host: string
   port: string
   user: string
+  sshKeyPath: string
 }
 
 const original = ref<RemoteConnectionView>()
@@ -22,7 +23,8 @@ const dirty = computed(() => {
     (saved.displayName !== current.displayName ||
       saved.host !== current.host ||
       String(saved.port) !== current.port ||
-      saved.user !== current.user)
+      saved.user !== current.user ||
+      saved.sshKeyPath !== current.sshKeyPath)
   )
 })
 
@@ -42,7 +44,8 @@ function open(connectionId: string): boolean {
     displayName: current.displayName,
     host: current.host,
     port: String(current.port),
-    user: current.user
+    user: current.user,
+    sshKeyPath: current.sshKeyPath ?? ''
   }
   return true
 }

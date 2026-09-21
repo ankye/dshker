@@ -5,14 +5,14 @@ Enable one DSHKer Launcher to manage several trusted computers and open each com
 ## ADDED Requirements
 
 ### Requirement: Explicit remote computer catalog
-The Launcher SHALL let the user register multiple computers with an explicit display name, SSH host, SSH port, and SSH user. It SHALL persist stable computer identities and those connection fields, and SHALL NOT persist SSH passwords, private keys, DSH session URLs, DSH session credentials, local forwarding ports, or child-process identifiers.
+The Launcher SHALL let the user register multiple computers with an explicit display name, SSH host, SSH port, SSH user, and optional absolute local SSH key path. It SHALL persist stable computer identities and those connection fields, and SHALL NOT persist SSH passwords or private-key contents, DSH session URLs, DSH session credentials, local forwarding ports, or child-process identifiers.
 
 #### Scenario: Register a computer
-- **WHEN** the user submits a unique display name, valid SSH host, port, and user
+- **WHEN** the user submits a unique display name, valid SSH host, port, user, and either an empty key path or an absolute local key path
 - **THEN** the Launcher persists one computer record and immediately creates its fixed Run tab in a disconnected state
 
 #### Scenario: Reject incomplete or ambiguous input
-- **WHEN** any required field is missing, malformed, duplicated, or outside its admitted range
+- **WHEN** any required field is missing, malformed, duplicated, or outside its admitted range, or the optional key path is relative or contains control characters
 - **THEN** the Launcher rejects the request with a typed validation error and does not infer or substitute a value
 
 #### Scenario: Restore registered computers
@@ -103,7 +103,7 @@ The renderer SHALL receive only typed catalog projections, connection and test s
 - **THEN** Electron main validates the sender and payload before performing the named operation
 
 #### Scenario: Renderer attempts to supply authority-bearing data
-- **WHEN** a request contains unknown fields, filesystem paths, executable paths, process arguments, URLs, credentials, or an unknown computer identity
+- **WHEN** a request contains unknown fields, arbitrary filesystem paths, executable paths, process arguments, URLs, credentials, or an unknown computer identity
 - **THEN** Electron main rejects the entire request with a typed invalid-request or not-found error
 
 ### Requirement: Cross-platform peer behavior

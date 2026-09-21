@@ -15,6 +15,7 @@
 - [x] 3.2 Replace disposable Run tabs with stable `local` and `remote:<id>` projections, remove close/new controls, preserve selection, and render non-ready local/remote recovery states; verify local stop/start, remote catalog changes, ready/failure transitions, removal focus, and route remount tests.
 - [x] 3.3 Update shell route, layout, responsive styling, icons, and smoke route inventory; verify keyboard-visible controls, narrow-window overflow behavior, and route reachability tests.
 - [x] 3.4 Add a one-shot full-path connection test, process-local test result, strict operation exclusion, and textual red/green connection indicators; verify service, IPC, preload, and component behavior.
+- [x] 3.5 Clarify the remote route as **SSH 连接**, add a visible Add computer action, and persist/forward an optional absolute SSH key path through the catalog, core protocol, OpenSSH SCP/forward arguments, add form, and edit form. Verify legacy key-less catalogs, key-path validation, exact IPC admission, and Go core route arguments.
 
 ## 4. Integration and delivery evidence
 

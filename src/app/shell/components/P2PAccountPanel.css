@@ -1,0 +1,527 @@
+/* A card, matching .settings-section elsewhere in the app, rather than six
+ * siblings separated only by a rule. The panel previously had no surface of its
+ * own: heading, actions, status text and a bare button all sat at one level, so
+ * nothing grouped the account from the networks it owns. */
+/* Secondary refresh actions previously stretched to the full card width because
+ * the grid stretches its items, which made a minor reload read as the card's
+ * primary action. */
+.p2p-account-refresh {
+  justify-self: start;
+}
+/* The account line packed a label, an email and a raw user ID into one sentence
+ * at a single weight, so the identifier competed with the identity. */
+.p2p-account-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+}
+.p2p-account-identity-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-account-identity-name {
+  color: var(--color-text);
+  font-size: var(--type-body);
+  font-weight: var(--font-weight-medium);
+}
+.p2p-account-identity-id {
+  overflow-wrap: anywhere;
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  font-size: var(--type-caption);
+}
+.p2p-account {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.p2p-account-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--space-4);
+  row-gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+/* The heading owns the card, so it takes the section type scale and a rule that
+ * separates it from the account row. Actions share this row so the account
+ * header reads as one compact unit instead of three unrelated blocks. */
+.p2p-account-header > h3 {
+  flex: 1 1 auto;
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-section);
+  font-weight: var(--font-weight-semibold);
+}
+.p2p-account > p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-body);
+}
+.p2p-account code {
+  overflow-wrap: anywhere;
+}
+.p2p-account-actions,
+.p2p-account-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+}
+.p2p-account-actions {
+  justify-content: flex-end;
+  justify-self: end;
+}
+
+@media (max-width: 640px) {
+  .p2p-account-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .p2p-account-actions {
+    justify-self: start;
+  }
+}
+.p2p-account-fields {
+  border: 0;
+  padding: 0;
+  margin: var(--space-3) 0;
+  min-width: 0;
+}
+.p2p-account-fields label {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+/* Credential forms read top to bottom: one field per row at a legible width,
+   unlike the inline rename and create-network forms that share the base class. */
+.p2p-account-fields--stacked {
+  display: grid;
+  gap: var(--space-3);
+  align-items: stretch;
+  max-width: 22rem;
+}
+.p2p-account-fields--stacked label {
+  flex: none;
+}
+.p2p-account-fields--stacked button {
+  justify-self: start;
+  margin-top: var(--space-1);
+}
+.p2p-account-fields input {
+  width: 100%;
+  min-height: var(--size-control-md);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface-muted);
+  color: var(--color-text);
+}
+.p2p-account input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+.p2p-account-rule {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-account-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-account-switch-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--color-accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.p2p-account-switch-link:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.p2p-network-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.p2p-network-load-state {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  justify-items: start;
+  padding: var(--space-2) 0;
+}
+.p2p-network-load-state > p {
+  margin: 0;
+}
+.p2p-network-load-warning {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+.p2p-network-load-warning .prototype-button {
+  flex: 0 0 auto;
+}
+.p2p-network-card {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--color-surface-muted);
+}
+.p2p-network-card + .p2p-network-card {
+  margin-top: var(--space-2);
+}
+.p2p-network-card.is-selected {
+  border-color: var(--color-accent);
+  box-shadow: inset 3px 0 var(--color-accent);
+}
+.p2p-network-card-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.p2p-network-card-header label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+  min-height: var(--size-control-md);
+}
+.p2p-network-card-header input {
+  flex-shrink: 0;
+  accent-color: var(--color-accent);
+}
+.p2p-network-name {
+  overflow-wrap: anywhere;
+}
+.p2p-network-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+  margin: 0;
+}
+.p2p-network-fields > div {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.p2p-network-fields dt {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-network-fields dd {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-body);
+}
+.p2p-network-row-limit {
+  font-variant-numeric: tabular-nums;
+}
+.p2p-network-selection {
+  color: var(--color-text-muted);
+  font-weight: var(--font-weight-medium);
+}
+.p2p-network-selection[data-selected='true'] {
+  color: var(--color-accent);
+}
+.p2p-network-editor {
+  min-width: 0;
+}
+.p2p-network-toggle {
+  color: var(--color-accent);
+  min-height: var(--size-control-md);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.p2p-network-toggle::before {
+  content: '▸';
+  margin-right: var(--space-2);
+}
+.p2p-network-toggle[aria-expanded='true']::before {
+  content: '▾';
+}
+.p2p-network-editor-hint {
+  color: var(--color-text-muted);
+  margin-left: var(--space-3);
+  font-size: var(--type-caption);
+}
+.p2p-network-editor-body {
+  min-width: 0;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-network-editor form {
+  max-width: 40rem;
+}
+.p2p-network-danger {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-network-danger span {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  flex: 1 1 20rem;
+}
+.p2p-network-technical {
+  margin-top: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-network-technical summary {
+  color: var(--color-accent);
+}
+.p2p-technical-details {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-technical-details p {
+  margin-block: var(--space-2);
+}
+.p2p-technical-details code {
+  display: block;
+}
+/* The network id is deliberately secondary: it is available in technical
+   details with a copy action, while the network name remains the primary row
+   identity. */
+.p2p-network-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.p2p-network-identity-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-network-identity-value {
+  font-family: var(--font-mono, monospace);
+  font-size: var(--type-body);
+  user-select: all;
+}
+.p2p-network-identity-hint {
+  flex-basis: 100%;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-account summary {
+  cursor: pointer;
+  padding-block: var(--space-2);
+  width: fit-content;
+}
+.p2p-account summary:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.p2p-networks-heading {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  justify-content: space-between;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-networks-heading h4 {
+  font-size: var(--type-section);
+  margin: 0;
+}
+.p2p-networks-heading p {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  margin: var(--space-2) 0 0;
+}
+.p2p-network-toolbar-actions,
+.p2p-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+.p2p-network-select-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border: 0;
+  background: transparent;
+}
+.p2p-network-select-row label {
+  display: grid;
+  flex: 1 1 18rem;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-network-select-empty {
+  flex: 1 1 18rem;
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--type-body);
+}
+.p2p-network-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.p2p-network-summary > div {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.p2p-network-summary-label {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+}
+.p2p-network-summary code {
+  overflow-wrap: anywhere;
+}
+.p2p-network-summary-limit {
+  color: var(--color-text-muted);
+  font-size: var(--type-caption);
+  white-space: nowrap;
+}
+.p2p-network-dialog {
+  position: fixed;
+  z-index: 20;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(34rem, calc(100vw - 2 * var(--space-6)));
+  max-height: calc(100vh - 2 * var(--space-6));
+  gap: var(--space-3);
+  overflow: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border-strong, var(--color-border));
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-lg, 0 1rem 3rem rgb(0 0 0 / 35%));
+  transform: translate(-50%, -50%);
+}
+.p2p-network-dialog h4 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--type-section);
+}
+.p2p-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.p2p-dialog-header h4 {
+  min-width: 0;
+}
+.p2p-network-dialog > form,
+.p2p-network-dialog > .p2p-network-capacity {
+  min-width: 0;
+}
+.p2p-network-dialog .p2p-account-fields {
+  margin: 0;
+}
+.p2p-network-dialog .p2p-network-danger {
+  margin-top: var(--space-2);
+}
+.p2p-network-dialog .p2p-network-identity {
+  margin-top: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+.p2p-selected-network-heading {
+  padding-top: var(--space-3);
+}
+.p2p-network-create {
+  border-top: 1px solid var(--color-border);
+  padding-top: var(--space-3);
+}
+.p2p-network-create form {
+  max-width: 40rem;
+}
+@media (max-width: 760px) {
+  .p2p-network-summary {
+    grid-template-columns: 1fr;
+  }
+  .p2p-network-card-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .p2p-network-fields {
+    grid-template-columns: 1fr;
+    gap: var(--space-2);
+  }
+  .p2p-network-editor-hint {
+    display: block;
+    margin-left: 0;
+  }
+}
+.p2p-delete-confirm {
+  padding: var(--space-4);
+  border: 1px solid var(--color-danger);
+  border-radius: var(--radius-sm);
+}
+.p2p-network-capacity {
+  margin-top: var(--space-2);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--color-border);
+}
+.p2p-network-capacity p {
+  margin: 0;
+}
+.p2p-limit-control {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+.p2p-limit-control label {
+  display: grid;
+  gap: var(--space-1);
+}

@@ -30,6 +30,24 @@ describe('Launcher shutdown ownership', () => {
     expect(owners.launcherHarnessService.shutdown).toHaveBeenCalledTimes(1)
   })
 
+  it('hands the attached core back only after connection owners close', async () => {
+    const owners = {
+      ...fixture(),
+      coreSupervisor: { close: vi.fn(async (): Promise<void> => undefined) }
+    }
+    const order: string[] = []
+    owners.peerManagement.close.mockImplementationOnce(async () => void order.push('peer'))
+    owners.remoteConnectionService.shutdown.mockImplementationOnce(
+      async () => void order.push('ssh')
+    )
+    owners.remotePeerBroker.shutdown.mockImplementationOnce(async () => void order.push('broker'))
+    owners.coreSupervisor = { close: vi.fn(async () => void order.push('core')) }
+    await shutdownLauncherOwners(owners)
+    expect(order.indexOf('core')).toBeGreaterThan(order.indexOf('peer'))
+    expect(order.indexOf('core')).toBeGreaterThan(order.indexOf('ssh'))
+    expect(order.indexOf('core')).toBeGreaterThan(order.indexOf('broker'))
+  })
+
   it.each(['peer', 'ssh', 'broker', 'runtime'])(
     'preserves a %s failure without skipping other owners',
     async (target) => {

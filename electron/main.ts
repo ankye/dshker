@@ -35,7 +35,7 @@ import { registerLauncherProtocol } from './main/protocol'
 import { beginForceQuit, createTray, destroyTray, isTrayActive } from './main/launcher-tray'
 import { resolvePnpmLauncher } from './main/pnpm-launcher'
 import { runSmokeTest, writeSmokeFailure, writeSmokeTrace } from './main/smoke'
-import { createWindow } from './main/window'
+import { createWindow, revealWindow } from './main/window'
 import { RuntimeBrowserController } from './main/runtime-browser-controller'
 import { RuntimeBrowserPreferencesStore } from './main/runtime-browser-preferences'
 import { APP_METADATA } from '../src/shared/contracts'
@@ -152,15 +152,8 @@ async function start(): Promise<void> {
   // this process was already running). Focus the existing window rather than
   // leaving the user wondering where the application went.
   app.on('second-instance', () => {
-    const existing = BrowserWindow.getAllWindows()
-    if (existing.length > 0) {
-      const main = existing[0]
-      if (main.isMinimized()) main.restore()
-      // A window hidden to the tray (minimize-to-tray) is not minimised, so
-      // restore() alone does nothing. show() brings it back to screen.
-      main.show()
-      main.focus()
-    }
+    const existing = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+    if (existing) revealWindow(existing)
   })
   void initializeActiveVersion(services.launcherHarnessService)
   // Presence, the reported build, discoverability and pairing all ride on the
@@ -180,9 +173,9 @@ async function start(): Promise<void> {
   powerMonitor.on('unlock-screen', () => services.peerManagement.resumeConnectivity())
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createWindow(mainDirectory, services.runtimeBrowserController)
-    }
+    const existing = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
+    if (existing) revealWindow(existing)
+    else createWindow(mainDirectory, services.runtimeBrowserController)
   })
 }
 
@@ -328,6 +321,7 @@ async function registerLauncherServices(
           ? process.resourcesPath
           : path.join(app.getAppPath(), 'build'),
         dataRoot: path.join(launcherRoot, 'core-data'),
+        stateRoot: path.join(launcherRoot, 'core-state'),
         catalogRoot:
           settingsRoot === undefined ? undefined : path.join(settingsRoot, 'dsh-launcher'),
         onUnavailable: () => undefined

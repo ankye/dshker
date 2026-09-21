@@ -21,6 +21,8 @@ export interface PeerCredential {
   publicKey: string
   privateKey: string
   certificate: string
+  /** The network used for this enrollment; absent only in legacy credentials. */
+  networkId?: string
 }
 
 export interface PeerCredentialReadback {
@@ -513,7 +515,7 @@ export class PeerCredentialStore {
 }
 
 export function assertPeerCredential(value: unknown): asserts value is PeerCredential {
-  const record = exactPeerObject(value, [
+  const baseFields = [
     'serviceId',
     'deviceId',
     'userId',
@@ -521,7 +523,13 @@ export function assertPeerCredential(value: unknown): asserts value is PeerCrede
     'publicKey',
     'privateKey',
     'certificate'
-  ])
+  ] as const
+  // v1 credentials written before the network was retained remain readable,
+  // but new credentials include the authoritative network ID. Never infer it
+  // from an account list: a device may be bound to more than one network.
+  const hasNetworkId =
+    typeof value === 'object' && value !== null && !Array.isArray(value) && 'networkId' in value
+  const record = exactPeerObject(value, hasNetworkId ? [...baseFields, 'networkId'] : baseFields)
   for (const field of [
     'serviceId',
     'deviceId',
@@ -542,6 +550,8 @@ export function assertPeerCredential(value: unknown): asserts value is PeerCrede
     Buffer.byteLength(record.name as string) > 256 ||
     /[\x00\r\n]/.test(record.name as string)
   )
+    throw new PeerHelperError('p2p.credential_invalid')
+  if (hasNetworkId && !/^[0-9a-f]{12}$/.test(record.networkId as string))
     throw new PeerHelperError('p2p.credential_invalid')
   if (
     decodeBase64(record.publicKey as string).length !== 32 ||

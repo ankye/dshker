@@ -87,7 +87,12 @@ export function projectPeerRegistration(value: P2PRegistrationView): P2PRegistra
   if (value.kind === 'pending')
     return { ...identity, kind: 'pending', requestId: value.requestId, networkId: value.networkId }
   if (value.kind !== 'registered') throw new PeerHelperError('p2p.enrollment_state_mismatch')
-  return { ...identity, kind: 'registered', deviceId: value.deviceId }
+  return {
+    ...identity,
+    kind: 'registered',
+    deviceId: value.deviceId,
+    ...(value.networkId === undefined ? {} : { networkId: value.networkId })
+  }
 }
 
 /** Explicit allowlist: never spread persistence records into renderer state. */

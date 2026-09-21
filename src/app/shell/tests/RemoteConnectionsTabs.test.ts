@@ -113,7 +113,7 @@ async function openAccountTab(ui: VueWrapper) {
 }
 
 describe('RemoteConnectionsPanel two sub-tabs', () => {
-  it('opens on the login-free Connect tab by default and keeps account content unmounted', async () => {
+  it('opens on the login-free Connect tab and keeps full network management in the account tab', async () => {
     await render({}, false)
     const connect = wrapper!.get('[data-testid="remote-pane-connect"]')
     expect(connect.attributes('role')).toBe('tabpanel')
@@ -124,10 +124,22 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     expect(wrapper!.get('[data-testid="remote-tab-account"]').attributes('data-active')).toBe(
       'false'
     )
+    expect(connect.find('[data-testid="remote-add-form"]').exists()).toBe(false)
+    await connect.get('[data-testid="remote-add-open"]').trigger('click')
     expect(connect.find('[data-testid="remote-add-form"]').exists()).toBe(true)
+    expect(connect.find('[data-testid="p2p-join-panel"]').exists()).toBe(false)
+    expect(connect.find('[data-testid="p2p-open-network-account"]').exists()).toBe(false)
   })
 
-  it('gates the Network & account tab behind login: signed out shows the login page only there', async () => {
+  it('opens the full My network card in the Network & account tab', async () => {
+    const { domain } = await render(signedOutApi(), true)
+    await openAccountTab(wrapper!)
+    expect(wrapper!.find('[data-testid="remote-pane-account"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="p2p-join-panel"]').exists()).toBe(true)
+    expect(domain.p2pManagement.selectedServiceId.value).toBe(serviceId)
+  })
+
+  it('gates account and network management behind the account tab login', async () => {
     const { domain } = await render(signedOutApi(), true)
     expect(domain.p2pAccounts.state(serviceId).user).toBeUndefined()
     expect(wrapper!.find('[data-testid="remote-pane-account"]').exists()).toBe(false)
@@ -139,9 +151,12 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     expect(accountPane.find('input[type="password"]').exists()).toBe(true)
     // Signed out shows the login form only: enrollment needs a signed-in owner
     // and a selected network, so it must not appear as inert controls here.
-    expect(wrapper!.find('[data-testid="p2p-login-register-heading"]').exists()).toBe(true)
+    expect(wrapper!.get('[data-testid="p2p-account-heading"]').text()).toContain(
+      '登录 DSHKer 服务器'
+    )
     expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(false)
     expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
+    expect(wrapper!.find('[data-testid="p2p-join-panel"]').exists()).toBe(true)
     expect(wrapper!.find('[data-testid="remote-pane-connect"]').exists()).toBe(false)
   })
 
@@ -151,14 +166,14 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     await flushPromises()
     await openAccountTab(wrapper!)
     const gate = wrapper!.get('[data-testid="p2p-account-mesh-gate"]')
-    expect(gate.text()).toContain('尚未登录')
+    expect(gate.text()).toContain('登录后即可连接其他设备')
     // The gate never navigates or switches tabs; the login form is right below.
     expect(gate.find('button').exists()).toBe(false)
     expect(wrapper!.find('[data-testid="p2p-mesh-gate-login"]').exists()).toBe(false)
     expect(wrapper!.find('input[autocomplete="username"]').exists()).toBe(true)
   })
 
-  it('never bounces back to Connect when no server is selected: static message only', async () => {
+  it('never bounces back to Connect when no server is selected: keeps identity and disabled auth', async () => {
     const { api: sshApi } = remoteApi()
     window.dshLauncher = {
       remoteConnections: sshApi,
@@ -179,12 +194,16 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     expect(pane.text()).toContain('还没有可管理的服务器')
     // No jump button exists and no automatic tab switch happens.
     expect(wrapper!.find('[data-testid="p2p-account-go-connect"]').exists()).toBe(false)
-    expect(pane.find('button').exists()).toBe(false)
+    expect(pane.find('[data-testid="p2p-device-info"]').exists()).toBe(true)
+    expect(pane.find('[data-testid="p2p-login-form"]').exists()).toBe(true)
+    expect(
+      (pane.get('[data-testid="p2p-login-form"] fieldset').element as HTMLFieldSetElement).disabled
+    ).toBe(true)
     expect(wrapper!.find('[data-testid="remote-pane-account"]').exists()).toBe(true)
     expect(wrapper!.find('[data-testid="remote-pane-connect"]').exists()).toBe(false)
   })
 
-  it('composes account, network, enrollment and pairing management once logged in', async () => {
+  it('keeps the signed-in account tab focused on networks and devices', async () => {
     const login = vi.fn<P2PManagementApi['login']>().mockResolvedValue({ ok: true, data: user })
     const currentUser = vi
       .fn<P2PManagementApi['currentUser']>()
@@ -203,7 +222,7 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
       true
     )
     await openAccountTab(wrapper!)
-    // Neither enrollment nor pairing is offered before sign-in.
+    // Enrollment recovery and pairing are not exposed as duplicate panels.
     expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(false)
     expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
     const pane = wrapper!.get('[data-testid="remote-pane-account"]')
@@ -216,8 +235,34 @@ describe('RemoteConnectionsPanel two sub-tabs', () => {
     )
     expect(domain.p2pAccounts.state(serviceId).user?.username).toBe('alice')
     expect(pane.text()).toContain('登出')
-    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(true)
-    expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(true)
+    expect(wrapper!.find('[data-testid="p2p-enrollment"]').exists()).toBe(false)
+    expect(wrapper!.find('[data-testid="p2p-pairing-panel"]').exists()).toBe(false)
     expect(wrapper!.find('input[type="password"]').exists()).toBe(false)
+  })
+
+  it('rebinds account content when the selected coordinator changes', async () => {
+    const otherServiceId = 'b'.repeat(12)
+    const otherService = { ...service, serviceId: otherServiceId, displayName: 'Other server' }
+    const currentUser = vi.fn<P2PManagementApi['currentUser']>(async ({ serviceId: selected }) => ({
+      ok: true,
+      data: selected === serviceId ? user : { userId: 'user-b', username: 'bob' }
+    }))
+    const { domain } = await render(
+      {
+        catalog: async () => ({ ok: true, data: { ...saved, services: [service, otherService] } }),
+        currentUser,
+        networks: async () => ({ ok: true, data: [] })
+      },
+      true
+    )
+    await openAccountTab(wrapper!)
+    expect(wrapper!.get('[data-testid="remote-pane-account"]').text()).toContain('alice')
+
+    domain.p2pManagement.selectedServiceId.value = otherServiceId
+    await flushPromises()
+    expect(currentUser).toHaveBeenCalledWith(expect.objectContaining({ serviceId: otherServiceId }))
+    const accountPane = wrapper!.get('[data-testid="remote-pane-account"]')
+    expect(accountPane.text()).toContain('bob')
+    expect(accountPane.text()).not.toContain('alice')
   })
 })

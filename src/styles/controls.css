@@ -359,11 +359,15 @@
 }
 
 .statusbar-control {
-  display: grid;
+  display: inline-flex;
   position: relative;
-  width: 1.375rem;
+  min-width: 1.375rem;
   height: 1.375rem;
   place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  padding: 0 var(--space-1);
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   background: none;
@@ -376,11 +380,21 @@
 }
 
 .statusbar-control svg {
+  flex: 0 0 auto;
   width: 0.875rem;
   height: 0.875rem;
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 1.9;
+}
+
+.statusbar-control-label {
+  color: inherit;
+  font-family: var(--font-sans);
+  font-size: var(--type-caption);
+  font-weight: var(--font-weight-medium);
+  line-height: 1;
+  white-space: nowrap;
 }
 
 .statusbar-control:hover {

@@ -13,6 +13,10 @@ package main
 
 import "errors"
 
+func registeredAutostartTarget() (autostartTarget, bool, error) {
+	return autostartTarget{}, false, nil
+}
+
 func installAutostart(_ string, _ string) error {
 	return errors.New("p2p.autostart_unsupported")
 }
@@ -20,6 +24,10 @@ func installAutostart(_ string, _ string) error {
 func removeAutostart() error {
 	return errors.New("p2p.autostart_unsupported")
 }
+
+func removeAutostartPreservingProcess() error { return removeAutostart() }
+
+func retireDisabledAutostart(string) error { return nil }
 
 func autostartStatus() (AutostartState, error) {
 	return AutostartState{Installed: false, Mechanism: "unsupported"}, nil

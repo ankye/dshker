@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // The build is CGO_ENABLED=0, so the Keychain is reached through the system
@@ -126,6 +127,13 @@ func keychainWrite(key string, value []byte) error {
 	input = append(input, value...)
 	input = append(input, '\n')
 	command := exec.Command(keychainTool, "add-generic-password", "-a", key, "-s", keychainService, "-U", "-w")
+	// `security -w` reads the value from its controlling terminal when one is
+	// inherited. dshkerd is launched by Electron with a terminal descriptor
+	// still available, so the child otherwise ignores this pipe forever and
+	// leaves the login session unpersisted. Start a detached session with no
+	// controlling tty; security then consumes the supplied stdin exactly as
+	// intended. The value never enters argv or the process listing.
+	command.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 	command.Stdin = bytes.NewReader(input)
 	if output, err := command.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: %s", ErrWrite, strings.TrimSpace(string(output)))

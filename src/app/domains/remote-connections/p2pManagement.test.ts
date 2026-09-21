@@ -351,6 +351,23 @@ describe('built-in official server provisioning', () => {
     expect(domain.builtinProvisioned.value).toBe(true)
   })
 
+  it('shares the in-flight built-in provisioning between shell startup readers', async () => {
+    const enable = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, revision: 'enabled' }
+    }))
+    const addService = vi.fn(async () => ({
+      ok: true as const,
+      data: { ...saved, revision: 'added', services: [builtin] }
+    }))
+    const { domain } = setup({ enable, addService })
+    domain.catalog.value = null
+    await Promise.all([domain.ensureBuiltinService(), domain.ensureBuiltinService()])
+    expect(enable).toHaveBeenCalledTimes(1)
+    expect(addService).toHaveBeenCalledTimes(1)
+    expect(domain.selectedServiceId.value).toBe(builtin.serviceId)
+  })
+
   /**
    * A record this build cannot read leaves the page with no catalog at all, and
    * discarding it is the only way forward — so the reset must hand the user a

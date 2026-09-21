@@ -94,8 +94,9 @@ func (store *Store) Save(record Record) error {
 
 // Create publishes one new definition. A display name that differs only in case
 // from an existing one is refused, because the page presents names, not ids.
-func (store *Store) Create(displayName string, host string, port int, user string) ([]Computer, error) {
-	if err := assertRequest(displayName, host, port, user); err != nil {
+func (store *Store) Create(displayName string, host string, port int, user string, keyPath ...string) ([]Computer, error) {
+	sshKeyPath := optionalKeyPath(keyPath)
+	if err := assertRequest(displayName, host, port, user, sshKeyPath); err != nil {
 		return nil, err
 	}
 	current, err := store.Load()
@@ -119,6 +120,7 @@ func (store *Store) Create(displayName string, host string, port int, user strin
 		Host:         host,
 		Port:         port,
 		User:         user,
+		SSHKeyPath:   sshKeyPath,
 	})
 	if err := store.Save(next); err != nil {
 		return nil, err
@@ -127,11 +129,15 @@ func (store *Store) Create(displayName string, host string, port int, user strin
 }
 
 // Update replaces one definition whose revision the caller prepared against.
-func (store *Store) Update(connectionID string, displayName string, host string, port int, user string, expectedRevision string) ([]Computer, error) {
+func (store *Store) Update(connectionID string, displayName string, host string, port int, user string, args ...string) ([]Computer, error) {
+	sshKeyPath, expectedRevision, argsErr := updateArguments(args)
+	if argsErr != nil {
+		return nil, argsErr
+	}
 	if err := AssertConnectionID(connectionID); err != nil {
 		return nil, err
 	}
-	if err := assertRequest(displayName, host, port, user); err != nil {
+	if err := assertRequest(displayName, host, port, user, sshKeyPath); err != nil {
 		return nil, err
 	}
 	current, err := store.Load()
@@ -164,11 +170,29 @@ func (store *Store) Update(connectionID string, displayName string, host string,
 		Host:         host,
 		Port:         port,
 		User:         user,
+		SSHKeyPath:   sshKeyPath,
 	}
 	if err := store.Save(next); err != nil {
 		return nil, err
 	}
 	return next.Connections, nil
+}
+
+func optionalKeyPath(value []string) string {
+	if len(value) == 0 {
+		return ""
+	}
+	return value[0]
+}
+
+func updateArguments(value []string) (string, string, error) {
+	if len(value) == 1 {
+		return "", value[0], nil
+	}
+	if len(value) == 2 {
+		return value[0], value[1], nil
+	}
+	return "", "", fmt.Errorf("%w: update arguments are invalid.", ErrInvalidRequest)
 }
 
 // Remove deletes one definition.
