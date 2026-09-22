@@ -105,9 +105,7 @@ const preset = new Set(
 )
 const files = loadConfigFiles()
 
-console.log(
-  files.length > 0 ? `config: ${files.join(', ')}` : 'config: none (using defaults)'
-)
+console.log(files.length > 0 ? `config: ${files.join(', ')}` : 'config: none (using defaults)')
 
 const resolved = REQUIREMENTS.map((requirement) => ({
   requirement,
