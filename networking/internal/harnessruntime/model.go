@@ -108,12 +108,22 @@ var opaqueIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
 // AssertLaunchRequest validates one request before anything is spawned. Every
 // path is required to be absolute and already normalized, so a caller cannot
 // launch from a relative or ambiguous location.
+//
+// Each refusal names the field it rejected. One shared sentence for all eight
+// checks made a refused launch unreadable: the shell logged "Managed DSH launch
+// input is invalid" and the peer that asked for a runtime was refused with no way
+// to tell an unresolved pnpm from a missing log path or a non-canonical checkout,
+// which is exactly the diagnosis a user cannot perform and a maintainer had to
+// guess at from the outside.
 func AssertLaunchRequest(request LaunchRequest) error {
-	if !opaqueIDPattern.MatchString(request.LaunchID) || !opaqueIDPattern.MatchString(request.SubjectID) {
-		return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+	if !opaqueIDPattern.MatchString(request.LaunchID) {
+		return fmt.Errorf("%w: launchId is not an opaque id: %q", ErrInputInvalid, request.LaunchID)
+	}
+	if !opaqueIDPattern.MatchString(request.SubjectID) {
+		return fmt.Errorf("%w: subjectId is not an opaque id: %q", ErrInputInvalid, request.SubjectID)
 	}
 	if !absoluteNormalized(request.Directory) {
-		return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+		return fmt.Errorf("%w: directory is not an absolute normalized path: %q", ErrInputInvalid, request.Directory)
 	}
 	switch request.Profile {
 	case ProfileNode:
@@ -121,19 +131,32 @@ func AssertLaunchRequest(request LaunchRequest) error {
 		// checkout, so the pnpm facts are absent and the Node path is the fact
 		// that must hold. The log is the shell's business and may be absent.
 		if !absoluteNormalized(request.NodeExecutable) {
-			return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+			return fmt.Errorf("%w: nodeExecutable is not an absolute normalized path: %q", ErrInputInvalid, request.NodeExecutable)
 		}
 		if request.LogPath != "" && !absoluteNormalized(request.LogPath) {
-			return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+			return fmt.Errorf("%w: logPath is not an absolute normalized path: %q", ErrInputInvalid, request.LogPath)
 		}
 	case "", ProfilePnpm:
-		for _, value := range []string{request.PnpmExecutable, request.DiagnosticsPatchPath, request.LogPath} {
-			if !absoluteNormalized(value) {
-				return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+		for _, field := range []struct {
+			name  string
+			value string
+		}{
+			{"pnpmExecutable", request.PnpmExecutable},
+			{"diagnosticsPatchPath", request.DiagnosticsPatchPath},
+			{"logPath", request.LogPath},
+		} {
+			if !absoluteNormalized(field.value) {
+				// An unresolved pnpm is the common cause here and the shell already
+				// knows why, so carry its own explanation rather than making the user
+				// discover it again.
+				if field.name == "pnpmExecutable" && request.PnpmResolutionError != "" {
+					return fmt.Errorf("%w: pnpmExecutable is unavailable: %s", ErrInputInvalid, request.PnpmResolutionError)
+				}
+				return fmt.Errorf("%w: %s is not an absolute normalized path: %q", ErrInputInvalid, field.name, field.value)
 			}
 		}
 	default:
-		return fmt.Errorf("%w: Managed DSH launch input is invalid.", ErrInputInvalid)
+		return fmt.Errorf("%w: unknown launch profile: %q", ErrInputInvalid, request.Profile)
 	}
 	if _, err := AssertPortSetting(request.Port); err != nil {
 		return err

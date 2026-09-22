@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.71 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
+- **修复对方连过来时被拒、并反复重连。** 连接建立后，被连接的那台电脑要为这条连接启动 DSH，而启动请求因为找不到可用的 pnpm 被拒绝，于是连接被关闭、重连、再次失败，循环不止。界面把这个循环显示为"连不上协调服务器"，指向了完全无关的地方——协调器一直是通的。
+- **修复 pnpm 查找被一个无法解析的候选中断。** Windows 上 pnpm 常常是一个指向别处的链接（scoop 即如此）。查找过程在解析这种链接时没有保护，一旦当前进程无法跟随该链接就直接抛出，后面所有候选目录——包括真正可用的那一个——都不再检查，于是报告"没有可用的 pnpm"。现在单个候选失败只跳过它自己。
+- **启动被拒时说明是哪一项不合法。** 之前八项检查共用同一句"启动参数不合法"，无法区分是 pnpm 没找到、日志路径缺失还是检出目录不规范。现在每条拒绝都指名字段，pnpm 不可用时直接带上原因；找不到 pnpm 时也会列出查找过的目录。
+- **保留网络核心的诊断输出。** 核心把每一次修复和每一次拒绝都写在标准错误上，但这些内容除非开发者设置了调试开关否则被直接丢弃。用户报告"连不上"时因此没有任何记录可查，只能从外部猜测。现在它们与核心自身的状态存放在一起，可随问题反馈一同提交。
+
+### English (en-US)
+
+- **Fix an inbound connection being refused and then retried forever.** Once a connection was established, the receiving computer had to start DSH for it, and that launch was refused because no usable pnpm could be found — so the connection closed, reconnected and failed again without end. The interface reported the loop as "cannot reach the coordinator", which pointed at something entirely unrelated: the coordinator was reachable throughout.
+- **Fix the pnpm search ending on one unresolvable candidate.** On Windows pnpm is usually a shim that links elsewhere, as scoop's does. Resolving that link was unguarded, so a link the current process could not follow threw out of the whole search: every later directory — including one holding a working pnpm — went unexamined and the launcher reported no runnable pnpm at all. A failing candidate is now skipped on its own.
+- **Say which field a refused launch rejected.** Eight separate checks shared one "launch input is invalid" sentence, which could not distinguish an unresolved pnpm from a missing log path or a non-canonical checkout. Each refusal now names its field, an unavailable pnpm carries its own reason, and a failed search lists the directories it looked in.
+- **Keep the networking core's diagnostics.** The core reports every repair and every refusal on standard error, and all of it was discarded unless a developer had set a debug switch. A user reporting "it cannot connect" therefore left no record to read, and diagnosis came down to guessing from the outside. Those lines now sit beside the core's own state, where a bug report can carry them.
+
 ## 0.1.70 — 2026-09-23
 
 ### 简体中文 (zh-CN)

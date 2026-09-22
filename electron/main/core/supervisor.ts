@@ -265,9 +265,22 @@ export class CoreSupervisor {
     })
     child.on('error', (error) => diagnose(`spawn-error ${String(error)}`))
     child.stdin.on('error', () => undefined)
-    if (process.env.DSH_P2P_TRACE === '1')
-      child.stderr.on('data', (chunk: Buffer) => process.stderr.write(chunk))
-    else child.stderr.resume()
+    // Keep what the core says about itself.
+    //
+    // The core reports every refusal it repairs or cannot repair on stderr:
+    // signalling that stood down, a credential it could not record, a peer it was
+    // told is offline. Those lines were discarded unless a developer had exported
+    // DSH_P2P_TRACE, so a user reporting "it cannot reach the coordinator" left no
+    // record of which operation failed or why, and the only evidence available was
+    // guesswork from the outside. They now land beside the core's own state, which
+    // is the file a bug report can carry.
+    child.stderr.on('data', (chunk: Buffer) => {
+      if (process.env.DSH_P2P_TRACE === '1') process.stderr.write(chunk)
+      for (const line of chunk.toString('utf8').split('\n')) {
+        const text = line.trim()
+        if (text.length > 0) diagnose(`core ${text.slice(0, 400)}`)
+      }
+    })
     const budget = AbortSignal.any([signal, AbortSignal.timeout(30_000)])
     let rpc: PeerRpc | undefined
     try {

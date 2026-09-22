@@ -68,3 +68,41 @@ describe('Windows pnpm installation layouts', () => {
     )
   })
 })
+
+describe('a candidate that cannot be inspected', () => {
+  // One bad entry must not end the search.
+  //
+  // The resolver called realpathSync on a discovered shim without guarding it, so
+  // a shim behind a link this session cannot follow threw out of the whole
+  // function. Every later directory — including one holding a working pnpm — was
+  // then never examined, and the launcher reported no runnable pnpm at all. The
+  // refusal only surfaced later, as a DSH launch rejected for an unavailable
+  // pnpmExecutable, which read to the user as a coordinator problem.
+  it('keeps searching later directories and still resolves a usable pnpm', () => {
+    const broken = mkdtempSync(path.join(tmpdir(), 'pnpm broken '))
+    directories.push(broken)
+    // A shim that exists but names a script that does not: readable, unusable.
+    writeFileSync(path.join(broken, 'pnpm.cmd'), '@"%~dp0\\node_modules\\pnpm\\bin\\pnpm.mjs" %*')
+
+    const working = createBin()
+    const script = path.resolve(working, 'node_modules/pnpm/bin/pnpm.mjs')
+    mkdirSync(path.dirname(script), { recursive: true })
+    writeFileSync(script, '')
+    writeFileSync(path.join(working, 'pnpm.cmd'), '@"%~dp0\\node_modules\\pnpm\\bin\\pnpm.mjs" %*')
+
+    const launcher = resolveWindowsPnpmLauncher([broken, working])
+    expect(launcher.resolutionError).toBeUndefined()
+    expect(launcher.executable).toBe(path.join(realpathSync(working), 'node.exe'))
+    expect(launcher.prefixArguments).toEqual([realpathSync(script)])
+  })
+
+  // A failure has to say where it looked: the same sentence with no list left the
+  // user and the maintainer with the same unanswerable question.
+  it('names every directory it searched when nothing is runnable', () => {
+    const empty = mkdtempSync(path.join(tmpdir(), 'pnpm empty '))
+    directories.push(empty)
+    const launcher = resolveWindowsPnpmLauncher([empty])
+    expect(launcher.executable).toBe('')
+    expect(launcher.resolutionError).toContain(empty)
+  })
+})

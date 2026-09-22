@@ -60,8 +60,17 @@ export function resolveWindowsPnpmLauncher(
     const shim = path.join(directory, 'pnpm.cmd')
     if (!isRegularFile(shim)) continue
     const scriptPath = readWindowsShimScript(shim)
+    // A shim whose link cannot be resolved must not end the search.
+    //
+    // This used to call realpathSync directly: a scoop-style shim behind a
+    // junction that the current session cannot resolve threw out of the whole
+    // resolver, so every later candidate — including a working pnpm.exe — was
+    // never examined and the launcher reported no runnable pnpm at all. The
+    // throw surfaced much later as a refused DSH launch, which is why it read
+    // as "cannot reach the coordinator" rather than as a missing pnpm.
+    const shimDirectory = canonicalDirectory(shim)
     const node = [
-      path.join(path.dirname(realpathSync(shim)), 'node.exe'),
+      ...(shimDirectory === undefined ? [] : [path.join(shimDirectory, 'node.exe')]),
       ...directories.map((entry) => path.join(entry, 'node.exe'))
     ].find(isRegularFile)
     if (scriptPath !== undefined && node !== undefined) {
@@ -76,8 +85,9 @@ export function resolveWindowsPnpmLauncher(
     executable: '',
     prefixArguments: [],
     commandSearchPath: directories.join(path.delimiter),
-    resolutionError:
-      'No runnable pnpm installation was found. Check Node.js and pnpm installation and restart Launcher.'
+    // Name where it looked. "No runnable pnpm was found" with no list left the
+    // user and the maintainer with the same question and no way to answer it.
+    resolutionError: `No runnable pnpm installation was found in: ${directories.join(', ')}. Check Node.js and pnpm installation and restart Launcher.`
   }
 }
 
@@ -104,10 +114,27 @@ function buildCommandSearchPath(pnpmExecutable: string | undefined): string {
     .join(path.delimiter)
 }
 
+/** Resolves a path's real directory, or undefined when the link cannot be followed. */
+function canonicalDirectory(filePath: string): string | undefined {
+  try {
+    return path.dirname(realpathSync(filePath))
+  } catch {
+    return undefined
+  }
+}
+
 /** Reads the actual npm/Corepack shim target without executing a command shell. */
 function readWindowsShimScript(shim: string): string | undefined {
-  const canonical = realpathSync(shim)
-  const text = readFileSync(canonical, 'utf8')
+  let canonical: string
+  let text: string
+  try {
+    canonical = realpathSync(shim)
+    text = readFileSync(canonical, 'utf8')
+  } catch {
+    // Unreadable or unresolvable: the caller moves on to the next candidate
+    // rather than the whole resolution failing on one bad entry.
+    return undefined
+  }
   const match = /%(?:dp0|~dp0)%?[\\/]([^"\r\n]*pnpm\.(?:mjs|cjs|js))/iu.exec(text)
   if (match === null) return undefined
   const script = path.resolve(path.dirname(canonical), match[1]!.replace(/\\/gu, path.sep))
