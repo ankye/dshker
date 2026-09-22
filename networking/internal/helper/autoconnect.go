@@ -131,6 +131,42 @@ func (host *Host) AutoConnectEngine() *autoconnect.Engine {
 	return host.reconnect
 }
 
+// RepairSignals brings every restored account's coordinator subscription back when
+// it was displaced by a newer process or otherwise became unusable.
+//
+// The shell gets this repair for free: it arrives through peer.autoconnect_reconcile,
+// which repairs the socket before driving the engine. A headless daemon drives the
+// same engine directly, so without this it never repaired anything — the manager
+// stood down permanently and every later connect answered p2p.server_unavailable
+// while both machines still looked online, because presence is reported over a
+// different path than signalling. That is the state a restart used to be the only
+// exit from.
+//
+// A healthy socket is left untouched, so calling this on every pass is safe.
+func (host *Host) RepairSignals(ctx context.Context) {
+	host.mu.Lock()
+	accounts := make([]*account, 0, len(host.accounts))
+	for _, value := range host.accounts {
+		accounts = append(accounts, value)
+	}
+	host.mu.Unlock()
+	for _, value := range accounts {
+		if ctx.Err() != nil {
+			return
+		}
+		value.mu.Lock()
+		manager := value.manager
+		value.mu.Unlock()
+		if manager == nil {
+			continue
+		}
+		// One account's unreachable coordinator must not stop the next from being
+		// repaired, so the error is deliberately not propagated: the following pass
+		// tries again, which is exactly what the ticker is for.
+		_ = manager.ReconnectSignals(ctx)
+	}
+}
+
 // autoConnectOperation answers the three engine methods the shell drives.
 //
 // The shell no longer owns a reconnection implementation; it reports the events it

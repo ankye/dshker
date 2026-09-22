@@ -177,15 +177,26 @@ func (host *Host) Close() {
 	}
 	host.mu.Unlock()
 	for _, value := range accounts {
+		// Extract the manager reference under the lock, then release before calling
+		// manager.Close(). The session tear-down calls back into the account (emit
+		// → announce), which re-acquires account.mu. Holding it across manager.Close
+		// would deadlock: host.Close holds account.mu while waiting for the session
+		// to finish, and the session waits for account.mu before it can finish.
 		value.mu.Lock()
-		if value.manager != nil {
-			value.manager.Close()
-		}
-		if value.client != nil {
-			value.client.Close()
-		}
-		value.base.Close()
+		manager := value.manager
+		value.manager = nil
+		client := value.client
+		value.client = nil
+		base := value.base
+		value.base = nil
 		value.mu.Unlock()
+		if manager != nil {
+			manager.Close()
+		}
+		if client != nil {
+			client.Close()
+		}
+		base.Close()
 	}
 }
 

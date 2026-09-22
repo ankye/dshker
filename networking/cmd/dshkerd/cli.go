@@ -351,6 +351,14 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 		ticker := time.NewTicker(reconnectInterval)
 		defer ticker.Stop()
 		for {
+			// Repair the coordinator subscription before asking the engine to
+			// reconnect pairs. A socket displaced by a newer process leaves the
+			// manager standing down, and every connect then answers
+			// p2p.server_unavailable even though both machines still report as
+			// online — presence and signalling travel different paths. The shell
+			// gets this repair through its reconcile method; a daemon drives the
+			// engine directly and so has to ask for it here.
+			host.RepairSignals(ctx)
 			reconnect.Reconcile(ctx)
 			select {
 			case <-ctx.Done():

@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.1.68 — 2026-09-22
+
+### 简体中文 (zh-CN)
+
+- **修复无界面核心断线后永远无法恢复连接。** `dshkerd` 无界面运行时直接驱动重连引擎，但被新进程顶替或失效的协调器信令订阅从未被修复：管理器永久停摆，之后每次连接都回答 `p2p.server_unavailable`，而两台机器因为在线状态走的是另一条通道仍然显示在线——只有重启应用才能恢复。现在每次重连前都会先修复所有账户的信令订阅，与桌面端已有的修复路径保持一致，健康连接不受影响。
+- **修复核心退出时残留进程。** 桌面端关闭 RPC 通道后核心应随之退出，但关闭清理路径持有一个账户锁等待对端会话结束，而对端会话的收尾又需要同一个锁来上报状态，形成互相等待：核心既不退出也不释放，进程残留在后台。现在关闭前先释放账户锁，核心随父进程通道关闭立即退出，不再有残留进程。
+
+### English (en-US)
+
+- **Fix a headless core that could never reconnect after a drop.** When `dshkerd` runs without a desktop it drives the reconnection engine directly, but a coordinator signal subscription displaced by a newer process or otherwise made unusable was never repaired: the manager stood down permanently, every later connect answered `p2p.server_unavailable`, and both machines still looked online because presence travels a different path than signalling — only a restart recovered. Every reconciliation pass now repairs the subscription for all accounts first, matching the repair the desktop shell already had, and a healthy subscription is left untouched.
+- **Fix a core that outlived its parent and left a process behind.** The core is a child, not a daemon: it must exit when the desktop's private channel closes. The shutdown path held an account lock while waiting for the peer session to end, and the session's own teardown needed that same lock to report its final state — each waiting on the other, so the core hung instead of exiting. Closing now releases the account lock before waiting on the session, so the core follows its parent channel and no process is left behind.
 
 ## 0.1.67 — 2026-09-21
 
