@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/ankye/dshker/networking/internal/controlplane"
@@ -99,7 +100,27 @@ func (account *account) management(ctx context.Context, method string, data json
 		if protocol.Decode(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
-		return account.base.ReadEnrollment(ctx, request.RequestID, request.PrivateKey, account.identity)
+		device, err := account.base.ReadEnrollment(ctx, request.RequestID, request.PrivateKey, account.identity)
+		if err != nil {
+			return nil, err
+		}
+		// Take ownership of the credential this enrollment just produced.
+		//
+		// Every field was minted or received here, inside the core, and used to be
+		// returned and forgotten: the only complete copy then lived in the desktop's
+		// encrypted store, which a headless core cannot read. That is why a freshly
+		// enrolled machine could serve RPC and still never reach the coordinator
+		// without a desktop running. Recording it here is what lets this machine
+		// come up as itself on the next launch, with or without a shell.
+		//
+		// A store that cannot hold it is logged rather than failing the enrollment,
+		// which has already succeeded on the coordinator; the desktop copy still
+		// works and the next restore records it again.
+		if err := account.host.SaveCredential(account.identity.ServiceID, device, request.PrivateKey); err != nil {
+			log.Printf("[p2p] credential could not be recorded after enrollment for service %s: %v",
+				account.identity.ServiceID, err)
+		}
+		return device, nil
 	}
 	if account.client == nil {
 		return nil, errors.New("p2p.device_unregistered")

@@ -357,3 +357,90 @@ func TestReconnectSignalsSerializesConcurrentRepairs(t *testing.T) {
 		t.Fatalf("repairs left %d dials and down=%v; want one live replacement", gotDials, manager.signals.isDown())
 	}
 }
+
+// A manager holding no subscription at all is repairable, not healthy. The first
+// dial can fail while the manager is being created, and the supervisor that would
+// retry is only started by a dial that succeeded — so an absent subscription used
+// to be permanent: ReconnectSignals returned nil without doing anything and every
+// connect answered p2p.server_unavailable for the life of the process.
+func TestReconnectSignalsSubscribesWhenNoneIsHeld(t *testing.T) {
+	managerCtx, stopManager := context.WithCancel(context.Background())
+	defer stopManager()
+	established := newFakeSubscription()
+	var mu sync.Mutex
+	dials := 0
+	dial := func(context.Context, string) (subscription, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		dials++
+		return established, nil
+	}
+	// signals is deliberately nil: the state a manager is left in when its very
+	// first subscription attempt failed.
+	manager := &Manager{ctx: managerCtx, cancel: stopManager, config: Config{Device: controlplane.Device{DeviceID: "device"}}, subscribe: dial}
+
+	if err := manager.ReconnectSignals(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	gotDials := dials
+	mu.Unlock()
+	if gotDials != 1 {
+		t.Fatalf("subscription dials = %d, want 1; an absent subscription was treated as healthy", gotDials)
+	}
+	if manager.signals == nil || manager.signals.isDown() {
+		t.Fatal("repair left the manager without usable signalling")
+	}
+	defer func() { manager.signals.close() }()
+	if err := manager.signals.send(context.Background(), protocol.Signal{Version: 1, Type: "offer"}); err != nil {
+		t.Fatalf("send after repairing absent signalling: %v", err)
+	}
+}
+
+// The end-to-end shape of the reported failure: a displaced socket makes send
+// refuse with p2p.server_unavailable, and the repair an explicit connect now
+// performs has to make that same send work again without restarting anything.
+func TestReconnectSignalsRestoresSendAfterDisplacement(t *testing.T) {
+	managerCtx, stopManager := context.WithCancel(context.Background())
+	defer stopManager()
+	first, second := newFakeSubscription(), newFakeSubscription()
+	var mu sync.Mutex
+	dials := 0
+	dial := func(context.Context, string) (subscription, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		dials++
+		if dials == 1 {
+			return first, nil
+		}
+		return second, nil
+	}
+	manager := &Manager{ctx: managerCtx, cancel: stopManager, config: Config{Device: controlplane.Device{DeviceID: "device"}}, subscribe: dial}
+	var err error
+	manager.signals, err = newSignaling(managerCtx, dial, "device", manager.receive)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { manager.signals.close() }()
+
+	first.displace()
+	waitFor(t, "displaced subscription to go down", manager.signals.isDown)
+	// This is what the user saw: the connect path refused before it ever dialed.
+	if err := manager.signals.send(context.Background(), protocol.Signal{Version: 1, Type: "offer"}); err == nil {
+		t.Fatal("a displaced subscription accepted a send")
+	} else if err.Error() != "p2p.server_unavailable" {
+		t.Fatalf("displaced send error = %v, want p2p.server_unavailable", err)
+	}
+
+	if err := manager.ReconnectSignals(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := manager.signals.send(context.Background(), protocol.Signal{Version: 1, Type: "offer"}); err != nil {
+		t.Fatalf("send after repair: %v", err)
+	}
+	select {
+	case <-second.sent:
+	case <-time.After(time.Second):
+		t.Fatal("the repaired subscription never carried the signal")
+	}
+}

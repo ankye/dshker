@@ -196,7 +196,14 @@ func (host *Host) Close() {
 		if client != nil {
 			client.Close()
 		}
-		base.Close()
+		// An account can exist without a control-plane client: it is registered
+		// under its service id before one is built, and a configure that failed part
+		// way leaves exactly that. The two references above are already guarded;
+		// this one was not, so shutting down in that window panicked on the path
+		// whose whole job is to release the process's resources.
+		if base != nil {
+			base.Close()
+		}
 	}
 }
 
@@ -477,6 +484,22 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		return nil, err
 	}
 	account.client, account.manager, account.device = client, manager, request.Device
+	// Take ownership of the credential this restore carried.
+	//
+	// The core holds the machine's private key but used to keep nothing that says
+	// what that key was enrolled as, so the only complete copy lived in the shell,
+	// encrypted with a key only Electron can use. A core with no desktop attached
+	// therefore could not act as the device it already had the key for: `dshkerd
+	// serve` came up, answered RPC and never reached the coordinator. Recording it
+	// here is what converges an existing installation — the shell restores once, as
+	// it always did, and from then on the core can restore itself.
+	//
+	// A store that cannot hold it is logged rather than failing the restore: this
+	// session is already usable, and refusing it would turn a machine that works
+	// today into one that does not.
+	if err := host.SaveCredential(account.identity.ServiceID, request.Device, request.PrivateKey); err != nil {
+		log.Printf("[p2p] credential could not be recorded for service %s: %v", account.identity.ServiceID, err)
+	}
 	// A restored session starts with no pins, and the peer session admits a
 	// connection only for a pair it has pinned. The catalog pass is what pins, and
 	// answering this call is what the shell takes as "online", so the pass runs
@@ -572,6 +595,25 @@ func (account *account) connection(ctx context.Context, method string, data json
 	}
 	if protocol.Decode(data, &request) != nil || !protocol.ValidID(request.PairID) || request.Generation == 0 {
 		return nil, errors.New("p2p.invalid_request")
+	}
+	// Repair a displaced coordinator subscription before dialing.
+	//
+	// The signalling supervisor deliberately stands down for good when the
+	// coordinator reports that a newer socket for this device exists: reconnecting
+	// would kick the live socket off and the two would displace each other forever.
+	// The cost is that the subscription stays marked down after the newer socket is
+	// itself gone — this process restarting is exactly that case — and every later
+	// connect answered p2p.server_unavailable while both machines still looked
+	// online, because presence travels a different path than signalling. A restart
+	// of the whole Launcher used to be the only exit.
+	//
+	// The repair existed but was only reachable from the reconciliation methods and
+	// from the headless serve loop, so the one action a user actually takes when
+	// nothing works — pressing connect — was the single path that never repaired
+	// anything. A healthy subscription is left untouched, so this is safe to run on
+	// every attempt.
+	if err := manager.ReconnectSignals(ctx); err != nil {
+		return nil, err
 	}
 	return manager.Connect(ctx, request.PairID, request.Generation)
 }

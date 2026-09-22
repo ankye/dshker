@@ -28,6 +28,12 @@ import { fileURLToPath } from 'node:url'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 
+// Windows names an executable with its extension, and the default path below is a
+// build output rather than something resolved through PATH. Without this the
+// default pointed at a file that can never exist on Windows, so the suite reported
+// a missing coordinator on a machine that had built one.
+const executable = (name) => (process.platform === 'win32' ? `${name}.exe` : name)
+
 /**
  * The artefacts the suite needs, and how to get one when it is missing.
  *
@@ -39,12 +45,18 @@ const REQUIREMENTS = [
   {
     variable: 'DSHKER_SERVER_BINARY',
     purpose: 'the coordinator server the peer tests dial',
-    default: path.join(homedir(), 'workspace/go_workspace/dshker-server/bin/dshker-server'),
+    default: path.join(
+      homedir(),
+      'workspace/go_workspace/dshker-server/bin',
+      executable('dshker-server')
+    ),
     probe: (value) => value,
     hint: [
       'Build it from the coordinator checkout:',
       '  cd <coordinator-checkout>',
-      '  go build -mod=readonly -trimpath -o bin/dshker-server ./cmd/dshker-server'
+      '  go build -mod=readonly -trimpath -o bin/dshker-server ./cmd/dshker-server',
+      'On Windows the output carries the .exe suffix:',
+      '  go build -mod=readonly -trimpath -o bin/dshker-server.exe ./cmd/dshker-server'
     ]
   },
   {

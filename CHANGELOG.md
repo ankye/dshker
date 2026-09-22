@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.69 — 2026-09-22
+
+### 简体中文 (zh-CN)
+
+- **修复点"连接"仍然回答 `p2p.server_unavailable`。** 0.1.68 修复了信令订阅的自动修复，但只接在自动重连和无界面定时通道上；用户真正会做的动作——手动点击连接——恰恰是唯一不修复信令的路径，于是被顶替的订阅一直停摆，连接始终失败而两台机器都显示在线。现在每次连接前都会先修复信令，健康的连接不受影响。
+- **修复首次订阅失败后永远无法恢复。** 核心在创建时如果第一次订阅协调器就失败，之后负责重试的监督协程根本不会启动，而修复逻辑把"没有订阅"当成健康状态直接跳过：这台机器此后永远无法收发信令，且没有任何操作能修回来。现在"没有订阅"被视为需要修复的状态。
+- **网络核心接管设备凭据，无界面运行不再需要桌面端。** 设备私钥一直由核心保管，但凭据中说明"这把私钥注册成了哪台设备"的部分——协调器签发的设备编号、证书、所属账户——只存在桌面端的加密存储里，核心读不到。因此 `dshkerd` 独立运行时能应答所有调用却不知道自己是谁：不建立协调器订阅、不上报在线状态，对端看到的永远是一台离线机器，而这台机器看起来明明装好了并正在运行。现在核心在完成注册以及桌面端交接凭据时各自留存一份完整记录，启动时自行恢复。升级后首次仍需启动一次桌面端完成交接。
+- **修复核心关闭时可能崩溃。** 关闭流程会释放每个账户持有的资源，其中两项做了空值检查，第三项没有：一个尚未完成配置的账户会让核心在退出时崩溃——而这正是负责释放资源的那条路径。
+- **修复集成测试在 Windows 上无法启动。** 测试入口没有任何平台判断，协调器二进制的默认路径不带 `.exe` 后缀，在 Windows 上永远指向一个不存在的文件，整套集成测试因此默认跑不起来。
+
+### English (en-US)
+
+- **Fix pressing connect still answering `p2p.server_unavailable`.** 0.1.68 added the signalling repair but wired it only into the reconciliation methods and the headless ticker. The one action a user actually takes when nothing works — pressing connect — was the single path that never repaired anything, so a displaced subscription stayed down and every attempt failed while both machines showed as online. Connect now repairs signalling first, and a healthy subscription is left untouched.
+- **Fix a first subscription failure being permanent.** When the very first dial to the coordinator failed while the manager was being created, the supervisor that would have retried was never started, and the repair treated "no subscription" as healthy and returned without doing anything. The machine could then never signal again, with no operation able to recover it. An absent subscription is now repairable.
+- **The networking core now owns the device credential, so headless runs no longer need a desktop.** The core always held the machine's private key, but the part of the credential naming what that key was enrolled as — the coordinator-issued device id, the certificate, the account it belongs to — lived only in the desktop's encrypted store, which the core cannot read. `dshkerd` running on its own therefore answered every method while being nobody: no coordinator subscription, no presence, and every attempt toward it saw an offline peer while the machine looked installed and running. The core now records its own complete credential when an enrollment completes and when a desktop hands one over, and restores itself on startup. The first launch after updating still needs the desktop once, to hand the existing credential over.
+- **Fix a crash while the core was shutting down.** Shutdown releases the resources each account holds. Two of those references were checked for absence and the third was not, so an account that had not finished being configured crashed the core on exit — on the path whose whole job is to release resources.
+- **Fix the integration suite being unable to start on Windows.** The test entry point had no platform handling, so the default path for the coordinator binary lacked the `.exe` suffix and always pointed at a file that cannot exist on Windows, leaving the whole suite unable to run by default.
+
 ## 0.1.68 — 2026-09-22
 
 ### 简体中文 (zh-CN)

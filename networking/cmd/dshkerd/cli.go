@@ -347,6 +347,18 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	// schedule, one set of recorded refusals.
 	reconnect := host.AutoConnectEngine()
 	defer reconnect.Close()
+	// Come up as the device this machine already is.
+	//
+	// Nothing else in a headless run restores an account. The credential used to be
+	// owned by the desktop, so a core with no desktop attached served every method
+	// while being nobody: no coordinator subscription, no presence, and every
+	// attempt toward it saw an offline peer while the machine looked installed. The
+	// core now records its own credential whenever a desktop restores one or an
+	// enrollment completes, which is what makes this possible. It runs before the
+	// first reconcile so the engine has accounts to work with on its first pass.
+	if restored := host.RestoreOwnCredentials(ctx); restored > 0 {
+		log.Printf("[p2p] restored %d stored credential(s) with no desktop attached", restored)
+	}
 	go func() {
 		ticker := time.NewTicker(reconnectInterval)
 		defer ticker.Stop()
