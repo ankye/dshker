@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.70 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
+- **修复先登录的机器对后登录的机器不可达。** 在线状态由协调器按"设备 + 账户"记录，而核心上报的账户只在恢复设备时设定一次——取自凭据里记录的账户——之后用户登录、切换账户或登出都不会更新。先登录的那台机器因此一直按旧账户上报在线状态：它确实在线，但对端按自己登录的账户去查却查不到，于是连接被拒为 `p2p.peer_offline`，而两台机器在界面上都显示在线。退出重启之所以能"修好"，只是因为重启会先恢复已保存的登录会话，设备恢复时才拿到了正确的账户。现在登录、登出以及重启时的会话恢复都会更新上报的账户。
+
+### English (en-US)
+
+- **Fix the machine that signed in first being unreachable from the one that signed in second.** The coordinator records presence per device and account, but the account the core reported was set once, while restoring the device, from whatever the credential recorded — and never updated when the user signed in, switched accounts or signed out. The machine that signed in first therefore kept reporting presence for the earlier account: it was genuinely online, the peer looked under the account it was itself signed in to, found nothing, and every attempt was refused as `p2p.peer_offline` while both machines displayed as online. Quitting and restarting appeared to fix it only because a restart restores the saved login session before the device, so the restore finally carried the right account. Signing in, signing out and restoring a session on restart now all update the reported account.
+
 ## 0.1.69 — 2026-09-22
 
 ### 简体中文 (zh-CN)

@@ -312,6 +312,37 @@ func (host *Host) manage(ctx context.Context, account *account, method string, d
 	if err != nil {
 		return result, err
 	}
+	// Report presence for the account actually in use.
+	//
+	// Presence is recorded per (device, account) pair and the coordinator authorizes
+	// a connection by finding both ends online under one shared account. The account
+	// the core reports was set once, while restoring the device, from whatever the
+	// credential recorded — and never again. Signing in afterwards therefore left the
+	// core reporting for the previous account: the machine was genuinely online, the
+	// peer asking about it looked under the account it was itself signed in to, found
+	// nothing, and every attempt was refused as p2p.peer_offline while both sides
+	// displayed as online. Whichever machine signed in first was the one that became
+	// unreachable, and restarting it "fixed" it only because a restart restores the
+	// persisted session before the device.
+	if account.client != nil {
+		switch method {
+		case "user.login":
+			if session, ok := result.(controlplane.UserSession); ok && session.User.UserID != "" {
+				account.client.SetAccount(session.User.UserID)
+			}
+		case "user.current":
+			// A restart signs in by restoring its persisted token rather than by
+			// logging in again, and this is the call that reads it. Without this the
+			// fix above would only hold until the next launch.
+			if user, ok := result.(controlplane.User); ok && user.UserID != "" {
+				account.client.SetAccount(user.UserID)
+			}
+		case "user.logout":
+			// Signed in nowhere reads as offline, which is the truth: an account that
+			// is no longer signed in must not keep this machine reachable.
+			account.client.SetAccount("")
+		}
+	}
 	if method == "user.logout" {
 		account.forgetToken()
 		account.host.announceDirectory(account.identity.ServiceID, account.snapshot(account.identity.ServiceID).Revision)
