@@ -127,26 +127,29 @@ jobs:
           go-version-file: networking/go.mod
           cache-dependency-path: networking/go.sum
 
-      # Without the token this job cannot build the coordinator it dials. It says so
-      # in the run summary and stops, rather than reporting a pass it did not earn:
-      # a peer suite that quietly ran nothing is what let three defects reach two
-      # installed machines. Set COORDINATOR_REPO_TOKEN to a token that can read
-      # ankye/dshker-server and this job starts enforcing on every push.
-      - name: Check for the coordinator token
+      # Without this key the job cannot build the coordinator it dials. It says so in
+      # the run summary and stops there, rather than reporting a pass it did not
+      # earn: a peer suite that quietly ran nothing is what let three defects reach
+      # two installed machines.
+      #
+      # The credential is a read-only deploy key for ankye/dshker-server alone, not
+      # an account token: it cannot write anything, and it grants no access to any
+      # other repository.
+      - name: Check for the coordinator key
         id: coordinator
         env:
-          COORDINATOR_TOKEN: ${{ secrets.COORDINATOR_REPO_TOKEN }}
+          COORDINATOR_SSH_KEY: ${{ secrets.COORDINATOR_SSH_KEY }}
         run: |
-          if [[ -z "$COORDINATOR_TOKEN" ]]; then
+          if [[ -z "$COORDINATOR_SSH_KEY" ]]; then
             {
               echo "### Peer connection suite did not run"
               echo
-              echo 'No `COORDINATOR_REPO_TOKEN` secret is configured, so the coordinator this'
+              echo 'No `COORDINATOR_SSH_KEY` secret is configured, so the coordinator this'
               echo 'suite dials could not be built. The peer connection is therefore **unverified**'
               echo 'by CI; it was checked by hand before release.'
             } >> "$GITHUB_STEP_SUMMARY"
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::warning title=Peer suite skipped::COORDINATOR_REPO_TOKEN is not set, so the peer connection was not verified."
+            echo "::warning title=Peer suite skipped::COORDINATOR_SSH_KEY is not set, so the peer connection was not verified."
             exit 0
           fi
           echo "available=true" >> "$GITHUB_OUTPUT"
@@ -154,10 +157,16 @@ jobs:
       - name: Check out the coordinator
         if: steps.coordinator.outputs.available == 'true'
         env:
-          COORDINATOR_TOKEN: ${{ secrets.COORDINATOR_REPO_TOKEN }}
+          COORDINATOR_SSH_KEY: ${{ secrets.COORDINATOR_SSH_KEY }}
         run: |
-          git clone --depth 1 \
-            "https://x-access-token:${COORDINATOR_TOKEN}@github.com/ankye/dshker-server.git" \
+          # The key is written to the runner's own temp dir, read only by this step's
+          # git, and removed before the step ends even if the clone fails.
+          key="${RUNNER_TEMP}/coordinator_key"
+          umask 077
+          printf '%s\n' "$COORDINATOR_SSH_KEY" > "$key"
+          trap 'rm -f "$key"' EXIT
+          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
+            git clone --depth 1 git@github.com:ankye/dshker-server.git \
             "${RUNNER_TEMP}/dshker-server"
 
       - name: Build the coordinator
@@ -167,11 +176,7 @@ jobs:
           CGO_ENABLED=0 go build -mod=vendor -trimpath \
             -o "${RUNNER_TEMP}/dshker-server/bin/dshker-server" ./cmd/dshker-server
 
-      # The two cases suffixed RealDSH drive a real built DSH Harness, which this
-      # job does not have; the other thirty need only the coordinator. They are
-      # excluded by that suffix rather than by name, so a new one cannot be added
-      # without either a harness here or the same suffix.
-      # vet needs nothing external, so it runs whether or not the token exists.
+      # vet needs nothing external, so it runs whether or not the key exists.
       - name: Vet the headless core
         working-directory: networking
         run: go vet ./...
