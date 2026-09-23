@@ -216,8 +216,13 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 	if err != nil {
 		return Connected{}, err
 	}
+	fmt.Fprintf(os.Stderr, "connect requested pair=%s target=%s generation=%d\n", pairID, target, generation)
 	lease, err := manager.client.Begin(connection.ctx, target, generation)
 	if err != nil {
+		// The coordinator's answer decides whether this attempt exists at all, and
+		// it was discarded: an authorization refused as an offline peer or an
+		// unreachable server reached the user as a sentence with nothing behind it.
+		fmt.Fprintf(os.Stderr, "connect refused pair=%s target=%s: %v\n", pairID, target, err)
 		return Connected{}, err
 	}
 	_, err = manager.start(pairID, lease, connection)
@@ -233,6 +238,10 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		signals := manager.signals
 		manager.mu.Unlock()
 		if signals == nil {
+			// Reported to the user as "cannot reach the coordinator" even though
+			// the coordinator may be perfectly reachable: what is missing is this
+			// machine's own signal subscription.
+			fmt.Fprintf(os.Stderr, "connect pair=%s: no signal subscription on this machine\n", pairID)
 			err = errors.New("p2p.server_unavailable")
 		} else {
 			err = signals.send(deadline, offer)
@@ -646,6 +655,10 @@ func (manager *Manager) receive(active subscription) {
 				pairID, ok := manager.pairForRemoteLocked(event.Lease.FromDeviceID, event.Lease.NetworkID)
 				manager.mu.Unlock()
 				if ok {
+					// An inbound attempt that is accepted was as silent as one that
+					// was dropped, so the receiving machine's log could not show
+					// that a peer had even reached it.
+					fmt.Fprintf(os.Stderr, "attempt inbound pair=%s attempt=%s from=%s\n", pairID, event.Lease.AttemptID, event.Lease.FromDeviceID)
 					if _, err := manager.start(pairID, event.Lease, nil); err != nil {
 						fmt.Fprintf(os.Stderr, "start %s: %v\n", pairID, err)
 					}
@@ -723,6 +736,25 @@ func (manager *Manager) run(connection *session) {
 	renewed := make(chan struct{})
 	go func() { defer close(renewed); manager.renew(connection) }()
 	state := State{PairID: connection.PairID, AttemptID: connection.lease.AttemptID, Generation: connection.lease.Generation, Stage: "punching"}
+	// Report the whole life of a connection, not only its refusals.
+	//
+	// Every stage transition was silent and only a handful of failure branches
+	// logged anything, so a connection that never became usable left no trace of
+	// how far it got: one empty log covered a peer that was never reachable, a
+	// transport that never formed, and a runtime the far side refused to start.
+	// Naming each stage is what makes a single attempt readable afterwards.
+	role := "answered"
+	if initiator {
+		role = "initiated"
+	}
+	logStage := func(stage string, err error) {
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "session %s %s pair=%s attempt=%s: %v\n", role, stage, connection.PairID, connection.lease.AttemptID, err)
+			return
+		}
+		fmt.Fprintf(os.Stderr, "session %s %s pair=%s attempt=%s\n", role, stage, connection.PairID, connection.lease.AttemptID)
+	}
+	logStage(state.Stage, nil)
 	announce(state)
 	defer func() {
 		connection.cancel()
@@ -731,6 +763,7 @@ func (manager *Manager) run(connection *session) {
 		if state.Stage != "failed" {
 			state.Stage = "disconnected"
 		}
+		logStage(state.Stage, nil)
 		announce(state)
 		manager.end(connection.lease)
 		// The endpoint (and its gateway, its port, its URL) is not torn down here:
@@ -758,6 +791,7 @@ func (manager *Manager) run(connection *session) {
 	}
 	if err == nil {
 		state.Stage = "starting-runtime"
+		logStage(state.Stage, nil)
 		announce(state)
 		// The browsed runtime and the served one are separate attachments, so the
 		// direction picks the map: a dialled session's Endpoint carries the
@@ -827,6 +861,7 @@ func (manager *Manager) run(connection *session) {
 	connection.err = err
 	if err == nil {
 		state.Stage = "ready"
+		logStage(state.Stage, nil)
 		connection.result = Connected{State: state, URL: readyURL}
 	} else {
 		// The runtime is only attempted once the direct path is ready, so a
@@ -837,6 +872,9 @@ func (manager *Manager) run(connection *session) {
 		state.Stage = "failed"
 		state.Error = namedRefusal(err, transportReady)
 		connection.refusal = state.Error
+		// The refusal the user is shown plus the error it came from: a mapped code
+		// alone cannot distinguish the several causes that share it.
+		logStage(fmt.Sprintf("failed(%s)", state.Error), err)
 	}
 	connection.mu.Unlock()
 	close(connection.ready)

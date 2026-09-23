@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { readFileSync, realpathSync, statSync } from 'node:fs'
+import { readdirSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 
@@ -72,6 +72,7 @@ export function resolveWindowsPnpmLauncher(
     const shimDirectory = canonicalDirectory(shim)
     const node = [
       ...(shimDirectory === undefined ? [] : [path.join(shimDirectory, 'node.exe')]),
+      path.join(path.dirname(shim), 'node.exe'),
       ...directories.map((entry) => path.join(entry, 'node.exe'))
     ].find(isRegularFile)
     if (scriptPath !== undefined && node !== undefined) {
@@ -187,6 +188,12 @@ function windowsCommandDirectories(): string[] {
     // shell's PATH either. Searching the real location is what closes that gap.
     path.join(homedir(), 'scoop', 'persist', 'nodejs', 'bin'),
     path.join(homedir(), 'scoop', 'shims'),
+    // Scoop exposes the selected Node through a `current` junction, and a
+    // desktop-launched process cannot always follow it — the junction then
+    // contributes nothing and node.exe appears to be missing. Naming the version
+    // directories directly reaches the same files without the link, which is what
+    // lets a resolved pnpm shim find the Node it needs to run.
+    ...versionDirectories(path.join(homedir(), 'scoop', 'apps', 'nodejs')),
     process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'nodejs')
   ]
   return [
@@ -196,6 +203,17 @@ function windowsCommandDirectories(): string[] {
         .map((entry) => entry.replace(/^"|"$/gu, ''))
     )
   ]
+}
+
+/** Lists an installation root's concrete version directories, newest names last. */
+function versionDirectories(root: string): readonly string[] {
+  try {
+    return readdirSync(root, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && entry.name !== 'current')
+      .flatMap((entry) => [path.join(root, entry.name), path.join(root, entry.name, 'bin')])
+  } catch {
+    return []
+  }
 }
 
 /** Splits the platform's command search path, ignoring blank entries. */

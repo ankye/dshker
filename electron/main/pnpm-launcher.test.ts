@@ -106,3 +106,36 @@ describe('a candidate that cannot be inspected', () => {
     expect(launcher.resolutionError).toContain(empty)
   })
 })
+
+describe('an installation that keeps its entry script apart from Node', () => {
+  // Scoop's layout: the shim and pnpm's entry script live under persist/, and
+  // node.exe lives in a versioned app directory reached through a junction.
+  //
+  // Only the junction was ever searched. A desktop-launched process cannot always
+  // follow it, so node.exe appeared to be missing, a working pnpm was discarded,
+  // and the launcher reported that none was installed — which refused the DSH
+  // launch an inbound connection needs and surfaced to the user as a coordinator
+  // failure. Naming the version directory reaches the same node.exe without the
+  // link.
+  it('resolves when node.exe is only in another searched directory', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'pnpm split '))
+    directories.push(root)
+
+    // Where the shim and its script live: no node.exe here.
+    const persist = path.join(root, 'persist', 'nodejs', 'bin')
+    const script = path.join(persist, 'node_modules', 'pnpm', 'bin', 'pnpm.mjs')
+    mkdirSync(path.dirname(script), { recursive: true })
+    writeFileSync(script, '')
+    writeFileSync(path.join(persist, 'pnpm.cmd'), '@"%~dp0\\node_modules\\pnpm\\bin\\pnpm.mjs" %*')
+
+    // Where Node lives: a separate versioned directory.
+    const versioned = path.join(root, 'apps', 'nodejs', '22.22.2')
+    mkdirSync(versioned, { recursive: true })
+    writeFileSync(path.join(versioned, 'node.exe'), '')
+
+    const launcher = resolveWindowsPnpmLauncher([persist, versioned])
+    expect(launcher.resolutionError).toBeUndefined()
+    expect(launcher.executable).toBe(path.join(versioned, 'node.exe'))
+    expect(launcher.prefixArguments).toEqual([realpathSync(script)])
+  })
+})

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.73 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
+- **修复 pnpm 的启动脚本与 Node 分开存放时被判定为没安装。** scoop 就是这种布局：shim 和 pnpm 的入口脚本放在 `persist` 下，而 `node.exe` 在带版本号的目录里、通过一个链接对外暴露。此前只查那个链接，而从桌面启动的进程未必能跟随它，于是 `node.exe` 看起来不存在、一个完全可用的 pnpm 被丢弃、报告"没有安装 pnpm"——对方连过来时所需的 DSH 启动因此被拒，最终显示为"连不上协调服务器"。现在直接查带版本号的目录，不再依赖那个链接。
+- **记录每一次连接的完整过程，而不只是失败。** 之前每个阶段的转换都是静默的，只有少数几个失败分支会输出，所以一次没能连上的尝试留不下任何痕迹：对方从未可达、直连从未建立、对方拒绝启动工作台——三种情况共用同一份空日志。现在连接请求、协调器的授权结果、收到的入站尝试、每一次阶段转换（打洞、启动运行时、就绪、断开、失败）以及失败对应的原始错误都会记录下来。
+
+### English (en-US)
+
+- **Fix pnpm being reported as missing when its entry script is kept apart from Node.** Scoop uses exactly this layout: the shim and pnpm's entry script live under `persist`, while `node.exe` sits in a versioned directory exposed through a link. Only that link was searched, and a desktop-launched process cannot always follow it, so `node.exe` appeared to be absent, a working pnpm was discarded, and the launcher reported none installed — which refused the DSH launch an inbound connection needs and surfaced as "cannot reach the coordinator". The versioned directories are now searched directly, without depending on the link.
+- **Record the whole life of a connection, not only its failures.** Every stage transition was silent and only a few failure branches printed anything, so an attempt that never connected left no trace of how far it got: a peer that was never reachable, a direct path that never formed, and a far side refusing to start its workbench all shared one empty log. A connection request, the coordinator's authorization result, an accepted inbound attempt, every stage transition (punching, starting-runtime, ready, disconnected, failed) and the underlying error behind a failure are now all recorded.
+
 ## 0.1.72 — 2026-09-23
 
 ### 简体中文 (zh-CN)
