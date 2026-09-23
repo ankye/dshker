@@ -102,6 +102,15 @@ func (endpoint *Endpoint) Detach(expected *peer.Mux) bool {
 	return true
 }
 
+// CurrentMux reports the session this endpoint currently serves, or nil when it
+// serves none. Used to detach exactly the session that is ending, so a
+// replacement installed in the meantime is never dropped by mistake.
+func (endpoint *Endpoint) CurrentMux() *peer.Mux {
+	endpoint.mu.Lock()
+	defer endpoint.mu.Unlock()
+	return endpoint.mux
+}
+
 // Replace attaches a rebuilt session, dropping the previous one's connections
 // first so nothing is pooled across two different sessions.
 func (endpoint *Endpoint) Replace(mux *peer.Mux, binding Binding) error {

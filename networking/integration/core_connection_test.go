@@ -363,3 +363,100 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 	}
 	drainInto(coreStates, "ready")
 }
+
+// TestCoreDaemonAttachesAWorkbenchThatRecovers proves the optional workbench is
+// genuinely optional in both directions: a pair connects while the peer has none,
+// and a later attempt picks one up without the connection having to be rebuilt by
+// hand.
+//
+// This is the sequence a user actually hits — DSH is broken, they fix it, they
+// expect the tab to work — and the one most likely to be left behind by making a
+// workbench optional at all.
+func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := context.WithTimeout(f.ctx, 180*time.Second)
+	defer cancel()
+
+	runtimeURL, stopRuntime := startStubDSH(t)
+	defer stopRuntime()
+
+	// The workbench is unavailable at first and becomes available later, which is
+	// what repairing a broken DSH looks like from this side.
+	var ownerMu sync.Mutex
+	available := false
+	f.devices[1].SetAccount(f.config[1].Device.UserID)
+	remote, err := peersession.New(
+		ctx,
+		f.devices[1],
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private},
+		[]controlplane.PairIdentity{f.config[1].Pin},
+		func(context.Context, string) (runtimebridge.Binding, error) {
+			ownerMu.Lock()
+			defer ownerMu.Unlock()
+			if !available {
+				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
+			}
+			return runtimebridge.Binding{Generation: 2, URL: runtimeURL}, nil
+		},
+		func(peersession.State) {},
+	)
+	must(t, err)
+	defer remote.Close()
+
+	parent, stopCore := startCoreDaemon(t, func(_ context.Context, method string, payload json.RawMessage) (any, error) {
+		switch method {
+		case "runtime.connect":
+			return nil, errors.New("p2p.unexpected_runtime_owner")
+		case "peer.state":
+			_ = payload
+			return struct{}{}, nil
+		}
+		return nil, errors.New("p2p.invalid_operation")
+	}, coreTrustArguments(t, f)...)
+	defer stopCore()
+
+	identity := configureCoreService(t, ctx, parent, f)
+	restoreCoreDevice(t, ctx, parent, f)
+	pairID := f.config[0].Pin.Pair.PairID
+
+	connect := func(generation uint64) peersession.Connected {
+		raw := callCore(t, ctx, parent, "peer.connect", struct {
+			ServiceID string `json:"serviceId"`
+			Data      struct {
+				PairID     string `json:"pairId"`
+				Generation uint64 `json:"generation"`
+			} `json:"data"`
+		}{ServiceID: identity.ServiceID, Data: struct {
+			PairID     string `json:"pairId"`
+			Generation uint64 `json:"generation"`
+		}{PairID: pairID, Generation: generation}})
+		var answer peersession.Connected
+		must(t, json.Unmarshal(raw, &answer))
+		return answer
+	}
+
+	// Connected with no workbench: ready, and no address because there is nothing
+	// to address.
+	first := connect(1)
+	if first.State.Stage != "ready" || first.URL != "" {
+		t.Fatalf("connect without a workbench = %+v url=%q", first.State, first.URL)
+	}
+
+	// The workbench comes back. The next attempt must attach it and hand out a
+	// working address; nothing about the earlier attempt may prevent that.
+	ownerMu.Lock()
+	available = true
+	ownerMu.Unlock()
+
+	second := connect(2)
+	if second.State.Stage != "ready" {
+		t.Fatalf("connect after the workbench recovered = %+v", second.State)
+	}
+	if second.URL == "" {
+		t.Fatal("a recovered workbench produced no address, so the tab would stay dead")
+	}
+	// And the address genuinely serves the peer's workbench through the tunnel.
+	if err := runtimebridge.Probe(ctx, second.URL); err != nil {
+		t.Fatalf("probe through the recovered workbench: %v", err)
+	}
+}

@@ -137,6 +137,16 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 	// that is what being connected means. Attaching a workbench later is the job of
 	// the next Establish for this pair, which replaces the session in place.
 	if _, usable := binding.Endpoint(); usable != nil {
+		// A pair that had a workbench before keeps its attachment, and with it the
+		// stable address a tab may already be showing. That attachment must not be
+		// left pointing at the session it held previously: this reconnect replaces
+		// it, and the old mux is about to die with the old session. Detaching drops
+		// the dead session's pooled connections and tells the listening side the
+		// address currently serves nothing, instead of leaving an address that
+		// answers every request with a failure while the UI reports ready.
+		if attachment != nil {
+			attachment.Detach(attachment.CurrentMux())
+		}
 		return nil, attachment, mux, binding, nil
 	}
 	var gateway *Gateway

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.75 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
+- **修复工作台挂掉后，原来的地址还能打开却什么都打不开。** 某台电脑之前连接正常、有工作台（地址稳定，标签页可能正开着），之后它的 DSH 挂掉重连时，那个地址仍然指向已经结束的旧会话：界面显示"已就绪"、地址看起来正常，但每个请求都失败——这比直接连不上更难判断。现在这种情况下地址会明确报"正在重连"，而不是假装可用。
+- **补上工作台恢复后的验证。** 新增测试覆盖用户真正会走的顺序——DSH 坏了、修好、标签页应该能用：先在对方没有工作台时连上，再确认工作台恢复后被自动挂上，且那个地址真的能通到对方。
+
+### English (en-US)
+
+- **Fix a workbench address that stayed openable but served nothing after the workbench died.** A computer that had connected successfully and had a workbench (a stable address, possibly with a tab open on it) kept pointing that address at a session that had already ended once its DSH died and the pair reconnected: the interface said ready and the address looked fine while every request through it failed — harder to diagnose than not connecting at all. Such an address now reports that it is reconnecting instead of pretending to work.
+- **Cover the workbench recovery path.** A new test follows the sequence users actually hit — DSH broken, fixed, tab expected to work: connect while the peer has no workbench, then confirm a recovered one is attached automatically and that its address genuinely serves the peer.
+
 ## 0.1.74 — 2026-09-23
 
 ### 简体中文 (zh-CN)
