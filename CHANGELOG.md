@@ -4,6 +4,28 @@
 
 ### 简体中文 (zh-CN)
 
+- **修复曾经有工作台的电脑，工作台坏掉后整条连接失败。** 之前有工作台、后来 DSH 坏掉重连时，系统仍然公布那个已经不服务任何东西的地址，随后对它的健康检查失败，把一条本来正常的连接判为失败（`p2p.runtime_http_failed`）。结果很荒谬：从没有过工作台的电脑能连上，而丢掉自己工作台的那台连不上。现在地址只在这次连接真的带着工作台时才公布。
+- **发布流程不会再产出装不了的版本。** 上一个 tag 构建全部成功、release 也建好了，但安装包一个都没上传，而流程认为成功——你只有去装的时候才会发现。现在会核对 release 上实际挂了哪些安装包，缺少就让构建失败。
+- **协调服务器同步更新。** 服务器和客户端各有一份协议解码器，靠人工同步；这次把服务器上中继客户端数据的那部分也放宽，否则客户端将来加字段又会被服务器拒收，表现成"新客户端连不上"。服务器自己的 HTTP 接口仍然严格。已部署到线上。
+- **两台电脑之间的通信协议现在可以演进了。** 此前任何一方多发一个字段，另一方都会整条消息拒收，所以协议一旦定型就再也不能加东西——这正是为什么一个修复只装了一台机器时完全不生效，而且两端日志各说各话。现在不认识的字段会被忽略。
+- **握手加入能力声明，一次加好、以后不必再改结构。** 用名称列表而非逐个功能加字段。第一个能力是"没有工作台也维持连接"：对方是旧版时，日志直接说明"本端保持连接，但对方的版本会主动断开，请升级"。
+- **区分两类消息各用各自的严格程度。** 跨机器的对等消息容忍未知字段（两端独立升级）；本机内部通道和自家服务器响应保持严格（出现未知字段说明契约漂移，应尽早暴露）。
+- **测试覆盖工作台的全部五种结局。** 一次运行覆盖：拒绝、恢复、恢复后再次丢失、返回不可用地址、二次恢复。每一项都对应一个已经发布出去的缺陷——上面第一条就是这个测试发现的。
+
+### English (en-US)
+
+- **Fix a computer that had a workbench failing its whole connection once that workbench died.** After having one, a pair that reconnected still published an address that no longer served anything; the health check against it then failed and condemned an otherwise healthy connection as `p2p.runtime_http_failed`. The result was backwards: a computer that never had a workbench could connect, while one that lost its own could not. An address is now published only when the attempt genuinely carries a workbench.
+- **The release pipeline can no longer ship a version nobody can install.** The previous tag built successfully and created its release, yet uploaded zero installers while reporting success — discoverable only by trying to install it. The pipeline now checks which installers the release actually holds and fails when they are missing.
+- **The coordinator is updated to match.** Server and client each carry their own copy of the protocol decoder, kept in sync by hand; the server half that parses relayed client traffic is now tolerant too, otherwise a client that adds a field would be rejected there and surface as "the new client cannot connect". The server's own HTTP API stays strict. Deployed.
+- **The protocol between two computers can now evolve.** Any field one side added was enough for the other to reject the entire message, so the contract was frozen the moment it shipped — which is why a fix installed on one machine had no effect until the other was upgraded, each side's log blaming something different. Unknown fields are now ignored.
+- **The handshake advertises capabilities, designed once so the structure never changes again.** A list of names rather than a field per feature. The first is "keeps a connection with no workbench": against an older peer the log now says plainly that this side keeps the link while the peer's build will close it and should be upgraded.
+- **Two classes of message, each with the strictness it needs.** Cross-machine peer messages tolerate unknown fields because the ends upgrade independently; this process's private channel and our coordinator's responses still refuse them, because there an unknown field means drift and must be loud.
+- **Test coverage for all five workbench outcomes.** One run covers refusal, recovery, loss after recovery, an unusable address, and a second recovery. Every row is a defect that already shipped — the first entry above is one this test found.
+
+## 0.1.75 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
 - **两台电脑之间的通信协议现在可以演进了。** 此前任何一方多发一个字段，另一方都会整条消息拒收，所以协议一旦定型就再也不能加东西——这正是为什么一个修复只装了一台机器时完全不生效，而且两端日志各说各话、谁都说不清原因。现在不认识的字段会被忽略，以后新增可选字段不会让旧版本断连。
 - **握手加入能力声明，一次加好、以后不必再改结构。** 用的是名称列表而不是逐个功能加字段，所以后续新增能力只是多一个名字。第一个能力是"没有工作台也维持连接"：当对方是不支持它的旧版本时，日志会直接说明"本端保持连接，但对方的版本会主动断开，请升级"，而不是留下两份互相矛盾的日志。
 - **区分两类消息，各用各自合适的严格程度。** 跨机器的对等消息（握手、数据帧、信令、目录）容忍未知字段，因为两端各自独立升级；本机内部通道和自家协调服务器的响应保持严格拒收，因为那里出现不认识的字段说明契约漂移了，尽早发现比容忍更有价值。顺带：数据帧走的是较快的那条解析路径。

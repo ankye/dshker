@@ -489,3 +489,32 @@ jobs:
             --verify-tag \
             --notes "$release_notes" \
             --title "DSHKer Launcher ${GITHUB_REF_NAME}"
+
+      - name: Refuse a release that carries no installers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          # A release whose upload silently produced nothing is worse than a failed
+          # build: the tag looks published, the version is announced, and the only
+          # way anyone finds out is by trying to install it. `gh release create` has
+          # exited 0 with zero assets attached, so success is asserted here against
+          # what the release actually holds.
+          attached="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length')"
+          echo "attached assets: ${attached}"
+          missing=0
+          for required in \
+            "dshker-launcher-*-mac-arm64.dmg" \
+            "dshker-launcher-*-mac-x64.dmg" \
+            "dshker-launcher-*-win-x64.exe" \
+            "dshker-launcher-*-win-arm64.exe" \
+            "checksums.txt"; do
+            if ! gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' | grep -q -- "${required//\*/.*}"; then
+              echo "::error title=Missing release asset::${GITHUB_REF_NAME} has no asset matching ${required}."
+              missing=1
+            fi
+          done
+          if [[ "$attached" -eq 0 || "$missing" -ne 0 ]]; then
+            echo "::error title=Empty or incomplete release::Refusing to leave ${GITHUB_REF_NAME} published without its installers."
+            exit 1
+          fi

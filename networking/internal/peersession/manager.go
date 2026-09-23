@@ -855,8 +855,17 @@ func (manager *Manager) run(connection *session) {
 	// peer's loopback address and means nothing on this machine. Only the first
 	// Establish creates the gateway; every later one replaces the session inside
 	// the same one, so the address is already recorded there.
+	// An address is reported only when this attempt actually carries a workbench.
+	//
+	// The binding is that fact. Reading the address off any surviving endpoint
+	// instead meant a pair that once had a workbench kept publishing its address
+	// after losing it: the endpoint outlives one session on purpose, so it was still
+	// there, no longer serving anything. The probe below then failed against it and
+	// took down a connection that was otherwise fine, reported as
+	// p2p.runtime_http_failed — a pair that had never had a workbench connected,
+	// while one that had lost its own could not.
 	var readyURL string
-	if err == nil {
+	if _, usable := binding.Endpoint(); err == nil && usable == nil {
 		if gateway != nil {
 			readyURL = gateway.URL
 		} else if endpoint != nil {

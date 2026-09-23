@@ -460,3 +460,154 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 		t.Fatalf("probe through the recovered workbench: %v", err)
 	}
 }
+
+// TestCoreDaemonSurvivesEveryWorkbenchOutcome is one run that covers the whole
+// matrix of workbench outcomes a real pair goes through, because verifying these
+// by installing builds on two machines costs far more than the connection itself.
+//
+// Each row is a defect that actually shipped. None of them was visible while every
+// test handed out a workbench that always started.
+func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := context.WithTimeout(f.ctx, 300*time.Second)
+	defer cancel()
+
+	runtimeURL, stopRuntime := startStubDSH(t)
+	defer stopRuntime()
+
+	// The owner's answer is switched between attempts; every case below states what
+	// the pair must do with that answer.
+	var ownerMu sync.Mutex
+	answer := func() (runtimebridge.Binding, error) {
+		return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
+	}
+	f.devices[1].SetAccount(f.config[1].Device.UserID)
+	remote, err := peersession.New(
+		ctx,
+		f.devices[1],
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private},
+		[]controlplane.PairIdentity{f.config[1].Pin},
+		func(context.Context, string) (runtimebridge.Binding, error) {
+			ownerMu.Lock()
+			current := answer
+			ownerMu.Unlock()
+			return current()
+		},
+		func(peersession.State) {},
+	)
+	must(t, err)
+	defer remote.Close()
+
+	parent, stopCore := startCoreDaemon(t, func(_ context.Context, method string, payload json.RawMessage) (any, error) {
+		switch method {
+		case "runtime.connect":
+			return nil, errors.New("p2p.unexpected_runtime_owner")
+		case "peer.state":
+			_ = payload
+			return struct{}{}, nil
+		}
+		return nil, errors.New("p2p.invalid_operation")
+	}, coreTrustArguments(t, f)...)
+	defer stopCore()
+
+	identity := configureCoreService(t, ctx, parent, f)
+	restoreCoreDevice(t, ctx, parent, f)
+	pairID := f.config[0].Pin.Pair.PairID
+
+	connect := func(generation uint64) peersession.Connected {
+		raw := callCore(t, ctx, parent, "peer.connect", struct {
+			ServiceID string `json:"serviceId"`
+			Data      struct {
+				PairID     string `json:"pairId"`
+				Generation uint64 `json:"generation"`
+			} `json:"data"`
+		}{ServiceID: identity.ServiceID, Data: struct {
+			PairID     string `json:"pairId"`
+			Generation uint64 `json:"generation"`
+		}{PairID: pairID, Generation: generation}})
+		var connected peersession.Connected
+		must(t, json.Unmarshal(raw, &connected))
+		return connected
+	}
+
+	generation := uint64(0)
+	for _, scenario := range []struct {
+		name        string
+		owner       func() (runtimebridge.Binding, error)
+		wantAddress bool
+		// why records the shipped defect this row exists for.
+		why string
+	}{
+		{
+			name: "refused outright",
+			owner: func() (runtimebridge.Binding, error) {
+				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
+			},
+			wantAddress: false,
+			why:         "the stream layer demanded a workbench, so this failed the connection in both directions",
+		},
+		{
+			name: "recovered",
+			owner: func() (runtimebridge.Binding, error) {
+				return runtimebridge.Binding{Generation: 2, URL: runtimeURL}, nil
+			},
+			wantAddress: true,
+			why:         "a pair that connected without one must still be able to pick one up",
+		},
+		{
+			name: "lost again after having one",
+			owner: func() (runtimebridge.Binding, error) {
+				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
+			},
+			wantAddress: false,
+			why:         "the attachment stayed bound to the dead session, so its address answered every request with a failure while the UI said ready",
+		},
+		{
+			name: "answered with an unusable address",
+			owner: func() (runtimebridge.Binding, error) {
+				return runtimebridge.Binding{Generation: 3, URL: "http://10.0.0.1:1/"}, nil
+			},
+			wantAddress: false,
+			why:         "a non-loopback answer must not become a tunnel, and must not kill the link either",
+		},
+		{
+			name: "recovered a second time",
+			owner: func() (runtimebridge.Binding, error) {
+				return runtimebridge.Binding{Generation: 4, URL: runtimeURL}, nil
+			},
+			wantAddress: true,
+			why:         "recovery must not be a one-time affair",
+		},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			ownerMu.Lock()
+			answer = scenario.owner
+			ownerMu.Unlock()
+			generation++
+
+			connected := connect(generation)
+			// The connection itself is established in every single case. That is the
+			// contract: maintenance belongs to the daemon, a workbench is cargo.
+			if connected.State.Stage != "ready" || connected.State.PairID != pairID {
+				t.Fatalf("%s: connection not established (%s): %+v", scenario.name, scenario.why, connected.State)
+			}
+			if path := connected.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {
+				t.Fatalf("%s: no direct path: %+v", scenario.name, path)
+			}
+			if scenario.wantAddress {
+				if connected.URL == "" {
+					t.Fatalf("%s: no address, so the tab stays dead (%s)", scenario.name, scenario.why)
+				}
+				if err := runtimebridge.Probe(ctx, connected.URL); err != nil {
+					t.Fatalf("%s: the address does not serve the peer (%s): %v", scenario.name, scenario.why, err)
+				}
+				return
+			}
+			if connected.URL != "" {
+				// An address handed out here is the dangerous case: it looks usable and
+				// is not.
+				t.Fatalf("%s: handed out an address with no workbench behind it (%s): %q", scenario.name, scenario.why, connected.URL)
+			}
+		})
+	}
+}
