@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.72 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
+- **修复明明装了 pnpm 却报告找不到。** 从桌面启动的应用继承的是登录时那一份环境变量，之后安装任何东西都不会更新它，所以在终端里 `pnpm` 完全正常的机器，在本应用看来却不存在——启动 DSH 因此被拒，对方连过来时连接被关闭并反复重连。现在除了继承到的 PATH，还会读取用户与系统登记的 PATH，并补上 scoop 实际存放 pnpm 的位置。
+- **诊断日志保留两端而不是截断尾部。** 一条拒绝把结论写在前面、证据写在最后（"在以下目录中找不到 pnpm：……"），只保留开头恰好丢掉了唯一有用的部分。
+
+### English (en-US)
+
+- **Fix pnpm being reported as missing on a machine that has it.** A desktop-launched application inherits the environment as it stood at sign-in and never sees anything installed afterwards, so a machine where `pnpm` works in every terminal had none as far as this application was concerned. Starting DSH was refused for it, which closed an inbound connection and retried without end. The registered user and machine PATH are now consulted alongside the inherited one, and scoop's real pnpm location is searched.
+- **Keep both ends of a long diagnostic line.** A refusal states its conclusion first and its evidence last — "no pnpm was found in: <directories>" — so keeping only the head discarded the one part worth reading.
+
 ## 0.1.71 — 2026-09-23
 
 ### 简体中文 (zh-CN)

@@ -99,6 +99,19 @@ async function headlessEndpoint(
 }
 
 /** The core's argv names every persistent root explicitly. */
+/**
+ * Shortens a long line while keeping both ends.
+ *
+ * A refusal states the problem first and the evidence last — "no pnpm was found
+ * in: <every directory>" — so cutting the tail discarded exactly the part worth
+ * reading. Keeping both ends preserves the claim and the decisive detail.
+ */
+function truncateMiddle(value: string, limit: number): string {
+  if (value.length <= limit) return value
+  const half = Math.floor((limit - 5) / 2)
+  return `${value.slice(0, half)} ... ${value.slice(value.length - half)}`
+}
+
 function coreArguments(options: CoreSupervisorOptions): string[] {
   const args = ['--data', options.dataRoot]
   if (options.catalogRoot !== undefined) args.push('--catalog', options.catalogRoot)
@@ -278,7 +291,7 @@ export class CoreSupervisor {
       if (process.env.DSH_P2P_TRACE === '1') process.stderr.write(chunk)
       for (const line of chunk.toString('utf8').split('\n')) {
         const text = line.trim()
-        if (text.length > 0) diagnose(`core ${text.slice(0, 400)}`)
+        if (text.length > 0) diagnose(`core ${truncateMiddle(text, 2000)}`)
       }
     })
     const budget = AbortSignal.any([signal, AbortSignal.timeout(30_000)])

@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process'
 import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -141,15 +142,51 @@ function readWindowsShimScript(shim: string): string | undefined {
   return isRegularFile(script) ? script : undefined
 }
 
+/**
+ * Reads the PATH the user and machine have registered.
+ *
+ * A desktop-launched Electron app inherits whatever Explorer was started with,
+ * which is a snapshot that predates any installer run since that sign-in. A
+ * machine with a working `pnpm` in every terminal therefore had none as far as
+ * this process was concerned. The registered value is the durable one, so it is
+ * consulted in addition to the inherited PATH rather than instead of it.
+ */
+function registeredWindowsPath(): readonly string[] {
+  try {
+    const script =
+      '[Environment]::GetEnvironmentVariable("PATH","User") + ";" + ' +
+      '[Environment]::GetEnvironmentVariable("PATH","Machine")'
+    const value = execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', script],
+      { encoding: 'utf8', timeout: 5000, windowsHide: true }
+    )
+    return splitPath(value.trim())
+  } catch {
+    // An unavailable shell is not a failure: the inherited PATH and the explicit
+    // locations below still apply.
+    return []
+  }
+}
+
 /** Preserves PATH order and checks explicit package-manager installation locations. */
 function windowsCommandDirectories(): string[] {
   const candidates = [
     ...splitPath(process.env.PATH),
+    ...registeredWindowsPath(),
     process.env.PNPM_HOME,
     process.env.APPDATA && path.join(process.env.APPDATA, 'npm'),
     process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'pnpm'),
     path.join(homedir(), 'scoop', 'apps', 'nodejs', 'current'),
     path.join(homedir(), 'scoop', 'apps', 'nodejs', 'current', 'bin'),
+    // Scoop keeps a package's writable files under persist/ and exposes them
+    // through a junction, so a globally installed pnpm lives here rather than in
+    // the versioned app directory. Only the junction was searched, and it does
+    // not hold pnpm: a machine with a working `pnpm` on an interactive shell
+    // still reported none, because a desktop-launched app does not inherit that
+    // shell's PATH either. Searching the real location is what closes that gap.
+    path.join(homedir(), 'scoop', 'persist', 'nodejs', 'bin'),
+    path.join(homedir(), 'scoop', 'shims'),
     process.env.ProgramFiles && path.join(process.env.ProgramFiles, 'nodejs')
   ]
   return [
