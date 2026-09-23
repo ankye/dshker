@@ -169,11 +169,15 @@ jobs:
             git clone --depth 1 git@github.com:ankye/dshker-server.git \
             "${RUNNER_TEMP}/dshker-server"
 
+      # Built with downloaded modules, not -mod=vendor: that repository gitignores
+      # its vendor directory, so a clean clone has none and a vendored build fails
+      # with inconsistent vendoring. A local checkout hides this behind an
+      # untracked vendor tree left over from an earlier build.
       - name: Build the coordinator
         if: steps.coordinator.outputs.available == 'true'
         working-directory: ${{ runner.temp }}/dshker-server
         run: |
-          CGO_ENABLED=0 go build -mod=vendor -trimpath \
+          CGO_ENABLED=0 go build -trimpath \
             -o "${RUNNER_TEMP}/dshker-server/bin/dshker-server" ./cmd/dshker-server
 
       # vet needs nothing external, so it runs whether or not the key exists.
