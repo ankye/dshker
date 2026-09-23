@@ -238,11 +238,18 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 		signals := manager.signals
 		manager.mu.Unlock()
 		if signals == nil {
-			// Reported to the user as "cannot reach the coordinator" even though
-			// the coordinator may be perfectly reachable: what is missing is this
-			// machine's own signal subscription.
-			fmt.Fprintf(os.Stderr, "connect pair=%s: no signal subscription on this machine\n", pairID)
-			err = errors.New("p2p.server_unavailable")
+			// This machine's own signal subscription is missing — a transient state
+			// while it is being rebuilt, most often immediately after a previous
+			// session for this pair was torn down.
+			//
+			// It used to report p2p.server_unavailable, which the product renders as
+			// "cannot reach the coordinator, check your network and the server". The
+			// coordinator is typically reachable throughout; the advice sent users to
+			// inspect a network and a server that were never at fault. A distinct
+			// code lets the surface say what is actually true and lets the
+			// reconnection engine treat it as the retriable local condition it is.
+			fmt.Fprintf(os.Stderr, "connect pair=%s: this machine has no signal subscription yet\n", pairID)
+			err = errors.New("p2p.signalling_not_ready")
 		} else {
 			err = signals.send(deadline, offer)
 		}
@@ -815,7 +822,13 @@ func (manager *Manager) run(connection *session) {
 			connection.mux, connection.endpoint = mux, endpoint
 			connection.mu.Unlock()
 			manager.mu.Lock()
-			attachments[connection.PairID] = endpoint
+			// Only a real attachment is recorded. A connection with no workbench has
+			// no endpoint, and storing that nil made every later consumer — the
+			// shutdown that closes each attachment, the wait that watches one end —
+			// dereference it and take the daemon down with a segfault.
+			if endpoint != nil {
+				attachments[connection.PairID] = endpoint
+			}
 			manager.mu.Unlock()
 			// A connected peer asks for the local directory listing through
 			// remote.roots / remote.directory over the mux, which is also the
@@ -882,10 +895,17 @@ func (manager *Manager) run(connection *session) {
 	if err != nil {
 		return
 	}
+	// A connection with no workbench has no endpoint to outlive, so only the
+	// session context and the transport itself can end it. Reading Done() on a nil
+	// endpoint panicked the daemon the moment such a connection was established.
+	var endpointDone <-chan struct{}
+	if endpoint != nil {
+		endpointDone = endpoint.Done()
+	}
 	select {
 	case <-connection.ctx.Done():
 	case <-connection.transport.Done():
-	case <-endpoint.Done():
+	case <-endpointDone:
 	}
 }
 

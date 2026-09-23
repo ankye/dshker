@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.74 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
+- **修复只要有一端的工作台起不来，两台电脑就完全连不上。** 连接的底层通道此前要求"必须已有一个工作台"才允许建立，所以任意一端的 DSH 起不来，连接在协议层就直接失败——**两个方向同时失败**，因为两端共用同一条通道。这也是为什么发起方自己的 DSH 坏了同样连不上。现在连接的建立与维护完全由 dshkerd 负责，工作台只是连接之上的一项可选内容：没有工作台时连接照样建立、照样保持，只是暂时没有可打开的页面。
+- **修复没有工作台时守护进程崩溃。** 一旦走到"连接成立但没有工作台"的分支，两处代码会对不存在的对象取值，导致 dshkerd 段错误退出。
+- **修复刚连上就被自己断开、反复重连。** 界面在每次掉线时立即重新发起连接，而发起连接本身会顶掉该配对已有的连接——于是每次重连都制造出下一次掉线。日志显示连接达到"就绪"后约半秒被拆除，如此循环不止，其间的重试还会因为本机信令尚未重建而被拒绝。掉线现在交给核心已有的重连节奏（1 秒、2 秒、5 秒、15 秒、60 秒）。
+- **区分"本机信令尚未就绪"与"协调服务器不可达"。** 前者此前复用了后者的提示，让人去检查从未出问题的网络与服务器。
+- **补上一直缺失的测试。** 此前所有连接测试都给一个"永远能成功启动"的假工作台，因此上述三个缺陷在测试中完全不可见——而它们正是真机上"一开 tab 就连不上"的原因。新增的测试让对端像真实机器一样拒绝提供工作台。
+
+### English (en-US)
+
+- **Fix two computers being unable to connect at all whenever either side's workbench could not start.** The connection's own stream layer required a workbench to already exist before it would open, so a machine whose DSH could not run failed the connection at the protocol level — in **both directions at once**, because the two sides share that one layer. This is also why the initiator's own broken DSH prevented connecting. Establishing and maintaining a connection is now entirely dshkerd's job, and a workbench is one optional thing carried over it: without one the connection is still established and still maintained, with no page to open for the moment.
+- **Fix the daemon crashing when there is no workbench.** Two places dereferenced an object that does not exist in that case, taking dshkerd down with a segfault the moment such a connection was established.
+- **Fix a connection tearing itself down right after it came up, forever.** The interface re-dispatched a connect on every drop, and dispatching one supersedes the pair's existing connection — so each retry produced the next drop. The logs show a connection reaching ready and being torn down about half a second later, on repeat, with the retry in between refused because this machine's signalling had not finished rebuilding. A drop is now left to the core's existing schedule (1s, 2s, 5s, 15s, 60s).
+- **Tell "this machine's signalling is not ready" apart from "the coordinator is unreachable".** The former reused the latter's message, which sent users to inspect a network and a server that were never at fault.
+- **Add the test that was missing all along.** Every existing connection test handed out a stub workbench that always starts, which made all three defects above invisible — and those defects are exactly why opening a tab failed on real machines. The new test refuses a workbench the way a real machine does.
+
 ## 0.1.73 — 2026-09-23
 
 ### 简体中文 (zh-CN)

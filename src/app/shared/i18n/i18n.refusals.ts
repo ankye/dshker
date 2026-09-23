@@ -107,6 +107,10 @@ export function refusalKeyForCode(code: string): keyof typeof zhCNRefusals {
     case 'p2p.enrollment_not_found':
     case 'p2p.helper_unavailable':
     case 'p2p.helper_closed':
+    // This machine's signal subscription is still being rebuilt. It used to
+    // report the coordinator as unreachable, which sent users to inspect a
+    // network and a server that were working.
+    case 'p2p.signalling_not_ready':
       return 'p2p.refusal.localNotReady'
     // Nothing is wrong with either computer: the server that lets them find each
     // other is unreachable, so no candidate pair can ever be exchanged.

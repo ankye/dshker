@@ -81,9 +81,24 @@ describe('main-owned P2P connections', () => {
     })
   })
 
-  it('refuses a connection reply that carries no usable entry point', async () => {
+  // A reply without an address means the far computer has no workbench to offer,
+  // which is a fact about that machine rather than a failure of the link.
+  //
+  // Rejecting it here discarded a connection that had already been negotiated,
+  // so a peer whose DSH could not start — an unresolved pnpm, a dependency tree
+  // the platform could not traverse — took the whole connection down with it,
+  // along with everything else the link carries.
+  it('accepts a connection reply that carries no workbench address', async () => {
     const f = fixture()
     f.accept('')
+    const accepted = await f.connections.connect(serviceId, pairId, signal())
+    expect(accepted.pairId).toBe(pairId)
+    expect(f.connections.entry(serviceId, pairId, accepted.generation)).toBe('')
+  })
+
+  it('refuses a reply whose entry point is not a string at all', async () => {
+    const f = fixture()
+    f.accept(1234 as unknown as string)
     await expect(f.connections.connect(serviceId, pairId, signal())).rejects.toMatchObject({
       code: 'p2p.invalid_socket'
     })

@@ -57,19 +57,25 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 		if err != nil {
 			return nil, nil, nil, binding, err
 		}
-		if response.Type != "runtime.result" || response.Error != "" {
-			// The far side already named the refusal. Returning the constant here
-			// threw that away: every runtime problem — a workbench that could not
-			// start, a port already held, a worktree that failed verification —
-			// reached the user as one indistinguishable "runtime unavailable".
-			// Only a code the protocol admits is passed through; anything else
-			// still collapses, so a library sentence cannot masquerade as one.
-			if code, ok := protocol.Refusal(errors.New(response.Error)); ok {
-				return nil, nil, nil, binding, errors.New(code)
-			}
-			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
+		if response.Type != "runtime.result" {
+			return nil, nil, nil, binding, errors.New("p2p.protocol_mismatch")
 		}
-		binding = Binding{Generation: response.RuntimeGeneration, URL: response.URL}
+		if response.Error != "" {
+			// The peer has no workbench to offer. That is a fact about the far
+			// machine, not a failure of this connection, so the reason is recorded
+			// and the link is still established: the two computers remain connected
+			// and whatever else the connection carries keeps working. Only a code
+			// the protocol admits is reported; anything else collapses to the
+			// generic one so a library sentence cannot masquerade as a refusal.
+			code := "p2p.runtime_unavailable"
+			if named, ok := protocol.Refusal(errors.New(response.Error)); ok {
+				code = named
+			}
+			fmt.Fprintf(os.Stderr, "runtime.connect peer has no workbench: %s (connection kept)\n", code)
+			binding = Binding{}
+		} else {
+			binding = Binding{Generation: response.RuntimeGeneration, URL: response.URL}
+		}
 	} else {
 		incoming, err := readHello(budget, transport, request)
 		if err != nil {
@@ -93,34 +99,45 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 		binding, err = owner(budget, peerDeviceID)
 		request.Type = "runtime.result"
 		if err != nil {
-			// Never swallow the reason: a flattened code here is indistinguishable
-			// from a genuinely unavailable runtime and hides the real refusal, so
-			// the refusal the owner named is what the peer is told — a runtime.*
-			// code from the shell (a port already held, a workbench that failed to
-			// start) is exactly what the far side's user needs to read.
+			// A workbench that will not start is not a broken connection.
+			//
+			// This used to end the session: the pair was told the named refusal and
+			// the transport was torn down, so a local problem on one machine — an
+			// unresolved pnpm, a dependency tree the platform could not traverse —
+			// destroyed a link that had already been negotiated successfully, and
+			// the reconnect that followed destroyed the next one too. Connection
+			// maintenance belongs to this daemon; a workbench is one optional thing
+			// carried over a connection, not the reason it exists. The reason is
+			// still reported and still reaches the peer, but the link survives it.
 			code := "p2p.runtime_unavailable"
 			if named, ok := protocol.Refusal(err); ok {
 				code = named
 			}
-			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v\n", peerDeviceID, err)
+			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v (connection kept, no workbench)\n", peerDeviceID, err)
 			request.Error = code
-			sendHello(transport, request)
-			return nil, nil, nil, binding, err
+			binding, err = Binding{}, nil
+		} else if _, invalid := binding.Endpoint(); invalid != nil {
+			// An owner that answers with something unusable is the same case: report
+			// it and carry on without a tunnel rather than dropping the link.
+			fmt.Fprintf(os.Stderr, "runtime.connect owner answered an unusable binding peer=%s: %v (connection kept, no workbench)\n", peerDeviceID, invalid)
+			request.Error, binding = "p2p.runtime_invalid", Binding{}
+		} else {
+			request.RuntimeGeneration, request.URL = binding.Generation, binding.URL
 		}
-		if _, err = binding.Endpoint(); err != nil {
-			return nil, nil, nil, binding, err
-		}
-		request.RuntimeGeneration, request.URL = binding.Generation, binding.URL
 		if err = sendHello(transport, request); err != nil {
 			return nil, nil, nil, binding, err
 		}
 	}
-	if _, err := binding.Endpoint(); err != nil {
-		return nil, nil, nil, binding, err
-	}
 	mux, err := peer.NewMux(transport, peer.StreamScope{AttemptID: lease.AttemptID, Generation: lease.Generation, RuntimeGeneration: binding.Generation, Initiator: initiator})
 	if err != nil {
 		return nil, nil, nil, binding, err
+	}
+	// Without a workbench there is nothing to proxy, so no endpoint and no gateway
+	// are built — but the transport and its mux are established and returned, and
+	// that is what being connected means. Attaching a workbench later is the job of
+	// the next Establish for this pair, which replaces the session in place.
+	if _, usable := binding.Endpoint(); usable != nil {
+		return nil, attachment, mux, binding, nil
 	}
 	var gateway *Gateway
 	if attachment == nil {

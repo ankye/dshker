@@ -39,8 +39,15 @@ type Mux struct {
 	err        error
 }
 
+// NewMux opens the stream layer for one attempt.
+//
+// RuntimeGeneration may be zero, which names an attempt that carries no workbench.
+// Requiring it to be non-zero made the stream layer — and therefore the whole
+// connection — impossible to establish unless a workbench had started, so a
+// machine whose DSH could not run could not be connected to at all. The scope
+// still has to match on both sides; zero is simply one of the values it may hold.
 func NewMux(link StreamLink, scope StreamScope) (*Mux, error) {
-	if link == nil || !protocol.ValidID(scope.AttemptID) || scope.Generation == 0 || scope.RuntimeGeneration == 0 {
+	if link == nil || !protocol.ValidID(scope.AttemptID) || scope.Generation == 0 {
 		return nil, errors.New("p2p.frame_scope_mismatch")
 	}
 	mux := &Mux{link: link, scope: scope, streams: make(map[uint32]*Stream), accepted: make(chan *Stream, protocol.MaxStreams), changed: make(chan struct{}), done: make(chan struct{})}

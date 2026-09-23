@@ -264,3 +264,102 @@ func drainInto(states <-chan peersession.State, stage string) {
 		}
 	}
 }
+
+// TestCoreDaemonConnectsWhenThePeerHasNoWorkbench proves the connection is the
+// daemon's own business and does not depend on a workbench existing anywhere.
+//
+// Connection maintenance belongs to dshkerd; a workbench is one optional thing
+// carried over a link. The code used to conflate the two: a peer whose DSH would
+// not start refused the runtime, and that refusal tore down a transport which had
+// already been negotiated successfully. Because the shell then retried at once and
+// every retry superseded the previous session, the pair never held a connection —
+// and the user was told the coordinator was unreachable, which it never was.
+//
+// No test could see this, because every existing one hands out a stub workbench
+// that always succeeds. This one refuses it the way a real machine does.
+func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
+	f := newFixture(t)
+	ctx, cancel := context.WithTimeout(f.ctx, 120*time.Second)
+	defer cancel()
+
+	// The remote owns no runtime at all and says so, exactly as a Launcher whose
+	// dependencies cannot be resolved does.
+	f.devices[1].SetAccount(f.config[1].Device.UserID)
+	var refusals int
+	var refusalMu sync.Mutex
+	remote, err := peersession.New(
+		ctx,
+		f.devices[1],
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private},
+		[]controlplane.PairIdentity{f.config[1].Pin},
+		func(context.Context, string) (runtimebridge.Binding, error) {
+			refusalMu.Lock()
+			refusals++
+			refusalMu.Unlock()
+			return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
+		},
+		func(peersession.State) {},
+	)
+	must(t, err)
+	defer remote.Close()
+
+	coreStates := make(chan peersession.State, 256)
+	parent, stopCore := startCoreDaemon(t, func(_ context.Context, method string, payload json.RawMessage) (any, error) {
+		switch method {
+		case "runtime.connect":
+			return nil, errors.New("p2p.unexpected_runtime_owner")
+		case "peer.state":
+			var event struct {
+				ServiceID string            `json:"serviceId"`
+				State     peersession.State `json:"state"`
+			}
+			if json.Unmarshal(payload, &event) != nil {
+				return nil, errors.New("p2p.invalid_payload")
+			}
+			select {
+			case coreStates <- event.State:
+			default:
+			}
+			return struct{}{}, nil
+		}
+		return nil, errors.New("p2p.invalid_operation")
+	}, coreTrustArguments(t, f)...)
+	defer stopCore()
+
+	identity := configureCoreService(t, ctx, parent, f)
+	restoreCoreDevice(t, ctx, parent, f)
+
+	pairID := f.config[0].Pin.Pair.PairID
+	connected := callCore(t, ctx, parent, "peer.connect", struct {
+		ServiceID string `json:"serviceId"`
+		Data      struct {
+			PairID     string `json:"pairId"`
+			Generation uint64 `json:"generation"`
+		} `json:"data"`
+	}{ServiceID: identity.ServiceID, Data: struct {
+		PairID     string `json:"pairId"`
+		Generation uint64 `json:"generation"`
+	}{PairID: pairID, Generation: 1}})
+	var answer peersession.Connected
+	must(t, json.Unmarshal(connected, &answer))
+
+	// The connection is established and reported ready. This is the whole point:
+	// the two computers are connected even though neither has a workbench to show.
+	if answer.State.Stage != "ready" || answer.State.PairID != pairID {
+		t.Fatalf("connect without a workbench reported %+v", answer.State)
+	}
+	if path := answer.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {
+		t.Fatalf("no direct path was selected: %+v", path)
+	}
+	// And it carries no address, because there is no workbench to address.
+	if answer.URL != "" {
+		t.Fatalf("a connection with no workbench still produced an address %q", answer.URL)
+	}
+	refusalMu.Lock()
+	asked := refusals
+	refusalMu.Unlock()
+	if asked == 0 {
+		t.Fatal("the responder was never asked for a runtime, so the refusal was never exercised")
+	}
+	drainInto(coreStates, "ready")
+}

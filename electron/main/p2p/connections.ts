@@ -68,9 +68,15 @@ export class PeerConnections {
       const state = parseHelperState(record.state)
       if (state.pairId !== pairId) throw new PeerHelperError('p2p.identity_mismatch')
       if (state.generation !== generation) throw new PeerHelperError('p2p.stale_generation')
-      if (typeof record.url !== 'string' || record.url === '')
-        throw new PeerHelperError('p2p.invalid_socket')
-      // The URL stops here. Only the Run guest receives it, through main.
+      if (typeof record.url !== 'string') throw new PeerHelperError('p2p.invalid_socket')
+      // An address is what a workbench has, not what a connection needs.
+      //
+      // Requiring one here rejected a perfectly good link whenever the far side
+      // had no workbench to offer — a machine whose dependencies could not be
+      // resolved, or one that simply is not running DSH. The two computers were
+      // connected and the shell threw the connection away, so everything else the
+      // link carries was lost for a reason that has nothing to do with it.
+      // The URL stops here either way. Only the Run guest receives it, through main.
       this.#entries.set(this.#key(serviceId, pairId), { generation, url: record.url })
       return state
     })

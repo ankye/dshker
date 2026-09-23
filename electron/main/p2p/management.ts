@@ -108,14 +108,22 @@ export class PeerManagement {
       runtime: options.runtime,
       rootsProvider: options.rootsProvider,
       onUnavailable: () => this.#clearSession(),
-      // A drop is retried at once rather than at the next sweep: the hole is
-      // usually re-punchable within a second of a network change, and a tab the
-      // user may switch back to at any moment must not sit dead in between.
-      onPeerStage: (serviceId, pairId, stage, generation) => {
+      // A drop is handed to the core's reconnection engine, which owns the
+      // widening schedule and the terminal-refusal set.
+      //
+      // This used to call reconcile directly on every drop, which dispatched a
+      // fresh connect with no delay at all. Because starting a connect also
+      // supersedes the pair's existing session, each of those attempts produced
+      // the very `disconnected` that triggered the next one: the logs show a
+      // connection reaching `ready` and being torn down about half a second
+      // later, forever, with the retry in between refused because this machine's
+      // signal subscription was still being rebuilt. The engine already retries
+      // a dropped pair — 1s, 2s, 5s, 15s, 60s — so the drop only needs to be
+      // reported, not raced.
+      onPeerStage: (serviceId, pairId, _stage, generation) => {
         // The core can replace an attempt without this process calling connect, so
         // the address cached under the old one must go. See `retire`.
         this.#session?.connections.retire(serviceId, pairId, generation)
-        if (stage === 'disconnected' || stage === 'failed') void this.#reconcile(serviceId)
       },
       // The core announces a directory revision instead of the shell discovering
       // one: the snapshot is the core's, and a page that already read it cannot

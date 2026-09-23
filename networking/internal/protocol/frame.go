@@ -18,9 +18,15 @@ type Frame struct {
 	Data              []byte `json:"data"`
 }
 
+// Validate refuses a frame that does not belong to this exact attempt.
+//
+// runtime may be zero: an attempt that carries no workbench is a real attempt,
+// and its frames are scoped by that zero on both sides. Rejecting it here meant
+// the two machines could not exchange anything at all unless one of them had a
+// running workbench, which is the opposite of what a connection is for.
 func (frame Frame) Validate(attempt string, generation, runtime uint64) error {
 	if frame.Version != Version || !ValidID(frame.AttemptID) || frame.AttemptID != attempt ||
-		generation == 0 || runtime == 0 || frame.Generation != generation || frame.RuntimeGeneration != runtime || frame.StreamID == 0 {
+		generation == 0 || frame.Generation != generation || frame.RuntimeGeneration != runtime || frame.StreamID == 0 {
 		return errors.New("p2p.frame_scope_mismatch")
 	}
 	if frame.Data == nil || len(frame.Data) > MaxDataBytes || frame.Credit > MaxQueueBytes {

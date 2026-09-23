@@ -184,6 +184,7 @@ STUN 通过只能证明本机能通过 UDP 到达服务器，**不能**证明两
 | `p2p.invalid_service_endpoint` / `p2p.invalid_signal_endpoint` / `p2p.invalid_stun_endpoint` | 地址格式不合要求。HTTPS 必须 `https:`，信令必须 `wss:`，STUN 为 `主机:端口`。先用 `node tools/p2p-preflight.mjs` 验证。 |
 | `p2p.invalid_service_identity` / `p2p.identity_mismatch`                                     | 服务器出示的身份与已固定的不一致。**不要批准。** 确认你连的是正确服务器；若确实更换了服务器身份，需要重新建立信任。     |
 | `p2p.server_unavailable`                                                                     | 服务器不可达或未响应。用预检确认 HTTPS/WSS/STUN 三项。                                                                  |
+| `p2p.signalling_not_ready`                                                                   | 本机的信令订阅正在重建，通常出现在与同一台电脑的上一次连接刚结束之后。它会自行重试，与服务器无关。                      |
 | `p2p.trust_restore_rejected`                                                                 | 该服务器身份此前被你移除过，已永久标记不可信。这是刻意的，不能撤销。                                                    |
 | `p2p.service_exists`                                                                         | 该地址已被另一条服务器记录占用。                                                                                        |
 | `p2p.user_login_required` / `p2p.user_session_expired`                                       | 未登录或会话过期。重新登录。                                                                                            |

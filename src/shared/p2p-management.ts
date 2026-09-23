@@ -642,6 +642,7 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.request_timeout',
   'p2p.secure_storage_unavailable',
   'p2p.server_unavailable',
+  'p2p.signalling_not_ready',
   'p2p.service_busy',
   'p2p.service_exists',
   'p2p.service_not_found',
