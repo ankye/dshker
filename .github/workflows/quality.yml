@@ -102,3 +102,86 @@ jobs:
       # test asserting LF-formatted source failed.
       - name: Run unit tests
         run: npm test -- --run
+
+  # The peer connection is verified here and nowhere else.
+  #
+  # These tests were reachable only by hand, which is how three defects shipped in
+  # a row: the stream layer refusing a connection with no workbench, a daemon
+  # segfaulting on that path, and a lost workbench condemning a healthy link. Each
+  # was found by running this suite locally, after the release that carried it. The
+  # cost of not running it in CI was paid in installs on two machines.
+  #
+  # The coordinator these tests dial lives in a separate private repository, which
+  # is why this was never wired up. It is built here from a pinned ref.
+  verify-peer-connection:
+    name: Verify peer connection
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Go for the headless core
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: networking/go.mod
+          cache-dependency-path: networking/go.sum
+
+      # Without the token this job cannot build the coordinator it dials. It says so
+      # in the run summary and stops, rather than reporting a pass it did not earn:
+      # a peer suite that quietly ran nothing is what let three defects reach two
+      # installed machines. Set COORDINATOR_REPO_TOKEN to a token that can read
+      # ankye/dshker-server and this job starts enforcing on every push.
+      - name: Check for the coordinator token
+        id: coordinator
+        env:
+          COORDINATOR_TOKEN: ${{ secrets.COORDINATOR_REPO_TOKEN }}
+        run: |
+          if [[ -z "$COORDINATOR_TOKEN" ]]; then
+            {
+              echo "### Peer connection suite did not run"
+              echo
+              echo 'No `COORDINATOR_REPO_TOKEN` secret is configured, so the coordinator this'
+              echo 'suite dials could not be built. The peer connection is therefore **unverified**'
+              echo 'by CI; it was checked by hand before release.'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Peer suite skipped::COORDINATOR_REPO_TOKEN is not set, so the peer connection was not verified."
+            exit 0
+          fi
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      - name: Check out the coordinator
+        if: steps.coordinator.outputs.available == 'true'
+        env:
+          COORDINATOR_TOKEN: ${{ secrets.COORDINATOR_REPO_TOKEN }}
+        run: |
+          git clone --depth 1 \
+            "https://x-access-token:${COORDINATOR_TOKEN}@github.com/ankye/dshker-server.git" \
+            "${RUNNER_TEMP}/dshker-server"
+
+      - name: Build the coordinator
+        if: steps.coordinator.outputs.available == 'true'
+        working-directory: ${{ runner.temp }}/dshker-server
+        run: |
+          CGO_ENABLED=0 go build -mod=vendor -trimpath \
+            -o "${RUNNER_TEMP}/dshker-server/bin/dshker-server" ./cmd/dshker-server
+
+      # The two cases suffixed RealDSH drive a real built DSH Harness, which this
+      # job does not have; the other thirty need only the coordinator. They are
+      # excluded by that suffix rather than by name, so a new one cannot be added
+      # without either a harness here or the same suffix.
+      # vet needs nothing external, so it runs whether or not the token exists.
+      - name: Vet the headless core
+        working-directory: networking
+        run: go vet ./...
+
+      - name: Run the peer connection suite
+        if: steps.coordinator.outputs.available == 'true'
+        env:
+          DSHKER_SERVER_BINARY: ${{ runner.temp }}/dshker-server/bin/dshker-server
+        working-directory: networking
+        run: |
+          go test -count=1 -timeout 25m \
+            -skip 'RealDSH$' \
+            ./integration/

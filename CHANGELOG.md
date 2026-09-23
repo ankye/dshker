@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.77 — 2026-09-23
+
+无用户可见的行为变化；这一版只加强发布前的验证。
+
+### 简体中文 (zh-CN)
+
+- **两台电脑之间的连接现在由 CI 验证。** 此前这套测试只能手工运行，结果是连着三个缺陷先发布、后才被发现：流层拒绝没有工作台的连接、守护进程在该路径上崩溃、丢掉工作台导致整条连接被判失败。每一个都是我在本地跑出来的，都在承载它的版本发布之后——代价是你在两台机器上反复安装。现在 30 个用例每次推送都跑（另外 2 个需要真实 Harness 的仍留在本地）。
+- **发布产物检查改为按 release 编号查询，并要求每个安装包真的上传完成。** 按 tag 查询会读到 GitHub 的缓存，同一个挂了 25 个安装包的 release 可能被报成 0 个，那会让这道闸门既漏掉真故障、又凭空造出假故障。另外 GitHub 在上传刚开始时就会登记资产名，所以半途失败会留下一个名字却没有内容——只数名字看不出来，现在要求状态为 `uploaded`。检查清单也补上了 Linux 的三个产物，之前写错了架构名。
+
+### English (en-US)
+
+No user-visible behaviour changes; this release only strengthens pre-release verification.
+
+- **The connection between two computers is now verified by CI.** This suite could only be run by hand, which is how three defects shipped in a row and were found afterwards: the stream layer refusing a connection with no workbench, the daemon segfaulting on that path, and a lost workbench condemning an otherwise healthy link. Each was found locally, after the release that carried it — paid for in repeated installs on two machines. Thirty cases now run on every push; the two that drive a real Harness remain local.
+- **The release asset gate reads by release id and requires each installer to have finished uploading.** Reading by tag returns a cached representation that has reported zero assets for a release holding twenty-five, which would make the gate both miss a real failure and invent one. GitHub also records an asset name the moment an upload begins, so a transfer that died halfway leaves a name with nothing behind it — invisible to a check that counts names, so `uploaded` state is now required. The checklist also gained the three Linux artifacts, whose architecture names it had wrong.
+
 ## 0.1.76 — 2026-09-23
 
 ### 简体中文 (zh-CN)

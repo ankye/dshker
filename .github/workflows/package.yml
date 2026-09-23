@@ -497,24 +497,47 @@ jobs:
         run: |
           # A release whose upload silently produced nothing is worse than a failed
           # build: the tag looks published, the version is announced, and the only
-          # way anyone finds out is by trying to install it. `gh release create` has
-          # exited 0 with zero assets attached, so success is asserted here against
-          # what the release actually holds.
-          attached="$(gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets | length')"
-          echo "attached assets: ${attached}"
+          # way anyone finds out is by trying to install it.
+          #
+          # The release is resolved to its numeric id once and then read by that id.
+          # Reading it by tag returns a cached representation that has reported zero
+          # assets for a release holding twenty-five, which would make this gate both
+          # miss a real failure and invent one that did not happen.
+          #
+          # Each asset must also say "uploaded". GitHub records an asset the moment
+          # an upload starts, so a transfer that died halfway leaves a name behind
+          # with nothing retrievable under it — exactly the outcome this gate exists
+          # to catch, and invisible to a check that only counts names.
+          release_id="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${GITHUB_REF_NAME}" --jq '.id')"
+          if [[ -z "$release_id" || "$release_id" == "null" ]]; then
+            echo "::error title=Release missing::${GITHUB_REF_NAME} has no release to verify."
+            exit 1
+          fi
+          gh api --paginate "repos/${GITHUB_REPOSITORY}/releases/${release_id}/assets" \
+            --jq '.[] | "\(.state) \(.name)"' > release-assets.txt
+          echo "assets attached to release ${release_id}:"
+          sed 's/^/  /' release-assets.txt
+          incomplete="$(grep -cv '^uploaded ' release-assets.txt || true)"
+          if [[ "$incomplete" -ne 0 ]]; then
+            echo "::error title=Incomplete asset upload::${GITHUB_REF_NAME} has ${incomplete} asset(s) not in the uploaded state."
+            exit 1
+          fi
           missing=0
           for required in \
-            "dshker-launcher-*-mac-arm64.dmg" \
-            "dshker-launcher-*-mac-x64.dmg" \
-            "dshker-launcher-*-win-x64.exe" \
-            "dshker-launcher-*-win-arm64.exe" \
-            "checksums.txt"; do
-            if ! gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' | grep -q -- "${required//\*/.*}"; then
-              echo "::error title=Missing release asset::${GITHUB_REF_NAME} has no asset matching ${required}."
+            "dshker-launcher-.*-mac-arm64[.]dmg" \
+            "dshker-launcher-.*-mac-x64[.]dmg" \
+            "dshker-launcher-.*-win-x64[.]exe" \
+            "dshker-launcher-.*-win-arm64[.]exe" \
+            "dshker-launcher-.*-linux-x86_64[.]AppImage" \
+            "dshker-launcher-.*-linux-arm64[.]AppImage" \
+            "dshker-launcher-.*-linux-amd64[.]deb" \
+            "checksums[.]txt"; do
+            if ! grep -Eq "^uploaded .*${required}$" release-assets.txt; then
+              echo "::error title=Missing release asset::${GITHUB_REF_NAME} has no uploaded asset matching ${required}."
               missing=1
             fi
           done
-          if [[ "$attached" -eq 0 || "$missing" -ne 0 ]]; then
-            echo "::error title=Empty or incomplete release::Refusing to leave ${GITHUB_REF_NAME} published without its installers."
+          if [[ "$missing" -ne 0 ]]; then
+            echo "::error title=Incomplete release::Refusing to leave ${GITHUB_REF_NAME} published without its installers."
             exit 1
           fi
