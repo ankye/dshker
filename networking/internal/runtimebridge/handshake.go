@@ -24,6 +24,9 @@ type hello struct {
 	RuntimeGeneration uint64 `json:"runtimeGeneration"`
 	URL               string `json:"url"`
 	Error             string `json:"error"`
+	// Capabilities is what the sender's build supports. It is the extension point
+	// for this contract: a later build adds a name and older peers ignore it.
+	Capabilities []string `json:"capabilities"`
 }
 
 // RuntimeOwner must be implemented by the target main process; it is never a
@@ -47,8 +50,11 @@ type RuntimeOwner func(context.Context, string) (Binding, error)
 func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport *peer.Transport, lease protocol.Lease, initiator bool, owner RuntimeOwner, attachment *Endpoint) (*Gateway, *Endpoint, *peer.Mux, Binding, error) {
 	budget, cancel := context.WithTimeout(sessionCtx, 70*time.Second)
 	defer cancel()
-	request := hello{Version: 1, Type: "runtime.connect", AttemptID: lease.AttemptID, Generation: lease.Generation}
+	request := hello{Version: 1, Type: "runtime.connect", AttemptID: lease.AttemptID, Generation: lease.Generation, Capabilities: protocol.PeerCapabilities()}
 	var binding Binding
+	// Whether the peer's build keeps a link alive with no workbench on it. Assumed
+	// true for the initiator path, where the answer arrives with the reply instead.
+	peerKeepsWorkbenchlessLinks := true
 	if initiator {
 		if err := sendHello(transport, request); err != nil {
 			return nil, nil, nil, binding, err
@@ -84,6 +90,14 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 		if incoming.Type != "runtime.connect" || incoming.RuntimeGeneration != 0 || incoming.URL != "" || incoming.Error != "" {
 			return nil, nil, nil, binding, errors.New("p2p.protocol_mismatch")
 		}
+		if !protocol.ValidCapabilities(incoming.Capabilities) {
+			return nil, nil, nil, binding, errors.New("p2p.protocol_mismatch")
+		}
+		// A peer that cannot keep a connection without a workbench will drop this one
+		// the moment we answer that we have none, whatever we do here. Recording it
+		// makes that outcome readable from this side instead of appearing as two logs
+		// disagreeing about whether the connection succeeded.
+		peerKeepsWorkbenchlessLinks = protocol.HasCapability(incoming.Capabilities, protocol.CapabilityOptionalWorkbench)
 		if owner == nil {
 			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
 		}
@@ -113,7 +127,16 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 			if named, ok := protocol.Refusal(err); ok {
 				code = named
 			}
-			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v (connection kept, no workbench)\n", peerDeviceID, err)
+			kept := "connection kept, no workbench"
+			if !peerKeepsWorkbenchlessLinks {
+				// Naming this is the whole point of advertising capabilities. The link is
+				// kept on this side, the peer's older build will close it anyway, and
+				// without this line the two machines' logs simply disagree about whether
+				// the connection succeeded — which is exactly how a mixed-build pair
+				// used to look while neither side could say why.
+				kept = "connection kept here, but this peer's build closes links without a workbench — upgrade it"
+			}
+			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v (%s)\n", peerDeviceID, err, kept)
 			request.Error = code
 			binding, err = Binding{}, nil
 		} else if _, invalid := binding.Endpoint(); invalid != nil {

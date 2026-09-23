@@ -125,7 +125,7 @@ func (peer *Peer) read() {
 	scanner.Buffer(make([]byte, 4096), protocol.MaxControlBytes+1)
 	for scanner.Scan() {
 		var frame Frame
-		if protocol.Decode(scanner.Bytes(), &frame) != nil || frame.Version != 1 || frame.ID == 0 || frame.ID > 9007199254740991 || len(frame.Method) > 80 {
+		if protocol.DecodeExact(scanner.Bytes(), &frame) != nil || frame.Version != 1 || frame.ID == 0 || frame.ID > 9007199254740991 || len(frame.Method) > 80 {
 			return
 		}
 		if frame.Method == "" {

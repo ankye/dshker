@@ -222,7 +222,7 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	}
 	if method == "device.createKey" {
 		var empty struct{}
-		if protocol.Decode(payload, &empty) != nil {
+		if protocol.DecodeExact(payload, &empty) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		key, err := host.machineDeviceKey()
@@ -239,7 +239,7 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 		var request struct {
 			PrivateKey []byte `json:"privateKey"`
 		}
-		if protocol.Decode(payload, &request) != nil {
+		if protocol.DecodeExact(payload, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		defer clear(request.PrivateKey)
@@ -249,7 +249,7 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 		}{csr}, err
 	}
 	var request scopedRequest
-	if protocol.Decode(payload, &request) != nil {
+	if protocol.DecodeExact(payload, &request) != nil {
 		return nil, errors.New("p2p.invalid_request")
 	}
 	host.mu.Lock()
@@ -305,7 +305,7 @@ func (host *Host) manage(ctx context.Context, account *account, method string, d
 	var probe struct {
 		Token string `json:"token"`
 	}
-	if protocol.Decode(data, &probe) == nil && account.rememberToken(probe.Token) {
+	if protocol.DecodeExact(data, &probe) == nil && account.rememberToken(probe.Token) {
 		account.refreshAfterWrite()
 	}
 	result, err := account.management(ctx, method, data)
@@ -386,7 +386,7 @@ func catalogChangesOn(method string) bool {
 // directoryOperation answers the two directory methods the shell calls directly.
 func (account *account) directoryOperation(ctx context.Context, method string, data json.RawMessage) (any, error) {
 	var empty struct{}
-	if protocol.Decode(data, &empty) != nil {
+	if protocol.DecodeExact(data, &empty) != nil {
 		return nil, errors.New("p2p.invalid_request")
 	}
 	if method == "directory.refresh" {
@@ -403,7 +403,7 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 		// than guessed by the helper. Absent telemetry reports nothing.
 		Telemetry controlplane.Telemetry `json:"telemetry"`
 	}
-	if protocol.Decode(payload, &request) != nil || (len(request.PinnedKey) != 0 && len(request.PinnedKey) != 32) {
+	if protocol.DecodeExact(payload, &request) != nil || (len(request.PinnedKey) != 0 && len(request.PinnedKey) != 32) {
 		return nil, errors.New("p2p.invalid_request")
 	}
 	host.mu.Lock()
@@ -452,7 +452,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		PrivateKey []byte                      `json:"privateKey"`
 		Pins       []controlplane.PairIdentity `json:"pins"`
 	}
-	if protocol.Decode(data, &request) != nil || account.manager != nil {
+	if protocol.DecodeExact(data, &request) != nil || account.manager != nil {
 		return nil, errors.New("p2p.invalid_device_state")
 	}
 	client, err := account.base.WithDevice(request.Device, request.PrivateKey, account.identity)
@@ -473,7 +473,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		}{account.identity.ServiceID, pairID})
 		var binding runtimebridge.Binding
 		if err == nil {
-			err = protocol.Decode(data, &binding)
+			err = protocol.DecodeExact(data, &binding)
 		}
 		return binding, err
 	}
@@ -487,7 +487,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		var result struct {
 			Roots []runtimebridge.Root `json:"roots"`
 		}
-		if err := protocol.Decode(data, &result); err != nil {
+		if err := protocol.DecodeExact(data, &result); err != nil {
 			return nil, err
 		}
 		return result.Roots, nil
@@ -554,7 +554,7 @@ func (account *account) connection(ctx context.Context, method string, data json
 		var request struct {
 			NetworkID string `json:"networkId"`
 		}
-		if protocol.Decode(data, &request) != nil || !protocol.ValidID(request.NetworkID) {
+		if protocol.DecodeExact(data, &request) != nil || !protocol.ValidID(request.NetworkID) {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		// A configured account with no device manager owns no local peer authority.
@@ -570,7 +570,7 @@ func (account *account) connection(ctx context.Context, method string, data json
 		var request struct {
 			Generation uint64 `json:"generation"`
 		}
-		if protocol.Decode(data, &request) != nil || request.Generation == 0 {
+		if protocol.DecodeExact(data, &request) != nil || request.Generation == 0 {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		manager.InvalidateRuntime(request.Generation)
@@ -580,7 +580,7 @@ func (account *account) connection(ctx context.Context, method string, data json
 		var request struct {
 			PairID string `json:"pairId"`
 		}
-		if protocol.Decode(data, &request) != nil || !protocol.ValidID(request.PairID) {
+		if protocol.DecodeExact(data, &request) != nil || !protocol.ValidID(request.PairID) {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		roots, err := manager.RemoteRoots(ctx, request.PairID)
@@ -599,7 +599,7 @@ func (account *account) connection(ctx context.Context, method string, data json
 			Offset int    `json:"offset"`
 			Limit  int    `json:"limit"`
 		}
-		if protocol.Decode(data, &request) != nil || !protocol.ValidID(request.PairID) || request.RootID == "" {
+		if protocol.DecodeExact(data, &request) != nil || !protocol.ValidID(request.PairID) || request.RootID == "" {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		entries, total, err := manager.RemoteDirectory(ctx, request.PairID, request.RootID, request.Ref, request.Offset, request.Limit)
@@ -615,7 +615,7 @@ func (account *account) connection(ctx context.Context, method string, data json
 		var request struct {
 			PairID string `json:"pairId"`
 		}
-		if protocol.Decode(data, &request) != nil || !protocol.ValidID(request.PairID) {
+		if protocol.DecodeExact(data, &request) != nil || !protocol.ValidID(request.PairID) {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return struct{}{}, manager.Disconnect(request.PairID)
@@ -624,7 +624,7 @@ func (account *account) connection(ctx context.Context, method string, data json
 		PairID     string `json:"pairId"`
 		Generation uint64 `json:"generation"`
 	}
-	if protocol.Decode(data, &request) != nil || !protocol.ValidID(request.PairID) || request.Generation == 0 {
+	if protocol.DecodeExact(data, &request) != nil || !protocol.ValidID(request.PairID) || request.Generation == 0 {
 		return nil, errors.New("p2p.invalid_request")
 	}
 	// Repair a displaced coordinator subscription before dialing.

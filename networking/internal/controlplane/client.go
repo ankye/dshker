@@ -210,7 +210,7 @@ func (client *Client) call(ctx context.Context, method, path, token string, body
 		var failure struct {
 			Code string `json:"code"`
 		}
-		if protocol.Decode(data, &failure) != nil || !strings.HasPrefix(failure.Code, "p2p.") || strings.ContainsAny(failure.Code, " \r\n\t") {
+		if protocol.DecodeExact(data, &failure) != nil || !strings.HasPrefix(failure.Code, "p2p.") || strings.ContainsAny(failure.Code, " \r\n\t") {
 			return errors.New("p2p.invalid_server_response")
 		}
 		return errors.New(failure.Code)
@@ -221,7 +221,7 @@ func (client *Client) call(ctx context.Context, method, path, token string, body
 func decodeResponse(data []byte, target any) error {
 	value := reflect.ValueOf(target).Elem()
 	if value.Kind() != reflect.Slice {
-		return protocol.Decode(data, target)
+		return protocol.DecodeExact(data, target)
 	}
 	var entries []json.RawMessage
 	if json.Unmarshal(data, &entries) != nil || entries == nil {
@@ -230,7 +230,7 @@ func decodeResponse(data []byte, target any) error {
 	result := reflect.MakeSlice(value.Type(), 0, len(entries))
 	for _, entry := range entries {
 		item := reflect.New(value.Type().Elem())
-		if err := protocol.Decode(entry, item.Interface()); err != nil {
+		if err := protocol.DecodeExact(entry, item.Interface()); err != nil {
 			return err
 		}
 		result = reflect.Append(result, item.Elem())

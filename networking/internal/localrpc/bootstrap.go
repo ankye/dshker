@@ -40,7 +40,7 @@ func (conn *authenticatedConn) Read(data []byte) (int, error) {
 func AcceptMain(ctx context.Context, input io.Reader, output io.Writer) (net.Conn, error) {
 	data, err := io.ReadAll(io.LimitReader(input, protocol.MaxControlBytes+1))
 	var config Bootstrap
-	if err != nil || protocol.Decode(data, &config) != nil || config.Version != 1 {
+	if err != nil || protocol.DecodeExact(data, &config) != nil || config.Version != 1 {
 		return nil, errors.New("p2p.invalid_bootstrap")
 	}
 	secret, err := hex.DecodeString(config.Secret)
@@ -66,7 +66,7 @@ func AcceptMain(ctx context.Context, input io.Reader, output io.Writer) (net.Con
 	reader := bufio.NewReaderSize(conn, protocol.MaxControlBytes+1)
 	line, err := reader.ReadSlice('\n')
 	var auth Authentication
-	if err != nil || protocol.Decode(line, &auth) != nil || auth.Version != 1 || subtle.ConstantTimeCompare([]byte(auth.Secret), []byte(config.Secret)) != 1 {
+	if err != nil || protocol.DecodeExact(line, &auth) != nil || auth.Version != 1 || subtle.ConstantTimeCompare([]byte(auth.Secret), []byte(config.Secret)) != 1 {
 		conn.Close()
 		return nil, errors.New("p2p.helper_authentication_failed")
 	}

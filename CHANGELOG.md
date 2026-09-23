@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.1.76 — 2026-09-23
+
+### 简体中文 (zh-CN)
+
+- **两台电脑之间的通信协议现在可以演进了。** 此前任何一方多发一个字段，另一方都会整条消息拒收，所以协议一旦定型就再也不能加东西——这正是为什么一个修复只装了一台机器时完全不生效，而且两端日志各说各话、谁都说不清原因。现在不认识的字段会被忽略，以后新增可选字段不会让旧版本断连。
+- **握手加入能力声明，一次加好、以后不必再改结构。** 用的是名称列表而不是逐个功能加字段，所以后续新增能力只是多一个名字。第一个能力是"没有工作台也维持连接"：当对方是不支持它的旧版本时，日志会直接说明"本端保持连接，但对方的版本会主动断开，请升级"，而不是留下两份互相矛盾的日志。
+- **区分两类消息，各用各自合适的严格程度。** 跨机器的对等消息（握手、数据帧、信令、目录）容忍未知字段，因为两端各自独立升级；本机内部通道和自家协调服务器的响应保持严格拒收，因为那里出现不认识的字段说明契约漂移了，尽早发现比容忍更有价值。顺带：数据帧走的是较快的那条解析路径。
+
+### English (en-US)
+
+- **The protocol between two computers can now evolve.** Any field one side added was enough for the other to reject the entire message, so the contract was frozen the moment it shipped — which is exactly why a fix installed on one machine had no effect until the other was upgraded, with each side's log blaming something different and neither able to say why. Unknown fields are now ignored, so adding an optional field no longer disconnects older builds.
+- **The handshake advertises capabilities, designed once so the structure never has to change again.** It carries a list of names rather than a field per feature, so a later capability is just another name. The first one is "keeps a connection with no workbench": when the peer is an older build without it, the log now says plainly that this side keeps the link but the peer's build will close it and should be upgraded, instead of leaving two logs that contradict each other.
+- **Two classes of message, each with the strictness it needs.** Cross-machine peer messages (handshake, data frames, signalling, directory) tolerate unknown fields because the two ends upgrade independently; this process's own private channel and our coordinator's responses still refuse them, because there an unrecognized field means the contract drifted and finding it immediately is worth more. Incidentally, data frames now take the faster of the two paths.
+
 ## 0.1.75 — 2026-09-23
 
 ### 简体中文 (zh-CN)

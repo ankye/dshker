@@ -306,7 +306,7 @@ func secretKey(raw string) error {
 func (server Serve) Handle(ctx context.Context, method string, payload json.RawMessage) (any, error) {
 	if method == "core.version" {
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		return versionResult{Version: Version, MethodTableVersion: localrpc.MethodTableVersion, Methods: server.MethodTable()}, nil
@@ -314,7 +314,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 	switch method {
 	case "core.desktop_attach", "core.desktop_handoff":
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		// Only the authenticated headless endpoint can promote a particular
@@ -325,7 +325,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			Key string `json:"key"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if err := secretKey(request.Key); err != nil {
@@ -346,7 +346,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			Key   string `json:"key"`
 			Value string `json:"value"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if err := secretKey(request.Key); err != nil {
@@ -367,7 +367,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			Key string `json:"key"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if err := secretKey(request.Key); err != nil {
@@ -382,7 +382,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		return struct{}{}, nil
 	case "core.catalog_inspect":
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.Catalog == nil {
@@ -397,7 +397,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		return catalogSnapshot(snapshot), nil
 	case "core.catalog_enable":
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.Catalog == nil {
@@ -413,7 +413,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			ExpectedRevision string         `json:"expectedRevision"`
 			Record           catalog.Record `json:"record"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.Catalog == nil {
@@ -441,7 +441,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			Port                  harnessruntime.PortSetting `json:"port"`
 			LogPath               string                     `json:"logPath"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		supervisor, err := server.runtimeSupervisor()
@@ -487,7 +487,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, errors.New("p2p.autostart_unavailable")
 		}
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		switch method {
@@ -512,7 +512,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		// transport: a caller with no desktop session can see the address this
 		// machine would bind a peer to, and the generation that identifies it.
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.RuntimeBinding == nil {
@@ -523,7 +523,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			SubjectID string `json:"subjectId"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		supervisor, err := server.runtimeSupervisor()
@@ -539,7 +539,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			SubjectID string `json:"subjectId"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		supervisor, err := server.runtimeSupervisor()
@@ -555,7 +555,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			FilePath string `json:"filePath"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := remoteconnections.Open(request.FilePath)
@@ -576,7 +576,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			User        string `json:"user"`
 			SSHKeyPath  string `json:"sshKeyPath"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := remoteconnections.Open(request.FilePath)
@@ -599,7 +599,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			SSHKeyPath             string `json:"sshKeyPath"`
 			ExpectedConfigRevision string `json:"expectedConfigRevision"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := remoteconnections.Open(request.FilePath)
@@ -616,7 +616,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			FilePath     string `json:"filePath"`
 			ConnectionID string `json:"connectionId"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := remoteconnections.Open(request.FilePath)
@@ -633,7 +633,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			DescriptorPath string `json:"descriptorPath"`
 			SubjectID      string `json:"subjectId"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.Brokers == nil || server.Runtime == nil {
@@ -657,7 +657,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		return remoteBrokerResult{Port: descriptor.Port, InstanceID: descriptor.InstanceID}, nil
 	case "remote.broker_stop":
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.Brokers == nil {
@@ -669,7 +669,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		return struct{}{}, nil
 	case "remote.broker_status":
 		var request struct{}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.Brokers == nil {
@@ -688,7 +688,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			SCP          string               `json:"scp"`
 			SSHKeyPath   string               `json:"sshKeyPath"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		route, err := server.remoteRoute()
@@ -715,7 +715,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			ConnectionID string `json:"connectionId"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		route, err := server.remoteRoute()
@@ -730,7 +730,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			ConnectionID string `json:"connectionId"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		route, err := server.remoteRoute()
@@ -746,7 +746,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			Cursor int64 `json:"cursor"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		supervisor, err := server.runtimeSupervisor()
@@ -759,7 +759,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			FilePath string `json:"filePath"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := harnessruntime.OpenPreferences(request.FilePath)
@@ -776,7 +776,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			FilePath string                     `json:"filePath"`
 			Port     harnessruntime.PortSetting `json:"port"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := harnessruntime.OpenPreferences(request.FilePath)
@@ -795,7 +795,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			FilePath string `json:"filePath"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := installcatalog.Open(request.FilePath)
@@ -812,7 +812,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			FilePath string                 `json:"filePath"`
 			Catalog  installcatalog.Catalog `json:"catalog"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		// The store re-validates every field, publishes atomically and proves the
@@ -842,7 +842,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			FilePath      string `json:"filePath"`
 			NativeDshHome string `json:"nativeDshHome"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		store, err := rootregistry.Open(request.FilePath, request.NativeDshHome)
@@ -860,7 +860,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			NativeDshHome string                `json:"nativeDshHome"`
 			Registry      rootregistry.Registry `json:"registry"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		// The store validates the whole topology, publishes atomically and proves
@@ -878,7 +878,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		var request struct {
 			ServiceID string `json:"serviceId"`
 		}
-		if err := protocol.Decode(payload, &request); err != nil {
+		if err := protocol.DecodeExact(payload, &request); err != nil {
 			return nil, err
 		}
 		if server.Catalog == nil {

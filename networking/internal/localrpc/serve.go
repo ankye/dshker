@@ -61,7 +61,7 @@ func ReadEndpointRecord(path string) (Bootstrap, error) {
 		return Bootstrap{}, errors.New("p2p.helper_unavailable")
 	}
 	var config Bootstrap
-	if protocol.Decode(data, &config) != nil || config.Version != 1 {
+	if protocol.DecodeExact(data, &config) != nil || config.Version != 1 {
 		return Bootstrap{}, errors.New("p2p.invalid_bootstrap")
 	}
 	secret, err := hex.DecodeString(config.Secret)
@@ -96,7 +96,7 @@ func AcceptClient(ctx context.Context, listener net.Listener, secret string) (ne
 	reader := bufio.NewReaderSize(conn, protocol.MaxControlBytes+1)
 	line, err := reader.ReadSlice('\n')
 	var auth Authentication
-	if err != nil || protocol.Decode(line, &auth) != nil || auth.Version != 1 ||
+	if err != nil || protocol.DecodeExact(line, &auth) != nil || auth.Version != 1 ||
 		subtle.ConstantTimeCompare([]byte(auth.Secret), []byte(secret)) != 1 {
 		conn.Close()
 		return nil, errors.New("p2p.helper_authentication_failed")
@@ -181,7 +181,7 @@ func Connect(ctx context.Context, socket string, secret string) (net.Conn, error
 		Version       int  `json:"version"`
 		Authenticated bool `json:"authenticated"`
 	}
-	if err != nil || protocol.Decode(line, &ack) != nil || ack.Version != 1 || !ack.Authenticated {
+	if err != nil || protocol.DecodeExact(line, &ack) != nil || ack.Version != 1 || !ack.Authenticated {
 		conn.Close()
 		return nil, errors.New("p2p.helper_authentication_failed")
 	}

@@ -14,7 +14,7 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 		var request struct {
 			Token string `json:"token"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		switch method {
@@ -31,7 +31,7 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 			NetworkID string `json:"networkId"`
 			Name      string `json:"name"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.RenameNetwork(ctx, request.Token, request.NetworkID, request.Name)
@@ -41,7 +41,7 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 			NetworkID  string `json:"networkId"`
 			MaxDevices int    `json:"maxDevices"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.UpdateNetworkLimit(ctx, request.Token, request.NetworkID, request.MaxDevices)
@@ -50,7 +50,7 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 			Token     string `json:"token"`
 			NetworkID string `json:"networkId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		switch method {
@@ -69,7 +69,7 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 			NetworkID string `json:"networkId"`
 			DeviceID  string `json:"deviceId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return struct{}{}, account.base.UnbindDevice(ctx, request.Token, request.NetworkID, request.DeviceID)
@@ -79,7 +79,7 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 			NetworkID string `json:"networkId"`
 			DeviceID  string `json:"deviceId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		if method == "devices.bind" {
@@ -92,7 +92,7 @@ func (account *account) userManagement(ctx context.Context, method string, data 
 			NetworkID string `json:"networkId"`
 			PairID    string `json:"pairId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return struct{}{}, account.base.DeletePair(ctx, request.Token, request.NetworkID, request.PairID)

@@ -169,7 +169,7 @@ func (client *Client) Share(ctx context.Context, networkID string) (Share, error
 func VerifyShare(encoded string, identity Identity, networkID, ownDeviceID string, now time.Time) (Share, error) {
 	var share Share
 	data, err := base64.RawURLEncoding.DecodeString(encoded)
-	if err != nil || protocol.Decode(data, &share) != nil {
+	if err != nil || protocol.DecodeExact(data, &share) != nil {
 		return Share{}, errors.New("p2p.invalid_pairing_code")
 	}
 	if share.Version != 1 || share.ServiceID != identity.ServiceID || share.NetworkID != networkID || !protocol.ValidID(share.DeviceID) || share.DeviceID == ownDeviceID || !protocol.ValidID(share.Nonce) || share.ExpiresAt <= now.Unix() || share.ExpiresAt > now.Add(5*time.Minute).Unix() {

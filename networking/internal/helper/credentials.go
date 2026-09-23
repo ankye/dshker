@@ -172,7 +172,7 @@ func credentialIndex(store secret.Store) []string {
 		return nil
 	}
 	var record credentialIndexRecord
-	if protocol.Decode(data, &record) != nil || record.Version != 1 {
+	if protocol.DecodeExact(data, &record) != nil || record.Version != 1 {
 		return nil
 	}
 	services := make([]string, 0, len(record.Services))
@@ -250,7 +250,7 @@ func (host *Host) LoadCredential(serviceID string) (storedCredential, error) {
 		return storedCredential{}, errors.New("p2p.secret_provider_unavailable")
 	}
 	var record storedCredential
-	if protocol.Decode(data, &record) != nil || record.ServiceID != serviceID || !record.valid() {
+	if protocol.DecodeExact(data, &record) != nil || record.ServiceID != serviceID || !record.valid() {
 		// A record this build cannot use is not an identity. Reporting it as absent
 		// keeps the machine enrollable instead of failing every launch on a value
 		// that no operation can repair.

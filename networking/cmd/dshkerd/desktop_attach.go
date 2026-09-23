@@ -35,7 +35,7 @@ func (attachment *desktopAttachment) handlerFor(peer *localrpc.Peer, server *cor
 	return func(ctx context.Context, method string, payload json.RawMessage) (any, error) {
 		if method == "core.desktop_attach" {
 			var request struct{}
-			if err := protocol.Decode(payload, &request); err != nil {
+			if err := protocol.DecodeExact(payload, &request); err != nil {
 				return nil, err
 			}
 			attachment.mu.Lock()
@@ -52,7 +52,7 @@ func (attachment *desktopAttachment) handlerFor(peer *localrpc.Peer, server *cor
 		}
 		if method == "core.desktop_handoff" {
 			var request struct{}
-			if err := protocol.Decode(payload, &request); err != nil {
+			if err := protocol.DecodeExact(payload, &request); err != nil {
 				return nil, err
 			}
 			attachment.mu.Lock()

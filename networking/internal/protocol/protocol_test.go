@@ -11,7 +11,7 @@ import (
 )
 
 func TestStrictJSON(t *testing.T) {
-	for _, input := range []string{`{"sdp":"x","sdp":"y"}`, `{"sdp":"x","extra":1}`, `null`, `{"sdp":null}`, `{"sdp":"x"} {}`, `[]`, strings.Repeat(" ", MaxControlBytes+1)} {
+	for _, input := range []string{`{"sdp":"x","sdp":"y"}`, `null`, `{"sdp":null}`, `{"sdp":"x"} {}`, `[]`, `{}`, strings.Repeat(" ", MaxControlBytes+1)} {
 		t.Run(input[:min(len(input), 60)], func(t *testing.T) {
 			var target SDP
 			if Decode([]byte(input), &target) == nil {
@@ -22,6 +22,22 @@ func TestStrictJSON(t *testing.T) {
 	var target SDP
 	if err := Decode([]byte(`{"sdp":"v=0\r\n"}`), &target); err != nil || target.SDP != "v=0\r\n" {
 		t.Fatalf("valid field changed: %q %v", target.SDP, err)
+	}
+	// A field this build does not know is ignored, not refused. This is what lets
+	// the wire contract grow: a peer may add an optional field without every older
+	// peer rejecting the whole message, which is the state that made two adjacent
+	// builds unable to talk to each other at all.
+	var forward SDP
+	if err := Decode([]byte(`{"sdp":"v=0","somethingNewer":{"a":[1,2]}}`), &forward); err != nil {
+		t.Fatalf("an unknown field was refused: %v", err)
+	}
+	if forward.SDP != "v=0" {
+		t.Fatalf("the known field did not survive an unknown one: %q", forward.SDP)
+	}
+	// A declared field may still never be omitted: silence must not read as zero.
+	var missing Signal
+	if Decode([]byte(`{"version":1}`), &missing) == nil {
+		t.Fatal("a message missing declared fields was accepted")
 	}
 }
 
@@ -129,6 +145,74 @@ func TestFrameLimitsAndGeneration(t *testing.T) {
 		}
 		if frame.Validate(attempt, 2, 2) == nil || frame.Validate(attempt, 1, 3) == nil || frame.Validate(NewID(), 1, 2) == nil {
 			t.Fatal("accepted stale or cross-peer frame")
+		}
+	}
+}
+
+// TestDecoderSeparatesPeerAndSameOwnerContracts states the one rule that decides
+// which decoder a message uses, because getting it wrong is silent in both
+// directions.
+//
+// A peer message must tolerate a field it does not know: the two ends are separate
+// machines upgraded separately, and refusing an unknown field froze this contract
+// so completely that adding one optional field would have made adjacent builds
+// unable to talk at all. A same-owner message — this process's private channel, or
+// the coordinator API this client is written against — must refuse it, because
+// there an unrecognized field means the contract drifted and silence would hide it.
+func TestDecoderSeparatesPeerAndSameOwnerContracts(t *testing.T) {
+	const withUnknown = `{"sdp":"v=0","fromALaterBuild":true}`
+
+	var peerSide SDP
+	if err := Decode([]byte(withUnknown), &peerSide); err != nil {
+		t.Fatalf("a peer message with an unknown field was refused: %v", err)
+	}
+	if peerSide.SDP != "v=0" {
+		t.Fatalf("the known field did not survive: %q", peerSide.SDP)
+	}
+
+	var sameOwner SDP
+	if DecodeExact([]byte(withUnknown), &sameOwner) == nil {
+		t.Fatal("a same-owner message with an unknown field was accepted")
+	}
+
+	// Both keep every other guarantee: a declared field may never be omitted, and a
+	// duplicate key is never admitted by either.
+	for _, input := range []string{`{}`, `{"sdp":"x","sdp":"y"}`} {
+		if Decode([]byte(input), &peerSide) == nil {
+			t.Fatalf("Decode admitted %s", input)
+		}
+		if DecodeExact([]byte(input), &sameOwner) == nil {
+			t.Fatalf("DecodeExact admitted %s", input)
+		}
+	}
+}
+
+// TestCapabilityAdvertisementIsBounded covers the extension point itself: a peer
+// may claim names this build has never heard of, but not use the list as a channel.
+func TestCapabilityAdvertisementIsBounded(t *testing.T) {
+	mine := PeerCapabilities()
+	if !HasCapability(mine, CapabilityOptionalWorkbench) {
+		t.Fatal("this build does not advertise that it keeps workbenchless links")
+	}
+	// A caller must not be able to change what this build claims.
+	mine[0] = "tampered"
+	if !HasCapability(PeerCapabilities(), CapabilityOptionalWorkbench) {
+		t.Fatal("a caller altered this build's advertised capabilities")
+	}
+
+	if !ValidCapabilities([]string{"something.from.the.future"}) {
+		t.Fatal("an unknown name was rejected, which defeats the extension point")
+	}
+	if !ValidCapabilities(nil) {
+		t.Fatal("a peer advertising nothing was rejected")
+	}
+	flood := make([]string, MaxCapabilities+1)
+	for index := range flood {
+		flood[index] = string(rune('a'+index%26)) + string(rune('0'+index/26))
+	}
+	for _, invalid := range [][]string{flood, {""}, {"a", "a"}, {strings.Repeat("x", 65)}} {
+		if ValidCapabilities(invalid) {
+			t.Fatalf("an ill-formed advertisement was accepted: %d entries", len(invalid))
 		}
 	}
 }

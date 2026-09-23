@@ -21,7 +21,7 @@ func (account *account) management(ctx context.Context, method string, data json
 			Username string `json:"username"`
 			Password string `json:"password"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.Login(ctx, request.Username, request.Password)
@@ -34,7 +34,7 @@ func (account *account) management(ctx context.Context, method string, data json
 			CSR       string `json:"csr"`
 			Name      string `json:"name"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.JoinNetwork(ctx, controlplane.NetworkJoin{
@@ -48,7 +48,7 @@ func (account *account) management(ctx context.Context, method string, data json
 			Email    string `json:"email"`
 			Password string `json:"password"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		// The coordinator's register endpoint returns the created user without a
@@ -64,7 +64,7 @@ func (account *account) management(ctx context.Context, method string, data json
 		var request struct {
 			Token string `json:"token"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.Networks(ctx, request.Token)
@@ -73,7 +73,7 @@ func (account *account) management(ctx context.Context, method string, data json
 			Token string `json:"token"`
 			Name  string `json:"name"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.CreateNetwork(ctx, request.Token, request.Name)
@@ -82,13 +82,13 @@ func (account *account) management(ctx context.Context, method string, data json
 			Token     string `json:"token"`
 			NetworkID string `json:"networkId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.EnrollmentToken(ctx, request.Token, request.NetworkID)
 	case "device.enroll":
 		var request controlplane.Enrollment
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.base.Enroll(ctx, request)
@@ -97,7 +97,7 @@ func (account *account) management(ctx context.Context, method string, data json
 			RequestID  string `json:"requestId"`
 			PrivateKey []byte `json:"privateKey"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		device, err := account.base.ReadEnrollment(ctx, request.RequestID, request.PrivateKey, account.identity)
@@ -128,7 +128,7 @@ func (account *account) management(ctx context.Context, method string, data json
 	switch method {
 	case "pairs.list":
 		var empty struct{}
-		if protocol.Decode(data, &empty) != nil {
+		if protocol.DecodeExact(data, &empty) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.client.Pairs(ctx)
@@ -136,7 +136,7 @@ func (account *account) management(ctx context.Context, method string, data json
 		// No arguments: the coordinator derives peers from this device's own
 		// network bindings, so there is nothing for the caller to choose.
 		var empty struct{}
-		if protocol.Decode(data, &empty) != nil {
+		if protocol.DecodeExact(data, &empty) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.client.AdoptNetwork(ctx)
@@ -144,7 +144,7 @@ func (account *account) management(ctx context.Context, method string, data json
 		var request struct {
 			PairID string `json:"pairId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.client.PairIdentity(ctx, request.PairID)
@@ -152,7 +152,7 @@ func (account *account) management(ctx context.Context, method string, data json
 		var request struct {
 			NetworkID string `json:"networkId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		share, err := account.client.Share(ctx, request.NetworkID)
@@ -169,7 +169,7 @@ func (account *account) management(ctx context.Context, method string, data json
 			Code      string `json:"code"`
 			NetworkID string `json:"networkId"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		if _, err := controlplane.VerifyShare(request.Code, account.identity, request.NetworkID, account.device.DeviceID, time.Now()); err != nil {
@@ -182,13 +182,13 @@ func (account *account) management(ctx context.Context, method string, data json
 			Action      string `json:"action"`
 			Fingerprint string `json:"fingerprint"`
 		}
-		if protocol.Decode(data, &request) != nil {
+		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.client.PairAction(ctx, request.PairID, request.Action, request.Fingerprint)
 	case "pairs.pin":
 		var pin controlplane.PairIdentity
-		if protocol.Decode(data, &pin) != nil {
+		if protocol.DecodeExact(data, &pin) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return struct{}{}, account.manager.Pin(pin)

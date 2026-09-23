@@ -132,7 +132,7 @@ func gitExecutionContext(workingDirectory string) (gitcheckout.ExecutionContext,
 // the declared policy, in that order.
 func (server Serve) handleGitRegister(ctx context.Context, payload json.RawMessage) (any, error) {
 	var request gitRegisterRequest
-	if err := protocol.Decode(payload, &request); err != nil {
+	if err := protocol.DecodeExact(payload, &request); err != nil {
 		return nil, err
 	}
 	execution, err := gitExecutionContext(request.WorkingDirectory)
@@ -158,7 +158,7 @@ func (server Serve) handleGitRegister(ctx context.Context, payload json.RawMessa
 // be shown what the launcher found before anything is created.
 func (server Serve) handleRepositoryInspect(ctx context.Context, payload json.RawMessage) (any, error) {
 	var request repositoryInspectRequest
-	if err := protocol.Decode(payload, &request); err != nil {
+	if err := protocol.DecodeExact(payload, &request); err != nil {
 		return nil, err
 	}
 	execution, err := gitExecutionContext(filepath.Dir(request.RepositoryPath))
@@ -183,7 +183,7 @@ func (server Serve) handleRepositoryInspect(ctx context.Context, payload json.Ra
 // shell's job; deciding what the answer is, is not.
 func (server Serve) handleCheckoutPrepare(ctx context.Context, payload json.RawMessage) (any, error) {
 	var request checkoutRequest
-	if err := protocol.Decode(payload, &request); err != nil {
+	if err := protocol.DecodeExact(payload, &request); err != nil {
 		return nil, err
 	}
 	paths, err := gitcheckout.NewInstallationPaths(request.NamespacePath, request.InstallationID)
@@ -265,7 +265,7 @@ func ensureMirror(ctx context.Context, runner *gitcheckout.Runner, executable gi
 // the mirror, the worktree identity, the remote and the cleanliness of the tree.
 func (server Serve) handleCheckoutVerify(ctx context.Context, payload json.RawMessage) (any, error) {
 	var request checkoutVerifyRequest
-	if err := protocol.Decode(payload, &request); err != nil {
+	if err := protocol.DecodeExact(payload, &request); err != nil {
 		return nil, err
 	}
 	paths, err := gitcheckout.NewInstallationPaths(request.NamespacePath, request.InstallationID)
