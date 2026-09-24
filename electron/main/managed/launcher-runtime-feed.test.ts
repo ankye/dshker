@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { CoreHarnessLaunchView, CoreHarnessRuntimePort } from '../core/harness-runtime'
 import { LauncherRuntimeFeed, consoleStreamOf } from './launcher-runtime-feed'
 
@@ -166,6 +166,56 @@ describe('launcher runtime feed', () => {
     })
 
     await expect(feed.drain()).resolves.toBeUndefined()
+  })
+
+  // A launch talks while it starts and is silent for the hours after. At a fixed
+  // 200ms that silence still cost two core round trips every 200ms for as long as
+  // DSH stayed up, with nothing to report.
+  it('slows down while a launch is quiet and speeds up when it talks again', async () => {
+    vi.useFakeTimers()
+    try {
+      const runtime = fakeRuntime()
+      const feed = new LauncherRuntimeFeed({
+        runtime: async () => runtime.port,
+        subjectId: 'launcher-harness',
+        onConsole: () => undefined,
+        onLaunch: () => undefined
+      })
+      feed.start()
+
+      // Silence: each drain waits longer than the last, up to the idle bound.
+      const quietReads: number[] = []
+      for (let elapsed = 0; elapsed < 20_000; elapsed += 100) {
+        await vi.advanceTimersByTimeAsync(100)
+        quietReads.push(runtime.cursors.length)
+      }
+      const drainsWhileQuiet = runtime.cursors.length
+      // A fixed 200ms rate would have drained a hundred times in twenty seconds.
+      expect(drainsWhileQuiet).toBeLessThan(30)
+      // The first second still drains at the fast rate, so a launch that starts
+      // talking a moment after boot is not answered two seconds late. quietReads is
+      // sampled every 100ms, so index 9 is one second in.
+      expect(quietReads[9]).toBeGreaterThanOrEqual(4)
+
+      // Output restores the fast rate, and keeps it: backing off on the first empty
+      // read made the feed lose the fast rate again one drain later, so a gap
+      // inside a burst slowed it down mid-burst.
+      runtime.page = {
+        entries: [{ seq: 1, stream: 'stdout', text: 'listening', occurredAt: 1 }],
+        cursor: 1
+      }
+      await vi.advanceTimersByTimeAsync(2_000)
+      const afterOutput = runtime.cursors.length
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(runtime.cursors.length - afterOutput).toBeGreaterThan(1)
+
+      feed.stop()
+      const afterStop = runtime.cursors.length
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(runtime.cursors.length).toBe(afterStop)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('narrows unknown core streams to standard output', () => {

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.80 — 2026-09-24
+
+### 简体中文 (zh-CN)
+
+- **挂机时不再持续空转。** DSH 启动后，外壳每 200 毫秒就向核心请求一次控制台和状态，每秒十次，不管有没有输出、窗口是否在前台——启动阶段有用，之后几小时里全是空读。现在有输出时保持 200 毫秒的灵敏度，连续多次读到空才逐步放慢到 2 秒；一有新输出立刻恢复。实测 12 秒静默从 60 次请求降到 12 次。
+- **窗口看不见时不再读取运行状态。** 界面每 1.5 秒轮询一次启动状态，最小化或切到别处时照旧唤醒主进程和核心。现在隐藏时暂停，重新可见时立即读一次，不等下一个周期。
+
+说明：活动监视器里占用最高的那个渲染进程是嵌入的 DSH 页面本身（流式输出与代码高亮），不是 Launcher 的逻辑；本次优化针对的是外壳这侧确实在空转的部分。
+
+### English (en-US)
+
+- **An idle launch no longer keeps polling at full speed.** Once DSH was up, the shell asked the core for its console and status every 200ms — ten times a second, regardless of whether anything had been written or the window was even in front. That rate is right while a launch is starting and pure waste for the hours after. It now holds 200ms while output is arriving, slows toward 2s only after a sustained run of empty reads, and returns to full speed on the next line. Measured over twelve seconds of silence: 12 reads instead of 60.
+- **A hidden window no longer reads launch state.** The interface polled every 1.5s even when minimised or behind another app, waking both the main process and the core to render nothing. It now pauses while hidden and reads once immediately on becoming visible, rather than waiting for the next tick.
+
+Note: the heaviest renderer in Activity Monitor is the embedded DSH page itself (streaming output and syntax highlighting), not launcher logic. This release addresses the shell-side work that was genuinely spinning.
+
 ## 0.1.79 — 2026-09-24
 
 ### 简体中文 (zh-CN)

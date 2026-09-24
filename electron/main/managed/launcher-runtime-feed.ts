@@ -12,8 +12,28 @@ import type {
 } from '../core/harness-runtime'
 import type { LauncherHarnessConsoleEntry } from '../../../src/shared/contracts'
 
-/** How often the shell drains the core's console feed while a launch is live. */
+/** How often the shell drains the core's console feed while output is arriving. */
 export const CONSOLE_POLL_MILLISECONDS = 200
+
+/**
+ * The slowest the feed backs off to once a launch has gone quiet.
+ *
+ * A launch is talkative while it starts and nearly silent for the hours after. At
+ * a fixed 200ms that silence still cost two core round trips every 200ms for as
+ * long as DSH stayed up — ten a second, forever, with nothing to report. Backing
+ * off to this bound cuts an idle launch to one drain every two seconds while
+ * leaving startup output as immediate as before.
+ */
+export const CONSOLE_IDLE_POLL_MILLISECONDS = 2_000
+
+/**
+ * Empty reads required before the feed starts slowing down.
+ *
+ * Output arrives in bursts with short gaps inside them. Backing off on the first
+ * empty page meant one gap mid-burst doubled the delay, so the fast rate was never
+ * actually held while a launch was talking.
+ */
+export const QUIET_DRAINS_BEFORE_BACKOFF = 5
 
 export interface LauncherRuntimeFeedOptions {
   /** Resolves the core's runtime port, or refuses when no core is reachable. */
@@ -31,7 +51,18 @@ export interface LauncherRuntimeFeedOptions {
 export class LauncherRuntimeFeed {
   readonly #options: LauncherRuntimeFeedOptions
   #cursor = 0
-  #timer: ReturnType<typeof setInterval> | undefined
+  #timer: ReturnType<typeof setTimeout> | undefined
+  /** The delay the next drain is scheduled with; grows while the launch is quiet. */
+  #delay = CONSOLE_POLL_MILLISECONDS
+  /**
+   * Consecutive drains that found nothing.
+   *
+   * Backing off on the first empty page was wrong: output arrives in bursts with
+   * gaps inside them, so one empty read between two lines doubled the delay and
+   * the feed never actually held the fast rate while a launch was talking. Only a
+   * run of empty reads means the launch has genuinely gone quiet.
+   */
+  #quietDrains = 0
   /**
    * Invalidates an in-flight drain when a launch is stopped or the feed is
    * restarted. Without this fence, a status response that started before stop
@@ -47,19 +78,40 @@ export class LauncherRuntimeFeed {
   start(): void {
     if (this.#timer !== undefined) return
     this.#generation += 1
-    const interval = this.#options.intervalMilliseconds ?? CONSOLE_POLL_MILLISECONDS
-    this.#timer = setInterval(() => {
-      void this.drain()
-    }, interval)
+    // A fresh launch is the talkative phase, so start at the fast rate whatever
+    // the previous launch backed off to.
+    this.#delay = this.#fastDelay()
+    this.#quietDrains = 0
+    this.#schedule()
   }
 
   /** Stops polling. The next start resumes from the cursor it reached. */
   stop(): void {
     this.#generation += 1
     if (this.#timer !== undefined) {
-      clearInterval(this.#timer)
+      clearTimeout(this.#timer)
       this.#timer = undefined
     }
+  }
+
+  #fastDelay(): number {
+    return this.#options.intervalMilliseconds ?? CONSOLE_POLL_MILLISECONDS
+  }
+
+  /**
+   * Chains the next drain instead of holding a fixed interval.
+   *
+   * A self-scheduling timeout is what lets the delay change between drains, and it
+   * also stops drains from overlapping when the core is slow to answer — an
+   * interval would have queued another one on top.
+   */
+  #schedule(): void {
+    this.#timer = setTimeout(() => {
+      void this.drain().finally(() => {
+        if (this.#timer === undefined) return
+        this.#schedule()
+      })
+    }, this.#delay)
   }
 
   /** Reads one console page and one launch record. Never throws from a timer. */
@@ -69,6 +121,15 @@ export class LauncherRuntimeFeed {
       const page = await runtime.console(this.#cursor)
       if (generation !== this.#generation) return
       this.#cursor = page.cursor
+      // Output means the launch is active: hold the fast rate. Only a sustained
+      // run of empty reads backs off, so a gap between two lines of a burst does
+      // not slow the feed down mid-burst.
+      if (page.entries.length > 0) {
+        this.#quietDrains = 0
+        this.#delay = this.#fastDelay()
+      } else if (++this.#quietDrains >= QUIET_DRAINS_BEFORE_BACKOFF) {
+        this.#delay = Math.min(this.#delay * 2, CONSOLE_IDLE_POLL_MILLISECONDS)
+      }
       for (const entry of page.entries) {
         if (generation !== this.#generation) return
         this.#forward(entry)

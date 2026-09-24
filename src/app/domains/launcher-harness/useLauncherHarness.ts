@@ -349,6 +349,7 @@ async function applyOperation(
 /** Renderer state for the one Launcher-owned Harness checkout. */
 export function useLauncherHarness() {
   let polling: ReturnType<typeof setInterval> | undefined
+  let onVisible: (() => void) | undefined
   onMounted(() => {
     // Console output arrives by push; this subscription is idempotent and
     // outlives every component because the feed state is module-level.
@@ -357,6 +358,11 @@ export function useLauncherHarness() {
     // State transitions (preparing, starting, running) stay on the periodic
     // read: they are low-frequency facts, unlike the streamed console feed.
     polling = setInterval(() => {
+      // A hidden window cannot show a state change, so reading one only wakes the
+      // main process and the core for nothing. Visibility is re-checked on every
+      // tick rather than by subscribing, because the read has to resume by itself
+      // when the window comes back.
+      if (document.visibilityState === 'hidden') return
       if (
         !loading.value &&
         (state.value?.kind === 'preparing' ||
@@ -366,9 +372,16 @@ export function useLauncherHarness() {
         void refreshSilently()
       }
     }, 1_500)
+    // Coming back into view must not wait for the next tick: the state may have
+    // changed while nothing was reading it.
+    onVisible = () => {
+      if (document.visibilityState === 'visible' && !loading.value) void refreshSilently()
+    }
+    document.addEventListener('visibilitychange', onVisible)
   })
   onUnmounted(() => {
     if (polling !== undefined) clearInterval(polling)
+    if (onVisible !== undefined) document.removeEventListener('visibilitychange', onVisible)
   })
   return {
     state,
