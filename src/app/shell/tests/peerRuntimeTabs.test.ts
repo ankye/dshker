@@ -104,7 +104,7 @@ describe('paired computer Run tabs', () => {
   })
 
   it('retains one tab per explicitly opened paired computer', () => {
-    expect(peerTab()).toMatchObject({ source: 'peer', connectionId, title: 'Studio' })
+    expect(peerTab()).toMatchObject({ source: 'peer', connectionId, label: 'Studio' })
   })
 
   it('carries no address while the peer is not connected', () => {
@@ -172,12 +172,32 @@ describe('paired computer Run tabs', () => {
     expect(JSON.stringify(peerTab()?.status)).not.toMatch(/http|127\.0\.0\.1|url/i)
   })
 
+  // With several machines open, a label that tracked the page title rewrote itself
+  // on every navigation inside each workspace, and the tabs stopped telling the
+  // machines apart. The page title is still recorded — it is worth having in the
+  // tooltip — but it must never reach the label.
+  it('keeps naming the machine while the page navigates', async () => {
+    const before = peerTab()?.label
+    expect(before).toBe('Studio')
+
+    runtimeBrowser.updateTab(`peer:${connectionId}`, {
+      url: 'http://127.0.0.1:9/some/deep/page',
+      title: 'Some Long Page Heading — Section 4'
+    })
+    await nextTick()
+
+    expect(peerTab()?.label).toBe(before)
+    expect(peerTab()?.title).toBe('Some Long Page Heading — Section 4')
+  })
+
   it('follows a rename without changing tab identity', async () => {
     const before = peerTab()?.id
     p2pManagement.catalog.value = catalog([computer({ displayName: 'Renamed studio' })])
     await nextTick()
     expect(peerTab()?.id).toBe(before)
-    expect(peerTab()?.title).toBe('Renamed studio')
+    // Renaming the computer renames its tab, because the label follows the catalog
+    // rather than whatever page happens to be loaded.
+    expect(peerTab()?.label).toBe('Renamed studio')
   })
 
   it('removes the tab when the computer leaves the catalog', async () => {

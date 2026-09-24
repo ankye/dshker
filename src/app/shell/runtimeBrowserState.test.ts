@@ -162,7 +162,9 @@ describe('fixed runtime workspaces', () => {
     }
     await nextTick()
     expect(runtimeBrowser.tabs.value[1]?.url).toBeUndefined()
-    expect(runtimeBrowser.tabs.value[1]?.title).toBe('Build Mac')
+    // The label names the machine and survives losing the URL; only the page title
+    // would have gone with it.
+    expect(runtimeBrowser.tabs.value[1]?.label).toBe('Build Mac')
   })
 
   it('returns focus to local only when the selected computer is removed', async () => {

@@ -38,7 +38,19 @@ export interface RuntimeTab {
    * Absent for the local tab and for SSH remotes, which use the default session.
    */
   readonly partition?: string
+  /**
+   * What the page currently calls itself. Useful as a tooltip; never the tab label.
+   */
   title: string
+  /**
+   * The name of the machine this tab belongs to, independent of the page.
+   *
+   * A tab label has to answer "which computer is this" at a glance. Labelling with
+   * the page title could not: every navigation inside a workspace rewrote it, so
+   * with several machines open the labels drifted into each other and stopped
+   * telling them apart. This is derived from the connection, so it holds still.
+   */
+  readonly label: string
   readonly status: RuntimeTabStatus | undefined
 }
 
@@ -103,6 +115,8 @@ const tabs = computed<readonly RuntimeTab[]>(() => {
     source: 'local',
     url: runtimeUrl.value === undefined ? undefined : (localNavigation?.url ?? runtimeUrl.value),
     title: localNavigation?.title ?? '',
+    // Named by the view, which owns the translated string for this machine.
+    label: '',
     status: undefined
   }
   return [
@@ -117,7 +131,8 @@ const tabs = computed<readonly RuntimeTab[]>(() => {
           source: 'remote',
           connectionId: connection.connectionId,
           url: readyUrl === undefined ? undefined : (current?.url ?? readyUrl),
-          title: current?.title ?? connection.displayName,
+          title: current?.title ?? '',
+          label: connection.displayName,
           status: withoutAddress(connection.status)
         }
       })
@@ -154,7 +169,8 @@ function peerTabs(): RuntimeTab[] {
       url: status?.kind === 'ready' ? (current?.url ?? peerEntries[id]?.url) : undefined,
       // The guest for a peer is isolated by main's own partition for this pair.
       partition: status?.kind === 'ready' ? peerEntries[id]?.partition : undefined,
-      title: current?.title ?? computer.displayName,
+      title: current?.title ?? '',
+      label: computer.displayName,
       status
     }
   })

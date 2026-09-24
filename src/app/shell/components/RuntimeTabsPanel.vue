@@ -16,7 +16,12 @@ import {
   runtimeBrowserZoomCommandForInput,
   type RuntimeBrowserZoomCommand
 } from '@/shared/runtime-browser-zoom'
-import { isLoopbackAddress, runtimeBrowser, type RuntimeTabId } from '../runtimeBrowserState'
+import {
+  isLoopbackAddress,
+  runtimeBrowser,
+  type RuntimeTab,
+  type RuntimeTabId
+} from '../runtimeBrowserState'
 import EmptyState from './EmptyState.vue'
 import RemoteRunActions from './RemoteRunActions.vue'
 import RuntimePeerEmptyState from './RuntimePeerEmptyState.vue'
@@ -192,6 +197,24 @@ function onDomReady(id: RuntimeTabId): void {
 }
 
 /** Records the page title the guest reports, so the tab strip stays truthful. */
+/**
+ * The name of the machine a tab belongs to.
+ *
+ * Deliberately not the page title: that changed on every navigation, so several
+ * machines open at once drifted into indistinguishable labels. The page title is
+ * still worth showing, but as the tooltip below.
+ */
+function tabLabel(tab: RuntimeTab): string {
+  return tab.source === 'local' ? t('runtime.localTab') : tab.label
+}
+
+/** Where the page's own title and address remain visible, without moving the label. */
+function tabTooltip(tab: RuntimeTab): string {
+  const label = tabLabel(tab)
+  const detail = tab.title || tab.url
+  return detail ? `${label} — ${detail}` : label
+}
+
 function onTitleUpdated(id: RuntimeTabId, event: unknown): void {
   const title = (event as { title?: unknown }).title
   if (typeof title === 'string' && title.length > 0) browser.updateTab(id, { title })
@@ -404,14 +427,12 @@ onUnmounted(() => {
             :data-state="
               tab.source === 'local' ? (tab.url ? 'ready' : 'disconnected') : tab.status?.kind
             "
-            :title="tab.url ?? tab.title"
+            :title="tabTooltip(tab)"
             :data-testid="`runtime-tab-${tab.id}`"
             @click="browser.activeTabId.value = tab.id"
           >
             <span class="browser-tab-status" aria-hidden="true" />
-            <span class="browser-tab-title">{{
-              tab.source === 'local' ? t('runtime.localTab') : tab.title
-            }}</span>
+            <span class="browser-tab-title">{{ tabLabel(tab) }}</span>
           </button>
         </div>
         <RuntimeTabAddMenu @navigate="emit('navigate', $event)" />

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.79 — 2026-09-24
+
+### 简体中文 (zh-CN)
+
+- **浏览器标签页现在固定显示机器名，不再跟着网页标题变。** 之前标签用的是网页自己的标题，所以在某台机器的工作区里点来点去，标签文字就一直改；同时开几台机器时，几个标签会变得互相看不出区别，认不出哪个是哪台。现在标签始终是那台机器的名字，鼠标悬停时才显示当前网页的标题和地址。给机器改名后标签会跟着改，本机标签仍是"本机"。
+
+### English (en-US)
+
+- **Browser tabs now stay labelled by machine instead of following the page title.** A tab took its text from whatever the page called itself, so navigating inside one machine's workspace kept rewriting it, and with several machines open the tabs drifted into labels that no longer told them apart. A tab is now named after its machine; the current page's title and address moved to the tooltip. Renaming a computer still renames its tab, and the local tab keeps its own label.
+
 ## 0.1.78 — 2026-09-24
 
 无用户可见的行为变化；这一版让上一版承诺的 CI 验证真正跑起来。
