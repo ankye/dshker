@@ -185,12 +185,29 @@ jobs:
         working-directory: networking
         run: go vet ./...
 
+      # libsecret backs the credential store on Linux and the runner has none.
+      # Installing it keeps the credential tests in scope instead of excluded,
+      # which would leave open part of the gap this job exists to close.
+      - name: Install the Linux credential backend
+        if: steps.coordinator.outputs.available == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libsecret-tools gnome-keyring dbus-x11
+
+      # Only the two cases suffixed RealDSH are excluded: they drive a real built
+      # DSH Harness, which this job has none of. They are matched by that suffix so
+      # a new one cannot be added without either a harness here or the same name.
+      #
+      # Nothing else is excluded. A case that cannot run on this platform says so
+      # itself with t.Skip and names the reason, which keeps a platform limit and a
+      # real regression from looking alike in a CI exclusion list.
       - name: Run the peer connection suite
         if: steps.coordinator.outputs.available == 'true'
         env:
           DSHKER_SERVER_BINARY: ${{ runner.temp }}/dshker-server/bin/dshker-server
         working-directory: networking
         run: |
-          go test -count=1 -timeout 25m \
-            -skip 'RealDSH$' \
-            ./integration/
+          # secret-tool talks to a D-Bus session holding an unlocked keyring.
+          # Without one the credential store is correctly unavailable and those
+          # tests would fail for the environment rather than for the code.
+          dbus-run-session -- bash -c 'echo | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1 || true; go test -count=1 -timeout 25m -skip "RealDSH$" ./integration/'

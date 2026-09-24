@@ -170,6 +170,13 @@ func TestHeadlessDesktopHandoffReleasesSingleOwner(t *testing.T) {
 	if code != 0 && strings.Contains(diagnostic, "p2p.autostart_conflict") {
 		t.Skip("another installation owns this user's autostart label")
 	}
+	// The daemon implements autostart on macOS and Windows only; elsewhere it
+	// answers p2p.autostart_unsupported by construction. Recognising that here
+	// keeps the reason in the test rather than in a CI exclusion list, where a
+	// platform limit and a real regression would look the same.
+	if code != 0 && strings.Contains(diagnostic, "p2p.autostart_unsupported") {
+		t.Skipf("autostart is not implemented on %s", runtime.GOOS)
+	}
 	if code != 0 {
 		t.Fatalf("autostart status: %s", diagnostic)
 	}

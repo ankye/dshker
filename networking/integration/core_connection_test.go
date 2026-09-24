@@ -448,6 +448,14 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 	available = true
 	ownerMu.Unlock()
 
+	// The coordinator admits a bounded number of requests per second from one
+	// source, and a single connect spends several of them. Back-to-back attempts
+	// passed only on a machine slow enough to spread them out; a CI runner tripped
+	// the limit and failed with p2p.rate_limited, which says nothing about the
+	// behaviour under test. Waiting out the window keeps the test about workbench
+	// recovery.
+	waitForRequestBudget()
+
 	second := connect(2)
 	if second.State.Stage != "ready" {
 		t.Fatalf("connect after the workbench recovered = %+v", second.State)
@@ -585,6 +593,11 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 			ownerMu.Unlock()
 			generation++
 
+			// Each row dispatches a fresh connect, and the coordinator's per-second
+			// request budget is shared by all of them. Without this the later rows
+			// failed with p2p.rate_limited on a fast runner.
+			waitForRequestBudget()
+
 			connected := connect(generation)
 			// The connection itself is established in every single case. That is the
 			// contract: maintenance belongs to the daemon, a workbench is cargo.
@@ -610,4 +623,14 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 			}
 		})
 	}
+}
+
+// waitForRequestBudget spaces out consecutive connect attempts.
+//
+// The coordinator allows a bounded number of requests per second from one source
+// and a single connect spends several. Tests that dispatched attempts back to back
+// passed locally and failed on a faster runner with p2p.rate_limited — a limit
+// working as designed, reported as a test failure about something else entirely.
+func waitForRequestBudget() {
+	time.Sleep(1100 * time.Millisecond)
 }
