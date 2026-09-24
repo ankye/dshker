@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.78 — 2026-09-24
+
+无用户可见的行为变化；这一版让上一版承诺的 CI 验证真正跑起来。
+
+### 简体中文 (zh-CN)
+
+- **两台电脑之间的连接现在真的由 CI 验证了，不再只是配置好而未生效。** 上一版加了这个检查，但它一直处于"跳过并警告"状态，因为缺少读取协调器仓库的凭据。现在用一个仅对该仓库只读的部署密钥（不是账号令牌，写不了任何东西，也碰不到其他仓库），30 个连接用例每次推送都真实执行。
+- **修好三处让 CI 失败、却与产品无关的问题。** 协调器对每个来源每秒只接受有限次请求，而一次连接会花掉好几次，所以我新写的两个工作台测试连发尝试时在快机器上被限流——之前只在慢机器上偶然通过。Linux 的密钥存储依赖 libsecret，CI 机器没有，现在装上并起一个解锁的钥匙环，而不是把这些用例排除掉。自动启动只在 macOS 和 Windows 实现，相关用例现在自己说明这一点并跳过，而不是靠 CI 的排除名单——那会让平台限制和真实回归看起来一样。
+
+### English (en-US)
+
+No user-visible behaviour changes; this release makes the CI verification the previous one promised actually run.
+
+- **The connection between two computers is now genuinely verified by CI, rather than configured and inert.** The previous release added the check but left it skipping with a warning, because it had no credential for the coordinator repository. It now uses a deploy key that is read-only for that one repository — not an account token, unable to write anything or reach anything else — and thirty connection cases run on every push.
+- **Three CI failures that said nothing about the product are fixed.** The coordinator admits a bounded number of requests per second per source and one connect spends several, so the two new workbench tests tripped it on a fast runner while passing locally by accident of timing. The Linux credential store needs libsecret, which the runner lacked; it is now installed with an unlocked keyring instead of excluding those cases. Autostart exists on macOS and Windows only, and that case now says so itself and skips, rather than living in a CI exclusion list where a platform limit and a real regression look alike.
+
 ## 0.1.77 — 2026-09-23
 
 无用户可见的行为变化；这一版只加强发布前的验证。
