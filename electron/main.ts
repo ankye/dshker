@@ -1,4 +1,4 @@
-import { app, BrowserWindow, powerMonitor, protocol } from 'electron'
+import { app, BrowserWindow, powerMonitor, protocol, shell } from 'electron'
 import { mkdir, realpath } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import path from 'node:path'
@@ -158,7 +158,8 @@ async function start(): Promise<void> {
     createTray(window, {
       shouldMinimizeOnClose: () =>
         services.launcherHarnessService.hasActiveOperation() ||
-        services.managedInstallationService.hasActiveOperation()
+        services.managedInstallationService.hasActiveOperation() ||
+        services.pluginCatalogService.hasActiveOperation()
     })
   }
   createLauncherWindow()
@@ -229,6 +230,7 @@ async function registerLauncherServices(
   readonly remotePeerBroker: Readonly<{ shutdown(): Promise<void> }>
   readonly peerManagement: PeerManagement
   readonly managedInstallationService: ManagedInstallationService
+  readonly pluginCatalogService: AwesomePluginCatalog
   readonly coreSupervisor: CoreSupervisor | undefined
 }> {
   // The core is started before the roots are initialized, because the core owns
@@ -287,12 +289,6 @@ async function registerLauncherServices(
     pnpmExecutable: PNPM_LAUNCHER.executable,
     pnpmLauncher: PNPM_LAUNCHER,
     runtime: () => coreHarnessRuntime
-  })
-  const launcherUpdateService = new LauncherUpdateService({
-    currentVersion: APP_METADATA.version,
-    platform: process.platform,
-    arch: process.arch,
-    downloadsDirectory: app.getPath('downloads')
   })
   // The core owns the remote route now, and it starts after this service is
   // constructed, so the port is a getter: a shell without a core refuses every
@@ -394,17 +390,30 @@ async function registerLauncherServices(
     }),
     checkout: coreCheckout
   })
+  const pluginCatalogService = new AwesomePluginCatalog({
+    pluginsDirectory: path.join(launcherRoot, 'plugins'),
+    gitExecutable: GIT_EXECUTABLE,
+    onActivity: (message) => launcherHarnessService.recordOperationActivity(message)
+  })
+  const launcherUpdateService = new LauncherUpdateService({
+    currentVersion: APP_METADATA.version,
+    platform: process.platform,
+    arch: process.arch,
+    downloadsDirectory: app.getPath('downloads'),
+    openInstaller: (installerPath) => shell.openPath(installerPath),
+    hasActiveLauncherOperation: () =>
+      launcherHarnessService.hasActiveOperation() ||
+      managedInstallationService.hasActiveOperation() ||
+      pluginCatalogService.hasActiveOperation(),
+    quitApplication: () => app.quit()
+  })
   registerIpc({
     managedWorkspaceService,
     sessionUsageReader: new SessionUsageReader({
       dshHomeDirectory: path.join(homedir(), '.dsh'),
       cachePath: path.join(launcherRoot, 'session-usage-cache.json')
     }),
-    pluginCatalog: new AwesomePluginCatalog({
-      pluginsDirectory: path.join(launcherRoot, 'plugins'),
-      gitExecutable: GIT_EXECUTABLE,
-      onActivity: (message) => launcherHarnessService.recordOperationActivity(message)
-    }),
+    pluginCatalog: pluginCatalogService,
     runtimeBrowserController,
     launcherUpdateService,
     remoteConnectionService,
@@ -421,6 +430,7 @@ async function registerLauncherServices(
     remotePeerBroker,
     peerManagement,
     managedInstallationService,
+    pluginCatalogService,
     coreSupervisor
   }
 }

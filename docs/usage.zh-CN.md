@@ -35,7 +35,7 @@ DSHKer Launcher 不接管 `$DSH_HOME` 或 `~/.dsh`。不要把它移动到 `~/.d
 1. 打开**设置 → Launcher 设置 → 版本更新**。
 2. 点击**重新检查**。页面会从检查中进入已是最新、新版本可用或明确的失败状态。
 3. 发现新版本后，确认展示的稳定版本号和安装包名称，再点击**下载**。
-4. Launcher 会显示下载进度，并把严格匹配当前 macOS 或 Windows 架构的 GitHub Release 资产保存到系统“下载”目录。下载完成后请核对 `checksums.txt`，退出 Launcher，再手动运行安装程序。
+4. Launcher 会显示下载进度，并把严格匹配当前 macOS 或 Windows 架构的 GitHub Release 资产保存到系统“下载”目录。下载完成后会调用系统安装器打开该文件，并通过正常退出流程清理 Launcher；请在系统界面核对 `checksums.txt` 并确认安装。若系统无法打开，文件会保留且可明确重试；若 DSH、工作区或插件目录 Git 操作正在进行，则需等其完成后再交接。
 
 Release 更新说明会跟随 Launcher 当前选择的界面语言显示。
 

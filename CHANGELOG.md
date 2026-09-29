@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.82 — 2026-09-29
+
+### 简体中文 (zh-CN)
+
+- **下载更新后自动打开安装器并安全退出。** 安装器由系统打开，Launcher 通过正常生命周期清理后退出；用户仍需确认安装。系统打不开时保留安装包并提供重试，DSH、工作区或插件目录 Git 操作进行中不会被打断。
+
+### English (en-US)
+
+- **Open the installer after download and exit cleanly.** The OS opens the installer, then Launcher exits through its normal cleanup; installation still requires user confirmation. A failed open retains the installer and offers a retry, while active DSH, workspace, or plugin-catalog Git work is not interrupted.
+
 ## 0.1.81 — 2026-09-29
 
 ### 简体中文 (zh-CN)

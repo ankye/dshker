@@ -35,7 +35,7 @@ The selected core lives at `~/.dshlauncher/harness`. It is Git-managed by Launch
 1. Open **Settings → Launcher settings → Updates**.
 2. Choose **Check again**. The page moves from checking to either up to date, update available, or an explicit failed state.
 3. If an update is available, confirm the reported stable version and installer name, then choose **Download**.
-4. Launcher shows download progress and saves the exact GitHub Release asset for the current macOS or Windows architecture to the system Downloads folder. Verify `checksums.txt` after the download, quit Launcher, and run the installer manually.
+4. Launcher shows download progress and saves the exact GitHub Release asset for the current macOS or Windows architecture to Downloads. When complete, it opens that file with the OS installer and exits through its normal cleanup. Confirm and complete installation in the system UI. If opening fails, the file remains in Downloads and the Launcher offers an explicit retry. An active DSH, workspace, or plugin-catalog Git operation prevents handoff until it finishes. Verify `checksums.txt` before confirming installation.
 
 Release notes follow the language selected in Launcher.
 

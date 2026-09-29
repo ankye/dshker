@@ -71,11 +71,17 @@ The public update feed is the fixed
 The Launcher reads its latest stable release in Electron main, downloads the
 exact installer selected for the current supported platform and architecture
 into the system Downloads folder, and reports progress through the typed
-preload surface. It does not install, replace, or restart the application
-silently. Release bodies use `### ... (zh-CN)` and `### ... (en-US)` sections so
-the Launcher can show the selected language; a release without those sections
-does not fabricate localized notes. GitHub Actions artifacts remain build
-evidence and are not an update feed.
+preload surface. After the complete file is saved, it asks the operating system
+to open that exact installer and requests a normal Launcher quit only after the
+OS accepts the handoff. The user still confirms and completes installation in
+the visible system UI; this is not a silent install, in-process replacement, or
+automatic relaunch. If the OS rejects the open request, Launcher stays open and
+retains the installer for an explicit retry. Active DSH, workspace, and
+plugin-catalog Git operations prevent the handoff from interrupting work.
+Release bodies use `### ... (zh-CN)` and `### ... (en-US)` sections so the
+Launcher can show the selected language; a release without those sections does
+not fabricate localized notes. GitHub Actions artifacts remain build evidence
+and are not an update feed.
 
 ## Readiness gates
 
@@ -128,7 +134,7 @@ are the contract.
 
 Signing runs outside this repository. The current build records
 `signingStatus: "unsigned-local"` in `release/release-manifest.json`, and the
-GitHub Release warning tells users to download and install the package manually.
+GitHub Release warning tells direct-download users to verify and manually open the package.
 macOS Gatekeeper or Windows SmartScreen may require an explicit user action.
 
 When signing is introduced:
@@ -140,9 +146,9 @@ When signing is introduced:
    checksum is accepted.
 3. The release assembly verifies the signed installer against that manifest and
    the platform checksum before publication.
-4. macOS automatic installation is considered only after signing and
+4. macOS unattended installation is considered only after signing and
    notarization are operational; the current update action remains an in-app
-   download followed by manual installation.
+   download followed by OS-mediated, user-confirmed installation.
 
 ## GitHub Actions builds
 

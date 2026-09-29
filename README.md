@@ -222,7 +222,7 @@ Upgrade by running the same installer with the new explicit version. To uninstal
 
 Open **Settings → Launcher settings → Updates** to check the fixed DSHKer GitHub Release feed. The Launcher also performs this check in the background after startup without blocking the window. It shows a startup notice only when GitHub reports a higher stable semantic version; a network or feed failure remains available in Settings for an explicit retry instead of interrupting startup.
 
-When an update is available, **Download** shows progress in the Launcher and saves the exact installer asset for the current macOS or Windows architecture to the system Downloads folder. Missing, duplicate, or unsupported platform assets are reported as errors; the Launcher does not choose another package. Installation remains a user-controlled manual step because the current macOS and Windows packages are unsigned. Release notes are shown in the Launcher language.
+When an update is available, **Download and open installer** shows progress and saves the exact macOS or Windows asset to Downloads. Once complete, Launcher opens that installer with the OS handler and exits through its normal cleanup; you still confirm and complete installation in the system UI. If the OS cannot open it, the completed file stays in Downloads and Launcher offers an explicit retry. An active DSH, workspace, or plugin-catalog Git operation blocks the handoff until it finishes. Missing, duplicate, or unsupported assets are errors; Launcher never substitutes another package or installs silently. Current packages are unsigned. Release notes are shown in the Launcher language.
 
 ## First launch
 

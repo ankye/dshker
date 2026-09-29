@@ -52,7 +52,10 @@ describe('parsePluginCatalogEntry', () => {
         onActivity: (message) => activities.push(message)
       })
 
-      await expect(catalog.refresh()).rejects.toMatchObject({ code: expect.any(String) })
+      const refresh = catalog.refresh()
+      expect(catalog.hasActiveOperation()).toBe(true)
+      await expect(refresh).rejects.toMatchObject({ code: expect.any(String) })
+      expect(catalog.hasActiveOperation()).toBe(false)
       await expect(catalog.getState()).resolves.toMatchObject({ kind: 'empty', entries: [] })
 
       const log = await readFile(nodePath.join(root, 'logs', 'plugin-catalog.log'), 'utf8')

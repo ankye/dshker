@@ -10,6 +10,7 @@ import {
   useRemoteConnections
 } from '../domains/remote-connections'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
+import { LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS } from '../shared/i18n/i18n.updates'
 import ConsoleDrawer from './components/ConsoleDrawer.vue'
 import ControllerPanel from './components/ControllerPanel.vue'
 import ControllerPrimaryAction from './components/ControllerPrimaryAction.vue'
@@ -57,6 +58,16 @@ useRemoteConnections()
 const updateNotice = launcherUpdates.notice
 const updateDownloading = launcherUpdates.downloading
 const updateError = launcherUpdates.error
+const updateErrorMessage = computed(() => {
+  const code = updateError.value
+  if (code === undefined) return undefined
+  if (Object.prototype.hasOwnProperty.call(LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS, code)) {
+    return shell.t(
+      LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS[code as keyof typeof LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS]
+    )
+  }
+  return shell.t('settings.update.operationFailed')
+})
 
 const statusbarBaseLabel = computed(() => {
   const operation = harness.activeOperation.value
@@ -288,11 +299,16 @@ function openConsoleRoute(): void {
           :downloading-label="shell.t('settings.update.downloading')"
           :download-progress-label="shell.t('settings.update.downloadProgress')"
           :downloaded-label="shell.t('settings.update.downloaded')"
+          :retry-open-label="shell.t('settings.update.retryOpen')"
+          :handoff-open-failed-label="shell.t('settings.update.handoffFailed.open')"
+          :handoff-busy-label="shell.t('settings.update.handoffFailed.busy')"
           :install-hint="shell.t('update.notice.installHint')"
           :dismiss-label="shell.t('update.notice.dismiss')"
           :error-label="shell.t('update.notice.downloadFailed')"
+          :error-code-label="shell.t('update.notice.errorCode')"
           :downloading="updateDownloading"
-          :error="updateError"
+          :error="updateErrorMessage"
+          :error-code="updateError"
           @download="launcherUpdates.downloadInstaller"
           @dismiss="launcherUpdates.dismissNotice"
         />

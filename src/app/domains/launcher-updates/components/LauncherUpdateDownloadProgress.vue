@@ -7,6 +7,8 @@ const props = defineProps<{
   readonly progressLabel: string
   readonly downloadingLabel: string
   readonly downloadedLabel: string
+  readonly handoffOpenFailedLabel: string
+  readonly handoffBusyLabel: string
 }>()
 
 const percentage = computed(() => {
@@ -17,20 +19,28 @@ const percentage = computed(() => {
 
 const statusLabel = computed(() => {
   if (props.state.kind === 'downloaded') return props.downloadedLabel
+  if (props.state.kind === 'handoff-failed') {
+    return props.state.code === 'launcher.update_operation_busy'
+      ? props.handoffBusyLabel
+      : props.handoffOpenFailedLabel
+  }
   return props.downloadingLabel
 })
 </script>
 
 <template>
   <div
-    v-if="state.kind === 'downloading' || state.kind === 'downloaded'"
+    v-if="
+      state.kind === 'downloading' || state.kind === 'downloaded' || state.kind === 'handoff-failed'
+    "
     class="settings-update-download-progress"
     data-testid="launcher-update-download-progress"
-    role="status"
-    aria-live="polite"
+    :role="state.kind === 'handoff-failed' ? 'alert' : 'status'"
+    :aria-live="state.kind === 'handoff-failed' ? 'assertive' : 'polite'"
   >
     <div class="settings-update-download-progress-label">
       <span>{{ state.kind === 'downloading' ? progressLabel : statusLabel }}</span>
+      <code v-if="state.kind === 'handoff-failed'">{{ state.code }}</code>
       <strong v-if="state.kind === 'downloading' && percentage !== undefined">
         {{ percentage }}%
       </strong>

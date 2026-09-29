@@ -24,6 +24,9 @@ interface LauncherUpdateServiceOptions {
   readonly platform: NodeJS.Platform
   readonly arch: string
   readonly downloadsDirectory: string
+  readonly openInstaller: (installerPath: string) => Promise<string>
+  readonly hasActiveLauncherOperation: () => boolean
+  readonly quitApplication: () => void
   readonly fetchRelease?: (
     url: typeof LAUNCHER_RELEASE_API_URL,
     init: Readonly<{ headers: Readonly<Record<string, string>> }>
@@ -70,7 +73,7 @@ export class LauncherUpdateRuntimeError extends Error {
 }
 
 /**
- * Discovers and opens one exact release installer without exposing its URL to the renderer.
+ * Downloads and opens one exact release installer without exposing its URL or path to the renderer.
  */
 export class LauncherUpdateService {
   private state: LauncherUpdateState
@@ -109,41 +112,56 @@ export class LauncherUpdateService {
     return pending
   }
 
-  /** Downloads the cached installer only while its matching update remains available. */
+  /** Downloads and opens the cached installer only while its matching update remains available. */
   async downloadInstaller(): Promise<LauncherUpdateState> {
-    if (this.state.kind !== 'update-available' || this.cachedInstallerUrl === undefined) {
+    const installerUrl = this.cachedInstallerUrl
+    if (this.state.kind !== 'update-available' || installerUrl === undefined) {
       throw new LauncherUpdateRuntimeError(
         'launcher.update_not_available',
         'No verified Launcher installer is available.'
       )
     }
     if (this.pendingDownload !== undefined) return this.pendingDownload
-    if (this.state.download.kind === 'downloaded') return Promise.resolve(this.state)
-    validateInstallerUrl(
-      this.cachedInstallerUrl,
-      `v${this.state.latestVersion}`,
-      this.state.assetName
-    )
+    if (this.state.download.kind === 'downloaded') return this.state
     const update = this.state
-    const installerUrl = this.cachedInstallerUrl
     const updateGeneration = this.updateGeneration
     const destinationPath = path.join(this.options.downloadsDirectory, update.assetName)
+    const retryHandoff = update.download.kind === 'handoff-failed'
+    if (!retryHandoff && this.options.hasActiveLauncherOperation()) {
+      throw new LauncherUpdateRuntimeError(
+        'launcher.update_operation_busy',
+        'A managed DSH, workspace, or plugin-catalog Git operation is active.'
+      )
+    }
+    const operation = retryHandoff
+      ? this.openDownloadedInstaller(update, destinationPath, updateGeneration)
+      : this.startDownload(update, installerUrl, destinationPath, updateGeneration)
+    const pending = operation.finally(() => {
+      if (this.pendingDownload === pending) this.pendingDownload = undefined
+    })
+    this.pendingDownload = pending
+    return pending
+  }
+
+  private startDownload(
+    update: Extract<LauncherUpdateState, { readonly kind: 'update-available' }>,
+    installerUrl: string,
+    destinationPath: string,
+    updateGeneration: number
+  ): Promise<LauncherUpdateState> {
+    validateInstallerUrl(installerUrl, `v${update.latestVersion}`, update.assetName)
     const downloadInstaller = this.options.downloadInstaller ?? defaultDownloadInstaller
     this.transition({
       ...update,
       download: { kind: 'downloading', bytesReceived: 0 }
     })
-    const pending = this.performDownload(
+    return this.performDownload(
       update,
       installerUrl,
       destinationPath,
       updateGeneration,
       downloadInstaller
-    ).finally(() => {
-      if (this.pendingDownload === pending) this.pendingDownload = undefined
-    })
-    this.pendingDownload = pending
-    return pending
+    )
   }
 
   private async performDownload(
@@ -164,7 +182,7 @@ export class LauncherUpdateService {
           'The verified Launcher installer is no longer available.'
         )
       }
-      return this.transition({ ...update, download: { kind: 'downloaded' } })
+      return this.openDownloadedInstaller(update, destinationPath, updateGeneration)
     } catch (error) {
       const failure =
         error instanceof LauncherUpdateRuntimeError
@@ -178,6 +196,40 @@ export class LauncherUpdateService {
       }
       throw failure
     }
+  }
+
+  private async openDownloadedInstaller(
+    update: Extract<LauncherUpdateState, { readonly kind: 'update-available' }>,
+    destinationPath: string,
+    updateGeneration: number
+  ): Promise<LauncherUpdateState> {
+    if (!this.isCurrentUpdate(update, updateGeneration)) return this.state
+    if (this.options.hasActiveLauncherOperation()) {
+      return this.transition({
+        ...update,
+        download: { kind: 'handoff-failed', code: 'launcher.update_operation_busy' }
+      })
+    }
+
+    let openError: string
+    try {
+      openError = await this.options.openInstaller(destinationPath)
+    } catch {
+      openError = 'open failed'
+    }
+    if (openError !== '') {
+      if (!this.isCurrentUpdate(update, updateGeneration)) return this.state
+      return this.transition({
+        ...update,
+        download: { kind: 'handoff-failed', code: 'launcher.update_installer_open_failed' }
+      })
+    }
+
+    const completed = this.isCurrentUpdate(update, updateGeneration)
+      ? this.transition({ ...update, download: { kind: 'downloaded' } })
+      : this.state
+    this.options.quitApplication()
+    return completed
   }
 
   private isCurrentUpdate(

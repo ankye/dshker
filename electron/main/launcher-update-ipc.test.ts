@@ -115,6 +115,28 @@ describe('Launcher update IPC', () => {
     })
   })
 
+  it.each([
+    {
+      code: 'launcher.update_operation_busy',
+      message:
+        'A managed DSH, workspace, or plugin-catalog Git operation must finish before the Launcher installer can open.'
+    },
+    {
+      code: 'launcher.update_installer_open_failed',
+      message: 'The downloaded Launcher installer could not be opened.'
+    }
+  ] as const)('maps $code to a stable user-safe IPC error', async ({ code, message }) => {
+    const { service } = updateService()
+    vi.mocked(service.downloadInstaller).mockRejectedValue(
+      new LauncherUpdateRuntimeError(code, 'private system detail must not cross IPC')
+    )
+    registerLauncherUpdateIpc(service)
+
+    await expect(
+      mocks.handlers.get(DESKTOP_IPC_CHANNELS.launcherUpdatesDownloadInstaller)?.({})
+    ).resolves.toEqual({ ok: false, code, message })
+  })
+
   it('pushes state only to live Launcher windows', () => {
     const liveSend = vi.fn()
     const destroyedSend = vi.fn()

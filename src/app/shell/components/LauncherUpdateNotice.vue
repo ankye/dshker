@@ -10,11 +10,16 @@ defineProps<{
   readonly downloadingLabel: string
   readonly downloadProgressLabel: string
   readonly downloadedLabel: string
+  readonly retryOpenLabel: string
+  readonly handoffOpenFailedLabel: string
+  readonly handoffBusyLabel: string
   readonly installHint: string
   readonly dismissLabel: string
   readonly errorLabel: string
+  readonly errorCodeLabel: string
   readonly downloading: boolean
   readonly error?: string
+  readonly errorCode?: string
 }>()
 
 const emit = defineEmits<{
@@ -50,10 +55,15 @@ const emit = defineEmits<{
         :progress-label="downloadProgressLabel"
         :downloading-label="downloadingLabel"
         :downloaded-label="downloadedLabel"
+        :handoff-open-failed-label="handoffOpenFailedLabel"
+        :handoff-busy-label="handoffBusyLabel"
       />
-      <p v-if="error" class="launcher-update-notice-error" role="alert">
-        {{ errorLabel }} <code>{{ error }}</code>
-      </p>
+      <div v-if="error" class="launcher-update-notice-error" role="alert">
+        <p>{{ errorLabel }} {{ error }}</p>
+        <p v-if="errorCode">
+          <span>{{ errorCodeLabel }}</span> <code>{{ errorCode }}</code>
+        </p>
+      </div>
     </div>
     <div class="launcher-update-notice-actions">
       <button
@@ -69,7 +79,9 @@ const emit = defineEmits<{
             ? downloadingLabel
             : state.download.kind === 'downloaded'
               ? downloadedLabel
-              : downloadLabel
+              : state.download.kind === 'handoff-failed'
+                ? retryOpenLabel
+                : downloadLabel
         }}
       </button>
       <button

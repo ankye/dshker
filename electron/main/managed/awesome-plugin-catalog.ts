@@ -31,9 +31,15 @@ export interface AwesomePluginCatalogOptions {
 /** Synchronizes and parses the source repository selected by the product. */
 export class AwesomePluginCatalog {
   readonly #options: AwesomePluginCatalogOptions
+  #activeOperations = 0
 
   constructor(options: AwesomePluginCatalogOptions) {
     this.#options = options
+  }
+
+  /** True while a Launcher-owned plugin catalog clone or Git refresh is running. */
+  hasActiveOperation(): boolean {
+    return this.#activeOperations > 0
   }
 
   /** Returns the last synchronized source only; it never reaches the network. */
@@ -48,38 +54,43 @@ export class AwesomePluginCatalog {
 
   /** Clones or fast-forwards the Launcher-owned catalog source, then parses every entry file. */
   async refresh(): Promise<PluginCatalogState> {
-    await this.#record(
-      `Refreshing plugin catalog from ${AWESOME_DSH_PLUGIN_REMOTE} (branch ${AWESOME_DSH_PLUGIN_BRANCH})…`,
-      true
-    )
+    this.#activeOperations += 1
     try {
-      await assertDirectDirectory(this.#options.pluginsDirectory)
-      const directory = this.#catalogDirectory()
-      try {
-        await assertDirectDirectory(directory)
-        await assertDirectDirectory(nodePath.join(directory, '.git'))
-        await this.#runGit('fetch', ['-C', directory, 'fetch', '--prune', 'origin'])
-        await this.#runGit('checkout', [
-          '-C',
-          directory,
-          'checkout',
-          '--detach',
-          `origin/${AWESOME_DSH_PLUGIN_BRANCH}`
-        ])
-      } catch (error) {
-        if (!isMissing(error)) throw error
-        await this.#record('The plugin catalog checkout is missing; cloning a fresh copy…', false)
-        await this.#clone(directory)
-      }
-      const state = await this.#readState()
       await this.#record(
-        `Plugin catalog refresh completed at ${state.kind === 'ready' ? state.revision : 'empty'} (${state.entries.length} entries).`,
+        `Refreshing plugin catalog from ${AWESOME_DSH_PLUGIN_REMOTE} (branch ${AWESOME_DSH_PLUGIN_BRANCH})…`,
         true
       )
-      return state
-    } catch (error) {
-      await this.#record(`Plugin catalog refresh failed: ${formatError(error)}`, true)
-      throw error
+      try {
+        await assertDirectDirectory(this.#options.pluginsDirectory)
+        const directory = this.#catalogDirectory()
+        try {
+          await assertDirectDirectory(directory)
+          await assertDirectDirectory(nodePath.join(directory, '.git'))
+          await this.#runGit('fetch', ['-C', directory, 'fetch', '--prune', 'origin'])
+          await this.#runGit('checkout', [
+            '-C',
+            directory,
+            'checkout',
+            '--detach',
+            `origin/${AWESOME_DSH_PLUGIN_BRANCH}`
+          ])
+        } catch (error) {
+          if (!isMissing(error)) throw error
+          await this.#record('The plugin catalog checkout is missing; cloning a fresh copy…', false)
+          await this.#clone(directory)
+        }
+        const state = await this.#readState()
+        await this.#record(
+          `Plugin catalog refresh completed at ${state.kind === 'ready' ? state.revision : 'empty'} (${state.entries.length} entries).`,
+          true
+        )
+        return state
+      } catch (error) {
+        await this.#record(`Plugin catalog refresh failed: ${formatError(error)}`, true)
+        throw error
+      }
+    } finally {
+      this.#activeOperations -= 1
     }
   }
 

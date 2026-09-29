@@ -196,6 +196,8 @@ export type LauncherUpdateErrorCode =
   | 'launcher.update_download_in_progress'
   | 'launcher.update_download_failed'
   | 'launcher.update_download_destination_exists'
+  | 'launcher.update_operation_busy'
+  | 'launcher.update_installer_open_failed'
 
 /** Progress owned by the main-process installer download. */
 export type LauncherUpdateDownloadState =
@@ -206,6 +208,10 @@ export type LauncherUpdateDownloadState =
       readonly totalBytes?: number
     }
   | { readonly kind: 'downloaded' }
+  | {
+      readonly kind: 'handoff-failed'
+      readonly code: 'launcher.update_operation_busy' | 'launcher.update_installer_open_failed'
+    }
   | { readonly kind: 'failed'; readonly code: LauncherUpdateErrorCode }
 
 /** Stable failures from the Launcher-to-Launcher SSH peer capability. */
@@ -855,7 +861,7 @@ export interface DesktopApi {
   readonly launcherUpdates: Readonly<{
     getState(): Promise<ApiResult<LauncherUpdateState>>
     check(): Promise<ApiResult<LauncherUpdateState>>
-    /** Downloads only the exact installer asset cached by the latest successful check. */
+    /** Downloads and opens the exact cached installer; successful handoff requests graceful quit. */
     downloadInstaller(): Promise<ApiResult<LauncherUpdateState>>
     onStateChange(listener: (result: ApiResult<LauncherUpdateState>) => void): () => void
   }>

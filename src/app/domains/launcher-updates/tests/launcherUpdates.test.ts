@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import {
+  apiFail,
   apiOk,
   type ApiResult,
   type DesktopApi,
@@ -64,6 +65,27 @@ const states = {
     assetName: 'dshker-launcher-0.1.7-mac-arm64.dmg',
     releasePageUrl: 'https://github.com/ankye/dshker/releases/tag/v0.1.7',
     download: { kind: 'downloading', bytesReceived: 50, totalBytes: 100 },
+    checkedAt: '2026-09-04T10:00:00.000Z'
+  },
+  handoffFailedOpen: {
+    kind: 'update-available',
+    currentVersion: '0.1.6',
+    latestVersion: '0.1.7',
+    assetName: 'dshker-launcher-0.1.7-mac-arm64.dmg',
+    releasePageUrl: 'https://github.com/ankye/dshker/releases/tag/v0.1.7',
+    download: {
+      kind: 'handoff-failed',
+      code: 'launcher.update_installer_open_failed'
+    },
+    checkedAt: '2026-09-04T10:00:00.000Z'
+  },
+  handoffFailedBusy: {
+    kind: 'update-available',
+    currentVersion: '0.1.6',
+    latestVersion: '0.1.7',
+    assetName: 'dshker-launcher-0.1.7-mac-arm64.dmg',
+    releasePageUrl: 'https://github.com/ankye/dshker/releases/tag/v0.1.7',
+    download: { kind: 'handoff-failed', code: 'launcher.update_operation_busy' },
     checkedAt: '2026-09-04T10:00:00.000Z'
   },
   failed: {
@@ -163,6 +185,23 @@ describe('Launcher update Settings card', () => {
     wrapper.unmount()
   })
 
+  it('localizes a busy refusal before the installer download starts', async () => {
+    const api = installApi(states.available)
+    api.downloadInstaller.mockResolvedValueOnce(
+      apiFail('launcher.update_operation_busy', 'A managed Launcher operation is active.')
+    )
+    const wrapper = mount(LauncherUpdateSettingsCard)
+    await flushPromises()
+
+    await wrapper.get('[data-testid="settings-download-update"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toContain(
+      '有 DSH、工作区或插件目录 Git 操作正在进行，请完成后再下载更新。'
+    )
+    wrapper.unmount()
+  })
+
   it('shows what changed when the release carries notes', async () => {
     // The card previously reported only that a newer version existed, so the
     // user had to open GitHub to find out what was in it.
@@ -227,6 +266,23 @@ describe('Launcher update Settings card', () => {
     expect(wrapper.text()).toContain('50%')
     wrapper.unmount()
   })
+
+  it.each([
+    [states.handoffFailedOpen, '安装包已保留在系统“下载”目录，但无法打开'],
+    [states.handoffFailedBusy, '请先等待当前 DSH、工作区或插件目录 Git 操作完成']
+  ])('explains a failed handoff and offers an explicit retry', async (state, expected) => {
+    const api = installApi(state)
+    const wrapper = mount(LauncherUpdateSettingsCard)
+    await flushPromises()
+
+    expect(wrapper.get('[role="alert"]').text()).toContain(expected)
+    const retry = wrapper.get('[data-testid="settings-download-update"]')
+    expect(retry.text()).toContain('重试打开安装器')
+    await retry.trigger('click')
+    await flushPromises()
+    expect(api.downloadInstaller).toHaveBeenCalledOnce()
+    wrapper.unmount()
+  })
 })
 
 describe('LauncherUpdateNotice', () => {
@@ -240,9 +296,13 @@ describe('LauncherUpdateNotice', () => {
         downloadingLabel: '正在下载',
         downloadProgressLabel: '下载进度',
         downloadedLabel: '已下载',
+        retryOpenLabel: '重试打开安装器',
+        handoffOpenFailedLabel: '安装器无法打开',
+        handoffBusyLabel: '等待操作完成',
         installHint: '请手动运行安装包',
         dismissLabel: '关闭',
         errorLabel: '失败',
+        errorCodeLabel: '诊断代码',
         downloading: false
       }
     })

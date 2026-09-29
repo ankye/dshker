@@ -77,6 +77,12 @@ function updateFailureMessage(code: LauncherUpdateErrorCode): string {
   if (code === 'launcher.update_download_destination_exists') {
     return 'The Launcher installer already exists in the system Downloads folder.'
   }
+  if (code === 'launcher.update_operation_busy') {
+    return 'A managed DSH, workspace, or plugin-catalog Git operation must finish before the Launcher installer can open.'
+  }
+  if (code === 'launcher.update_installer_open_failed') {
+    return 'The downloaded Launcher installer could not be opened.'
+  }
   if (code === 'launcher.update_download_failed') {
     return 'The Launcher installer could not be downloaded.'
   }

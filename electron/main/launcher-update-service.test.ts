@@ -1,4 +1,6 @@
 import path from 'node:path'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { describe, expect, it, vi } from 'vitest'
 import {
   LauncherUpdateRuntimeError,
@@ -53,9 +55,13 @@ function service(options?: {
   payload?: unknown
   fetchRelease?: TestFetchRelease
   downloadInstaller?: TestDownloadInstaller
+  openInstaller?: (installerPath: string) => Promise<string>
+  hasActiveLauncherOperation?: () => boolean
+  quitApplication?: () => void
   platform?: NodeJS.Platform
   arch?: string
   currentVersion?: string
+  downloadsDirectory?: string
 }) {
   const fetchRelease =
     options?.fetchRelease ??
@@ -65,16 +71,25 @@ function service(options?: {
     vi.fn<TestDownloadInstaller>(async (_url, _destinationPath, onProgress) => {
       onProgress({ bytesReceived: 4, totalBytes: 4 })
     })
+  const openInstaller = options?.openInstaller ?? vi.fn(async () => '')
+  const hasActiveLauncherOperation = options?.hasActiveLauncherOperation ?? vi.fn(() => false)
+  const quitApplication = options?.quitApplication ?? vi.fn()
   return {
     fetchRelease,
     downloadInstaller,
+    openInstaller,
+    hasActiveLauncherOperation,
+    quitApplication,
     updateService: new LauncherUpdateService({
       currentVersion: options?.currentVersion ?? '0.1.6',
       platform: options?.platform ?? 'darwin',
       arch: options?.arch ?? 'arm64',
-      downloadsDirectory: '/tmp/dshker-launcher-tests',
+      downloadsDirectory: options?.downloadsDirectory ?? '/tmp/dshker-launcher-tests',
       fetchRelease,
       downloadInstaller,
+      openInstaller,
+      hasActiveLauncherOperation,
+      quitApplication,
       now: () => new Date('2026-09-04T08:00:00.000Z')
     })
   }
@@ -204,7 +219,23 @@ describe('Launcher update version and package matrix', () => {
 
 describe('LauncherUpdateService', () => {
   it('publishes an available update and downloads only its cached exact installer URL', async () => {
-    const { updateService, fetchRelease, downloadInstaller } = service()
+    const order: string[] = []
+    const downloadInstaller = vi.fn<TestDownloadInstaller>(
+      async (_url, _destination, onProgress) => {
+        onProgress({ bytesReceived: 4, totalBytes: 4 })
+        order.push('download')
+      }
+    )
+    const openInstaller = vi.fn(async () => {
+      order.push('open')
+      return ''
+    })
+    const quitApplication = vi.fn(() => order.push('quit'))
+    const { updateService, fetchRelease } = service({
+      downloadInstaller,
+      openInstaller,
+      quitApplication
+    })
 
     await expect(updateService.check()).resolves.toEqual({
       kind: 'update-available',
@@ -225,6 +256,11 @@ describe('LauncherUpdateService', () => {
       path.join('/tmp/dshker-launcher-tests', 'dshker-launcher-0.2.0-mac-arm64.dmg'),
       expect.any(Function)
     )
+    expect(openInstaller).toHaveBeenCalledWith(
+      path.join('/tmp/dshker-launcher-tests', 'dshker-launcher-0.2.0-mac-arm64.dmg')
+    )
+    expect(quitApplication).toHaveBeenCalledOnce()
+    expect(order).toEqual(['download', 'open', 'quit'])
     expect(fetchRelease).toHaveBeenCalledWith(
       'https://api.github.com/repos/ankye/dshker/releases/latest',
       {
@@ -333,12 +369,137 @@ describe('LauncherUpdateService', () => {
     const downloadInstaller = vi.fn<TestDownloadInstaller>(async () => {
       throw new Error('private filesystem detail')
     })
-    const { updateService } = service({ downloadInstaller })
+    const { updateService, openInstaller, quitApplication } = service({ downloadInstaller })
     await updateService.check()
 
     await expect(updateService.downloadInstaller()).rejects.toEqual(
       expect.objectContaining({ code: 'launcher.update_download_failed' })
     )
+    expect(openInstaller).not.toHaveBeenCalled()
+    expect(quitApplication).not.toHaveBeenCalled()
+  })
+
+  it('opens the exact Windows installer and quits only after the OS accepts it', async () => {
+    const order: string[] = []
+    const downloadInstaller = vi.fn<TestDownloadInstaller>(async () => {
+      order.push('download')
+    })
+    const openInstaller = vi.fn(async (installerPath: string) => {
+      expect(installerPath).toBe(
+        path.join('/tmp/dshker-launcher-tests', 'dshker-launcher-0.2.0-win-arm64.exe')
+      )
+      order.push('open')
+      return ''
+    })
+    const quitApplication = vi.fn(() => order.push('quit'))
+    const { updateService } = service({
+      platform: 'win32',
+      arch: 'arm64',
+      payload: releasePayload('0.2.0', ['dshker-launcher-0.2.0-win-arm64.exe']),
+      downloadInstaller,
+      openInstaller,
+      quitApplication
+    })
+
+    await updateService.check()
+    await expect(updateService.downloadInstaller()).resolves.toMatchObject({
+      kind: 'update-available',
+      download: { kind: 'downloaded' }
+    })
+
+    expect(order).toEqual(['download', 'open', 'quit'])
+  })
+
+  it('preserves a completed installer after open failure and lets an explicit retry reopen it', async () => {
+    const downloadsDirectory = await mkdtemp(path.join(tmpdir(), 'dshker-update-handoff-'))
+    const downloadInstaller = vi.fn<TestDownloadInstaller>(async (_url, destinationPath) => {
+      await writeFile(destinationPath, 'complete-installer')
+    })
+    const openInstaller = vi
+      .fn<(installerPath: string) => Promise<string>>()
+      .mockImplementationOnce(async (installerPath) => {
+        await expect(readFile(installerPath, 'utf8')).resolves.toBe('complete-installer')
+        return 'OS handler rejected the installer'
+      })
+      .mockResolvedValueOnce('')
+    const quitApplication = vi.fn()
+    const { updateService } = service({
+      downloadInstaller,
+      openInstaller,
+      quitApplication,
+      downloadsDirectory
+    })
+
+    try {
+      await updateService.check()
+      const installerPath = path.join(downloadsDirectory, 'dshker-launcher-0.2.0-mac-arm64.dmg')
+      await expect(updateService.downloadInstaller()).resolves.toMatchObject({
+        kind: 'update-available',
+        download: {
+          kind: 'handoff-failed',
+          code: 'launcher.update_installer_open_failed'
+        }
+      })
+      await expect(readFile(installerPath, 'utf8')).resolves.toBe('complete-installer')
+      expect(downloadInstaller).toHaveBeenCalledOnce()
+      expect(quitApplication).not.toHaveBeenCalled()
+
+      await expect(updateService.downloadInstaller()).resolves.toMatchObject({
+        kind: 'update-available',
+        download: { kind: 'downloaded' }
+      })
+      expect(downloadInstaller).toHaveBeenCalledOnce()
+      expect(openInstaller).toHaveBeenCalledTimes(2)
+      expect(quitApplication).toHaveBeenCalledOnce()
+    } finally {
+      await rm(downloadsDirectory, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses to download while a managed DSH or workspace operation is active', async () => {
+    const { updateService, downloadInstaller, openInstaller, quitApplication } = service({
+      hasActiveLauncherOperation: () => true
+    })
+    await updateService.check()
+
+    await expect(updateService.downloadInstaller()).rejects.toMatchObject({
+      code: 'launcher.update_operation_busy'
+    })
+    expect(downloadInstaller).not.toHaveBeenCalled()
+    expect(openInstaller).not.toHaveBeenCalled()
+    expect(quitApplication).not.toHaveBeenCalled()
+  })
+
+  it('preserves the downloaded installer if a managed operation starts during transfer', async () => {
+    let operationActive = false
+    const downloadInstaller = vi.fn<TestDownloadInstaller>(async () => {
+      operationActive = true
+    })
+    const openInstaller = vi.fn(async () => '')
+    const quitApplication = vi.fn()
+    const { updateService } = service({
+      downloadInstaller,
+      openInstaller,
+      hasActiveLauncherOperation: () => operationActive,
+      quitApplication
+    })
+    await updateService.check()
+
+    await expect(updateService.downloadInstaller()).resolves.toMatchObject({
+      kind: 'update-available',
+      download: { kind: 'handoff-failed', code: 'launcher.update_operation_busy' }
+    })
+    expect(openInstaller).not.toHaveBeenCalled()
+    expect(quitApplication).not.toHaveBeenCalled()
+
+    operationActive = false
+    await expect(updateService.downloadInstaller()).resolves.toMatchObject({
+      kind: 'update-available',
+      download: { kind: 'downloaded' }
+    })
+    expect(downloadInstaller).toHaveBeenCalledOnce()
+    expect(openInstaller).toHaveBeenCalledOnce()
+    expect(quitApplication).toHaveBeenCalledOnce()
   })
 
   it('coalesces repeated download requests while the installer is transferring', async () => {
@@ -372,7 +533,10 @@ describe('LauncherUpdateService', () => {
           releaseDownload = resolve
         })
     )
-    const { updateService } = service({ fetchRelease, downloadInstaller })
+    const { updateService, openInstaller, quitApplication } = service({
+      fetchRelease,
+      downloadInstaller
+    })
     await updateService.check()
     const oldDownload = updateService.downloadInstaller()
     await updateService.check()
@@ -386,6 +550,8 @@ describe('LauncherUpdateService', () => {
       latestVersion: '0.2.1',
       download: { kind: 'idle' }
     })
+    expect(openInstaller).not.toHaveBeenCalled()
+    expect(quitApplication).not.toHaveBeenCalled()
   })
 
   it('withdraws a retained installer as soon as a later check supersedes it', async () => {

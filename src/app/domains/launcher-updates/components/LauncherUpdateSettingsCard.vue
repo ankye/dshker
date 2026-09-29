@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { LauncherUpdateErrorCode } from '@/shared/contracts'
-import type { MessageKey } from '@/app/shared/i18n/i18n'
-import { selectLocalizedReleaseNotes } from '@/app/shared/i18n/i18n.updates'
+import {
+  LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS,
+  selectLocalizedReleaseNotes
+} from '@/app/shared/i18n/i18n.updates'
 import { locale, useTranslator } from '@/app/shared/i18n/useLocale'
 import { useLauncherUpdates } from '../useLauncherUpdates'
 import LauncherUpdateDownloadProgress from './LauncherUpdateDownloadProgress.vue'
@@ -29,26 +30,22 @@ const localizedReleaseNotes = computed(() => {
     : undefined
 })
 
-const FAILURE_MESSAGE_KEYS: Readonly<Record<LauncherUpdateErrorCode, MessageKey>> = {
-  'launcher.update_invalid_request': 'settings.update.error.invalidRequest',
-  'launcher.update_network_failed': 'settings.update.error.network',
-  'launcher.update_http_failed': 'settings.update.error.http',
-  'launcher.update_response_invalid': 'settings.update.error.response',
-  'launcher.update_release_unsupported': 'settings.update.error.release',
-  'launcher.update_release_url_invalid': 'settings.update.error.release',
-  'launcher.update_platform_unsupported': 'settings.update.error.platform',
-  'launcher.update_asset_missing': 'settings.update.error.asset',
-  'launcher.update_asset_ambiguous': 'settings.update.error.asset',
-  'launcher.update_asset_url_invalid': 'settings.update.error.asset',
-  'launcher.update_not_available': 'settings.update.error.notAvailable',
-  'launcher.update_download_in_progress': 'settings.update.error.download',
-  'launcher.update_download_failed': 'settings.update.error.download',
-  'launcher.update_download_destination_exists': 'settings.update.error.destinationExists'
-}
-
 const failureMessage = computed(() => {
   const current = updateState.value
-  return current?.kind === 'failed' ? t(FAILURE_MESSAGE_KEYS[current.code]) : undefined
+  return current?.kind === 'failed'
+    ? t(LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS[current.code])
+    : undefined
+})
+
+const operationErrorMessage = computed(() => {
+  const code = updateError.value
+  if (code === undefined) return undefined
+  if (Object.prototype.hasOwnProperty.call(LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS, code)) {
+    return t(
+      LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS[code as keyof typeof LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS]
+    )
+  }
+  return t('settings.update.operationFailed')
 })
 
 const checkedAt = computed(() => {
@@ -166,6 +163,8 @@ const statusLabel = computed(() => {
           :progress-label="t('settings.update.downloadProgress')"
           :downloading-label="t('settings.update.downloading')"
           :downloaded-label="t('settings.update.downloaded')"
+          :handoff-open-failed-label="t('settings.update.handoffFailed.open')"
+          :handoff-busy-label="t('settings.update.handoffFailed.busy')"
         />
         <p class="settings-update-install-hint">{{ t('settings.update.installHint') }}</p>
       </div>
@@ -190,7 +189,7 @@ const statusLabel = computed(() => {
       </p>
 
       <div v-if="updateError" class="settings-update-failure" role="alert">
-        <p>{{ t('settings.update.operationFailed') }}</p>
+        <p>{{ operationErrorMessage }}</p>
         <p class="settings-update-code">
           <span>{{ t('settings.update.errorCode') }}</span>
           <code>{{ updateError }}</code>
@@ -228,7 +227,9 @@ const statusLabel = computed(() => {
               ? t('settings.update.downloading')
               : updateState.download.kind === 'downloaded'
                 ? t('settings.update.downloaded')
-                : t('settings.update.download')
+                : updateState.download.kind === 'handoff-failed'
+                  ? t('settings.update.retryOpen')
+                  : t('settings.update.download')
           }}
         </button>
       </footer>
