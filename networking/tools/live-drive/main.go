@@ -376,7 +376,7 @@ func macConnect(ctx context.Context) {
 	if err != nil {
 		fatal("manager A:", err)
 	}
-	connected, err := manager.Connect(ctx, s.PairID, 1)
+	connected, err := manager.Connect(ctx, s.PairID, 1, true)
 	if err != nil {
 		// show the lease timing on failure to diagnose lease_expired
 		if le, ok := err.(interface{ Lease() protocol.Lease }); ok {
@@ -482,7 +482,7 @@ func connectAs(ctx context.Context, label string, pick func(*state) *deviceState
 	if err != nil {
 		fatal("manager "+label+":", err)
 	}
-	connected, err := manager.Connect(ctx, s.PairID, 1)
+	connected, err := manager.Connect(ctx, s.PairID, 1, true)
 	if err != nil {
 		if le, ok := err.(interface{ Lease() protocol.Lease }); ok {
 			lease := le.Lease()

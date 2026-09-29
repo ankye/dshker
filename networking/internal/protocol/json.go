@@ -20,6 +20,12 @@ const MaxCapabilities = 32
 // no workbench can be started on either side.
 const CapabilityOptionalWorkbench = "workbench.optional"
 
+// CapabilityWorkbenchRequest means the sender is explicitly opening a remote
+// workbench and permits the receiving peer to start its local DSH runtime. A
+// connection that omits this capability is a transport-only maintenance link;
+// it must never cause a DSH process to be started as a side effect of reconnect.
+const CapabilityWorkbenchRequest = "workbench.request"
+
 // PeerCapabilities is what this build advertises during a peer handshake.
 //
 // The list is the extension point for the peer contract, and it is deliberately a
@@ -31,6 +37,17 @@ func PeerCapabilities() []string {
 	// A fresh slice per call: a caller must not be able to alter what this build
 	// claims. Never nil, because an omitted or null field is refused on the wire.
 	return []string{CapabilityOptionalWorkbench}
+}
+
+// PeerCapabilitiesFor returns the capabilities for one connection intent.
+// The intent is carried as a capability rather than a new required handshake
+// field so peers on adjacent releases can continue decoding the hello frame.
+func PeerCapabilitiesFor(requestWorkbench bool) []string {
+	capabilities := PeerCapabilities()
+	if requestWorkbench {
+		capabilities = append(capabilities, CapabilityWorkbenchRequest)
+	}
+	return capabilities
 }
 
 // HasCapability reports whether an advertised list contains one name.

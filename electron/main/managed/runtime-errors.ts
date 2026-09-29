@@ -20,6 +20,8 @@ export type ManagedHarnessRuntimeErrorCode =
   | 'runtime.port_in_use'
   /** The DSH CLI refused a plugin install or uninstall. */
   | 'runtime.plugin_operation_failed'
+  /** The selected core and installed profile plugin peer ranges do not overlap. */
+  | 'runtime.plugin_incompatible'
   /** The persisted active-version pointer exists but is not a valid record. */
   | 'runtime.version_pointer_invalid'
   | 'runtime.not_found'

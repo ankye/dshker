@@ -90,6 +90,10 @@ The core SHALL own reconnection for every pair its catalog authorizes, so a head
 - **WHEN** an authorized pair's connection drops on a machine with no desktop session
 - **THEN** the core retries on the widening delay until the connection is re-established, without operator action
 
+#### Scenario: Reconnection does not start a local workbench
+- **WHEN** the core restores an authorized pair after a drop or during startup
+- **THEN** it establishes the authenticated peer transport without invoking the local DSH runtime owner; a local DSH process starts only after an explicit remote-workbench request
+
 #### Scenario: Peer that is simply off does not become a busy loop
 - **WHEN** a pair stays unreachable across many attempts
 - **THEN** the delay widens to its final interval and repeats at that interval instead of retrying continuously

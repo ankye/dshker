@@ -13,7 +13,9 @@ const REMEDIES: Readonly<Record<string, string>> = {
   'managed.harness_port_in_use':
     'The listen port is held by another process. Stop it, or choose a different port in Settings, then start again.',
   'runtime.child_crashed':
-    'The DSH Web process exited during startup. Its own output above says why; a missing build or a failed plugin load are the usual causes.'
+    'The DSH Web process exited during startup. Its own output above says why; a missing build or a failed plugin load are the usual causes.',
+  'runtime.plugin_incompatible':
+    'The selected core and installed profile plugins do not share a supported version range. Remove or update the listed plugins, or switch to a compatible core.'
 }
 
 /** The launcher-log line for one failed launch, with the remedy named when known. */

@@ -60,6 +60,7 @@ onMounted(() => {
 const stageLabels: Record<P2PConnectionView['stage'], MessageKey> = {
   punching: 'p2p.connection.stagePunching',
   'starting-runtime': 'p2p.connection.stageStarting',
+  connected: 'p2p.connection.stageConnected',
   ready: 'p2p.connection.stageReady',
   failed: 'p2p.connection.stageFailed',
   disconnected: 'p2p.connection.stageDisconnected'

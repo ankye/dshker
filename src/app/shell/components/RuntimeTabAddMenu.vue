@@ -19,7 +19,13 @@ const trigger = ref<HTMLButtonElement>()
 const menu = ref<HTMLElement>()
 const menuStyle = ref<Record<string, string>>()
 
-type AddTabOptionState = 'available' | 'ready' | 'connecting' | 'failed' | 'disconnected'
+type AddTabOptionState =
+  | 'available'
+  | 'connected'
+  | 'ready'
+  | 'connecting'
+  | 'failed'
+  | 'disconnected'
 interface AddTabOption {
   readonly id: RuntimeRemoteTabId
   readonly title: string
@@ -32,6 +38,7 @@ interface AddTabOption {
 const peerStageLabels: Record<P2PConnectionView['stage'], MessageKey> = {
   punching: 'p2p.connection.stagePunching',
   'starting-runtime': 'p2p.connection.stageStarting',
+  connected: 'p2p.connection.stageConnected',
   ready: 'p2p.connection.stageReady',
   failed: 'p2p.connection.stageFailed',
   disconnected: 'p2p.connection.stageDisconnected'
@@ -70,6 +77,8 @@ function peerStatusState(computer: P2PComputerView): AddTabOptionState {
       return 'connecting'
     case 'ready':
       return 'ready'
+    case 'connected':
+      return 'connected'
     case 'failed':
       return 'failed'
     case 'disconnected':
@@ -647,6 +656,10 @@ function onEscape(event: KeyboardEvent): void {
 
 .runtime-add-tab-option .browser-tab-status[data-state='ready'] {
   background: var(--color-success);
+}
+
+.runtime-add-tab-option .browser-tab-status[data-state='connected'] {
+  background: var(--color-accent);
 }
 
 .runtime-add-tab-option .browser-tab-status[data-state='available'] {

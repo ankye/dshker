@@ -632,10 +632,15 @@ export const zhCN = {
   'security.title': '当前权限',
   'security.description':
     'Renderer 只能调用命名的启动信息、目录或可执行文件选择、注册、克隆、切换和启动 API；它不能读取任意文件、启动任意进程、直接调用 Git 或读取凭证。',
-  'footer.protocol': 'Desktop API',
-  'footer.scope': '当前作用域',
-  'footer.scopeValue': '应用启动',
-  'footer.network': '网络'
+  'footer.launcherVersion': 'DSHKer',
+  'footer.dshVersion': 'DSH',
+  'footer.runtime': 'DSH运行',
+  'footer.network': '网络',
+  'footer.value.loading': '读取中',
+  'footer.dsh.preparing': '准备中',
+  'footer.dsh.missing': '未安装',
+  'footer.dsh.invalid': '不可用',
+  'footer.dsh.noRevision': '未识别版本'
 } as const
 
 /** Every message key, derived from the reference zh-CN catalog. */

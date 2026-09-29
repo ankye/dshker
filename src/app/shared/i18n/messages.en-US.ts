@@ -683,8 +683,13 @@ export const enUS: Record<MessageKey, string> = {
   'security.title': 'Current authority',
   'security.description':
     'The renderer can call only named bootstrap, directory or executable-selection, registration, clone, switch, and start APIs. It cannot read arbitrary files, start arbitrary processes, call Git directly, or read credentials.',
-  'footer.protocol': 'Desktop API',
-  'footer.scope': 'Current scope',
-  'footer.scopeValue': 'Application bootstrap',
-  'footer.network': 'Network'
+  'footer.launcherVersion': 'DSHKer',
+  'footer.dshVersion': 'DSH',
+  'footer.runtime': 'DSH runtime',
+  'footer.network': 'Network',
+  'footer.value.loading': 'Reading',
+  'footer.dsh.preparing': 'Preparing',
+  'footer.dsh.missing': 'Not installed',
+  'footer.dsh.invalid': 'Unavailable',
+  'footer.dsh.noRevision': 'Version unknown'
 }

@@ -199,6 +199,14 @@ func TestCapabilityAdvertisementIsBounded(t *testing.T) {
 	if !HasCapability(PeerCapabilities(), CapabilityOptionalWorkbench) {
 		t.Fatal("a caller altered this build's advertised capabilities")
 	}
+	requested := PeerCapabilitiesFor(true)
+	if !HasCapability(requested, CapabilityWorkbenchRequest) || !HasCapability(requested, CapabilityOptionalWorkbench) {
+		t.Fatalf("explicit workbench request did not preserve the optional-link capability: %v", requested)
+	}
+	transportOnly := PeerCapabilitiesFor(false)
+	if HasCapability(transportOnly, CapabilityWorkbenchRequest) {
+		t.Fatalf("transport-only capabilities asked the peer to start a workbench: %v", transportOnly)
+	}
 
 	if !ValidCapabilities([]string{"something.from.the.future"}) {
 		t.Fatal("an unknown name was rejected, which defeats the extension point")

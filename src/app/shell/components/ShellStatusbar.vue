@@ -2,10 +2,14 @@
 import type { SidebarState } from '../useLauncherShell'
 
 defineProps<{
-  readonly protocolLabel: string
-  readonly protocolVersion: string
-  readonly scopeLabel: string
-  readonly scopeValue: string
+  readonly launcherVersionLabel: string
+  readonly launcherVersion: string
+  readonly dshVersionLabel: string
+  readonly dshVersion: string
+  readonly dshVersionTitle: string
+  readonly runtimeLabel: string
+  readonly runtimeValue: string
+  readonly runtimeState: 'running' | 'starting' | 'stopped' | 'failed' | 'unknown'
   readonly operationLabel?: string
   /**
    * Filled fraction (0–1) when the operation reports real step progress.
@@ -52,10 +56,9 @@ const emit = defineEmits<{
 <template>
   <footer class="statusbar" :data-busy="operationLabel !== undefined">
     <!--
-      The control group leads the bar so the read-only protocol, scope, and
-      network facts stay on the trailing side. It is outside the busy branch
-      below: a running operation must not take the sidebar or console control
-      away from the user.
+      The control group leads the bar. Version and live-state facts stay visible
+      at the trailing edge even while an operation is in progress; progress uses
+      only the space between those two stable groups.
     -->
     <div class="statusbar-controls">
       <button
@@ -138,12 +141,43 @@ const emit = defineEmits<{
         operationLabel
       }}</span>
     </button>
-    <template v-else>
-      <span>{{ protocolLabel }} · {{ protocolVersion }}</span>
-      <span>{{ scopeLabel }} · {{ scopeValue }}</span>
-      <span class="statusbar-network" :data-state="networkState" role="status">
-        {{ networkLabel }} · {{ networkValue }}
+    <div class="statusbar-facts">
+      <span
+        class="statusbar-fact"
+        :aria-label="`${launcherVersionLabel}: ${launcherVersion}`"
+        :title="`${launcherVersionLabel}: ${launcherVersion}`"
+      >
+        <span class="statusbar-fact-label">{{ launcherVersionLabel }}</span>
+        <span class="statusbar-fact-value">{{ launcherVersion }}</span>
       </span>
-    </template>
+      <span
+        class="statusbar-fact"
+        :aria-label="`${dshVersionLabel}: ${dshVersionTitle}`"
+        :title="`${dshVersionLabel}: ${dshVersionTitle}`"
+      >
+        <span class="statusbar-fact-label">{{ dshVersionLabel }}</span>
+        <span class="statusbar-fact-value">{{ dshVersion }}</span>
+      </span>
+      <span
+        class="statusbar-fact"
+        :data-state="runtimeState"
+        role="status"
+        :aria-label="`${runtimeLabel}: ${runtimeValue}`"
+        :title="`${runtimeLabel}: ${runtimeValue}`"
+      >
+        <span class="statusbar-fact-label">{{ runtimeLabel }}</span>
+        <span class="statusbar-fact-value">{{ runtimeValue }}</span>
+      </span>
+      <span
+        class="statusbar-fact statusbar-network"
+        :data-state="networkState"
+        role="status"
+        :aria-label="`${networkLabel}: ${networkValue}`"
+        :title="`${networkLabel}: ${networkValue}`"
+      >
+        <span class="statusbar-fact-label">{{ networkLabel }}</span>
+        <span class="statusbar-fact-value">{{ networkValue }}</span>
+      </span>
+    </div>
   </footer>
 </template>

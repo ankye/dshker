@@ -316,7 +316,8 @@ export interface P2PConnectionView {
   pairId: string
   attemptId: string
   generation: number
-  stage: 'punching' | 'starting-runtime' | 'ready' | 'failed' | 'disconnected'
+  /** `connected` is transport-only; `ready` means a remote workbench is available. */
+  stage: 'punching' | 'starting-runtime' | 'connected' | 'ready' | 'failed' | 'disconnected'
   /** Error code only, empty unless the stage is `failed`. */
   error: string
   /** ICE candidate kinds, proving the path is direct rather than relayed. */
@@ -773,6 +774,7 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'runtime.not_found',
   'runtime.operation_in_progress',
   'runtime.plugin_operation_failed',
+  'runtime.plugin_incompatible',
   'runtime.port_in_use',
   'runtime.protocol_invalid',
   'runtime.protocol_mismatch',

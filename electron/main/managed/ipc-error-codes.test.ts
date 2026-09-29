@@ -29,6 +29,11 @@ describe('launcher harness error codes', () => {
     expect(codes['runtime.plugin_operation_failed']).toBe('managed.harness_plugin_operation_failed')
   })
 
+  it('reports a core/plugin peer mismatch as an explicit compatibility failure', async () => {
+    const codes = await loadMapping()
+    expect(codes['runtime.plugin_incompatible']).toBe('managed.harness_plugin_incompatible')
+  })
+
   it('reports an unusable checkout and an invalid selection under their own codes', async () => {
     const codes = await loadMapping()
     expect(codes['runtime.worktree_invalid']).toBe('managed.harness_worktree_invalid')

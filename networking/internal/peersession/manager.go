@@ -92,16 +92,17 @@ type turnCredentialRefresh struct {
 	err   error
 }
 type session struct {
-	PairID    string
-	lease     protocol.Lease
-	transport *peer.Transport
-	ctx       context.Context
-	cancel    context.CancelFunc
-	ready     chan struct{}
-	done      chan struct{}
-	mu        sync.Mutex
-	result    Connected
-	err       error
+	PairID           string
+	requestWorkbench bool
+	lease            protocol.Lease
+	transport        *peer.Transport
+	ctx              context.Context
+	cancel           context.CancelFunc
+	ready            chan struct{}
+	done             chan struct{}
+	mu               sync.Mutex
+	result           Connected
+	err              error
 	// refusal is the named code for a failed attempt, so a caller that returns
 	// the failure to the shell does not hand it the raw transport sentence.
 	refusal string
@@ -171,7 +172,7 @@ func (manager *Manager) Pin(pin controlplane.PairIdentity) error {
 	return nil
 }
 
-func (manager *Manager) Connect(ctx context.Context, pairID string, generation uint64) (Connected, error) {
+func (manager *Manager) Connect(ctx context.Context, pairID string, generation uint64, requestWorkbench bool) (Connected, error) {
 	if ctx.Err() != nil {
 		return Connected{}, ctx.Err()
 	}
@@ -200,6 +201,7 @@ func (manager *Manager) Connect(ctx context.Context, pairID string, generation u
 	}
 	connection := newSession(manager.ctx)
 	connection.PairID = pairID
+	connection.requestWorkbench = requestWorkbench
 	manager.sessions[pairID] = connection
 	manager.mu.Unlock()
 	stopCancellation := context.AfterFunc(ctx, connection.cancel)
@@ -816,7 +818,7 @@ func (manager *Manager) run(connection *session) {
 		// so its listener is owned by the manager instead. Attaching the gateway to
 		// connection.ctx would close its port the moment this session ended, making
 		// the URL change on every reconnect — the thing a stable URL must not do.
-		gateway, endpoint, mux, binding, err = runtimebridge.Establish(connection.ctx, manager.ctx, connection.transport, connection.lease, initiator, manager.runtimeOwner(connection), existing)
+		gateway, endpoint, mux, binding, err = runtimebridge.Establish(connection.ctx, manager.ctx, connection.transport, connection.lease, initiator, connection.requestWorkbench, manager.runtimeOwner(connection), existing)
 		if err == nil {
 			connection.mu.Lock()
 			connection.mux, connection.endpoint = mux, endpoint
@@ -882,7 +884,11 @@ func (manager *Manager) run(connection *session) {
 	connection.mu.Lock()
 	connection.err = err
 	if err == nil {
-		state.Stage = "ready"
+		if readyURL == "" {
+			state.Stage = "connected"
+		} else {
+			state.Stage = "ready"
+		}
 		logStage(state.Stage, nil)
 		connection.result = Connected{State: state, URL: readyURL}
 	} else {

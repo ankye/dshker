@@ -61,7 +61,7 @@ export class PeerConnections {
       const generation = this.#nextGeneration()
       const reply = await this.rpc.call(
         'peer.connect',
-        { serviceId, data: { pairId, generation } },
+        { serviceId, data: { pairId, generation, requestWorkbench: true } },
         signal
       )
       const record = exactPeerObject(reply, ['state', 'url'])

@@ -112,7 +112,7 @@ func TestConnectsEveryAuthorizedPair(t *testing.T) {
 
 // TestLiveStageIsLeftAlone keeps a reconcile from re-punching an open hole.
 func TestLiveStageIsLeftAlone(t *testing.T) {
-	for _, stage := range []string{"punching", "starting-runtime", "ready"} {
+	for _, stage := range []string{"punching", "starting-runtime", "connected", "ready"} {
 		t.Run(stage, func(t *testing.T) {
 			test := newHarness()
 			test.stages["svc-1:pair-a"] = stage

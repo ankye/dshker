@@ -62,7 +62,7 @@ func TestManagersAlternateOfflineAndRecover(t *testing.T) {
 
 	connect := func(dialer int) {
 		generation++
-		connected, err := managers[dialer].Connect(ctx, pairID, generation)
+		connected, err := managers[dialer].Connect(ctx, pairID, generation, true)
 		if err != nil {
 			t.Fatalf("device %d generation %d reconnect: %v", dialer, generation, err)
 		}

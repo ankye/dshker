@@ -133,9 +133,11 @@ approval took effect.
 ## 4. Connect and open a project
 
 1. Choose **Connect** on the paired computer. You will see the stages:
-   _attempting a direct connection_ → _starting the remote runtime_ → _connected_.
-   Only **connected** means the workbench is usable. The intermediate stages are
-   not a connection, and the app does not present them as one.
+   _attempting a direct connection_ → _connected (transport only)_ → _starting
+   the remote runtime_ → _connected, workbench available_. Automatic reconnects
+   stop at the transport-only stage and never start a local DSH process. Only the
+   final workbench-ready state opens DSH; opening a remote workbench is the
+   explicit request that starts it.
 2. Under **Run**, click **+** and choose the computer from the floating **LAN computers** list to create its tab on demand. Computers without a ready connection remain at the bottom and are disabled.
 3. Read the other computer's **authorized directories**, pick one, and browse
    it. Directory names come from the other computer; the folder structure is

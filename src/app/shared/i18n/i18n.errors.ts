@@ -8,6 +8,7 @@ export const zhCNErrors = {
   'toast.error.harnessWorktreeInvalid': '内核目录不可用',
   'toast.error.harnessInputInvalid': '操作参数无效',
   'toast.error.harnessPluginOperationFailed': '扩展安装或卸载失败',
+  'toast.error.harnessPluginIncompatible': '扩展与当前内核不兼容',
   'toast.error.harnessPortInUse': '启动端口被其他程序占用',
   'toast.error.gitOperationFailed': 'Git 操作失败',
   'toast.error.pluginCatalogReadFailed': '插件目录读取失败',
@@ -23,6 +24,8 @@ export const zhCNErrors = {
   'toast.error.detail.harnessInputInvalid': '该选项已不再有效。请刷新列表后重新选择。',
   'toast.error.detail.harnessPluginOperationFailed':
     'DSH 扩展命令执行失败，扩展列表保持原样。请在“控制台”查看输出后重试。',
+  'toast.error.detail.harnessPluginIncompatible':
+    '当前内核与已安装扩展的版本范围不兼容。请先移除或更新控制台中列出的旧扩展，再重新启动 Web。',
   'toast.error.detail.harnessPortInUse':
     '启动所需的端口正被其他程序使用，Launcher 不会擅自停止它。请停止占用端口的程序后重试。',
   'toast.error.detail.gitOperationFailed': '仓库未变更。请检查网络与分支权限后重试。',
@@ -45,6 +48,7 @@ export const enUSErrors = {
   'toast.error.harnessWorktreeInvalid': 'The core directory is unavailable',
   'toast.error.harnessInputInvalid': 'The selection is invalid',
   'toast.error.harnessPluginOperationFailed': 'Extension install or removal failed',
+  'toast.error.harnessPluginIncompatible': 'An extension is incompatible with the current core',
   'toast.error.harnessPortInUse': 'The launch port is held by another program',
   'toast.error.gitOperationFailed': 'The Git operation failed.',
   'toast.error.pluginCatalogReadFailed': 'The plugin catalog could not be read.',
@@ -63,6 +67,8 @@ export const enUSErrors = {
     'That selection is no longer valid. Refresh the list and choose again.',
   'toast.error.detail.harnessPluginOperationFailed':
     'The DSH extension command failed and the extension list is unchanged. Check the Console output and retry.',
+  'toast.error.detail.harnessPluginIncompatible':
+    'The current core is outside the installed extensions’ supported version ranges. Remove or update the old extensions listed in Console, then start Web again.',
   'toast.error.detail.harnessPortInUse':
     'The launch port is in use by another program, which the Launcher will not stop on its own. Stop the program holding the port and retry.',
   'toast.error.detail.gitOperationFailed':

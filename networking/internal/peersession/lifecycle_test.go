@@ -55,7 +55,7 @@ func TestConnectReplacesPendingBegin(t *testing.T) {
 		t.Fatal(err)
 	}
 	result := make(chan error, 1)
-	go func() { _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 1); result <- err }()
+	go func() { _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 1, true); result <- err }()
 	select {
 	case <-entered:
 	case <-manager.ctx.Done():
@@ -64,7 +64,7 @@ func TestConnectReplacesPendingBegin(t *testing.T) {
 	// A second connect supersedes the first: the old attempt's Begin request is
 	// cancelled and a fresh reservation replaces it. Refusing it as busy left a
 	// peer restart unable to reconnect for as long as the old transport lived.
-	go func() { _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 2); result <- err }()
+	go func() { _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 2, true); result <- err }()
 	select {
 	case <-entered:
 	case <-manager.ctx.Done():

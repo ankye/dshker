@@ -74,7 +74,23 @@ The core therefore composes the installed-peer host beside its own stores and an
 
 Trust for the coordinator is **not** renegotiated by that move. The launcher's documented rule stands: a machine that does not already trust the server refuses it, and the fix belongs on the server, so no CA travels in `service.configure`. What a host that administers itself needs is the ability to name anchors explicitly, which the headless entry point of P5 requires anyway: `dshkerd --roots <absolute PEM file>` adds CA certificates on top of the system store. It never disables verification and the shell never passes it. The alternative — accepting the coordinator's TLS CA through `service.configure` — was rejected because it contradicts that documented rule and would be a payload-shape change, hence a table version bump.
 
-### D8. Reconciliation with the in-flight changes
+### D8. Separate transport reconnection from workbench requests
+
+The core's automatic reconciliation sends a `peer.connect` request with
+`requestWorkbench: false`. An explicit shell connection sends the same operation
+with `requestWorkbench: true`. The peer handshake carries that intent through the
+additive `workbench.request` capability, so older peers can ignore the new name
+while newer peers keep transport-only links alive without calling their local DSH
+runtime owner. A transport-only session is reported as `connected` with runtime
+generation zero; `ready` remains reserved for a session with a usable workbench.
+
+This is deliberately an explicit intent rather than an inference from the local
+runtime state. A stopped DSH must not make a healthy network link look broken, and
+the core must never start a local child merely because a peer or a reconnect is
+present. Opening a remote workbench is the operation that authorizes the runtime
+owner call.
+
+### D9. Reconciliation with the in-flight changes
 
 Three active changes still contain requirements that this move contradicts, and none has archived yet:
 

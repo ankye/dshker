@@ -61,7 +61,7 @@ func TestManagerRealDSH(t *testing.T) {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
-		connected, err := managers[0].Connect(ctx, pairID, generation)
+		connected, err := managers[0].Connect(ctx, pairID, generation, true)
 		if err != nil {
 			t.Fatalf("generation %d connect: %v", generation, err)
 		}
@@ -85,7 +85,7 @@ func TestManagerRealDSH(t *testing.T) {
 	}
 	// An actual DSH process restart changes the announced endpoint and token.
 	time.Sleep(time.Second)
-	connected, err := managers[0].Connect(ctx, pairID, 6)
+	connected, err := managers[0].Connect(ctx, pairID, 6, true)
 	must(t, err)
 	runtimeProcess.stop(t, false)
 	managers[1].InvalidateRuntime(1)
@@ -102,7 +102,7 @@ func TestManagerRealDSH(t *testing.T) {
 	binding = runtimebridge.Binding{Generation: 2, URL: nextURL}
 	bindingMu.Unlock()
 	time.Sleep(time.Second)
-	connected, err = managers[0].Connect(ctx, pairID, 7)
+	connected, err = managers[0].Connect(ctx, pairID, 7, true)
 	must(t, err)
 	if connected.State.RuntimeGeneration != 2 || connected.State.AttemptID == previousAttempt {
 		t.Fatal("reconnect selected stale runtime identity")

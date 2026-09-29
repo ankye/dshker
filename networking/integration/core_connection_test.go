@@ -90,13 +90,15 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 	connected := callCore(t, ctx, parent, "peer.connect", struct {
 		ServiceID string `json:"serviceId"`
 		Data      struct {
-			PairID     string `json:"pairId"`
-			Generation uint64 `json:"generation"`
+			PairID           string `json:"pairId"`
+			Generation       uint64 `json:"generation"`
+			RequestWorkbench bool   `json:"requestWorkbench"`
 		} `json:"data"`
 	}{ServiceID: identity.ServiceID, Data: struct {
-		PairID     string `json:"pairId"`
-		Generation uint64 `json:"generation"`
-	}{PairID: pairID, Generation: 1}})
+		PairID           string `json:"pairId"`
+		Generation       uint64 `json:"generation"`
+		RequestWorkbench bool   `json:"requestWorkbench"`
+	}{PairID: pairID, Generation: 1, RequestWorkbench: true}})
 	var answer peersession.Connected
 	must(t, json.Unmarshal(connected, &answer))
 	if answer.State.Stage != "ready" || answer.State.PairID != pairID {
@@ -333,19 +335,21 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 	connected := callCore(t, ctx, parent, "peer.connect", struct {
 		ServiceID string `json:"serviceId"`
 		Data      struct {
-			PairID     string `json:"pairId"`
-			Generation uint64 `json:"generation"`
+			PairID           string `json:"pairId"`
+			Generation       uint64 `json:"generation"`
+			RequestWorkbench bool   `json:"requestWorkbench"`
 		} `json:"data"`
 	}{ServiceID: identity.ServiceID, Data: struct {
-		PairID     string `json:"pairId"`
-		Generation uint64 `json:"generation"`
-	}{PairID: pairID, Generation: 1}})
+		PairID           string `json:"pairId"`
+		Generation       uint64 `json:"generation"`
+		RequestWorkbench bool   `json:"requestWorkbench"`
+	}{PairID: pairID, Generation: 1, RequestWorkbench: true}})
 	var answer peersession.Connected
 	must(t, json.Unmarshal(connected, &answer))
 
 	// The connection is established and reported ready. This is the whole point:
 	// the two computers are connected even though neither has a workbench to show.
-	if answer.State.Stage != "ready" || answer.State.PairID != pairID {
+	if answer.State.Stage != "connected" || answer.State.PairID != pairID {
 		t.Fatalf("connect without a workbench reported %+v", answer.State)
 	}
 	if path := answer.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {
@@ -384,6 +388,7 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 	// what repairing a broken DSH looks like from this side.
 	var ownerMu sync.Mutex
 	available := false
+	ownerCalls := 0
 	f.devices[1].SetAccount(f.config[1].Device.UserID)
 	remote, err := peersession.New(
 		ctx,
@@ -393,6 +398,7 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 		func(context.Context, string) (runtimebridge.Binding, error) {
 			ownerMu.Lock()
 			defer ownerMu.Unlock()
+			ownerCalls++
 			if !available {
 				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
 			}
@@ -419,28 +425,36 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 	restoreCoreDevice(t, ctx, parent, f)
 	pairID := f.config[0].Pin.Pair.PairID
 
-	connect := func(generation uint64) peersession.Connected {
+	connect := func(generation uint64, requestWorkbench bool) peersession.Connected {
 		raw := callCore(t, ctx, parent, "peer.connect", struct {
 			ServiceID string `json:"serviceId"`
 			Data      struct {
-				PairID     string `json:"pairId"`
-				Generation uint64 `json:"generation"`
+				PairID           string `json:"pairId"`
+				Generation       uint64 `json:"generation"`
+				RequestWorkbench bool   `json:"requestWorkbench"`
 			} `json:"data"`
 		}{ServiceID: identity.ServiceID, Data: struct {
-			PairID     string `json:"pairId"`
-			Generation uint64 `json:"generation"`
-		}{PairID: pairID, Generation: generation}})
+			PairID           string `json:"pairId"`
+			Generation       uint64 `json:"generation"`
+			RequestWorkbench bool   `json:"requestWorkbench"`
+		}{PairID: pairID, Generation: generation, RequestWorkbench: requestWorkbench}})
 		var answer peersession.Connected
 		must(t, json.Unmarshal(raw, &answer))
 		return answer
 	}
 
-	// Connected with no workbench: ready, and no address because there is nothing
-	// to address.
-	first := connect(1)
-	if first.State.Stage != "ready" || first.URL != "" {
+	// Connected with no workbench: transport-only, and no address because there is
+	// nothing to address.
+	first := connect(1, false)
+	if first.State.Stage != "connected" || first.URL != "" {
 		t.Fatalf("connect without a workbench = %+v url=%q", first.State, first.URL)
 	}
+	ownerMu.Lock()
+	if ownerCalls != 0 {
+		ownerMu.Unlock()
+		t.Fatalf("transport-only reconnect asked the runtime owner %d time(s)", ownerCalls)
+	}
+	ownerMu.Unlock()
 
 	// The workbench comes back. The next attempt must attach it and hand out a
 	// working address; nothing about the earlier attempt may prevent that.
@@ -456,13 +470,18 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 	// recovery.
 	waitForRequestBudget()
 
-	second := connect(2)
+	second := connect(2, true)
 	if second.State.Stage != "ready" {
 		t.Fatalf("connect after the workbench recovered = %+v", second.State)
 	}
 	if second.URL == "" {
 		t.Fatal("a recovered workbench produced no address, so the tab would stay dead")
 	}
+	ownerMu.Lock()
+	if ownerCalls != 1 {
+		t.Fatalf("explicit workbench request called the runtime owner %d time(s)", ownerCalls)
+	}
+	ownerMu.Unlock()
 	// And the address genuinely serves the peer's workbench through the tunnel.
 	if err := runtimebridge.Probe(ctx, second.URL); err != nil {
 		t.Fatalf("probe through the recovered workbench: %v", err)
@@ -526,13 +545,15 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 		raw := callCore(t, ctx, parent, "peer.connect", struct {
 			ServiceID string `json:"serviceId"`
 			Data      struct {
-				PairID     string `json:"pairId"`
-				Generation uint64 `json:"generation"`
+				PairID           string `json:"pairId"`
+				Generation       uint64 `json:"generation"`
+				RequestWorkbench bool   `json:"requestWorkbench"`
 			} `json:"data"`
 		}{ServiceID: identity.ServiceID, Data: struct {
-			PairID     string `json:"pairId"`
-			Generation uint64 `json:"generation"`
-		}{PairID: pairID, Generation: generation}})
+			PairID           string `json:"pairId"`
+			Generation       uint64 `json:"generation"`
+			RequestWorkbench bool   `json:"requestWorkbench"`
+		}{PairID: pairID, Generation: generation, RequestWorkbench: true}})
 		var connected peersession.Connected
 		must(t, json.Unmarshal(raw, &connected))
 		return connected
@@ -601,7 +622,11 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 			connected := connect(generation)
 			// The connection itself is established in every single case. That is the
 			// contract: maintenance belongs to the daemon, a workbench is cargo.
-			if connected.State.Stage != "ready" || connected.State.PairID != pairID {
+			wantStage := "connected"
+			if scenario.wantAddress {
+				wantStage = "ready"
+			}
+			if connected.State.Stage != wantStage || connected.State.PairID != pairID {
 				t.Fatalf("%s: connection not established (%s): %+v", scenario.name, scenario.why, connected.State)
 			}
 			if path := connected.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {

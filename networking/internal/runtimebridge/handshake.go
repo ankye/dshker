@@ -47,10 +47,10 @@ type RuntimeOwner func(context.Context, string) (Binding, error)
 // the long-lived context that owns the listener — the manager's lifetime, not
 // the session's. Attaching the gateway to sessionCtx would close its port the
 // moment the session ended, which is exactly what a stable URL must not do.
-func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport *peer.Transport, lease protocol.Lease, initiator bool, owner RuntimeOwner, attachment *Endpoint) (*Gateway, *Endpoint, *peer.Mux, Binding, error) {
+func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport *peer.Transport, lease protocol.Lease, initiator bool, requestWorkbench bool, owner RuntimeOwner, attachment *Endpoint) (*Gateway, *Endpoint, *peer.Mux, Binding, error) {
 	budget, cancel := context.WithTimeout(sessionCtx, 70*time.Second)
 	defer cancel()
-	request := hello{Version: 1, Type: "runtime.connect", AttemptID: lease.AttemptID, Generation: lease.Generation, Capabilities: protocol.PeerCapabilities()}
+	request := hello{Version: 1, Type: "runtime.connect", AttemptID: lease.AttemptID, Generation: lease.Generation, Capabilities: protocol.PeerCapabilitiesFor(requestWorkbench)}
 	var binding Binding
 	// Whether the peer's build keeps a link alive with no workbench on it. Assumed
 	// true for the initiator path, where the answer arrives with the reply instead.
@@ -98,20 +98,23 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 		// makes that outcome readable from this side instead of appearing as two logs
 		// disagreeing about whether the connection succeeded.
 		peerKeepsWorkbenchlessLinks = protocol.HasCapability(incoming.Capabilities, protocol.CapabilityOptionalWorkbench)
-		if owner == nil {
-			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
-		}
-		// The runtime owner keys its catalog, its pin map and its state projection
-		// by the *far* device id — never by the coordinator's attempt key. The
-		// lease carries the id the initiator supplied, which is the target's own
-		// device id, so on this side lease.PairID names this device and every
-		// lookup by it is a miss. Ask about the initiator instead.
-		peerDeviceID := lease.ToDeviceID
-		if !initiator {
-			peerDeviceID = lease.FromDeviceID
-		}
-		binding, err = owner(budget, peerDeviceID)
 		request.Type = "runtime.result"
+		if !protocol.HasCapability(incoming.Capabilities, protocol.CapabilityWorkbenchRequest) {
+			// Reconnection is a transport concern. A peer that is merely restoring
+			// its authorized link is not asking this machine to start DSH, so answer
+			// without invoking the runtime owner at all.
+			request.Error, binding = "p2p.runtime_unavailable", Binding{}
+			fmt.Fprintf(os.Stderr, "runtime.connect transport-only request peer=%s (connection kept, no workbench)\n", peerDeviceID(lease, initiator))
+		} else if owner == nil {
+			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
+		} else {
+			// The runtime owner keys its catalog, its pin map and its state projection
+			// by the *far* device id — never by the coordinator's attempt key. The
+			// lease carries the id the initiator supplied, which is the target's own
+			// device id, so on this side lease.PairID names this device and every
+			// lookup by it is a miss. Ask about the initiator instead.
+			binding, err = owner(budget, peerDeviceID(lease, initiator))
+		}
 		if err != nil {
 			// A workbench that will not start is not a broken connection.
 			//
@@ -136,16 +139,19 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 				// used to look while neither side could say why.
 				kept = "connection kept here, but this peer's build closes links without a workbench — upgrade it"
 			}
-			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v (%s)\n", peerDeviceID, err, kept)
+			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v (%s)\n", peerDeviceID(lease, initiator), err, kept)
 			request.Error = code
 			binding, err = Binding{}, nil
-		} else if _, invalid := binding.Endpoint(); invalid != nil {
-			// An owner that answers with something unusable is the same case: report
-			// it and carry on without a tunnel rather than dropping the link.
-			fmt.Fprintf(os.Stderr, "runtime.connect owner answered an unusable binding peer=%s: %v (connection kept, no workbench)\n", peerDeviceID, invalid)
-			request.Error, binding = "p2p.runtime_invalid", Binding{}
-		} else {
-			request.RuntimeGeneration, request.URL = binding.Generation, binding.URL
+		} else if request.Error == "" {
+			_, invalid := binding.Endpoint()
+			if invalid == nil {
+				request.RuntimeGeneration, request.URL = binding.Generation, binding.URL
+			} else {
+				// An owner that answers with something unusable is the same case: report
+				// it and carry on without a tunnel rather than dropping the link.
+				fmt.Fprintf(os.Stderr, "runtime.connect owner answered an unusable binding peer=%s: %v (connection kept, no workbench)\n", peerDeviceID(lease, initiator), invalid)
+				request.Error, binding = "p2p.runtime_invalid", Binding{}
+			}
 		}
 		if err = sendHello(transport, request); err != nil {
 			return nil, nil, nil, binding, err
@@ -194,6 +200,13 @@ func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport
 		return nil, nil, nil, binding, err
 	}
 	return gateway, attachment, mux, binding, nil
+}
+
+func peerDeviceID(lease protocol.Lease, initiator bool) string {
+	if initiator {
+		return lease.ToDeviceID
+	}
+	return lease.FromDeviceID
 }
 
 func sendHello(transport *peer.Transport, value hello) error {

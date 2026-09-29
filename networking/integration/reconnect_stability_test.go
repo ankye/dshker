@@ -151,7 +151,7 @@ func reconnectCycles(t *testing.T, initiator, runtimeOwner int) {
 		case <-ctx.Done():
 			t.Fatal(ctx.Err())
 		}
-		connected, err := state.Connect(ctx, pairID, uint64(cycle))
+		connected, err := state.Connect(ctx, pairID, uint64(cycle), true)
 		if err != nil {
 			t.Fatalf("cycle %d connect: %v\n  A: %s\n  B: %s", cycle, err, describe(states[0]), describe(states[1]))
 		}

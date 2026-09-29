@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.1.81 — 2026-09-29
+
+### 简体中文 (zh-CN)
+
+- **底部状态栏现在显示四项产品状态。** 一眼可见 DSHKer 版本、当前 DSH 版本、DSH 运行状态和网络连接状态；长提交号可悬停查看完整值，操作进度期间这四项也不会消失。
+- **关闭窗口不再打断内核更新。** Git 刷新、依赖安装、Harness 构建、版本切换及旧版本清理期间，关闭会保留正在执行的任务；有托盘时隐藏窗口，没有托盘时保持窗口可见。macOS 从 Dock 重开窗口后也会恢复关闭保护，重复的版本/插件操作会收到“操作进行中”错误，不会并发改写同一工作区。
+- **修复 P2P 自动重连误启动 DSH。** 后台重连现在只恢复已认证的网络通道，不再调用本机 DSH 运行时；只有明确打开远程工作台时才请求启动对端 DSH，并将两种状态分别显示为“已连接（仅网络通道）”和“工作台可用”。
+- **避免不兼容的扩展导致 Web 启动后白屏。** 旧版扩展会调用新核心已移除的 `settings.installSection`，之前 Web 已报出地址但页面内容仍会报错。现在切换核心和启动 Web 前都会校验 profile 扩展声明的核心版本范围；不兼容时明确阻止启动并指出问题，不会半启动、静默删除扩展或注入兼容层。
+
+### English (en-US)
+
+- **The status bar now shows four product facts.** See the DSHKer version, selected DSH revision, DSH runtime state, and network connection state at a glance. Hovering a shortened commit reveals its full value, and these facts remain visible during operations.
+- **Closing the window no longer interrupts core updates.** During Git refresh, dependency installation, Harness builds, version switches, and old-version cleanup, closing preserves the operation; the window hides when a tray exists and stays visible when it does not. macOS Dock reactivation restores the close guard, and overlapping version/plugin mutations are rejected before they can change the same workspace concurrently.
+- **Fixed P2P reconnects starting DSH unexpectedly.** Background recovery now restores only the authenticated transport and never calls the local DSH runtime owner. Opening a remote workbench is the explicit request that starts the peer runtime; the UI distinguishes transport-only connectivity from a workbench-ready connection.
+- **Prevent incompatible extensions from breaking Web startup.** Older extensions called `settings.installSection`, which the new core removed; the URL could be announced while page content was already failing. Before switching cores or starting Web, the Launcher checks the core version ranges declared by profile extensions. An incompatible set is refused with an actionable error rather than causing a partial launch, deleting extensions, or injecting a compatibility shim.
+
 ## 0.1.80 — 2026-09-24
 
 ### 简体中文 (zh-CN)

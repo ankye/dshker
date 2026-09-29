@@ -9,13 +9,24 @@ interface TrayPreferences {
   closeBehavior: CloseBehavior
 }
 
+export interface TrayOptions {
+  /**
+   * Returns true when the window must stay alive because a main-process task
+   * owns Git, dependency installation, or a build. Close is then prevented even
+   * if the user's ordinary close preference is "quit"; without a tray, the window
+   * stays visible.
+   */
+  readonly shouldMinimizeOnClose?: () => boolean
+}
+
 const PREFS_FILE = 'launcher-tray-preferences.json'
 const DEFAULT: CloseBehavior = 'minimize-to-tray'
 
 let tray: Tray | undefined
 let mainWindow: BrowserWindow | undefined
 let currentBehavior: CloseBehavior = DEFAULT
-let closeHandlerInstalled = false
+let preferencesLoaded = false
+const closeHandlerWindows = new WeakSet<BrowserWindow>()
 /**
  * Set before any deliberate quit so the window close handler lets it through
  * instead of hiding the window — without this flag the quit is caught by the
@@ -68,7 +79,7 @@ export function setCloseBehavior(value: CloseBehavior): void {
 
 /** True when the window close button minimises to tray instead of quitting. */
 export function isTrayActive(): boolean {
-  return currentBehavior === 'minimize-to-tray'
+  return tray !== undefined && currentBehavior === 'minimize-to-tray'
 }
 
 /**
@@ -127,42 +138,47 @@ function showWindow(): void {
   mainWindow.focus()
 }
 
-/** Creates the system tray icon and installs the close-behavour handler. */
-export function createTray(window: BrowserWindow): void {
+/** Creates the system tray icon once and binds lifecycle handling to each window. */
+export function createTray(window: BrowserWindow, options: TrayOptions = {}): void {
   mainWindow = window
-  currentBehavior = read()
-
-  // A tray that cannot be created must not leave minimise-to-tray in force.
-  // `isTrayActive()` gates the `window-all-closed` quit, so a throw here — no
-  // system tray on a bare Linux session, a missing or corrupt icon — used to
-  // leave the app with no window, no tray icon and no way to quit, holding the
-  // single-instance lock so a relaunch only re-showed nothing. Falling back to
-  // 'quit' keeps the close button working as the only remaining exit.
-  try {
-    tray = new Tray(trayIcon())
-    tray.setToolTip('DSHKer Launcher')
-    // Left-click shows the window. It used to quit outright, so a stray click on
-    // the menu bar killed the app with no confirmation — and it contradicted this
-    // same tray's own "显示" item. Quitting stays an explicit menu choice.
-    tray.on('click', () => showWindow())
-    rebuildContextMenu()
-  } catch (error) {
-    tray = undefined
-    currentBehavior = 'quit'
-    console.error('DSHKer Launcher could not create the system tray icon.', error)
+  if (!preferencesLoaded) {
+    currentBehavior = read()
+    preferencesLoaded = true
   }
 
-  // Single close-handler that reads currentBehavior at event time.
-  // A deliberate quit from the tray or its context menu sets forceQuitting,
-  // so the window closes and the app exits; only a click on the window's own
-  // close button is intercepted by the minimise-to-tray behaviour.
-  if (!closeHandlerInstalled) {
-    closeHandlerInstalled = true
+  if (!tray) {
+    let candidate: Tray | undefined
+    try {
+      candidate = new Tray(trayIcon())
+      candidate.setToolTip('DSHKer Launcher')
+      // Left-click shows the window. It used to quit outright, so a stray click on
+      // the menu bar killed the app with no confirmation — and it contradicted this
+      // same tray's own "显示" item. Quitting stays an explicit menu choice.
+      candidate.on('click', () => showWindow())
+      tray = candidate
+      rebuildContextMenu()
+    } catch (error) {
+      candidate?.destroy()
+      tray = undefined
+      console.error('DSHKer Launcher could not create the system tray icon.', error)
+    }
+  }
+
+  if (!closeHandlerWindows.has(window)) {
+    closeHandlerWindows.add(window)
+    window.on('closed', () => {
+      if (mainWindow === window) mainWindow = undefined
+    })
     window.on('close', (event) => {
       if (forceQuitting) return
-      if (currentBehavior === 'minimize-to-tray') {
+
+      const operationActive = options.shouldMinimizeOnClose?.() === true
+      const minimizeToTray = currentBehavior === 'minimize-to-tray' && tray !== undefined
+      if (operationActive || minimizeToTray) {
         event.preventDefault()
-        window.hide()
+        // Keep the window visible when tray creation failed. Hiding it would
+        // remove the only way to observe and recover the still-running task.
+        if (tray) window.hide()
       }
     })
   }

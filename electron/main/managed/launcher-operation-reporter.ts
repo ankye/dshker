@@ -1,6 +1,7 @@
 import { createWriteStream, type WriteStream } from 'node:fs'
 import { mkdir } from 'node:fs/promises'
 import nodePath from 'node:path'
+import { ManagedHarnessRuntimeError } from './runtime-errors'
 import {
   formatLauncherLifecycleEvent,
   formatLauncherOperationFailure,
@@ -19,6 +20,8 @@ const STEP_SILENCE_THRESHOLD_MILLISECONDS = 20_000
 export interface LauncherOperationReporterOptions {
   /** Operations append their records here; launches keep their own truncating handle. */
   readonly launchLogPath: string
+  /** Blocks mutations while the main process is preparing the initial checkout. */
+  readonly isOperationAdmissionBlocked?: () => boolean
   /** Receives each launcher-marked record's message text. */
   readonly emit: (message: string) => void
   /** Timestamp of the newest console entry, for heartbeat silence gating. */
@@ -36,24 +39,52 @@ export interface LauncherOperationReporterOptions {
 export class LauncherOperationReporter {
   readonly #options: LauncherOperationReporterOptions
   #stream: WriteStream | undefined
+  #activeOperations = 0
 
   constructor(options: LauncherOperationReporterOptions) {
     this.#options = options
   }
 
+  /** True while at least one Launcher-owned Git/build operation is running. */
+  isActive(): boolean {
+    return this.#activeOperations > 0
+  }
+
   /** Runs one operation with start, success, and failure records. */
-  async reportOperation<T>(description: string, operation: () => Promise<T>): Promise<T> {
-    await this.#openOperationLog()
-    this.event(`${description}…`)
+  async reportOperation<T>(
+    description: string,
+    operation: () => Promise<T>,
+    options: { readonly allowWhileAdmissionBlocked?: boolean } = {}
+  ): Promise<T> {
+    // Claim synchronously before the first await. Version operations mutate the
+    // same mirror, worktree directories, and active-version pointer; allowing
+    // overlapping IPC calls can delete a directory another call is building.
+    if (
+      this.#activeOperations > 0 ||
+      (this.#options.isOperationAdmissionBlocked?.() === true &&
+        options.allowWhileAdmissionBlocked !== true)
+    ) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.operation_in_progress',
+        'Another DSH operation is already in progress.'
+      )
+    }
+    this.#activeOperations += 1
     try {
-      const result = await operation()
-      this.event(`${description} completed.`)
-      return result
-    } catch (error) {
-      this.event(formatLauncherOperationFailure(description, error))
-      throw error
+      await this.#openOperationLog()
+      this.event(`${description}…`)
+      try {
+        const result = await operation()
+        this.event(`${description} completed.`)
+        return result
+      } catch (error) {
+        this.event(formatLauncherOperationFailure(description, error))
+        throw error
+      } finally {
+        this.#closeOperationLog()
+      }
     } finally {
-      this.#closeOperationLog()
+      this.#activeOperations -= 1
     }
   }
 
@@ -96,7 +127,7 @@ export class LauncherOperationReporter {
       const stream = createWriteStream(this.#options.launchLogPath, { flags: 'a' })
       // An unwritable log must not take down the operation it explains.
       stream.on('error', () => {
-        this.#stream = undefined
+        if (this.#stream === stream) this.#stream = undefined
       })
       this.#stream = stream
     } catch {
@@ -105,7 +136,8 @@ export class LauncherOperationReporter {
   }
 
   #closeOperationLog(): void {
-    this.#stream?.end()
+    const stream = this.#stream
     this.#stream = undefined
+    stream?.end()
   }
 }

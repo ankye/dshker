@@ -35,7 +35,7 @@ func TestManagerNetworkRevocationRealDSH(t *testing.T) {
 	}
 	time.Sleep(time.Second)
 	pin := f.config[0].Pin
-	connected, err := managers[0].Connect(ctx, pin.Pair.PairID, 1)
+	connected, err := managers[0].Connect(ctx, pin.Pair.PairID, 1, true)
 	must(t, err)
 	must(t, runtimebridge.Probe(ctx, connected.URL))
 	must(t, f.client.DeleteNetwork(ctx, f.userSession.Token, pin.Pair.NetworkID))
@@ -45,7 +45,7 @@ func TestManagerNetworkRevocationRealDSH(t *testing.T) {
 	if err := managers[0].Pin(pin); err == nil || err.Error() != "p2p.network_revoked" {
 		t.Fatalf("deleted network repinned: %v", err)
 	}
-	_, err = managers[0].Connect(ctx, pin.Pair.PairID, 2)
+	_, err = managers[0].Connect(ctx, pin.Pair.PairID, 2, true)
 	if err == nil || err.Error() != "p2p.pair_unauthorized" {
 		t.Fatalf("revoked network reconnected: %v", err)
 	}

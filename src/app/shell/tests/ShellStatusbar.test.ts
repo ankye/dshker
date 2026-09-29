@@ -10,10 +10,14 @@ import ShellStatusbar from '../components/ShellStatusbar.vue'
  */
 describe('ShellStatusbar', () => {
   const base = {
-    protocolLabel: 'Desktop API',
-    protocolVersion: '1',
-    scopeLabel: 'Scope',
-    scopeValue: 'App start',
+    launcherVersionLabel: 'DSHKer',
+    launcherVersion: '0.1.80',
+    dshVersionLabel: 'DSH',
+    dshVersion: 'master · abc1234',
+    dshVersionTitle: 'master · abc1234def456',
+    runtimeLabel: 'DSH runtime',
+    runtimeValue: 'Running',
+    runtimeState: 'running' as const,
     networkLabel: 'Network',
     networkValue: 'Status unknown',
     networkState: 'unknown' as const,
@@ -91,11 +95,15 @@ describe('ShellStatusbar', () => {
     expect(wrapper.get('.statusbar-progress-bar').attributes('style')).toContain('width: 100%')
   })
 
-  it('shows protocol facts when idle', () => {
+  it('shows all four product and connection facts when idle', () => {
     const wrapper = mount(ShellStatusbar, { props: base })
 
     expect(wrapper.find('.statusbar-progress').exists()).toBe(false)
-    expect(wrapper.text()).toContain('Desktop API · 1')
+    expect(wrapper.findAll('.statusbar-fact')).toHaveLength(4)
+    expect(wrapper.text()).toContain('DSHKer0.1.80')
+    expect(wrapper.text()).toContain('DSHmaster · abc1234')
+    expect(wrapper.text()).toContain('DSH runtimeRunning')
+    expect(wrapper.text()).toContain('NetworkStatus unknown')
   })
 
   it('leads with the sidebar and console controls it took over from the rail', async () => {

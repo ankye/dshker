@@ -621,8 +621,9 @@ func (account *account) connection(ctx context.Context, method string, data json
 		return struct{}{}, manager.Disconnect(request.PairID)
 	}
 	var request struct {
-		PairID     string `json:"pairId"`
-		Generation uint64 `json:"generation"`
+		PairID           string `json:"pairId"`
+		Generation       uint64 `json:"generation"`
+		RequestWorkbench bool   `json:"requestWorkbench"`
 	}
 	if protocol.DecodeExact(data, &request) != nil || !protocol.ValidID(request.PairID) || request.Generation == 0 {
 		return nil, errors.New("p2p.invalid_request")
@@ -646,5 +647,5 @@ func (account *account) connection(ctx context.Context, method string, data json
 	if err := manager.ReconnectSignals(ctx); err != nil {
 		return nil, err
 	}
-	return manager.Connect(ctx, request.PairID, request.Generation)
+	return manager.Connect(ctx, request.PairID, request.Generation, request.RequestWorkbench)
 }

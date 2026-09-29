@@ -90,6 +90,8 @@ export interface VersionMaterializationSteps {
   readonly install: (directory: string) => Promise<void>
   readonly build: (directory: string) => Promise<void>
   readonly reconcilePlugins: (directory: string) => Promise<void>
+  /** Validates the selected core against the profile before the pointer flips. */
+  readonly validate: (directory: string) => Promise<void>
   readonly event: (message: string) => void
 }
 
@@ -150,6 +152,9 @@ export async function materializeLauncherVersion(
   } else {
     steps.event(`DSH commit ${commit} is already prepared; switching to it directly.`)
   }
+  await steps.loggedStep('Checking DSH core and profile plugin compatibility', () =>
+    steps.validate(target)
+  )
   await writeCurrentVersionPointer(pointerPath, commit)
 }
 

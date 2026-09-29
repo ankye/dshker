@@ -43,10 +43,14 @@ describe('statusbar chrome control wiring', () => {
         setup() {
           return () =>
             h(ShellStatusbar, {
-              protocolLabel: 'Desktop API',
-              protocolVersion: '1',
-              scopeLabel: 'Scope',
-              scopeValue: 'App start',
+              launcherVersionLabel: 'DSHKer',
+              launcherVersion: '0.1.80',
+              dshVersionLabel: 'DSH',
+              dshVersion: 'master · abc1234',
+              dshVersionTitle: 'master · abc1234def456',
+              runtimeLabel: 'DSH runtime',
+              runtimeValue: 'Running',
+              runtimeState: 'running',
               networkLabel: 'Network',
               networkValue: 'Status unknown',
               networkState: 'unknown',

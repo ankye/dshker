@@ -111,14 +111,16 @@ func scopedConnect(serviceID, pairID string, generation uint64) any {
 	return struct {
 		ServiceID string `json:"serviceId"`
 		Data      struct {
-			PairID     string `json:"pairId"`
-			Generation uint64 `json:"generation"`
+			PairID           string `json:"pairId"`
+			Generation       uint64 `json:"generation"`
+			RequestWorkbench bool   `json:"requestWorkbench"`
 		} `json:"data"`
 	}{
 		ServiceID: serviceID,
 		Data: struct {
-			PairID     string `json:"pairId"`
-			Generation uint64 `json:"generation"`
-		}{PairID: pairID, Generation: generation},
+			PairID           string `json:"pairId"`
+			Generation       uint64 `json:"generation"`
+			RequestWorkbench bool   `json:"requestWorkbench"`
+		}{PairID: pairID, Generation: generation, RequestWorkbench: true},
 	}
 }

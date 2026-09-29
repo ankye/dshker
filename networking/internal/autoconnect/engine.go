@@ -37,6 +37,7 @@ var Backoff = []time.Duration{
 var liveStages = map[string]bool{
 	"punching":         true,
 	"starting-runtime": true,
+	"connected":        true,
 	"ready":            true,
 }
 

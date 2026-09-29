@@ -151,14 +151,17 @@ async function start(): Promise<void> {
   app.once('browser-window-created', (_event, window) => {
     scheduleLauncherUpdateCheckAfterWindowReady(window, services.launcherUpdateService)
   })
-  createWindow(mainDirectory, services.runtimeBrowserController)
-  // System tray for minimise-to-tray close behaviour. Uses the same window the
-  // update scheduler received, so the icon and close handler always attach to
-  // the one window the app owns.
-  void app.whenReady().then(() => {
-    const main = BrowserWindow.getAllWindows()
-    if (main.length > 0) createTray(main[0])
-  })
+  const createLauncherWindow = (): void => {
+    const window = createWindow(mainDirectory, services.runtimeBrowserController)
+    // Bind every window, including one recreated from the macOS Dock, to the
+    // tray and the same main-process operation owner.
+    createTray(window, {
+      shouldMinimizeOnClose: () =>
+        services.launcherHarnessService.hasActiveOperation() ||
+        services.managedInstallationService.hasActiveOperation()
+    })
+  }
+  createLauncherWindow()
   // A second instance tried to start (the user clicked the shortcut while
   // this process was already running). Focus the existing window rather than
   // leaving the user wondering where the application went.
@@ -186,7 +189,7 @@ async function start(): Promise<void> {
   app.on('activate', () => {
     const existing = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
     if (existing) revealWindow(existing)
-    else createWindow(mainDirectory, services.runtimeBrowserController)
+    else createLauncherWindow()
   })
 }
 
@@ -225,6 +228,7 @@ async function registerLauncherServices(
   readonly remoteConnectionService: RemoteConnectionService
   readonly remotePeerBroker: Readonly<{ shutdown(): Promise<void> }>
   readonly peerManagement: PeerManagement
+  readonly managedInstallationService: ManagedInstallationService
   readonly coreSupervisor: CoreSupervisor | undefined
 }> {
   // The core is started before the roots are initialized, because the core owns
@@ -378,6 +382,18 @@ async function registerLauncherServices(
     runtime: launcherHarnessService,
     rootsProvider: async () => []
   })
+  const managedInstallationService = new ManagedInstallationService({
+    workspaceService: managedWorkspaceService,
+    executableCapabilities: new ExecutableSelectionCapabilities({
+      ttlMilliseconds: EXECUTABLE_SELECTION_TTL_MILLISECONDS
+    }),
+    executablePicker: new ElectronExecutablePicker(),
+    temporaryDirectory: app.getPath('temp'),
+    runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor({
+      runtime: () => coreHarnessRuntime
+    }),
+    checkout: coreCheckout
+  })
   registerIpc({
     managedWorkspaceService,
     sessionUsageReader: new SessionUsageReader({
@@ -395,18 +411,7 @@ async function registerLauncherServices(
     launcherHarnessService,
     peerManagement,
     coreAutostart,
-    managedInstallationService: new ManagedInstallationService({
-      workspaceService: managedWorkspaceService,
-      executableCapabilities: new ExecutableSelectionCapabilities({
-        ttlMilliseconds: EXECUTABLE_SELECTION_TTL_MILLISECONDS
-      }),
-      executablePicker: new ElectronExecutablePicker(),
-      temporaryDirectory: app.getPath('temp'),
-      runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor({
-        runtime: () => coreHarnessRuntime
-      }),
-      checkout: coreCheckout
-    })
+    managedInstallationService
   })
   return {
     launcherHarnessService,
@@ -415,6 +420,7 @@ async function registerLauncherServices(
     remoteConnectionService,
     remotePeerBroker,
     peerManagement,
+    managedInstallationService,
     coreSupervisor
   }
 }

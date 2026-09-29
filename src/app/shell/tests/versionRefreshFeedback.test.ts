@@ -49,13 +49,21 @@ describe('version-list refresh feedback', () => {
   })
 
   it('lets the pending track occupy the available status-bar width', () => {
-    const marker = '.statusbar-progress-track {'
+    const marker = '.statusbar-progress {'
     const start = controls.indexOf(marker)
     expect(start).toBeGreaterThan(-1)
     const block = controls.slice(start + marker.length, controls.indexOf('}', start))
 
     expect(block).toContain('flex: 1 1 auto')
     expect(block).not.toContain('max-width')
+
+    const trackMarker = '.statusbar-progress-track {'
+    const trackStart = controls.indexOf(trackMarker)
+    const trackBlock = controls.slice(
+      trackStart + trackMarker.length,
+      controls.indexOf('}', trackStart)
+    )
+    expect(trackBlock).toContain('flex: 1 1 2rem')
   })
 
   it('keeps every list refresh in the shared version-stage action area', () => {

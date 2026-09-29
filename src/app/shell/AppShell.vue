@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { APP_METADATA } from '@/shared/contracts'
 import { useLauncherHarness, usePluginCatalog } from '../domains/launcher-harness'
 import { useLauncherUpdates } from '../domains/launcher-updates'
 import {
@@ -112,6 +113,7 @@ const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.
   'managed.harness_worktree_invalid': 'toast.error.harnessWorktreeInvalid',
   'managed.harness_input_invalid': 'toast.error.harnessInputInvalid',
   'managed.harness_plugin_operation_failed': 'toast.error.harnessPluginOperationFailed',
+  'managed.harness_plugin_incompatible': 'toast.error.harnessPluginIncompatible',
   'managed.harness_port_in_use': 'toast.error.harnessPortInUse',
   'managed.git_operation_failed': 'toast.error.gitOperationFailed',
   'managed.plugin_catalog_read_failed': 'toast.error.pluginCatalogReadFailed',
@@ -127,6 +129,7 @@ const TOAST_ERROR_DETAIL_KEYS: Readonly<Record<string, Parameters<typeof shell.t
   'managed.harness_worktree_invalid': 'toast.error.detail.harnessWorktreeInvalid',
   'managed.harness_input_invalid': 'toast.error.detail.harnessInputInvalid',
   'managed.harness_plugin_operation_failed': 'toast.error.detail.harnessPluginOperationFailed',
+  'managed.harness_plugin_incompatible': 'toast.error.detail.harnessPluginIncompatible',
   'managed.harness_port_in_use': 'toast.error.detail.harnessPortInUse',
   'managed.git_operation_failed': 'toast.error.detail.gitOperationFailed',
   'managed.plugin_catalog_read_failed': 'toast.error.detail.pluginCatalogReadFailed',
@@ -191,11 +194,54 @@ const applicationItems = computed<readonly NavigationItem[]>(() =>
   }))
 )
 const statusKind = computed(() => shell.bootstrap.value.kind)
-const protocolVersion = computed(() =>
-  shell.bootstrap.value.kind === 'ready'
-    ? String(shell.bootstrap.value.info.apiVersion)
-    : 'unavailable'
-)
+const launcherVersion = APP_METADATA.version
+const dshVersion = computed(() => {
+  const current = harness.state.value
+  if (current === undefined) return shell.t('footer.value.loading')
+  if (current.revision !== undefined) {
+    const taggedVersion = current.stableVersions.find(
+      (version) => version.hash === current.revision
+    )
+    if (taggedVersion !== undefined) return taggedVersion.tag
+    const shortRevision = current.revision.slice(0, 7)
+    return current.currentBranch === undefined
+      ? shortRevision
+      : `${current.currentBranch} · ${shortRevision}`
+  }
+
+  switch (current.kind) {
+    case 'preparing':
+      return shell.t('footer.dsh.preparing')
+    case 'missing':
+      return shell.t('footer.dsh.missing')
+    case 'invalid':
+      return shell.t('footer.dsh.invalid')
+    case 'ready':
+      return shell.t('footer.dsh.noRevision')
+  }
+})
+const dshVersionTitle = computed(() => {
+  const current = harness.state.value
+  if (current?.revision === undefined) return dshVersion.value
+  return current.currentBranch === undefined
+    ? current.revision
+    : `${current.currentBranch} · ${current.revision}`
+})
+const dshRuntimeState = computed(() => harness.state.value?.launch.kind ?? 'unknown')
+const dshRuntimeLabel = computed(() => {
+  switch (dshRuntimeState.value) {
+    case 'running':
+      return shell.t('controller.status.running')
+    case 'starting':
+      return shell.t('controller.status.starting')
+    case 'stopped':
+      return shell.t('controller.status.stopped')
+    case 'failed':
+      return shell.t('controller.status.failed')
+    case 'unknown':
+      return shell.t('footer.value.loading')
+  }
+})
 
 /**
  * The coordinator session, shown in the status bar so it is legible from every
@@ -338,10 +384,14 @@ function openConsoleRoute(): void {
     </div>
 
     <ShellStatusbar
-      :protocol-label="shell.t('footer.protocol')"
-      :protocol-version="protocolVersion"
-      :scope-label="shell.t('footer.scope')"
-      :scope-value="shell.t('footer.scopeValue')"
+      :launcher-version-label="shell.t('footer.launcherVersion')"
+      :launcher-version="launcherVersion"
+      :dsh-version-label="shell.t('footer.dshVersion')"
+      :dsh-version="dshVersion"
+      :dsh-version-title="dshVersionTitle"
+      :runtime-label="shell.t('footer.runtime')"
+      :runtime-value="dshRuntimeLabel"
+      :runtime-state="dshRuntimeState"
       :operation-label="statusbarOperationLabel"
       :operation-progress="statusbarProgressRatio"
       :network-label="shell.t('footer.network')"

@@ -46,6 +46,7 @@ import { runText } from './process-utils'
 import { localGitHubPluginSource } from './legacy-plugin-source'
 import { ManagedPluginSources, type ManagedPluginInstallSource } from './managed-plugin-sources'
 import { assertPortSetting } from './launch-preferences'
+import { assertProfileCompatibility } from './profile-compatibility'
 
 /** A plugin command may resolve locally, but must never leave the UI busy indefinitely. */
 const PLUGIN_COMMAND_TIMEOUT_MILLISECONDS = 120_000
@@ -178,10 +179,15 @@ export class LauncherHarnessService {
     })
     this.#operations = new LauncherOperationReporter({
       launchLogPath: options.launchLogPath,
+      isOperationAdmissionBlocked: () => this.#bootstrap === 'preparing',
       emit: (message) =>
         this.#appendConsoleEntry('launcher', formatLauncherLifecycleEvent(message)),
       lastConsoleAppendAt: () => this.#lastConsoleAppendAt
     })
+  }
+  /** True while Git, dependency installation, build, or plugin reconciliation is running. */
+  hasActiveOperation(): boolean {
+    return this.#bootstrap === 'preparing' || this.#operations.isActive()
   }
   /** Records package initialization progress without changing the Harness checkout. */
   setBootstrapState(
@@ -403,7 +409,8 @@ export class LauncherHarnessService {
         ).trim()
         await this.#materializeVersion(commit)
         return this.getState()
-      }
+      },
+      { allowWhileAdmissionBlocked: true }
     )
   }
   /** Copies or clones a source under Launcher control, then installs that copy through DSH. */
@@ -620,12 +627,14 @@ export class LauncherHarnessService {
         build: (directory) => this.#runPnpm(['run', 'build'], { workingDirectory: directory }),
         reconcilePlugins: (directory) =>
           this.#runPluginCommand(launcherProfilePluginArguments('update'), directory),
+        validate: (directory) =>
+          assertProfileCompatibility(directory, this.#options.dshHomeDirectory),
         event: (message) => this.recordOperationActivity(message)
       }
     )
-    // Off the critical path: the new version is already active, so old version
-    // directories are deleted in the background and retried on the next switch.
-    void pruneInactiveVersions(
+    // Keep the operation active until cleanup completes so closing the window
+    // cannot interrupt work owned by this version switch.
+    await pruneInactiveVersions(
       this.#options.gitExecutable,
       this.#options.harnessDirectory,
       this.#options.versionsDirectory,
@@ -747,6 +756,7 @@ export class LauncherHarnessService {
     try {
       await this.#loadPort()
       const active = await this.#requireActiveVersion()
+      await assertProfileCompatibility(active.directory, this.#options.dshHomeDirectory)
       const readiness = await readHarnessReadiness(active.directory)
       if (readiness.kind !== 'ready') {
         throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)

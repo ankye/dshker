@@ -107,6 +107,11 @@ export class ManagedInstallationService {
     this.#worktreePreparer = options.worktreePreparer ?? new ManagedHarnessWorktreePreparer()
   }
 
+  /** True while a managed checkout, dependency install, or Harness build is running. */
+  hasActiveOperation(): boolean {
+    return this.#mutationActive
+  }
+
   /** The core is the only thing that may touch a managed checkout. */
   #checkout(): CoreCheckoutPort {
     if (this.#checkoutPort === undefined) {

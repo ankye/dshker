@@ -147,9 +147,10 @@ func runConnect(args []string, stdout io.Writer, stderr io.Writer) int {
 		return 0
 	}
 	answer, err := client.Call(ctx, "peer.connect", scopedRequest(effectiveService, struct {
-		PairID     string `json:"pairId"`
-		Generation uint64 `json:"generation"`
-	}{effectivePair, *generation}))
+		PairID           string `json:"pairId"`
+		Generation       uint64 `json:"generation"`
+		RequestWorkbench bool   `json:"requestWorkbench"`
+	}{effectivePair, *generation, true}))
 	if err != nil {
 		return fail(stderr, err)
 	}

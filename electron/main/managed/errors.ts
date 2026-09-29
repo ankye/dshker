@@ -45,6 +45,7 @@ export type ManagedRootErrorCode =
   | 'managed.harness_worktree_invalid'
   | 'managed.harness_input_invalid'
   | 'managed.harness_plugin_operation_failed'
+  | 'managed.harness_plugin_incompatible'
 
 /** Carries a safe, typed failure without serializing filesystem or secret data by default. */
 export class ManagedRootError extends Error {

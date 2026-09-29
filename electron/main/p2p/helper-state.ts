@@ -5,7 +5,7 @@ export interface PeerHelperState {
   pairId: string
   attemptId: string
   generation: number
-  stage: 'punching' | 'starting-runtime' | 'ready' | 'failed' | 'disconnected'
+  stage: 'punching' | 'starting-runtime' | 'connected' | 'ready' | 'failed' | 'disconnected'
   error: string
   path: { localType: string; remoteType: string; protocol: string }
   runtimeGeneration: number
@@ -35,12 +35,17 @@ export function parseHelperState(value: unknown): PeerHelperState {
     (record.generation as number) <= 0 ||
     !Number.isSafeInteger(record.runtimeGeneration) ||
     (record.runtimeGeneration as number) < 0 ||
-    !['punching', 'starting-runtime', 'ready', 'failed', 'disconnected'].includes(
+    !['punching', 'starting-runtime', 'connected', 'ready', 'failed', 'disconnected'].includes(
       record.stage as string
     ) ||
     typeof record.error !== 'string' ||
     (record.error !== '' && !peerErrorCode(record.error)) ||
     (!emptyPath && !directPath)
+  )
+    throw new PeerHelperError('p2p.invalid_peer_state')
+  if (
+    record.stage === 'connected' &&
+    (!directPath || record.runtimeGeneration !== 0 || record.error !== '')
   )
     throw new PeerHelperError('p2p.invalid_peer_state')
   if (
@@ -62,7 +67,14 @@ export function assertStateProgress(previous: PeerHelperState, next: PeerHelperS
   // there — the ranks are the replay guard — while a different attempt is a new
   // lineage whose freshness the caller decides by whether it has seen it before.
   if (next.attemptId !== previous.attemptId) return
-  const ranks = { punching: 0, 'starting-runtime': 1, ready: 2, failed: 3, disconnected: 3 }
+  const ranks = {
+    punching: 0,
+    'starting-runtime': 1,
+    connected: 2,
+    ready: 3,
+    failed: 4,
+    disconnected: 4
+  }
   if (
     ranks[next.stage] < ranks[previous.stage] ||
     (previous.stage === 'failed' && next.stage !== 'failed')

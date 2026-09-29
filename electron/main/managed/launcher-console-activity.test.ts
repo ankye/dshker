@@ -166,6 +166,18 @@ describe('launcher console activity', () => {
     }
   })
 
+  it('exposes the active window while a main-process operation is in flight', async () => {
+    const { service, cleanup } = await withService()
+    try {
+      const operation = service.uninstallPlugin('dsh-example-plugin')
+      expect(service.hasActiveOperation()).toBe(true)
+      await expect(operation).rejects.toThrow()
+      expect(service.hasActiveOperation()).toBe(false)
+    } finally {
+      await cleanup()
+    }
+  })
+
   it('formats step completions with whole elapsed seconds', () => {
     expect(formatLauncherStepCompletion('Removing untracked build residue', 90_000)).toBe(
       'Removing untracked build residue finished in 90s.'

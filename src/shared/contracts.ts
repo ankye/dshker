@@ -172,6 +172,8 @@ export type ManagedOperationErrorCode =
   | 'managed.harness_input_invalid'
   /** The DSH CLI refused the plugin install or uninstall. */
   | 'managed.harness_plugin_operation_failed'
+  /** The selected core and installed profile plugins have incompatible peer ranges. */
+  | 'managed.harness_plugin_incompatible'
 
 /** Failures from the fixed external product-source link capability. */
 export type ExternalLinkErrorCode =

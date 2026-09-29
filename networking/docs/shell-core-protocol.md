@@ -204,6 +204,14 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | user      | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                                                                                                                      | shell  |
 | callback  | `runtime.connect`, `peer.state`, `directory.changed`, `catalog.changed`                                                                                                                                                                                                                                           | parent |
 
+`peer.connect` carries `{ "pairId": "...", "generation": N, "requestWorkbench": B }`.
+The desktop shell sets `requestWorkbench` to `true` only for an explicit remote
+workbench action. The core's automatic catalog reconciliation sets it to `false`,
+which keeps the authenticated peer transport alive without asking the local DSH
+runtime owner to start a child. A transport-only connection is reported as
+`connected` with runtime generation `0`; `ready` is reserved for a usable
+workbench.
+
 The `core.*` group is the local state the core owns outright: its version, the
 device credential store, the device catalog, the managed-root registry (4.1) and
 the managed installation catalog (4.2). `core.roots_inspect` and `core.roots_commit` take the registry file path

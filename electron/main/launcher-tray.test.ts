@@ -204,6 +204,20 @@ describe('Launcher tray close behaviour', () => {
     expect(window.hide).not.toHaveBeenCalled()
   })
 
+  it('keeps the app alive for a background Git or build operation', async () => {
+    const tray = await load()
+    const { window, close } = windowStub()
+    let operationActive = true
+    tray.createTray(window as never, { shouldMinimizeOnClose: () => operationActive })
+    tray.setCloseBehavior('quit')
+
+    expect(close()).toBe(true)
+    expect(window.hide).toHaveBeenCalledTimes(1)
+
+    operationActive = false
+    expect(close()).toBe(false)
+  })
+
   it('treats a repeated quit declaration as the same quit', async () => {
     const tray = await load()
     const { window, close } = windowStub()

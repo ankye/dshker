@@ -337,13 +337,6 @@
   font-size: var(--type-caption);
 }
 
-/* The control group leads; the read-only facts are pushed to the trailing side
- * by the first of them rather than by space-between, which would otherwise
- * spread the controls and the text across the whole bar. */
-.statusbar-controls + * {
-  margin-left: auto;
-}
-
 .statusbar[data-busy='true'] {
   background: color-mix(in srgb, var(--color-accent), var(--color-surface) 94%);
 }
@@ -421,20 +414,64 @@
   box-shadow: 0 0 0 1px var(--color-surface);
 }
 
-/* Network reach belongs in the status bar because it governs whether any remote
- * workbench can open, which no single route owns. Online takes the success role;
- * unknown and offline stay muted so an unread session never reads as a fault. */
-.statusbar-network[data-state='online'] {
+/* Four compact facts stay visible beside the optional operation progress. */
+.statusbar-facts {
+  display: flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+}
+
+.statusbar-fact {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  align-items: baseline;
+  gap: 0.3rem;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.statusbar-fact-label {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  font-size: var(--type-caption);
+}
+
+.statusbar-fact-value {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statusbar-fact[data-state='running'] .statusbar-fact-value,
+.statusbar-network[data-state='online'] .statusbar-fact-value {
   color: var(--color-success);
 }
-.statusbar-network[data-state='offline'],
-.statusbar-network[data-state='unknown'] {
+
+.statusbar-fact[data-state='starting'] .statusbar-fact-value {
+  color: var(--color-accent);
+}
+
+.statusbar-fact[data-state='failed'] .statusbar-fact-value {
+  color: var(--color-danger);
+}
+
+.statusbar-fact[data-state='stopped'] .statusbar-fact-value,
+.statusbar-fact[data-state='unknown'] .statusbar-fact-value,
+.statusbar-network[data-state='offline'] .statusbar-fact-value,
+.statusbar-network[data-state='unknown'] .statusbar-fact-value {
   color: var(--color-text-muted);
 }
 
 .statusbar-progress {
   display: flex;
-  min-width: 0;
+  min-width: 2.75rem;
   flex: 1 1 auto;
   align-items: center;
   gap: var(--space-3);
@@ -455,7 +492,8 @@
 .statusbar-progress-track {
   position: relative;
   display: block;
-  flex: 1 1 auto;
+  min-width: 1.5rem;
+  flex: 1 1 2rem;
   height: 0.375rem;
   overflow: hidden;
   border-radius: 999px;
@@ -492,11 +530,25 @@
 }
 
 .statusbar-progress-text {
+  min-width: 0;
+  flex: 0 1 auto;
+  max-width: 14rem;
   overflow: hidden;
   color: var(--color-text);
   font-weight: var(--font-weight-semibold);
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+@media (max-width: 48rem) {
+  .statusbar {
+    gap: var(--space-2);
+    padding-right: var(--space-2);
+  }
+
+  .statusbar-facts {
+    gap: var(--space-2);
+  }
 }
 
 .shell-toast {

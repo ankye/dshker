@@ -149,7 +149,7 @@ function applyDockIcon(): void {
 export function createWindow(
   mainDirectory: string,
   runtimeBrowserController: RuntimeBrowserController
-): void {
+): BrowserWindow {
   applyDockIcon()
   const icon = unpackagedAppIcon()
   const saved = loadWindowBounds()
@@ -212,4 +212,6 @@ export function createWindow(
     // From here on the window's geometry is the user's, so it is worth saving.
     placementSettled = true
   })
+
+  return mainWindow
 }

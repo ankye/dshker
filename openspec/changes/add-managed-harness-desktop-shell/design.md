@@ -80,6 +80,12 @@ Ref updates never rewrite an active worktree. A rewritten branch or tag remains 
 
 Before an explicit version activation rebuilds the Launcher-owned Harness checkout, the launcher runs `git clean -xdf` in that verified checkout. This removes untracked and ignored dependency and build residue that can make the next selected revision fail its locked install or build. It does not reset tracked files, and it never runs in an unmanaged repository, native DSH home, plugin directory, preset directory, or settings directory.
 
+### Decision: Managed operations have one main-process owner
+
+The main process admits at most one Harness or plugin mutation at a time. A second request receives the existing typed `runtime.operation_in_progress` error before it can touch the mirror, worktree directories, profile, or active-version pointer. First-run bundled checkout preparation blocks these mutations and remains visible as active work. A version switch keeps the operation active through inactive-worktree cleanup, so closing the window cannot interrupt cleanup after the new pointer is written.
+
+Every created application window receives its own close handler and becomes the tray's current window. During an active operation, close is prevented; the window hides only when a tray exists, and stays visible when tray creation failed. macOS Dock reactivation rebinds the recreated window. `window-all-closed` considers the tray usable only when its icon was actually created.
+
 Alternative considered: maintain a mutable clone and switch branches in place. Rejected because a branch update can alter the running source and makes rollback and ownership hard to prove.
 
 ### Decision: External executables are explicit identities
@@ -170,3 +176,9 @@ Visual acceptance: three non-overlapping cards below the hero at 1240x820 and 16
 Direction: a quiet daily-use desktop workspace, not a promotional landing page. Preserve the approved otter art, three-card topology, existing theme tokens and mouse/keyboard actions. Composition variance is low, motion is none, and density is moderate. The primary attention order is artwork/short welcome line, selected version, persistent start action; open-source and update actions remain secondary.
 
 Hero title changes from a 48px repeated product name to a short localized welcome line at 24–30px/600 with a 10px letter-spaced brand label and 13px supporting text. Hero height is 208px (160px on short windows). Card surfaces mix existing raised/background colors, soften outline contrast, and use 14px section headings with 12–13px supporting text. Repository actions become light text rows; version/update controls remain visible outlined secondary buttons. No global theme change, new animation or behavior is introduced. Verify Chinese/English wrapping, 744px compact and 1224px/1584px wide content viewports, readable title over art, and unchanged navigation/footer behavior.
+
+## Status bar product facts (2026-09-29)
+
+The trailing status group contains exactly four product facts: DSHKer version from `APP_METADATA`, DSH version from the active commit (showing its known release tag when that exact commit is tagged, otherwise branch plus short commit), DSH runtime state from the Harness lifecycle projection, and coordinator-network reach from the selected service session. Unknown, preparing, missing, and invalid DSH version states remain explicit; no API version or application-scope diagnostic is substituted into the product status line. Full DSH commit identity remains available in the hover title and accessible name.
+
+The facts remain visible while a Launcher operation runs. Its existing progress control occupies only the flexible space between the leading Menu/Console controls and the trailing facts. Runtime failure is red, active runtime/network is green, starting is accent-colored, and stopped/unread facts stay muted. The group may ellipsize within the existing fixed-height status bar; its accessible names and title retain the complete value. This is a renderer-only presentation change with no IPC, persistence, or runtime behavior change.

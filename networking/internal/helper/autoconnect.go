@@ -106,9 +106,10 @@ func (host *Host) connectPair(ctx context.Context, serviceID string, pairID stri
 	// it keeps rising across restarts rather than colliding with the numbers a
 	// previous run already handed out.
 	payload, err := json.Marshal(struct {
-		PairID     string `json:"pairId"`
-		Generation uint64 `json:"generation"`
-	}{pairID, host.nextGeneration()})
+		PairID           string `json:"pairId"`
+		Generation       uint64 `json:"generation"`
+		RequestWorkbench bool   `json:"requestWorkbench"`
+	}{pairID, host.nextGeneration(), false})
 	if err != nil {
 		return errors.New("p2p.invalid_request")
 	}

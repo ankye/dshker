@@ -18,6 +18,10 @@ describe('launch failure log text', () => {
     expect(launchFailureEventText('runtime.child_crashed')).toContain('exited during startup')
   })
 
+  it('names the remedy for a core and profile plugin mismatch', () => {
+    expect(launchFailureEventText('runtime.plugin_incompatible')).toContain('Remove or update')
+  })
+
   it('leaves a code alone when it needs no explanation', () => {
     expect(launchFailureEventText('p2p.helper_unavailable')).toBe('p2p.helper_unavailable')
   })

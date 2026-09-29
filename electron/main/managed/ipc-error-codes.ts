@@ -30,6 +30,7 @@ export const RUNTIME_ERROR_CODES: readonly ManagedHarnessRuntimeErrorCode[] = [
   'runtime.busy_running',
   'runtime.port_in_use',
   'runtime.plugin_operation_failed',
+  'runtime.plugin_incompatible',
   'runtime.version_pointer_invalid',
   'runtime.not_found'
 ] as const
@@ -53,6 +54,7 @@ export const LAUNCHER_HARNESS_ERROR_CODES: Readonly<
   'runtime.worktree_invalid': 'managed.harness_worktree_invalid',
   'runtime.version_pointer_invalid': 'managed.harness_worktree_invalid',
   'runtime.plugin_operation_failed': 'managed.harness_plugin_operation_failed',
+  'runtime.plugin_incompatible': 'managed.harness_plugin_incompatible',
   'runtime.node_invalid': 'managed.harness_launch_failed',
   'runtime.descriptor_invalid': 'managed.harness_launch_failed',
   'runtime.descriptor_write_failed': 'managed.harness_launch_failed',

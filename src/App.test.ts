@@ -11,13 +11,16 @@ describe('DSHKer Launcher shell', () => {
     expect(wrapper.text()).not.toContain('Atlas paintover set')
   })
 
-  it('reports the desktop bridge as unavailable when no preload bridge exists', async () => {
+  it('keeps the footer focused on product state when no preload bridge exists', async () => {
     const wrapper = mount(App)
     await flushPromises()
 
-    // Without a preload bridge the shell must show an explicit unavailable
-    // footer state rather than presenting a usable runtime.
-    expect(wrapper.text()).toContain('Desktop API')
-    expect(wrapper.text()).toContain('unavailable')
+    // The footer reports four product/runtime facts, not internal IPC details.
+    const facts = wrapper.findAll('.statusbar-fact')
+    expect(facts).toHaveLength(4)
+    expect(facts.map((fact) => fact.text())).toEqual(
+      expect.arrayContaining([expect.stringContaining('DSHKer'), expect.stringContaining('DSH')])
+    )
+    expect(wrapper.text()).not.toContain('Desktop API')
   })
 })

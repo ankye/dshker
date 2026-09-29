@@ -42,6 +42,14 @@ describe('main-owned P2P connections', () => {
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     expect(JSON.stringify(accepted)).not.toContain('127.0.0.1')
     expect(JSON.stringify(accepted)).not.toContain(url)
+    expect(f.call).toHaveBeenCalledWith(
+      'peer.connect',
+      expect.objectContaining({
+        serviceId,
+        data: expect.objectContaining({ requestWorkbench: true })
+      }),
+      expect.any(AbortSignal)
+    )
   })
 
   it('never reports a dispatched attempt as ready', async () => {
