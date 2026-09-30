@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.83 — 2026-09-30
+
+### 简体中文 (zh-CN)
+
+- **安装与更新插件不再依赖系统 Node 或 pnpm。** DSHKer 现在自带运行时：打包内的 pnpm 跑在 Launcher 自己的进程上（复用其 Electron 运行环境，与官方 DSH 桌面端同思路），插件安装、更新、移除及其生命周期脚本都解析内置的 `node`/`pnpm`。机器上没装 Node/pnpm、版本过旧或在桌面进程里不可见，都不再卡住扩展操作。
+- **打包前按版本校验内置运行时。** `runtime:prepare` 会用将被打包的 Electron 探测 Node 版本、固定 pnpm 版本并写入 `resources/runtime/versions.json`，随后对这对运行时做 `pnpm --version` 烟测；`runtime:verify` 作为发布门禁，对已生成的运行时与固定版本重新核对。
+
+### English (en-US)
+
+- **Plugins install and update without a system Node or pnpm.** DSHKer now ships its own runtime: the packaged pnpm runs on the Launcher's own process (reusing its Electron runtime, the same approach as the official DSH desktop app), and plugin install, update, removal, and lifecycle scripts resolve the bundled `node`/`pnpm`. A machine with no Node/pnpm, an outdated one, or one invisible to a desktop-launched process no longer blocks extension operations.
+- **Packaging version-checks the bundled runtime.** `runtime:prepare` probes the Node version from the packaged Electron, pins the pnpm version, records both in `resources/runtime/versions.json`, and smokes `pnpm --version` on the pair; `runtime:verify` is the release gate that re-checks a staged runtime against the pinned versions.
+
 ## 0.1.82 — 2026-09-29
 
 ### 简体中文 (zh-CN)

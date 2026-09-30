@@ -1,6 +1,6 @@
 {
   "name": "@ankye/dshker-launcher",
-  "version": "0.1.82",
+  "version": "0.1.83",
   "description": "Managed desktop shell for DeepSeek Harness.",
   "author": "ankye <shengxiehua@gmail.com>",
   "homepage": "https://github.com/ankye/dshker",
@@ -52,14 +52,16 @@
     "seed:verify": "node tools/verify-bundled-seed.mjs",
     "preview:web": "vite preview --host 127.0.0.1",
     "bundled-source:verify": "npm run seed:verify",
-    "package": "npm run bundled-source:verify && electron-vite build && electron-builder --dir --publish never && npm run release:metadata -- --mode package",
-    "dist": "npm run bundled-source:verify && electron-vite build && electron-builder --publish never && npm run release:metadata -- --mode dist",
-    "dist:mac-arm64": "node tools/build-peer-helper.mjs --platform darwin --arch arm64 && npm run bundled-source:verify && electron-vite build && electron-builder --mac --arm64 --publish never && npm run release:metadata -- --mode dist-mac-arm64",
-    "dist:mac-x64": "node tools/build-peer-helper.mjs --platform darwin --arch x64 && npm run bundled-source:verify && electron-vite build && electron-builder --mac --x64 --publish never && npm run release:metadata -- --mode dist-mac-x64",
-    "dist:win-x64": "node tools/build-peer-helper.mjs --platform win32 --arch x64 && npm run bundled-source:verify && electron-vite build && electron-builder --win --x64 --publish never && npm run release:metadata -- --mode dist-win-x64",
-    "dist:win-arm64": "node tools/build-peer-helper.mjs --platform win32 --arch arm64 && npm run bundled-source:verify && electron-vite build && electron-builder --win --arm64 --publish never && npm run release:metadata -- --mode dist-win-arm64",
-    "dist:linux-x64": "node tools/build-peer-helper.mjs --platform linux --arch x64 && npm run bundled-source:verify && electron-vite build && electron-builder --linux --x64 --publish never && npm run release:metadata -- --mode dist-linux-x64",
-    "dist:linux-arm64": "node tools/build-peer-helper.mjs --platform linux --arch arm64 && npm run bundled-source:verify && electron-vite build && electron-builder --linux --arm64 --publish never && npm run release:metadata -- --mode dist-linux-arm64",
+    "runtime:prepare": "node tools/prepare-runtime.mjs",
+    "runtime:verify": "node tools/prepare-runtime.mjs --verify",
+    "package": "npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --dir --publish never && npm run release:metadata -- --mode package",
+    "dist": "npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --publish never && npm run release:metadata -- --mode dist",
+    "dist:mac-arm64": "node tools/build-peer-helper.mjs --platform darwin --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --mac --arm64 --publish never && npm run release:metadata -- --mode dist-mac-arm64",
+    "dist:mac-x64": "node tools/build-peer-helper.mjs --platform darwin --arch x64 && npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --mac --x64 --publish never && npm run release:metadata -- --mode dist-mac-x64",
+    "dist:win-x64": "node tools/build-peer-helper.mjs --platform win32 --arch x64 && npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --win --x64 --publish never && npm run release:metadata -- --mode dist-win-x64",
+    "dist:win-arm64": "node tools/build-peer-helper.mjs --platform win32 --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --win --arm64 --publish never && npm run release:metadata -- --mode dist-win-arm64",
+    "dist:linux-x64": "node tools/build-peer-helper.mjs --platform linux --arch x64 && npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --linux --x64 --publish never && npm run release:metadata -- --mode dist-linux-x64",
+    "dist:linux-arm64": "node tools/build-peer-helper.mjs --platform linux --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --linux --arm64 --publish never && npm run release:metadata -- --mode dist-linux-arm64",
     "performance:check": "node tools/performance-check.mjs --mode release-dry-run --json",
     "release:metadata": "node tools/release-artifacts.mjs --release-dir release",
     "release:verify": "node tools/release-artifacts.mjs --release-dir release --verify",
@@ -95,6 +97,7 @@
     "electron-vite": "^5.0.0",
     "esbuild": "0.25.12",
     "happy-dom": "^20.10.6",
+    "pnpm": "11.7.0",
     "prettier": "3.8.4",
     "typescript": "^5.7.3",
     "vite": "^7.3.5",
@@ -108,6 +111,9 @@
     "productName": "DSHKer Launcher",
     "icon": "resources/icon-512.png",
     "asar": true,
+    "electronFuses": {
+      "runAsNode": true
+    },
     "artifactName": "dshker-launcher-${version}-${os}-${arch}.${ext}",
     "directories": {
       "output": "release"
@@ -121,6 +127,13 @@
       {
         "from": "resources/bundled-seed/staged",
         "to": "bundled-seed",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/runtime",
+        "to": "runtime",
         "filter": [
           "**/*"
         ]
