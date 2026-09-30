@@ -367,6 +367,25 @@ func TestBuildCommandForAManagedInstallation(t *testing.T) {
 	}
 }
 
+// TestBuildCommandAppliesTheBundledRuntimePATH covers a managed installation
+// whose child must resolve the Launcher's bundled pnpm and node: the core
+// substitutes the bundled bin PATH on the child, and only then.
+func TestBuildCommandAppliesTheBundledRuntimePATH(t *testing.T) {
+	base := t.TempDir()
+	directory := filepath.Join(base, "worktree")
+	writeBuiltEntry(t, directory)
+	request := managedRequest(base, directory)
+	request.PnpmCommandSearchPath = filepath.Join(base, "runtime", "bin")
+
+	command, err := BuildCommand(request)
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	if command.Path != request.PnpmCommandSearchPath {
+		t.Fatalf("path override = %q, want %q", command.Path, request.PnpmCommandSearchPath)
+	}
+}
+
 // TestAssertBuiltEntryRefusesIndirectEntries covers the shell's own rule: a
 // missing, indirect or replaced entry is refused before anything is spawned.
 func TestAssertBuiltEntryRefusesIndirectEntries(t *testing.T) {
@@ -395,7 +414,12 @@ func TestAssertBuiltEntryRefusesIndirectEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(filepath.Join(base, "elsewhere.js"), entry); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
+		// Symlinks may be unavailable (Windows without Developer Mode). The
+		// refusal of a symlinked entry cannot be exercised on such a filesystem;
+		// the missing/directory-entry refusals above still hold, so the test
+		// finishes with the cases this platform can prove rather than failing.
+		t.Logf("symlinked-entry refusal not exercised: symlinks unavailable: %v", err)
+		return
 	}
 	if err := AssertBuiltEntry(directory); !errors.Is(err, ErrWorktreeInvalid) {
 		t.Fatalf("symlinked entry = %v", err)

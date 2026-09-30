@@ -172,6 +172,51 @@ async function peerHelperRoots(releaseDir, manifest) {
   return roots
 }
 
+/**
+ * Confirms every unpacked packaged app carries the staged bundled runtime
+ * descriptor, so plugin operations resolve the Launcher's own pnpm and node in
+ * the shipping artifact — the release-side of the packaging version gate.
+ */
+export async function bundledRuntimeHolds(releaseDir, manifest) {
+  const candidates = [
+    path.join(
+      releaseDir,
+      'mac-arm64',
+      `${manifest.productName}.app`,
+      'Contents',
+      'Resources',
+      'runtime',
+      'versions.json'
+    ),
+    path.join(
+      releaseDir,
+      'mac',
+      `${manifest.productName}.app`,
+      'Contents',
+      'Resources',
+      'runtime',
+      'versions.json'
+    ),
+    path.join(releaseDir, 'win-unpacked', 'resources', 'runtime', 'versions.json'),
+    path.join(releaseDir, 'win-arm64-unpacked', 'resources', 'runtime', 'versions.json'),
+    path.join(releaseDir, 'linux-unpacked', 'resources', 'runtime', 'versions.json'),
+    path.join(releaseDir, 'linux-arm64-unpacked', 'resources', 'runtime', 'versions.json')
+  ]
+  let found = 0
+  for (const candidate of candidates) {
+    if (!(await exists(candidate))) continue
+    found += 1
+    let descriptor
+    try {
+      descriptor = JSON.parse(await readFile(candidate, 'utf8'))
+    } catch {
+      return false
+    }
+    if (descriptor?.schemaVersion !== 1 || !descriptor.node || !descriptor.pnpm) return false
+  }
+  return found > 0
+}
+
 async function firstExisting(candidates) {
   for (const candidate of candidates) {
     if (await exists(candidate)) return candidate
@@ -344,6 +389,7 @@ async function main() {
     updateMetadata: Boolean(manifest.update?.channel && manifest.update?.minimumVersion),
     unpackedExecutable: Boolean(executable),
     peerHelperIntegrity: await peerHelperIntegrityHolds(releaseDir, manifest),
+    bundledRuntime: await bundledRuntimeHolds(releaseDir, manifest),
     launchIdentityMatchesManifest: launchPayloadMatchesManifest(
       launchPayload,
       manifest,
@@ -385,7 +431,13 @@ async function main() {
   if (!output.ok) process.exitCode = 1
 }
 
-main().catch((error) => {
-  console.error(`release-smoke: ${error.message}`)
-  process.exitCode = 1
-})
+// Run the CLI only when executed directly, so the module can be imported and
+// the packaged-runtime check tested without running the whole smoke on import.
+const isMain =
+  process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+if (isMain) {
+  main().catch((error) => {
+    console.error(`release-smoke: ${error.message}`)
+    process.exitCode = 1
+  })
+}

@@ -57,9 +57,22 @@ interface RuntimeRecord {
 export class ManagedHarnessWebRuntimeSupervisor {
   readonly #records = new Map<string, RuntimeRecord>()
   readonly #runtime: () => CoreHarnessRuntimePort | undefined
+  readonly #pnpmCommandSearchPath: string
 
-  constructor(options: { readonly runtime?: () => CoreHarnessRuntimePort | undefined } = {}) {
+  constructor(
+    options: {
+      readonly runtime?: () => CoreHarnessRuntimePort | undefined
+      /**
+       * PATH the core applies to this installation's child when the bundled
+       * runtime is staged, so the embedded Web plugin manager and its package
+       * scripts resolve the Launcher's own pnpm and node instead of a system
+       * installation. Empty keeps the child on the core's inherited PATH.
+       */
+      readonly pnpmCommandSearchPath?: string
+    } = {}
+  ) {
     this.#runtime = options.runtime ?? (() => undefined)
+    this.#pnpmCommandSearchPath = options.pnpmCommandSearchPath ?? ''
   }
 
   /** Starts the worktree's standard `dsh web --no-open` command through the core. */
@@ -84,7 +97,7 @@ export class ManagedHarnessWebRuntimeSupervisor {
       pnpmExecutable: '',
       pnpmPrefixArguments: [],
       pnpmResolutionError: '',
-      pnpmCommandSearchPath: '',
+      pnpmCommandSearchPath: this.#pnpmCommandSearchPath,
       diagnosticsPatchPath: '',
       port: { mode: 'auto' },
       logPath: ''

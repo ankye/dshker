@@ -15,11 +15,16 @@ export interface PnpmLauncher {
 /**
  * Resolves pnpm for the desktop process rather than trusting Finder or Explorer's reduced PATH.
  *
- * macOS and Linux run a real executable. Windows registers a `.CMD` shim which
- * shell-free spawn cannot execute, so it resolves the shim's adjacent pnpm Node
- * entry and invokes it with Node instead.
+ * The Launcher's bundled runtime (`resources/runtime`, staged by
+ * `tools/prepare-runtime.mjs`) takes precedence: the packaged pnpm distribution
+ * runs on the Launcher's own Electron binary in Node mode, mirroring how the
+ * official DeepSeek Harness Desktop carries its node and pnpm. Without a staged
+ * runtime — a development checkout that never ran `runtime:prepare` — the
+ * system resolution below applies unchanged.
  */
-export function resolvePnpmLauncher(): PnpmLauncher {
+export function resolvePnpmLauncher(bundledRuntimeRoot?: string): PnpmLauncher {
+  const bundled = bundledRuntimeLauncher(bundledRuntimeRoot)
+  if (bundled !== undefined) return bundled
   if (process.platform === 'win32') return resolveWindowsPnpmLauncher()
   const executable = findPosixPnpmExecutable()
   return {
@@ -27,6 +32,58 @@ export function resolvePnpmLauncher(): PnpmLauncher {
     prefixArguments: [],
     commandSearchPath: buildCommandSearchPath(executable)
   }
+}
+
+/**
+ * The staged bundled pnpm entry, or undefined when no complete runtime is staged.
+ *
+ * A complete runtime is bin/ + pnpm/bin/pnpm.mjs + a schemaVersion-1
+ * versions.json descriptor; anything else is treated as absent so the system
+ * resolution stays the fallback rather than failing on a partial stage.
+ */
+export function bundledPnpmEntry(bundledRuntimeRoot: string | undefined): string | undefined {
+  if (bundledRuntimeRoot === undefined || bundledRuntimeRoot.length === 0) return undefined
+  const pnpmEntry = path.join(bundledRuntimeRoot, 'pnpm', 'bin', 'pnpm.mjs')
+  if (
+    !isRegularFile(pnpmEntry) ||
+    !isDirectory(path.join(bundledRuntimeRoot, 'bin')) ||
+    !isRegularFile(path.join(bundledRuntimeRoot, 'versions.json'))
+  ) {
+    return undefined
+  }
+  try {
+    const descriptor = JSON.parse(
+      readFileSync(path.join(bundledRuntimeRoot, 'versions.json'), 'utf8')
+    )
+    if (descriptor?.schemaVersion !== 1) return undefined
+  } catch {
+    return undefined
+  }
+  return pnpmEntry
+}
+
+/** The bundled runtime's fixed launch form: Launcher Electron as Node plus its pinned pnpm. */
+export function bundledRuntimeLauncher(
+  bundledRuntimeRoot: string | undefined
+): PnpmLauncher | undefined {
+  const pnpmEntry = bundledPnpmEntry(bundledRuntimeRoot)
+  if (pnpmEntry === undefined || bundledRuntimeRoot === undefined) return undefined
+  return {
+    executable: process.execPath,
+    prefixArguments: ['--expose-internals', pnpmEntry],
+    commandSearchPath: buildBundledCommandSearchPath(path.join(bundledRuntimeRoot, 'bin'))
+  }
+}
+
+/**
+ * The deterministic command PATH for the bundled runtime: its private bin first
+ * (so its `node`/`pnpm` shell launchers resolve package scripts), then the
+ * inherited PATH and the platform's base directories.
+ */
+function buildBundledCommandSearchPath(bin: string): string {
+  return [bin, ...splitPath(process.env.PATH), '/usr/bin', '/bin']
+    .filter((entry, index, entries) => entry.length > 0 && entries.indexOf(entry) === index)
+    .join(path.delimiter)
 }
 
 /** Resolves a real pnpm binary from inherited PATH plus platform package-manager locations. */
@@ -225,6 +282,15 @@ function splitPath(pathValue: string | undefined): readonly string[] {
 function isRegularFile(filePath: string): boolean {
   try {
     return statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
+
+/** Confirms a candidate is a directory that can hold the staged runtime. */
+function isDirectory(filePath: string): boolean {
+  try {
+    return statSync(filePath).isDirectory()
   } catch {
     return false
   }

@@ -199,6 +199,10 @@ func BuildCommand(request LaunchRequest) (Command, error) {
 			Executable: request.NodeExecutable,
 			Arguments:  arguments,
 			Directory:  request.Directory,
+			// A staged Launcher runtime supplies the child's PATH override, so the
+			// embedded plugin manager resolves the bundled pnpm and node instead of
+			// a system installation. Empty keeps the child on the parent's PATH.
+			Path: request.PnpmCommandSearchPath,
 		}, nil
 	}
 	if request.PnpmResolutionError != "" {

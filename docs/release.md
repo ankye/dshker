@@ -17,6 +17,17 @@ installer names, release manifests, update comparisons, and the tag gate read
 that value instead of maintaining another version constant. A release tag must
 be the exact stable semantic version `v${package.json.version}`.
 
+## Bundled Launcher runtime
+
+Every desktop build stages and version-checks the runtime DSH package
+operations will use: `npm run runtime:prepare` runs before every
+`electron-builder` invocation. `tools/prepare-runtime.mjs` copies the pinned
+pnpm distribution into `resources/runtime/`, probes the Node version from the
+very Electron executable being packaged, records both in `versions.json`, and
+smokes `pnpm --version` on the staged pair. `npm run runtime:verify` re-checks
+a staged runtime against the probed and pinned versions; a build that cannot
+verify its stage is not release evidence.
+
 ## What every version must record
 
 A version that ships without saying what changed leaves both the user and the
@@ -105,6 +116,7 @@ Stages, in execution order:
 | `performance-check`           | `npm run performance:check`                                              |
 | `package`                     | `npm run package`                                                        |
 | `standalone-cli-distribution` | `npm run build:dshkerd -- --output-dir .run/dshkerd-release --overwrite` |
+| `runtime-verify`              | `npm run runtime:verify`                                                 |
 | `release-verify`              | `npm run release:verify`                                                 |
 | `release-smoke`               | `npm run release:smoke`                                                  |
 

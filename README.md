@@ -15,6 +15,7 @@
 - **Put all your computers in one window.** Add the machines you already use and open each as a tab next to Local — no DSH credentials copied by hand, no ports opened to the internet.
 - **Connect without exposing yourself.** Machines are authenticated one by one: you decide which computers may reach each other, and a remote session can only browse the folders you grant it.
 - **See what is going on.** A console follows the real process output, and Token usage totals come from the logs DSH already writes.
+- **Plugins install without a system Node or pnpm.** DSHKer carries its own runtime: the packaged pnpm runs on the Launcher's own process, and package operations and their lifecycle scripts resolve the bundled `node`/`pnpm` instead of whatever the machine has installed. A broken or invisible system pnpm no longer blocks extension installation.
 - **Close safely while updating.** Closing the window during Git refresh, dependency installation, or a core build hides the Launcher and lets the main-process task finish; the normal close preference still applies when it is idle.
 - **Your data stays yours.** Harness, plugins, presets, settings and your native `~/.dsh` folders stay where they are: the Launcher reuses them and never silently replaces or resets them.
 - **Old machines clean up after themselves.** Signing in on a new computer enrols it automatically, removing one takes its pairings with it, the network you picked is remembered, and a computer that is no longer part of the network you are looking at says so instead of quietly disappearing.
@@ -270,6 +271,18 @@ npm run service:smoke
 npm run visual:smoke
 npm run build:electron
 ```
+
+Packaging stages and version-checks the bundled runtime before every build:
+
+```bash
+npm run runtime:prepare   # stage bin launchers + pinned pnpm, probe/record versions, smoke
+npm run runtime:verify    # release gate: re-check the stage against the pinned versions
+```
+
+`runtime:prepare` records the Node version probed from the packaged Electron
+executable and the pinned pnpm version in `resources/runtime/versions.json`;
+both the DSH Web session and plugin operations run on that pair, so a release
+ships and smoke-tests the exact runtime its plugins will execute.
 
 ## Build and release
 

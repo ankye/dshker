@@ -1,0 +1,191 @@
+{
+  "change": "bundled pnpm runtime for package operations",
+  "risk": "standard",
+  "production_files": [
+    "electron/main.ts",
+    "electron/main/core/fixtures/fake-core.mjs",
+    "electron/main/core/supervisor.ts",
+    "electron/main/managed/harness-web-runtime.ts",
+    "electron/main/managed/launcher-harness-commands.ts",
+    "electron/main/pnpm-launcher.ts",
+    "networking/internal/harnessruntime/model.go",
+    "tools/prepare-runtime.mjs",
+    "tools/release-readiness-core.mjs",
+    "tools/release-smoke.mjs"
+  ],
+  "test_files": [
+    "electron/main/pnpm-launcher.test.ts",
+    "electron/main/managed/launcher-harness-commands.test.ts",
+    "electron/main/managed/harness-web-runtime.test.ts",
+    "electron/main/core/supervisor.test.ts",
+    "networking/internal/harnessruntime/harnessruntime_test.go",
+    "tools/release-readiness.test.mjs",
+    "tools/release-smoke.test.mjs",
+    "tools/prepare-runtime.test.mjs"
+  ],
+  "live_test_files": [
+    "electron/main/pnpm-launcher.e2e.test.mjs",
+    "electron/main/bundled-runtime.e2e.test.mjs"
+  ],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "prefers the staged runtime over the system resolution"
+    },
+    {
+      "state": "no_op",
+      "test": "falls back to the system resolution for an incomplete stage"
+    },
+    {
+      "state": "rejected",
+      "test": "refuses a runtime whose descriptor schema is unknown"
+    },
+    {
+      "state": "recovery",
+      "test": "rejects a missing tool before spawning and recovers after installation"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/pnpm-launcher.ts",
+      "field": "bundled launcher shape (executable, prefixArguments, commandSearchPath)",
+      "source": "staged resources/runtime plus process.execPath",
+      "assertion": "expect(launcher.executable).toBe(process.execPath)",
+      "test": "prefers the staged runtime over the system resolution",
+      "state": "success",
+      "identity_keys": ["bundled runtime root", "pnpm entry", "process.execPath"],
+      "missing_semantics": "an incomplete or schema-unknown stage falls back to the system resolution"
+    },
+    {
+      "production_file": "electron/main/managed/launcher-harness-commands.ts",
+      "field": "DSHKER_NODE_EXECUTABLE and PATH",
+      "source": "process.execPath and the launcher commandSearchPath",
+      "assertion": "expect(env.DSHKER_NODE_EXECUTABLE).toBe(process.execPath)",
+      "test": "carries the Launcher Electron identity for the bundled node launchers",
+      "state": "success",
+      "identity_keys": ["process.execPath", "commandSearchPath"],
+      "missing_semantics": "the variable is inert when the bundled bin is not on PATH"
+    },
+    {
+      "production_file": "electron/main/managed/harness-web-runtime.ts",
+      "field": "pnpmCommandSearchPath in the core launch request",
+      "source": "supervisor option wired from main.ts",
+      "assertion": "expect(request.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin')",
+      "test": "passes the staged bundled runtime PATH to the core child",
+      "state": "success",
+      "identity_keys": ["installationId", "launchId", "search path"],
+      "missing_semantics": "empty keeps the child on the inherited PATH"
+    },
+    {
+      "production_file": "electron/main/core/supervisor.ts",
+      "field": "core spawn env DSHKER_NODE_EXECUTABLE",
+      "source": "process.execPath recorded by the fake-core fixture",
+      "assertion": "expect(env.dshkerNodeExecutable).toBe(process.execPath)",
+      "test": "carries the Launcher Electron identity for the bundled runtime launchers",
+      "state": "success",
+      "identity_keys": ["core pid", "argvOut"],
+      "missing_semantics": "no injection means the bundled launchers cannot resolve a Node"
+    },
+    {
+      "production_file": "electron/main.ts",
+      "field": "BUNDLED_RUNTIME_ROOT and the supervisor pnpmCommandSearchPath",
+      "source": "process.resourcesPath/runtime when packaged, resources/runtime in development",
+      "assertion": "expect(request.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin')",
+      "test": "passes the staged bundled runtime PATH to the core child",
+      "state": "success",
+      "identity_keys": ["bundled runtime root", "app.isPackaged"],
+      "missing_semantics": "empty search path when no complete stage keeps the development fallback"
+    },
+    {
+      "production_file": "electron/main/core/fixtures/fake-core.mjs",
+      "field": "dshkerNodeExecutable observed in env.json",
+      "source": "the supervisor spawn environment as seen by the fixture",
+      "assertion": "expect(env.dshkerNodeExecutable).toBe(process.execPath)",
+      "test": "carries the Launcher Electron identity for the bundled runtime launchers",
+      "state": "success",
+      "identity_keys": ["core pid", "argvOut"],
+      "missing_semantics": "the injection must be observable for the assertion to run"
+    },
+    {
+      "production_file": "networking/internal/harnessruntime/model.go",
+      "field": "Command.Path override for the managed node profile",
+      "source": "request.PnpmCommandSearchPath when a staged runtime is present",
+      "assertion": "command.Path != request.PnpmCommandSearchPath",
+      "test": "TestBuildCommandAppliesTheBundledRuntimePATH",
+      "state": "success",
+      "identity_keys": ["launchId", "subjectId", "directory", "profile node"],
+      "missing_semantics": "an empty search path leaves the child on the inherited PATH"
+    },
+    {
+      "production_file": "tools/prepare-runtime.mjs",
+      "field": "versions.json descriptor and verify gate outcomes",
+      "source": "probeNodeVersion(electron) and pinnedPnpm()",
+      "assertion": "expect(() => verifyStagedRuntime(executable, root)).not.toThrow()",
+      "test": "accepts a complete scratch stage that matches the probed pair",
+      "state": "success",
+      "identity_keys": ["runtime root", "electron executable", "pinned pnpm version"],
+      "missing_semantics": "a drift or unknown schema exits non-zero without modifying the stage"
+    },
+    {
+      "production_file": "tools/release-readiness-core.mjs",
+      "field": "runtime-verify hard gate stage",
+      "source": "defaultStages after standalone-cli-distribution",
+      "assertion": "expect(createReadinessPlan().map((stage) => stage.id)).toEqual([",
+      "test": "creates the deterministic default stage order",
+      "state": "success",
+      "identity_keys": ["stage id sequence"],
+      "missing_semantics": "a release without the runtime version gate is not ready"
+    },
+    {
+      "production_file": "tools/release-smoke.mjs",
+      "field": "bundledRuntime packaged descriptor check",
+      "source": "every unpacked build's resources/runtime/versions.json",
+      "assertion": "expect(await bundledRuntimeHolds(directory, manifest)).toBe(true)",
+      "test": "accepts an unpacked build carrying a schemaVersion-1 runtime descriptor",
+      "state": "success",
+      "identity_keys": ["releaseDir", "productName", "runtime descriptor"],
+      "missing_semantics": "a missing or invalid descriptor fails the check"
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "npm run runtime:prepare",
+      "no_mock": true
+    },
+    {
+      "command": "npm run runtime:verify",
+      "no_mock": true
+    },
+    {
+      "command": "node electron/main/pnpm-launcher.e2e.test.mjs",
+      "no_mock": true
+    },
+    {
+      "command": "node electron/main/bundled-runtime.e2e.test.mjs",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go test ./internal/harnessruntime",
+      "no_mock": true
+    },
+    {
+      "command": "npm test -- --run electron/main/pnpm-launcher.test.ts electron/main/managed/launcher-harness-commands.test.ts electron/main/managed/harness-web-runtime.test.ts electron/main/core/supervisor.test.ts tools/release-readiness.test.mjs tools/release-smoke.test.mjs tools/prepare-runtime.test.mjs",
+      "no_mock": true
+    },
+    {
+      "command": "npm run type-check",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": "resources/runtime/versions.json"
+    },
+    {
+      "artifact": ".run/pnpm-startup-repair/probe.json"
+    },
+    {
+      "artifact": ".run/pnpm-startup-repair/bundled.json"
+    }
+  ]
+}

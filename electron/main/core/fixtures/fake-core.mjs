@@ -39,6 +39,14 @@ if (process.env.FAKE_CORE_ARGV_OUT) {
     JSON.stringify(process.argv.slice(2))
   )
   writeFileSync(process.env.FAKE_CORE_ARGV_OUT + '/pid.json', JSON.stringify(process.pid))
+  // The supervisor injects the Launcher's Electron identity for the bundled
+  // node/pnpm shell launchers; recording it makes the injection observable.
+  writeFileSync(
+    process.env.FAKE_CORE_ARGV_OUT + '/env.json',
+    JSON.stringify({
+      dshkerNodeExecutable: process.env.DSHKER_NODE_EXECUTABLE ?? ''
+    })
+  )
 }
 
 // The real core calls back into its parent once a device is restored:

@@ -33,7 +33,7 @@ import { CoreAutostart, type CoreAutostartPort } from './main/core/autostart'
 import { createLauncherQuitSequence, type LauncherShutdownOwners } from './main/launcher-shutdown'
 import { registerLauncherProtocol } from './main/protocol'
 import { beginForceQuit, createTray, destroyTray, isTrayActive } from './main/launcher-tray'
-import { resolvePnpmLauncher } from './main/pnpm-launcher'
+import { bundledPnpmEntry, resolvePnpmLauncher } from './main/pnpm-launcher'
 import { runSmokeTest, writeSmokeFailure, writeSmokeTrace } from './main/smoke'
 import { createWindow, revealWindow } from './main/window'
 import { RuntimeBrowserController } from './main/runtime-browser-controller'
@@ -102,7 +102,15 @@ if (remoteDebuggingPort !== undefined) {
 }
 
 const GIT_EXECUTABLE = resolveGitExecutable()
-const PNPM_LAUNCHER = resolvePnpmLauncher()
+// The staged bundled runtime travels with the app (extraResources `runtime/`),
+// so both resolutions agree on the same root: the packaged resources directory
+// in a release, the repository's staged copy in development.
+const BUNDLED_RUNTIME_ROOT = app.isPackaged
+  ? path.join(process.resourcesPath, 'runtime')
+  : path.join(app.getAppPath(), 'resources', 'runtime')
+const PNPM_LAUNCHER = resolvePnpmLauncher(BUNDLED_RUNTIME_ROOT)
+/** The bundled pnpm entry when a complete runtime is staged; undefined otherwise. */
+const BUNDLED_PNPM_ENTRY = bundledPnpmEntry(BUNDLED_RUNTIME_ROOT)
 
 /**
  * Resolves the system Git executable without a shell lookup.
@@ -386,7 +394,11 @@ async function registerLauncherServices(
     executablePicker: new ElectronExecutablePicker(),
     temporaryDirectory: app.getPath('temp'),
     runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor({
-      runtime: () => coreHarnessRuntime
+      runtime: () => coreHarnessRuntime,
+      // A staged bundled runtime also serves installation-launched Web sessions:
+      // the core substitutes its private bin PATH on those children, so their
+      // plugin manager and package scripts resolve the bundled pnpm and node.
+      pnpmCommandSearchPath: BUNDLED_PNPM_ENTRY === undefined ? '' : PNPM_LAUNCHER.commandSearchPath
     }),
     checkout: coreCheckout
   })

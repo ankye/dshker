@@ -127,6 +127,19 @@ describe('managed installation runtime supervisor', () => {
     })
   })
 
+  it('passes the staged bundled runtime PATH to the core child', async () => {
+    const core = fakeCore()
+    const input = await startInput()
+    await new ManagedHarnessWebRuntimeSupervisor({
+      runtime: () => core.port,
+      pnpmCommandSearchPath: '/runtime/bin:/usr/bin'
+    }).start(input)
+
+    const request = core.calls[0]?.value as CoreHarnessLaunchRequest
+    expect(request.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin')
+    expect(request.pnpmExecutable).toBe('')
+  })
+
   it('reads the launch state the core reports rather than a cached guess', async () => {
     const core = fakeCore({ status: () => Promise.resolve(undefined) })
     const supervisor = new ManagedHarnessWebRuntimeSupervisor({ runtime: () => core.port })

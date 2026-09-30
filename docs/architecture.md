@@ -23,3 +23,7 @@ Both layers distinguish "not read yet" from a confirmed negative state, and neit
 ## Extension rules
 
 Add a capability by defining its shared request/result types, validating its renderer sender in main, exposing only that operation from preload, and covering failure and admission behavior. Persisted paths and executable locations must be explicit registered data, never inferred defaults.
+
+## Bundled package runtime
+
+DSHKer carries the Node and pnpm used by DSH package operations (reference: the DeepSeek Harness Desktop Electron-RunAsNode runtime). `tools/prepare-runtime.mjs` stages `resources/runtime/` — `node`/`pnpm` shell launchers, the pinned pnpm distribution, and a `versions.json` recording the Node version probed from the packaged Electron plus the pinned pnpm version — and every `electron-builder` invocation runs it first. The packaged app ships the stage as `extraResources/runtime` with the `runAsNode` fuse enabled; `resolvePnpmLauncher` prefers it (its own process as Node, `--expose-internals` plus the bundled `pnpm.mjs`) and falls back to the system resolution only when no complete stage exists. `DSHKER_NODE_EXECUTABLE` reaches package subprocesses through the core and the pnpm command environment. `runtime:verify` gates the staged versions again during release readiness, and `release-smoke` checks the shipped descriptor.

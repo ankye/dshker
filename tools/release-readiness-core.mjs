@@ -99,6 +99,13 @@ export const defaultStages = [
     evidence: '.run/dshkerd-release'
   },
   {
+    id: 'runtime-verify',
+    label: 'Bundled runtime version gate',
+    command: 'npm',
+    args: ['run', 'runtime:verify'],
+    hardGate: true
+  },
+  {
     id: 'release-verify',
     label: 'Release metadata verify',
     command: 'npm',
@@ -165,6 +172,7 @@ export function createReadinessPlan(options = {}) {
               'package',
               'core-headless-smoke',
               'standalone-cli-distribution',
+              'runtime-verify',
               'release-verify',
               'release-smoke'
             ].includes(stage.id)

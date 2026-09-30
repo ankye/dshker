@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveWindowsPnpmLauncher } from './pnpm-launcher'
+import { bundledPnpmEntry, resolvePnpmLauncher, resolveWindowsPnpmLauncher } from './pnpm-launcher'
 import { resolvePnpmCommand } from './managed/launcher-harness-commands'
 
 const directories: string[] = []
@@ -66,6 +66,65 @@ describe('Windows pnpm installation layouts', () => {
     expect(() => resolvePnpmCommand('', resolveWindowsPnpmLauncher([bin]), [])).toThrow(
       'No runnable pnpm'
     )
+  })
+})
+
+describe('the staged bundled runtime', () => {
+  function createRuntime(): { root: string; pnpmEntry: string; bin: string } {
+    const root = mkdtempSync(path.join(tmpdir(), 'launcher runtime '))
+    directories.push(root)
+    const bin = path.join(root, 'bin')
+    const pnpmBin = path.join(root, 'pnpm', 'bin')
+    mkdirSync(bin, { recursive: true })
+    mkdirSync(pnpmBin, { recursive: true })
+    writeFileSync(path.join(pnpmBin, 'pnpm.mjs'), '')
+    writeFileSync(
+      path.join(root, 'versions.json'),
+      `${JSON.stringify({ schemaVersion: 1, node: '22.12.0', pnpm: '11.7.0' })}\n`
+    )
+    return { root, pnpmEntry: path.join(realpathSync(pnpmBin), 'pnpm.mjs'), bin }
+  }
+
+  it('prefers the staged runtime over the system resolution', () => {
+    const { root } = createRuntime()
+    const launcher = resolvePnpmLauncher(root)
+    expect(launcher.resolutionError).toBeUndefined()
+    // The Launcher's own process is the Node runtime, exactly as the reference
+    // Desktop runs its packaged pnpm through its Electron binary.
+    expect(launcher.executable).toBe(process.execPath)
+    expect(launcher.prefixArguments).toEqual([
+      '--expose-internals',
+      path.join(root, 'pnpm', 'bin', 'pnpm.mjs')
+    ])
+    expect(launcher.commandSearchPath.split(path.delimiter)[0]).toBe(path.join(root, 'bin'))
+    expect(bundledPnpmEntry(root)).toBe(path.join(root, 'pnpm', 'bin', 'pnpm.mjs'))
+    // The launcher shape flows into the pnpm command unchanged.
+    expect(resolvePnpmCommand('', launcher, ['--version']).executable).toBe(process.execPath)
+    expect(resolvePnpmCommand('', launcher, ['--version']).arguments).toEqual([
+      '--expose-internals',
+      path.join(root, 'pnpm', 'bin', 'pnpm.mjs'),
+      '--version'
+    ])
+  })
+
+  it('falls back to the system resolution for an incomplete stage', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'launcher runtime partial '))
+    directories.push(root)
+    mkdirSync(path.join(root, 'pnpm', 'bin'), { recursive: true })
+    writeFileSync(path.join(root, 'pnpm', 'bin', 'pnpm.mjs'), '')
+    // No versions.json descriptor: the stage is not a complete runtime.
+    expect(bundledPnpmEntry(root)).toBeUndefined()
+    const launcher = resolvePnpmLauncher(root)
+    expect(launcher.prefixArguments).toEqual([])
+  })
+
+  it('refuses a runtime whose descriptor schema is unknown', () => {
+    const { root } = createRuntime()
+    writeFileSync(
+      path.join(root, 'versions.json'),
+      `${JSON.stringify({ schemaVersion: 2, node: '22.12.0', pnpm: '11.7.0' })}\n`
+    )
+    expect(bundledPnpmEntry(root)).toBeUndefined()
   })
 })
 

@@ -246,7 +246,12 @@ export class CoreSupervisor {
     const child = spawn(executable, coreArguments(options), {
       stdio: 'pipe',
       windowsHide: true,
-      env: { ...process.env }
+      // The core spawns every harness child (dsh web and its plugin processes),
+      // so the Launcher's Electron identity is carried once here: the bundled
+      // `node`/`pnpm` shell launchers in resources/runtime read it when a
+      // package operation or lifecycle script needs a Node without a system
+      // installation, exactly as the reference Desktop injects its executable.
+      env: { ...process.env, DSHKER_NODE_EXECUTABLE: process.execPath }
     })
     // A handshake that fails on one platform and not another cannot be argued
     // about from the outside: keep the exact bytes the core sent, and where the

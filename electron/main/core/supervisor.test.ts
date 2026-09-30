@@ -121,6 +121,21 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       await expect(processAlive(supervisor.pid)).resolves.toBe(false)
     })
 
+    it('carries the Launcher Electron identity for the bundled runtime launchers', async () => {
+      const meta = await harness()
+      const argvOut = await mkdtemp(join(tmpdir(), 'core-argv-'))
+      const { supervisor: started } = launch(meta, argvOut)
+      const supervisor = await started
+      supervisors.push(supervisor)
+      if (process.platform !== 'win32') {
+        const env = JSON.parse(String(await readFile(join(argvOut, 'env.json'), 'utf8'))) as {
+          dshkerNodeExecutable: string
+        }
+        expect(env.dshkerNodeExecutable).toBe(process.execPath)
+      }
+      await supervisor.close()
+    })
+
     it('passes --catalog with a directory it creates itself', async () => {
       const meta = await harness()
       // Deliberately absent: the settings root's registry directory is created

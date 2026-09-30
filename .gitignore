@@ -12,6 +12,7 @@ dist-electron/
 out/
 build/
 release/
+resources/runtime/
 *.app/
 *.exe
 *.msi
