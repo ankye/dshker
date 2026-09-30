@@ -115,7 +115,19 @@ describe('the staged bundled runtime', () => {
     // No versions.json descriptor: the stage is not a complete runtime.
     expect(bundledPnpmEntry(root)).toBeUndefined()
     const launcher = resolvePnpmLauncher(root)
-    expect(launcher.prefixArguments).toEqual([])
+    // The incomplete stage must never leak into the bundled launch shape. The
+    // POSIX fallback has no prefix arguments; the Windows fallback is the
+    // shim-based system resolution and may legitimately carry a prefix script
+    // or end with a resolution error, so only the bundled prefix is asserted
+    // away there.
+    if (process.platform === 'win32') {
+      expect(launcher.prefixArguments).not.toEqual([
+        '--expose-internals',
+        path.join(root, 'pnpm', 'bin', 'pnpm.mjs')
+      ])
+    } else {
+      expect(launcher.prefixArguments).toEqual([])
+    }
   })
 
   it('refuses a runtime whose descriptor schema is unknown', () => {
