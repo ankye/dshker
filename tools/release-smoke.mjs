@@ -179,40 +179,84 @@ async function peerHelperRoots(releaseDir, manifest) {
  */
 export async function bundledRuntimeHolds(releaseDir, manifest) {
   const candidates = [
-    path.join(
-      releaseDir,
-      'mac-arm64',
-      `${manifest.productName}.app`,
-      'Contents',
-      'Resources',
-      'runtime',
-      'versions.json'
-    ),
-    path.join(
-      releaseDir,
-      'mac',
-      `${manifest.productName}.app`,
-      'Contents',
-      'Resources',
-      'runtime',
-      'versions.json'
-    ),
-    path.join(releaseDir, 'win-unpacked', 'resources', 'runtime', 'versions.json'),
-    path.join(releaseDir, 'win-arm64-unpacked', 'resources', 'runtime', 'versions.json'),
-    path.join(releaseDir, 'linux-unpacked', 'resources', 'runtime', 'versions.json'),
-    path.join(releaseDir, 'linux-arm64-unpacked', 'resources', 'runtime', 'versions.json')
+    {
+      platform: 'darwin',
+      arch: 'arm64',
+      root: path.join(
+        releaseDir,
+        'mac-arm64',
+        `${manifest.productName}.app`,
+        'Contents',
+        'Resources',
+        'runtime'
+      )
+    },
+    {
+      platform: 'darwin',
+      arch: 'x64',
+      root: path.join(
+        releaseDir,
+        'mac',
+        `${manifest.productName}.app`,
+        'Contents',
+        'Resources',
+        'runtime'
+      )
+    },
+    {
+      platform: 'darwin',
+      arch: 'x64',
+      root: path.join(
+        releaseDir,
+        'mac-x64',
+        `${manifest.productName}.app`,
+        'Contents',
+        'Resources',
+        'runtime'
+      )
+    },
+    ...['win-unpacked', 'win-x64-unpacked', 'win-arm64-unpacked'].map((directory) => ({
+      platform: 'win32',
+      arch: directory === 'win-arm64-unpacked' ? 'arm64' : 'x64',
+      root: path.join(releaseDir, directory, 'resources', 'runtime')
+    })),
+    ...['linux-unpacked', 'linux-x64-unpacked', 'linux-arm64-unpacked'].map((directory) => ({
+      platform: 'linux',
+      arch: directory === 'linux-arm64-unpacked' ? 'arm64' : 'x64',
+      root: path.join(releaseDir, directory, 'resources', 'runtime')
+    }))
   ]
   let found = 0
-  for (const candidate of candidates) {
-    if (!(await exists(candidate))) continue
+  for (const { platform, arch, root } of candidates) {
+    const descriptorPath = path.join(root, 'versions.json')
+    if (!(await exists(descriptorPath))) continue
     found += 1
     let descriptor
     try {
-      descriptor = JSON.parse(await readFile(candidate, 'utf8'))
+      descriptor = JSON.parse(await readFile(descriptorPath, 'utf8'))
     } catch {
       return false
     }
-    if (descriptor?.schemaVersion !== 1 || !descriptor.node || !descriptor.pnpm) return false
+    const nodeName = platform === 'win32' ? 'node.exe' : 'node'
+    const nodePath = path.join(root, 'bin', nodeName)
+    if (
+      descriptor?.schemaVersion !== 2 ||
+      descriptor.platform !== platform ||
+      descriptor.arch !== arch ||
+      descriptor.node !== '22.23.3' ||
+      typeof descriptor.pnpm !== 'string' ||
+      !descriptor.pnpm ||
+      typeof descriptor.nodeArchive !== 'string' ||
+      !/^[a-f0-9]{64}$/u.test(descriptor.nodeArchiveSha256 ?? '') ||
+      !/^[a-f0-9]{64}$/u.test(descriptor.nodeBinarySha256 ?? '') ||
+      !(await exists(nodePath))
+    ) {
+      return false
+    }
+    const nodeDigest = createHash('sha256')
+      .update(await readFile(nodePath))
+      .digest('hex')
+    if (nodeDigest !== descriptor.nodeBinarySha256) return false
   }
   return found > 0
 }

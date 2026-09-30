@@ -1,7 +1,0 @@
-#!/bin/sh
-# DSHKer-launched Node: forwards to the Launcher's own Electron binary in Node
-# mode, so shell lifecycle scripts run without a system Node installation.
-# Mirrors DeepSeek Harness Desktop's scripts/node-bin launcher; the packaged
-# Electron binary is named by the Launcher through DSHKER_NODE_EXECUTABLE.
-export ELECTRON_RUN_AS_NODE=1
-exec "$DSHKER_NODE_EXECUTABLE" --expose-internals "$@"

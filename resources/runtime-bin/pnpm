@@ -1,8 +1,7 @@
 #!/bin/sh
-# DSHKer-bundled pnpm entry: runs the Launcher's pinned pnpm distribution on the
-# Launcher's own Electron Node runtime. The pnpm.mjs package sits next to this
+# DSHKer-bundled pnpm entry: runs the Launcher's pinned pnpm distribution on its
+# standalone Node binary. The pnpm.mjs package sits next to this
 # bin directory (../pnpm/bin/pnpm.mjs), so the shim resolves it relative to
 # itself and works identically in staged and packaged layouts.
-export ELECTRON_RUN_AS_NODE=1
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$DSHKER_NODE_EXECUTABLE" --expose-internals "$SCRIPT_DIR/../pnpm/bin/pnpm.mjs" "$@"
+exec "$SCRIPT_DIR/node" --expose-internals "$SCRIPT_DIR/../pnpm/bin/pnpm.mjs" "$@"

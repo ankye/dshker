@@ -37,7 +37,12 @@ describe('launcher console activity', () => {
       launchLogPath: logPath,
       diagnosticsPatchPath: nodePath.join(root, 'verbose.patch.yml'),
       gitExecutable: 'git',
-      pnpmExecutable: 'pnpm'
+      pnpmExecutable: 'pnpm',
+      pnpmLauncher: {
+        executable: 'pnpm',
+        prefixArguments: [],
+        commandSearchPath: ''
+      }
     }
     return {
       service: new LauncherHarnessService(options),

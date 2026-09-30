@@ -26,6 +26,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
     afterEach(async () => {
       delete process.env.FAKE_CORE_ARGV_OUT
       delete process.env.FAKE_CORE_CALLBACK_OUT
+      delete process.env.ELECTRON_RUN_AS_NODE
       await Promise.all(
         supervisors.splice(0).map((supervisor) => supervisor.close().catch(() => undefined))
       )
@@ -121,7 +122,8 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       await expect(processAlive(supervisor.pid)).resolves.toBe(false)
     })
 
-    it('carries the Launcher Electron identity for the bundled runtime launchers', async () => {
+    it('strips inherited Electron Node mode from the supervised core', async () => {
+      process.env.ELECTRON_RUN_AS_NODE = '1'
       const meta = await harness()
       const argvOut = await mkdtemp(join(tmpdir(), 'core-argv-'))
       const { supervisor: started } = launch(meta, argvOut)
@@ -129,9 +131,9 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       supervisors.push(supervisor)
       if (process.platform !== 'win32') {
         const env = JSON.parse(String(await readFile(join(argvOut, 'env.json'), 'utf8'))) as {
-          dshkerNodeExecutable: string
+          electronRunAsNode: string
         }
-        expect(env.dshkerNodeExecutable).toBe(process.execPath)
+        expect(env.electronRunAsNode).toBe('')
       }
       await supervisor.close()
     })

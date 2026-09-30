@@ -151,7 +151,7 @@ func (supervisor *Supervisor) StartCommand(command Command, identity Identity) (
 
 	child := exec.Command(command.Executable, command.Arguments...)
 	child.Dir = command.Directory
-	child.Env = supervisor.environment()
+	child.Env = withoutElectronRunAsNode(supervisor.environment())
 	if command.Path != "" {
 		child.Env = withPath(child.Env, command.Path)
 	}
@@ -456,4 +456,18 @@ func withPath(environment []string, path string) []string {
 		result = append(result, entry)
 	}
 	return append(result, "PATH="+path)
+}
+
+// withoutElectronRunAsNode prevents a desktop's private Electron runtime mode
+// from leaking into the standalone Node process DSH requires.
+func withoutElectronRunAsNode(environment []string) []string {
+	result := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		key, _, _ := strings.Cut(entry, "=")
+		if strings.EqualFold(key, "ELECTRON_RUN_AS_NODE") {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result
 }

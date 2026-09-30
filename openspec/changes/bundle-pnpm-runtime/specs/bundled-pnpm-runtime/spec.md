@@ -2,86 +2,98 @@
 
 ## Purpose
 
-Let every DSH package operation (bundled-seed bootstrap, `dsh plugin` commands, the embedded Web Plugins page, and package lifecycle scripts) run on the Launcher's own Node and pnpm instead of a system installation, with the runtime's node/pnpm versions probed, recorded, and smoke-tested as a packaging gate. The design follows DeepSeek Harness Desktop's Electron-RunAsNode runtime.
-
-## Scenario
-
-- **WHEN** DSHKer is packaged
-- **THEN** `runtime:prepare` has staged a complete runtime (bin launchers, pinned pnpm, `versions.json`) based on the very Electron binary the app will run, and the release ships it under `resources/runtime`
-- **AND** `dsh web`, `dsh plugin`, and the embedded Plugins page resolve pnpm through the staged bundle
-- **AND** a user with no Node or pnpm installed can install, update, and remove plugins
+Run DSH Web and DSH package operations on a known standalone Node/pnpm pair.
+DSH's native builtin loader requires a Node V8 context; Electron's
+`ELECTRON_RUN_AS_NODE` process mode does not provide one.
 
 ## Requirements
 
-### Requirement: The staged runtime is complete and versioned
+### Requirement: The staged runtime is complete, target-specific, and verified
 
-`tools/prepare-runtime.mjs` SHALL stage `bin/` shell launchers (`node`, `node.cmd`, `pnpm`, `pnpm.cmd`), the pinned pnpm package, and a `versions.json` descriptor with `schemaVersion: 1`, the Node version probed from the packaged Electron executable (`ELECTRON_RUN_AS_NODE=1`), and the pnpm version read from the pinned devDependency. It SHALL smoke `pnpm --version` on the staged pair and fail the packaging run on any missing piece, probe failure, or version mismatch. `runtime:verify` SHALL re-check a staged runtime against the same probed and pinned versions.
+`tools/prepare-runtime.mjs` SHALL stage the official Node 22.23.3 binary and its
+license, the pinned pnpm package, and `versions.json` with schema version 2,
+platform, architecture, Node version, official archive name and SHA-256, staged
+binary SHA-256, and pnpm version. Every supported target archive digest SHALL
+be pinned in source. Preparation SHALL execute the staged binary, smoke
+`pnpm --version`, and fail on any missing, mismatched, or un-runnable artifact.
+`runtime:verify` SHALL validate the descriptor, actual binary digest, executable
+version, and pinned pnpm pair without rewriting the stage.
 
-#### Scenario: A fresh stage passes
+#### Scenario: A fresh native stage passes
 
-- **WHEN** the pinned pnpm devDependency is installed and the Electron distribution is present
-- **THEN** `npm run runtime:prepare` stages a complete runtime, `versions.json` matches the probed Electron Node version and pinned pnpm version, and `npm run runtime:verify` passes
+- **WHEN** pinned pnpm is installed and preparation runs on a supported native
+  platform/architecture
+- **THEN** the official archive digest is verified before extraction, the
+  standalone Node and pnpm smoke succeeds, and `runtime:verify` passes
 
-#### Scenario: A version drift fails the gate
+#### Scenario: A mismatched or foreign stage is rejected
 
-- **WHEN** the staged `versions.json` names a Node or pnpm version that no longer matches the packaged Electron or the pinned devDependency
-- **THEN** `runtime:verify` exits non-zero without modifying the stage
+- **WHEN** the stage has the wrong target, archive digest, binary digest,
+  runtime version, unknown descriptor schema, or cannot execute
+- **THEN** verification exits non-zero and does not rewrite the stage
 
-### Requirement: The bundled runtime takes precedence, with a system fallback
+### Requirement: DSH commands require the bundled standalone runtime
 
-`resolvePnpmLauncher()` SHALL return the staged runtime's launch facts when a complete stage exists: the Launcher's own `process.execPath` as the executable, `--expose-internals` plus the bundled `pnpm.mjs` as prefix arguments, and a bin-first command PATH. When the stage is absent or incomplete, it SHALL keep the existing system resolution, so a development checkout without a staged runtime still works.
+`resolvePnpmLauncher()` SHALL run the staged `node` binary with the pinned
+`pnpm.mjs` entry and a command PATH that places the staged `bin` first. An absent
+or incomplete runtime SHALL return a typed launch refusal. It SHALL NOT substitute
+system Node, system pnpm, or the Electron executable.
 
-#### Scenario: Staged runtime wins
+#### Scenario: The complete stage is selected
 
-- **WHEN** `resources/runtime` holds a complete stage
-- **THEN** the resolved launcher executes the bundled `pnpm.mjs` on the Launcher's own process and prepends `resources/runtime/bin` to its PATH
+- **WHEN** the descriptor and all required staged files match this build's
+  platform and architecture
+- **THEN** pnpm and DSH Web launch using `resources/runtime/bin/node` and
+  `resources/runtime/pnpm/bin/pnpm.mjs`
 
-#### Scenario: Incomplete stage falls back
+#### Scenario: The stage is unavailable
 
-- **WHEN** the stage lacks `versions.json`, the pnpm entry, or the bin directory
-- **THEN** resolution falls back to the system pnpm exactly as before the change
+- **WHEN** the descriptor, standalone Node, or pnpm entry is missing or invalid
+- **THEN** the operation is refused with a runtime-preparation diagnostic and
+  no process is spawned using a system or Electron runtime
 
-### Requirement: The package carries the runtime and the Node-mode fuse
+### Requirement: Electron Node mode is never used for DSH subprocesses
 
-The packaged application SHALL ship `resources/runtime` as `extraResources/runtime` and SHALL keep the Electron `runAsNode` fuse enabled so the packaged process can act as the Node runtime.
+The Electron `runAsNode` fuse SHALL remain disabled. The desktop's core spawn,
+pnpm commands, and supervised DSH Web child SHALL remove inherited
+`ELECTRON_RUN_AS_NODE` rather than set it. The private shell/core request schema
+does not carry an Electron Node-mode flag and its method-table version remains
+unchanged.
 
-#### Scenario: Packaged layout resolves
+#### Scenario: Host environment contains the Electron mode flag
 
-- **WHEN** the packaged app starts
-- **THEN** `process.resourcesPath/runtime` contains the staged bin, pnpm, and `versions.json`, and `resolvePnpmLauncher` prefers it
+- **WHEN** the desktop or core inherits `ELECTRON_RUN_AS_NODE=1`
+- **THEN** the standalone Node/pnpm and DSH Web child environment does not
+  contain that variable
 
-### Requirement: The Launcher's Electron identity reaches package subprocesses
+### Requirement: DSH native modules initialize on the bundled runtime
 
-The core's spawn environment and every electron-side pnpm invocation SHALL carry `DSHKER_NODE_EXECUTABLE` naming the Launcher's own executable, so the bundled `node`/`pnpm` launchers and package lifecycle scripts resolve without a system Node.
+The real bundled Node SHALL provide the V8 context required by DSH's native
+loader. A pnpm version probe alone SHALL NOT count as DSH Web startup acceptance.
 
-#### Scenario: Lifecycle scripts run without a system Node
+#### Scenario: DSH Web starts successfully
 
-- **WHEN** a plugin package runs a lifecycle script that invokes `node`
-- **THEN** the bundled `node` launcher forwards to the Launcher's own process in Node mode with `--expose-internals`
+- **WHEN** the launcher starts DSH Web with the staged standalone Node
+- **THEN** `node-addon-require-builtin` loads
+  `internal/modules/esm/loader`, host preparation succeeds, and DSH Web announces
+  its loopback URL
 
-### Requirement: Managed installation children resolve the bundled runtime
+### Requirement: Managed installation children use their registered Node
 
-The core's managed `node` profile SHALL apply the request's `pnpmCommandSearchPath` as the child PATH override when a staged runtime is present, so installation-launched Web sessions use the bundled pnpm and node; an empty search path SHALL leave the child on the inherited PATH unchanged.
+The core's managed `node` profile SHALL continue to run the installation's
+registered Node executable and SHALL apply the staged runtime PATH so the DSH
+plugin manager resolves the bundled pnpm. The bundled runtime SHALL NOT replace
+the installation's registered Node or toolchain used for worktree preparation.
 
-#### Scenario: A managed Web session uses bundled pnpm
+### Requirement: Target packaging and release checks cover shipped files
 
-- **WHEN** an installation is launched from a packaged app with a staged runtime
-- **THEN** the core spawns the child with the bundled bin directory first on PATH and its plugin manager resolves the bundled `pnpm`
+Target-specific `dist:*` scripts SHALL prepare the matching platform and
+architecture. CI SHALL run each target on a native runner, including Linux
+arm64. `release:smoke` SHALL verify that every unpacked app contains the target
+Node executable and that its bytes match the descriptor digest.
 
-### Requirement: Worktree preparation keeps the registered toolchain
+#### Scenario: A missing or altered packaged runtime blocks release
 
-Preparing a managed installation's source worktree (`pnpm install --frozen-lockfile` in `worktree-preparer`) SHALL keep using the user's explicitly registered pnpm toolchain. The bundled runtime serves package operations at runtime — launched Web sessions and plugin management — and does not substitute for the toolchain identity the managed-installation record binds, which must stay fail-loud about missing or version-mismatched registered tools.
-
-#### Scenario: A managed workspace's first build uses the registered pnpm
-
-- **WHEN** a managed installation is cloned and its worktree prepared on a machine without the bundled runtime staged
-- **THEN** preparation still proceeds with the registered toolchain and reports the same typed refusal it does today when that toolchain is missing
-
-### Requirement: Packaging and release gates verify the bundled runtime
-
-The `package`/`dist` scripts SHALL run `runtime:prepare` before `electron-builder`, and release readiness SHALL include a `runtime:verify` hard gate after packaging. The packaged-app release smoke SHALL additionally confirm every unpacked build carries `resources/runtime/versions.json` with `schemaVersion: 1` and non-empty `node` and `pnpm` values.
-
-#### Scenario: A release with a stale or absent runtime fails the gates
-
-- **WHEN** a packaged build lacks the runtime descriptor or its recorded versions stop matching the pinned pair
-- **THEN** `runtime:verify` exits non-zero and `release:smoke` reports a failed `bundledRuntime` check
+- **WHEN** a packaged app lacks its standalone Node or its digest differs from
+  `versions.json`
+- **THEN** `release:smoke` reports the bundled-runtime check as failed

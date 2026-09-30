@@ -1,68 +1,60 @@
-# Design — bundle the pnpm runtime
+# Design — bundle the standalone Node/pnpm runtime
 
-## Reference
+## Runtime choice
 
-The implementation mirrors DeepSeek Harness Desktop's bundled runtime
-(`apps/desktop/scripts/prepare-runtime.ts`, `scripts/node-bin/`, and the
-`packageManager` launch facts in `apps/desktop-host`): the application's own
-Electron executable is the Node runtime (`ELECTRON_RUN_AS_NODE=1
---expose-internals`), the pinned pnpm distribution ships beside small
-`node`/`pnpm` shell launchers, and the packaged node/pnpm versions are probed
-and recorded at build time and smoke-tested before packing. DSHKer adds no
-binary: its own `process.execPath` is Node, and its private `bin` directory is
-handed only to package-operation subprocesses.
+The first implementation reused Electron with `ELECTRON_RUN_AS_NODE=1`. A real
+DSH launch reached `node-addon-require-builtin` but failed with
+`Unsupported/no-context` and `has_v8_context: false`. Electron 43's version
+fingerprint did not change that runtime behavior. A separate Node 22.23.3
+executable successfully loaded the same DSH native addon and its
+`internal/modules/esm/loader` builtin, so the launcher packages that official
+Node distribution instead. Electron remains at its existing version and its
+`runAsNode` fuse is disabled.
 
 ## Staging
 
-`tools/prepare-runtime.mjs` writes `resources/runtime/` (gitignored):
+`tools/prepare-runtime.mjs` downloads the official archive for the requested
+platform/architecture and verifies its source SHA-256 before extracting only the
+Node executable and its license. It stages:
 
-- `bin/node`, `bin/node.cmd` — forward to `"$DSHKER_NODE_EXECUTABLE"
-  --expose-internals "$@"` in Node mode.
-- `bin/pnpm`, `bin/pnpm.cmd` — forward to the sibling
-  `../pnpm/bin/pnpm.mjs` the same way; this is what the embedded Web Plugins
-  page's default `pnpmCommand` (`pnpm`) resolves through PATH.
-- `pnpm/` — the pinned `pnpm@<exact>` devDependency copied from
-  `node_modules/pnpm`.
-- `versions.json` — `{ schemaVersion: 1, node, pnpm }` where `node` is probed
-  from the local Electron distribution and `pnpm` is read from the pinned
-  manifest. `runtime:verify` re-checks both against the stage and re-smokes
-  `pnpm --version`.
+- `bin/node` or `bin/node.exe` — the independent official Node runtime.
+- `bin/pnpm` and `bin/pnpm.cmd` — wrappers that invoke the sibling standalone
+  Node and pinned `pnpm.mjs`.
+- `pnpm/` — the pinned pnpm devDependency.
+- `LICENSE.node` — license from the Node archive.
+- `versions.json` — schema 2 target identity, Node version, source archive and
+  archive digest, executable digest, and pinned pnpm version.
 
-## Resolution and wiring
+The stage is smoked with the staged executable before it is used. Verification
+rechecks target, pinned archive identity, binary digest, executable version, and
+pnpm version without changing the staged directory.
 
-- `resolvePnpmLauncher(bundledRuntimeRoot)` prefers the complete stage: 
-  `executable = process.execPath`, `prefixArguments = ['--expose-internals',
-  <runtime>/pnpm/bin/pnpm.mjs]`, `commandSearchPath = <runtime>/bin:…`. An
-  incomplete stage (missing pnpm entry, bin, or a schema-version-1 descriptor)
-  falls back to the existing system resolution; a development checkout that
-  never staged the runtime is unchanged.
-- The pnpm-profile launch (`pnpm [prefix…] dsh web --patch … --no-open`) and
-  every electron-side pnpm invocation therefore run on the bundled pair. The
-  core already applies `PnpmCommandSearchPath` as the child PATH for that
-  profile.
-- The managed node-profile launch runs the installation's own Node; the core's
-  `BuildCommand` now applies `PnpmCommandSearchPath` as the child PATH there
-  too, so its embedded plugin manager resolves the bundled pnpm.
-- `DSHKER_NODE_EXECUTABLE` is set on the core's spawn environment and in
-  `pnpmCommandEnvironment`, so lifecycle scripts and both shims find the
-  Launcher's Electron without a system Node. The variable is inert when the
-  bundled bin is not on PATH.
+## Resolution and process wiring
 
-## Packaging
+- `resolvePnpmLauncher(resources/runtime)` requires the matching schema-2
+  runtime and returns the staged Node executable with `--expose-internals` and
+  the pinned `pnpm.mjs` entry. Missing or incomplete files return a launch
+  refusal; there is no system Node/pnpm or Electron-runtime substitution.
+- `resources/runtime/bin` is first on the DSH child PATH so its plugin manager
+  uses the same standalone Node and pnpm. Other inherited PATH entries remain
+  available for normal tools such as Git.
+- The desktop core and pnpm child environments strip inherited
+  `ELECTRON_RUN_AS_NODE`; no launch mode bit or shell/core method-table change is
+  needed.
+- Managed installations keep their explicitly registered Node executable.
+  Their child PATH can still resolve the bundled pnpm for plugin operations.
+  Worktree preparation continues to use the toolchain recorded by that
+  installation.
 
-`package.json` pins `pnpm`, runs `runtime:prepare` before every
-`electron-builder` invocation, ships `resources/runtime` as
-`extraResources/runtime`, and enables `electronFuses.runAsNode`. Release
-readiness adds a `runtime:verify` hard gate after packaging, and
-`release:smoke` verifies the packaged `resources/runtime/versions.json`
-descriptor in every unpacked build.
+## Packaging and evidence
 
-## Boundaries
+Target scripts pass exact platform and architecture values to runtime
+preparation. Each packaging job runs on a matching native runner, including
+Linux arm64, because preparation must execute the downloaded binary. The app
+ships the runtime under `extraResources/runtime`. `runtime:verify` gates the
+source stage, and packaged `release:smoke` verifies the target descriptor and
+hash of the actual shipped Node binary.
 
-The managed-installation worktree preparation (`worktree-preparer.mjs`) keeps
-its explicitly registered pnpm toolchain: that flow is bound to the toolchain
-identity the installation record persists, and substituting the bundled pnpm
-would bypass the user's registered choice. The bundled runtime covers package
-operations at runtime — the bundled-harness prepare/build, `dsh web` launches,
-the plugin panel's `dsh plugin` commands, and every embedded Web Plugins page —
-not the managed-installation first build.
+The pnpm smoke is necessary but not sufficient: local DSH startup must also
+prove the native addon loads, host preparation completes, and the Web URL is
+announced.

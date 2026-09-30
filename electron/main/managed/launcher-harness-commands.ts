@@ -40,25 +40,19 @@ export function resolvePnpmCommand(
 }
 
 /**
- * Supplies the Launcher-resolved command PATH and Electron identity to every
- * pnpm invocation.
- *
- * DSHKER_NODE_EXECUTABLE names the Launcher's own Electron binary, which the
- * bundled `node`/`pnpm` shell launchers (resources/runtime/bin) exec: lifecycle
- * scripts and pnpm entry points then run without a system Node installation,
- * the same contract the reference Desktop applies to its package operations.
- * The variable is inert when the bundled bin directory is not on PATH, so
- * injecting it unconditionally keeps one environment shape for every op.
+ * Supplies the Launcher-resolved command PATH and removes any Electron Node-mode
+ * variable inherited from the desktop process.
  */
 export function pnpmCommandEnvironment(
   launcher: PnpmCommandLauncher | undefined
 ): NodeJS.ProcessEnv {
   const commandSearchPath = launcher?.commandSearchPath
-  return {
+  const environment: NodeJS.ProcessEnv = {
     ...process.env,
-    DSHKER_NODE_EXECUTABLE: process.execPath,
     ...(commandSearchPath === undefined ? {} : { PATH: commandSearchPath })
   }
+  delete environment.ELECTRON_RUN_AS_NODE
+  return environment
 }
 
 /** Removes untracked and ignored build residue from a verified Launcher checkout. */

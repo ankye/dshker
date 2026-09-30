@@ -3,8 +3,8 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
@@ -26,36 +26,58 @@ try {
   })
   const launcher = createRequire(import.meta.url)(output).resolvePnpmLauncher(runtimeRoot)
   assert.equal(launcher.resolutionError, undefined)
-  // The bundled launcher runs the pinned pnpm entry on the Launcher's own
-  // process with --expose-internals, and hands it a bin-first command PATH.
-  assert.equal(launcher.executable, process.execPath)
+  const nodeExecutable = path.join(
+    runtimeRoot,
+    'bin',
+    process.platform === 'win32' ? 'node.exe' : 'node'
+  )
+  assert.equal(launcher.executable, nodeExecutable)
   assert.deepEqual(launcher.prefixArguments, [
     '--expose-internals',
     path.join(runtimeRoot, 'pnpm', 'bin', 'pnpm.mjs')
   ])
   assert.equal(launcher.commandSearchPath.split(path.delimiter)[0], path.join(runtimeRoot, 'bin'))
 
-  const result = spawnSync(launcher.executable, [...launcher.prefixArguments, '--version'], {
+  const environment = { ...process.env }
+  delete environment.ELECTRON_RUN_AS_NODE
+  const contextProbe = spawnSync(
+    nodeExecutable,
+    [
+      '--expose-internals',
+      '-e',
+      "if (process.versions.electron) process.exit(3); require('internal/modules/esm/loader'); process.stdout.write(process.versions.node)"
+    ],
+    {
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: 30000,
+      env: environment
+    }
+  )
+  assert.equal(contextProbe.status, 0, contextProbe.stderr)
+  const result = spawnSync(nodeExecutable, [...launcher.prefixArguments, '--version'], {
     encoding: 'utf8',
     windowsHide: true,
     timeout: 60000,
     env: {
-      ...process.env,
-      PATH: launcher.commandSearchPath,
-      DSHKER_NODE_EXECUTABLE: launcher.executable
+      ...environment,
+      PATH: launcher.commandSearchPath
     }
   })
   assert.equal(result.status, 0, result.stderr)
   const descriptor = JSON.parse(readFileSync(path.join(runtimeRoot, 'versions.json'), 'utf8'))
-  assert.equal(descriptor.schemaVersion, 1)
+  assert.equal(descriptor.schemaVersion, 2)
   assert.equal(result.stdout.trim(), descriptor.pnpm)
   mkdirSync('.run/pnpm-startup-repair', { recursive: true })
+  const evidencePath = '.run/pnpm-startup-repair/bundled.json'
+  mkdirSync(path.dirname(evidencePath), { recursive: true })
   writeFileSync(
-    '.run/pnpm-startup-repair/bundled.json',
+    evidencePath,
     JSON.stringify({
       status: result.status,
       version: result.stdout.trim(),
-      executable: launcher.executable,
+      executable: nodeExecutable,
+      nodeContextProbe: contextProbe.stdout.trim(),
       schemaVersion: descriptor.schemaVersion,
       pnpm: descriptor.pnpm
     })

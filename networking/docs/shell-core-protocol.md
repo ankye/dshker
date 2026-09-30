@@ -346,9 +346,9 @@ Two findings from writing this table down, both deliberate:
 `MethodTableVersion = 1`. Adding a method is additive within version 1: an older
 shell simply never calls it, and an older core refuses it with
 `p2p.invalid_operation` instead of guessing. Changing a payload shape or a
-refusal code for an existing method requires a new table version plus a shell and
-core released together. A foreign bootstrap or frame `version` is always refused,
-never downgraded.
+refusal code for an existing method requires a new table version plus a shell
+and core released together. A foreign bootstrap or frame `version` is always
+refused, never downgraded.
 
 ## 8. Lifetime
 

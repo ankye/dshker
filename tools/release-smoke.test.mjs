@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -28,25 +29,41 @@ function stageDescriptor(releaseDir, descriptor) {
     'runtime'
   )
   mkdirSync(runtime, { recursive: true })
+  mkdirSync(path.join(runtime, 'bin'), { recursive: true })
+  writeFileSync(path.join(runtime, 'bin', 'node'), '')
   writeFileSync(path.join(runtime, 'versions.json'), `${JSON.stringify(descriptor)}\n`)
 }
 
+function validDescriptor(overrides = {}) {
+  return {
+    schemaVersion: 2,
+    platform: 'darwin',
+    arch: 'arm64',
+    node: '22.23.3',
+    nodeArchive: 'node-v22.23.3-darwin-arm64.tar.gz',
+    nodeArchiveSha256: 'a'.repeat(64),
+    nodeBinarySha256: createHash('sha256').update('').digest('hex'),
+    pnpm: '11.7.0',
+    ...overrides
+  }
+}
+
 describe('the packaged bundled runtime check', () => {
-  it('accepts an unpacked build carrying a schemaVersion-1 runtime descriptor', async () => {
+  it('accepts an unpacked build carrying the pinned standalone runtime', async () => {
     const directory = releaseDir()
-    stageDescriptor(directory, { schemaVersion: 1, node: '24.16.0', pnpm: '11.7.0' })
+    stageDescriptor(directory, validDescriptor())
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(true)
   })
 
   it('rejects an unpacked build whose descriptor schema is unknown', async () => {
     const directory = releaseDir()
-    stageDescriptor(directory, { schemaVersion: 2, node: '24.16.0', pnpm: '11.7.0' })
+    stageDescriptor(directory, validDescriptor({ schemaVersion: 3 }))
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
   })
 
   it('rejects an unpacked build whose descriptor is missing the pinned pair', async () => {
     const directory = releaseDir()
-    stageDescriptor(directory, { schemaVersion: 1 })
+    stageDescriptor(directory, validDescriptor({ pnpm: '' }))
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
   })
 
@@ -67,6 +84,12 @@ describe('the packaged bundled runtime check', () => {
     )
     mkdirSync(runtime, { recursive: true })
     writeFileSync(path.join(runtime, 'versions.json'), '{broken')
+    expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
+  })
+
+  it('rejects a bundled Node binary whose digest differs from the descriptor', async () => {
+    const directory = releaseDir()
+    stageDescriptor(directory, validDescriptor({ nodeBinarySha256: 'b'.repeat(64) }))
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
   })
 })

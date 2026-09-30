@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.84 — 2026-10-01
+
+### 简体中文 (zh-CN)
+
+- **修复内置运行时下 DSH Web 无法启动。** Electron 的 Node 模式缺少 DSH 原生模块所需的 V8 context。现在改为随安装包携带经过 SHA-256 校验的 Node 22.23.3，并让 DSH Web 与插件命令使用该独立 Node；不再依赖 Electron Node 模式，也不会回退到系统 Node/pnpm。
+
+### English (en-US)
+
+- **Fixed DSH Web startup with the bundled runtime.** Electron's Node mode lacks the V8 context required by DSH's native module. The app now ships a SHA-256-verified standalone Node 22.23.3 for DSH Web and plugin commands; it no longer depends on Electron Node mode or falls back to system Node/pnpm.
+
 ## 0.1.83 — 2026-09-30
 
 ### 简体中文 (zh-CN)

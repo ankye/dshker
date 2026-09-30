@@ -39,12 +39,11 @@ if (process.env.FAKE_CORE_ARGV_OUT) {
     JSON.stringify(process.argv.slice(2))
   )
   writeFileSync(process.env.FAKE_CORE_ARGV_OUT + '/pid.json', JSON.stringify(process.pid))
-  // The supervisor injects the Launcher's Electron identity for the bundled
-  // node/pnpm shell launchers; recording it makes the injection observable.
+  // Recording the child's Electron mode makes environment isolation observable.
   writeFileSync(
     process.env.FAKE_CORE_ARGV_OUT + '/env.json',
     JSON.stringify({
-      dshkerNodeExecutable: process.env.DSHKER_NODE_EXECUTABLE ?? ''
+      electronRunAsNode: process.env.ELECTRON_RUN_AS_NODE ?? ''
     })
   )
 }
@@ -116,7 +115,11 @@ function serve(socket, secret, server) {
             version: 1,
             id: frame.id,
             method: '',
-            payload: { version: 1, methodTableVersion: 1, methods: ['core.version'] },
+            payload: {
+              version: 1,
+              methodTableVersion: 1,
+              methods: ['core.version']
+            },
             error: ''
           }) + '\n'
         )

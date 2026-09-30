@@ -1,33 +1,39 @@
 ## Why
 
-DSHKer manages DeepSeek Harness installations, but every package operation — the bundled-seed bootstrap, `dsh plugin` commands, and the embedded Web Plugins page — currently resolves `pnpm` (and through its lifecycle scripts, `node`) from the user's system. A machine whose pnpm or Node installation is missing, outdated, or invisible to a desktop-launched process cannot install or repair plugins, and the Launcher's toolchain requirements leak into what should be an appliance-like product.
+DSHKer needs its own predictable Node and pnpm for DSH Web and plugin package
+operations. The original Electron-RunAsNode approach failed in a real DSH launch:
+`node-addon-require-builtin` reported `Unsupported/no-context` because the
+embedded runtime had no usable V8 context. Switching Electron versions did not
+solve the missing context. A pinned official standalone Node distribution does.
 
-DeepSeek Harness Desktop solves the same problem by carrying the runtime itself: its `ELECTRON_RUN_AS_NODE=1` Electron binary is the Node, its pinned pnpm distribution ships beside `node`/`pnpm` shell launchers, and the packaged node/pnpm versions are probed and recorded at build time. DSHKer is also an Electron application, so the same design applies with no extra binary: the Launcher's own process is the Node runtime.
+## What changes
 
-## What Changes
-
-- Add a staged bundled runtime under `resources/runtime/`, generated and versioned by `tools/prepare-runtime.mjs`: `bin/` shell launchers (`node`, `node.cmd`, `pnpm`, `pnpm.cmd`), the pinned pnpm package, and a `versions.json` descriptor recording the probed Electron Node version and the pinned pnpm version.
-- Prefer the staged runtime in `resolvePnpmLauncher()`: the pnpm launch facts become the Launcher's own Electron binary with `--expose-internals` plus the bundled `pnpm.mjs`, and a bin-first command PATH. An incomplete stage falls back to the existing system resolution so development checkouts keep working.
-- Inject `DSHKER_NODE_EXECUTABLE` into the core's spawn environment and every electron-side pnpm invocation, so the bundled `node`/`pnpm` launchers and package lifecycle scripts run without a system Node.
-- Extend the core's managed `node` profile so the staged runtime's PATH override reaches installation-launched Web children, giving their embedded plugin manager the same bundled pnpm.
-- Package the runtime with the app (`extraResources`) and keep the `runAsNode` fuse enabled; run `runtime:prepare` before every `electron-builder` invocation. `runtime:verify` re-checks a staged runtime against the pinned versions as a release gate.
+- Stage an official, SHA-256-pinned Node 22.23.3 binary and license for each
+  supported platform/architecture, alongside the pinned pnpm package.
+- Record target, archive and executable identity in a versioned runtime
+  descriptor; smoke and verify the actual standalone Node/pnpm pair.
+- Require the staged runtime and fail clearly if it is missing or invalid; do
+  not substitute system Node/pnpm or Electron Node mode.
+- Keep Electron's `runAsNode` fuse disabled and strip any inherited
+  `ELECTRON_RUN_AS_NODE` from child processes.
+- Prepare each target's own runtime on native CI runners, including Linux arm64,
+  and validate the shipped Node executable against its descriptor.
+- Keep managed-installation Node registrations and worktree toolchains intact.
 
 ## Capabilities
 
-### New Capabilities
+### New capabilities
 
-- `bundled-pnpm-runtime`: stage, version, smoke-test, package, and resolve the Launcher's own Node/pnpm runtime for every DSH package operation.
+- `bundled-pnpm-runtime`: stage, verify, package, and resolve standalone Node and
+  pinned pnpm for DSH runtime/package operations.
 
-### Modified Capabilities
+### Modified capabilities
 
 - None.
 
 ## Impact
 
-- `resources/runtime-bin/` gains the committed shell launcher sources; `resources/runtime/` is generated output and gitignored.
-- `tools/prepare-runtime.mjs` stages the runtime, records versions, and smokes the pair; `runtime:verify` re-validates.
-- `electron/main/pnpm-launcher.ts` prefers the staged runtime over the system resolution.
-- `electron/main/core/supervisor.ts` and `launcher-harness-commands.ts` carry the Launcher Electron identity for package subprocesses.
-- `networking/internal/harnessruntime` applies the bundled PATH override to managed (node-profile) children.
-- `package.json` pins the pnpm devDependency, runs `runtime:prepare` before packaging, ships `resources/runtime`, and enables the `runAsNode` fuse.
-- `CHANGELOG.md`, both READMEs, and `docs/release.md` document the runtime and the packaging version gate.
+- `tools/prepare-runtime.mjs`, target package scripts, Electron child
+  environments, and Go supervised child environments.
+- Runtime packaging, release smoke checks, OpenSpec, changelog, READMEs, and
+  runtime documentation.

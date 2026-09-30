@@ -163,13 +163,12 @@ jobs:
               release/release-manifest.json
               release/checksums.txt
           - name: Linux arm64
-            os: ubuntu-latest
+            os: ubuntu-24.04-arm
             script: dist:linux-arm64
             coreTarget: linux-arm64
             artifact: dshker-launcher-linux-arm64
             launchTimeoutMs: 60000
             smokePrefix: xvfb-run -a
-            smokeSkip: true
             pattern: |
               release/*.AppImage
               release/*.deb

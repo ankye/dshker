@@ -21,6 +21,32 @@ func fakeChildCommand(base string) Command {
 	}
 }
 
+func TestChildNeverReceivesInheritedElectronNodeMode(t *testing.T) {
+	t.Setenv("ELECTRON_RUN_AS_NODE", "1")
+	base := t.TempDir()
+	supervisor := NewSupervisor()
+	logPath := filepath.Join(base, "child.log")
+	view, err := supervisor.StartCommand(Command{
+		Executable: "/bin/sh",
+		Arguments:  []string{"-c", `printf 'mode=%s\n' "${ELECTRON_RUN_AS_NODE-unset}"`},
+		Directory:  base,
+	}, Identity{LaunchID: "launch_child", SubjectID: "subject_child", LogPath: logPath})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitFor(t, "child exit", func() bool {
+		current, _ := supervisor.Status(view.SubjectID)
+		return current.State == StateStopped
+	})
+	output, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read child log: %v", err)
+	}
+	if !strings.Contains(string(output), "mode=unset") {
+		t.Fatalf("child log = %q, want mode=unset", output)
+	}
+}
+
 // TestStopLeavesNoGrandchild proves the supervision is a tree kill rather than a
 // signal to one process: the fake child starts its own child and records both
 // pids, and neither may survive the stop.

@@ -19,14 +19,16 @@ be the exact stable semantic version `v${package.json.version}`.
 
 ## Bundled Launcher runtime
 
-Every desktop build stages and version-checks the runtime DSH package
-operations will use: `npm run runtime:prepare` runs before every
-`electron-builder` invocation. `tools/prepare-runtime.mjs` copies the pinned
-pnpm distribution into `resources/runtime/`, probes the Node version from the
-very Electron executable being packaged, records both in `versions.json`, and
-smokes `pnpm --version` on the staged pair. `npm run runtime:verify` re-checks
-a staged runtime against the probed and pinned versions; a build that cannot
-verify its stage is not release evidence.
+Every desktop build stages and verifies the runtime DSH package operations will
+use: `npm run runtime:prepare` runs before every `electron-builder` invocation.
+It downloads the official Node 22.23.3 archive for the exact platform and
+architecture, verifies the pinned SHA-256, stages the Node binary and license
+with the pinned pnpm distribution, and smoke-tests that pair. `runtime:verify`
+checks target identity, archive identity, executable digest and versions. The
+app refuses package operations when this standalone runtime is absent or
+invalid; system Node/pnpm and Electron Node mode are not substitutes. The
+packaging matrix uses native runners for each runtime architecture, including
+Linux arm64, so the staged executable is actually run before packaging.
 
 ## What every version must record
 

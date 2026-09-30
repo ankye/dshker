@@ -1,15 +1,16 @@
-# Tasks — bundle the pnpm runtime
+# Tasks — bundle standalone Node and pnpm
 
 ## Capability: bundled-pnpm-runtime
 
-- [x] Add committed `resources/runtime-bin/` shell launchers (`node`, `node.cmd`, `pnpm`, `pnpm.cmd`).
-- [x] Add the pinned `pnpm` devDependency and `tools/prepare-runtime.mjs` (probe Electron Node version, copy the pnpm package, write `versions.json`, smoke `pnpm --version`); add `runtime:prepare` and `runtime:verify` scripts.
-- [x] Chain `runtime:prepare` into every `package`/`dist` script, ship `resources/runtime` via `extraResources`, and enable `electronFuses.runAsNode`.
-- [x] Prefer the staged runtime in `resolvePnpmLauncher()`; expose `bundledPnpmEntry`; fall back to the system resolution for an incomplete stage.
-- [x] Inject `DSHKER_NODE_EXECUTABLE` into the core spawn environment and `pnpmCommandEnvironment`.
-- [x] Apply `PnpmCommandSearchPath` as the child PATH override for the core's managed `node` profile; pass it through `ManagedHarnessWebRuntimeSupervisor` and `main.ts`.
-- [x] Cover the resolution, env, supervisor, and core command behavior with tests (TS and Go).
-- [x] Run `runtime:prepare`, `type-check`, `architecture:check`, `format:check`, the full vitest suite, Go tests, and `build:electron`.
-- [x] Add `runtime:verify` as a release-readiness hard gate and a `bundledRuntime` packaged-artifact check in `release:smoke`; update their tests.
-- [x] Document the managed-installation worktree-preparation boundary (registered toolchain) in the spec, design, and Agent Note.
-- [x] Update `CHANGELOG.md`, both READMEs, and `docs/release.md`; add the Agent Note.
+- [x] Pin official Node 22.23.3 archive names and digests for all supported targets.
+- [x] Stage Node binary/license plus pinned pnpm under `resources/runtime` and record schema-2 identity.
+- [x] Smoke and verify the actual staged executable; reject target, digest, version, and missing-file drift.
+- [x] Require the staged runtime in the launcher and refuse system/Electron substitution.
+- [x] Strip inherited Electron Node mode from desktop, pnpm, and supervised child environments; keep shell/core protocol at version 1.
+- [x] Pass explicit runtime targets from each platform package script.
+- [x] Use a native Linux arm64 runner so the target runtime can be executed during packaging.
+- [x] Verify packaged runtime descriptors and the actual Node executable digest in release smoke.
+- [x] Update tests, OpenSpec, Agent Note, changelog, READMEs, architecture, and release docs.
+- [x] Run focused tests, test-integrity static checks, and the source-file-size gate.
+- [x] Run the local app against the installed DSH checkout; confirm native host preparation, DSH Web URL readiness, and the embedded workbench renders.
+- [ ] Complete release-readiness gates and packaged artifacts.

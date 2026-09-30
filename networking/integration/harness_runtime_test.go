@@ -66,13 +66,13 @@ func TestCoreDaemonOwnsTheHarnessRuntime(t *testing.T) {
 		} `json:"port"`
 		LogPath string `json:"logPath"`
 	}{
-		LaunchID:             "launch_main",
-		SubjectID:            "subject_main",
-		Directory:            base,
-		Profile:              harnessruntime.ProfilePnpm,
-		PnpmExecutable:       executable,
-		PnpmPrefixArguments:  prefix,
-		DiagnosticsPatchPath: filepath.Join(base, "patch.yml"),
+		LaunchID:              "launch_main",
+		SubjectID:             "subject_main",
+		Directory:             base,
+		Profile:               harnessruntime.ProfilePnpm,
+		PnpmExecutable:        executable,
+		PnpmPrefixArguments:   prefix,
+		DiagnosticsPatchPath:  filepath.Join(base, "patch.yml"),
 		Port: struct {
 			Mode string `json:"mode"`
 		}{Mode: "auto"},

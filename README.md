@@ -272,17 +272,22 @@ npm run visual:smoke
 npm run build:electron
 ```
 
-Packaging stages and version-checks the bundled runtime before every build:
+Packaging stages and verifies a standalone runtime before every build:
 
 ```bash
-npm run runtime:prepare   # stage bin launchers + pinned pnpm, probe/record versions, smoke
-npm run runtime:verify    # release gate: re-check the stage against the pinned versions
+npm run runtime:prepare   # download checksum-pinned Node 22.23.3 and stage pinned pnpm
+npm run runtime:verify    # release gate: verify target, binary digest, versions, and smoke
 ```
 
-`runtime:prepare` records the Node version probed from the packaged Electron
-executable and the pinned pnpm version in `resources/runtime/versions.json`;
-both the DSH Web session and plugin operations run on that pair, so a release
-ships and smoke-tests the exact runtime its plugins will execute.
+`runtime:prepare` downloads the official Node 22.23.3 archive for the selected
+platform and architecture, verifies its pinned SHA-256 digest, and records the
+archive identity, executable digest, and pinned pnpm version in
+`resources/runtime/versions.json`. It smoke-tests the actual staged Node/pnpm
+pair. DSH Web and plugin commands use this standalone Node, which provides the
+V8 context required by DSH's native loader; the app does not enable Electron's
+Node mode and refuses to launch package operations if the staged runtime is
+missing or invalid. Target-specific package scripts select the matching native
+runtime for macOS, Windows, and Linux (including arm64).
 
 ## Build and release
 

@@ -109,7 +109,7 @@ export interface LauncherHarnessServiceOptions {
   readonly gitExecutable: string
   readonly pnpmExecutable: string
   /** Direct pnpm command for platforms whose registered pnpm is a shell shim. */
-  readonly pnpmLauncher?: Readonly<{
+  readonly pnpmLauncher: Readonly<{
     /** Set when the packaged pnpm could not be resolved; the launch is refused with it. */
     readonly resolutionError?: string
     readonly executable: string
@@ -768,9 +768,9 @@ export class LauncherHarnessService {
         profile: 'pnpm',
         nodeExecutable: '',
         pnpmExecutable: this.#options.pnpmExecutable,
-        pnpmPrefixArguments: this.#options.pnpmLauncher?.prefixArguments ?? [],
-        pnpmResolutionError: this.#options.pnpmLauncher?.resolutionError ?? '',
-        pnpmCommandSearchPath: this.#options.pnpmLauncher?.commandSearchPath ?? '',
+        pnpmPrefixArguments: this.#options.pnpmLauncher.prefixArguments,
+        pnpmResolutionError: this.#options.pnpmLauncher.resolutionError ?? '',
+        pnpmCommandSearchPath: this.#options.pnpmLauncher.commandSearchPath,
         diagnosticsPatchPath: this.#options.diagnosticsPatchPath,
         port: this.#port,
         logPath: this.#options.launchLogPath

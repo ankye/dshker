@@ -32,7 +32,12 @@ describe('launch log file', () => {
       launchLogPath: logPath,
       diagnosticsPatchPath: nodePath.join(root, 'dsh-launcher-verbose-logging.patch.yml'),
       gitExecutable: 'git',
-      pnpmExecutable: 'pnpm'
+      pnpmExecutable: 'pnpm',
+      pnpmLauncher: {
+        executable: 'pnpm',
+        prefixArguments: [],
+        commandSearchPath: ''
+      }
     })
     return { service, logPath, cleanup: () => rm(root, { recursive: true, force: true }) }
   }
