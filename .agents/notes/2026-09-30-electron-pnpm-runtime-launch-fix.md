@@ -54,5 +54,11 @@ package and `internal/modules/esm/loader` successfully.
   E2E, service/visual smoke, and performance gates. Local packaging successfully
   built the app but stopped at macOS code signing because this host's Apple
   timestamp service was unavailable. Native package verification and smoke are
-  delegated to the release's GitHub Actions matrix; publication and remote asset
-  verification remain pending.
+  delegated to the release's GitHub Actions matrix.
+- The first GitHub tag run (`v0.1.84`) passed release-input checks but exposed a
+  race in the Unix inherited-environment test: it read the child log after the
+  process state changed but before the stdout pipe had drained. The test now has
+  the child synchronously write its observed environment to a dedicated file;
+  25 focused repetitions pass. Since release tags are immutable, the corrected
+  source will publish as `v0.1.85`; the failed `v0.1.84` tag is retained without
+  a GitHub Release.

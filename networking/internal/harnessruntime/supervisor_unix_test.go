@@ -26,9 +26,10 @@ func TestChildNeverReceivesInheritedElectronNodeMode(t *testing.T) {
 	base := t.TempDir()
 	supervisor := NewSupervisor()
 	logPath := filepath.Join(base, "child.log")
+	environmentPath := filepath.Join(base, "child-environment")
 	view, err := supervisor.StartCommand(Command{
 		Executable: "/bin/sh",
-		Arguments:  []string{"-c", `printf 'mode=%s\n' "${ELECTRON_RUN_AS_NODE-unset}"`},
+		Arguments:  []string{"-c", `printf 'mode=%s\n' "${ELECTRON_RUN_AS_NODE-unset}" > "$1"`, "child", environmentPath},
 		Directory:  base,
 	}, Identity{LaunchID: "launch_child", SubjectID: "subject_child", LogPath: logPath})
 	if err != nil {
@@ -38,9 +39,9 @@ func TestChildNeverReceivesInheritedElectronNodeMode(t *testing.T) {
 		current, _ := supervisor.Status(view.SubjectID)
 		return current.State == StateStopped
 	})
-	output, err := os.ReadFile(logPath)
+	output, err := os.ReadFile(environmentPath)
 	if err != nil {
-		t.Fatalf("read child log: %v", err)
+		t.Fatalf("read child environment: %v", err)
 	}
 	if !strings.Contains(string(output), "mode=unset") {
 		t.Fatalf("child log = %q, want mode=unset", output)
