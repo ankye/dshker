@@ -60,5 +60,11 @@ package and `internal/modules/esm/loader` successfully.
   process state changed but before the stdout pipe had drained. The test now has
   the child synchronously write its observed environment to a dedicated file;
   25 focused repetitions pass. Since release tags are immutable, the corrected
-  source will publish as `v0.1.85`; the failed `v0.1.84` tag is retained without
+  source was published as `v0.1.85`; the failed `v0.1.84` tag is retained without
   a GitHub Release.
+- GitHub Actions run
+  [36757598697](https://github.com/ankye/dshker/actions/runs/36757598697)
+  passed source verification, all six native desktop package jobs, all six
+  standalone CLI target jobs, and publication. Stable `v0.1.85` is not a
+  prerelease and has 25 uploaded assets, including installers, checksums,
+  manifests, CLI archives, and install scripts.

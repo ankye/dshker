@@ -13,4 +13,4 @@
 - [x] Update tests, OpenSpec, Agent Note, changelog, READMEs, architecture, and release docs.
 - [x] Run focused tests, test-integrity static checks, and the source-file-size gate.
 - [x] Run the local app against the installed DSH checkout; confirm native host preparation, DSH Web URL readiness, and the embedded workbench renders.
-- [ ] Complete release-readiness gates and packaged artifacts.
+- [x] Complete GitHub Actions release gates and native packaged artifacts; publish stable `v0.1.85` with verified release assets.
