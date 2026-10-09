@@ -10,14 +10,15 @@ DSH's native builtin loader requires a Node V8 context; Electron's
 
 ### Requirement: The staged runtime is complete, target-specific, and verified
 
-`tools/prepare-runtime.mjs` SHALL stage the official Node 22.23.3 binary and its
-license, the pinned pnpm package, and `versions.json` with schema version 2,
-platform, architecture, Node version, official archive name and SHA-256, staged
-binary SHA-256, and pnpm version. Every supported target archive digest SHALL
-be pinned in source. Preparation SHALL execute the staged binary, smoke
-`pnpm --version`, and fail on any missing, mismatched, or un-runnable artifact.
-`runtime:verify` SHALL validate the descriptor, actual binary digest, executable
-version, and pinned pnpm pair without rewriting the stage.
+`tools/prepare-runtime.mjs` SHALL stage the official Node 22.23.3 binary, its
+license and complete `include/node` headers, the pinned pnpm package, and
+`versions.json` with schema version 3, platform, architecture, Node version,
+official archive name and SHA-256, staged binary and headers-tree SHA-256, and
+pnpm version. Every supported target archive digest SHALL be pinned in source.
+Preparation SHALL execute the staged binary, smoke `pnpm --version`, and fail on
+any missing, mismatched, or un-runnable artifact. `runtime:verify` SHALL
+validate the descriptor, actual binary and headers digests, executable version,
+and pinned pnpm pair without rewriting the stage.
 
 #### Scenario: A fresh native stage passes
 
@@ -28,8 +29,9 @@ version, and pinned pnpm pair without rewriting the stage.
 
 #### Scenario: A mismatched or foreign stage is rejected
 
-- **WHEN** the stage has the wrong target, archive digest, binary digest,
-  runtime version, unknown descriptor schema, or cannot execute
+- **WHEN** the stage has the wrong target, archive digest, binary or headers
+  digest, missing Node build headers, runtime version, unknown descriptor
+  schema, or cannot execute
 - **THEN** verification exits non-zero and does not rewrite the stage
 
 ### Requirement: DSH commands require the bundled standalone runtime
@@ -41,14 +43,15 @@ system Node, system pnpm, or the Electron executable.
 
 #### Scenario: The complete stage is selected
 
-- **WHEN** the descriptor and all required staged files match this build's
-  platform and architecture
+- **WHEN** the descriptor, Node build headers, and all required staged files
+  match this build's platform and architecture
 - **THEN** pnpm and DSH Web launch using `resources/runtime/bin/node` and
   `resources/runtime/pnpm/bin/pnpm.mjs`
 
 #### Scenario: The stage is unavailable
 
-- **WHEN** the descriptor, standalone Node, or pnpm entry is missing or invalid
+- **WHEN** the descriptor, standalone Node, Node build headers, or pnpm entry is
+  missing or invalid
 - **THEN** the operation is refused with a runtime-preparation diagnostic and
   no process is spawned using a system or Electron runtime
 
@@ -85,15 +88,41 @@ registered Node executable and SHALL apply the staged runtime PATH so the DSH
 plugin manager resolves the bundled pnpm. The bundled runtime SHALL NOT replace
 the installation's registered Node or toolchain used for worktree preparation.
 
+### Requirement: A failed version preparation can be retried without damaging the active version
+
+Before retrying an incomplete target version, the version store SHALL inspect
+Git's registered worktree paths. If the exact target is registered, it SHALL
+remove only that worktree and verify the registration is gone before creating a
+fresh worktree. If it is not registered, it SHALL remove only the exact target
+directory. A failed build SHALL NOT update the active-version pointer.
+If the incomplete target is the currently active version, the operation SHALL
+refuse without deleting or rebuilding that directory.
+
+#### Scenario: A missing failed worktree directory remains registered
+
+- **WHEN** a failed version build leaves a Git worktree registration but its
+  target directory has been removed, and the user retries that same version
+- **THEN** the stale registration is removed, the exact commit is prepared
+  again, and the active-version pointer changes only after successful build
+  and validation
+
+#### Scenario: The incomplete target is still active
+
+- **WHEN** the selected commit matches the active pointer but its prepared
+  checkout is incomplete
+- **THEN** the operation returns a typed error without removing the active
+  checkout or changing the pointer
+
 ### Requirement: Target packaging and release checks cover shipped files
 
 Target-specific `dist:*` scripts SHALL prepare the matching platform and
 architecture. CI SHALL run each target on a native runner, including Linux
 arm64. `release:smoke` SHALL verify that every unpacked app contains the target
-Node executable and that its bytes match the descriptor digest.
+Node executable and complete Node headers tree and that both match their
+descriptor digests.
 
 #### Scenario: A missing or altered packaged runtime blocks release
 
-- **WHEN** a packaged app lacks its standalone Node or its digest differs from
-  `versions.json`
+- **WHEN** a packaged app lacks its standalone Node, required headers, or either
+  digest differs from `versions.json`
 - **THEN** `release:smoke` reports the bundled-runtime check as failed

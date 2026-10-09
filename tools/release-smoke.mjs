@@ -5,6 +5,7 @@ import path from 'node:path'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
+import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
 
 const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -240,7 +241,7 @@ export async function bundledRuntimeHolds(releaseDir, manifest) {
     const nodeName = platform === 'win32' ? 'node.exe' : 'node'
     const nodePath = path.join(root, 'bin', nodeName)
     if (
-      descriptor?.schemaVersion !== 2 ||
+      descriptor?.schemaVersion !== 3 ||
       descriptor.platform !== platform ||
       descriptor.arch !== arch ||
       descriptor.node !== '22.23.3' ||
@@ -249,6 +250,7 @@ export async function bundledRuntimeHolds(releaseDir, manifest) {
       typeof descriptor.nodeArchive !== 'string' ||
       !/^[a-f0-9]{64}$/u.test(descriptor.nodeArchiveSha256 ?? '') ||
       !/^[a-f0-9]{64}$/u.test(descriptor.nodeBinarySha256 ?? '') ||
+      !/^[a-f0-9]{64}$/u.test(descriptor.nodeHeadersSha256 ?? '') ||
       !(await exists(nodePath))
     ) {
       return false
@@ -257,6 +259,13 @@ export async function bundledRuntimeHolds(releaseDir, manifest) {
       .update(await readFile(nodePath))
       .digest('hex')
     if (nodeDigest !== descriptor.nodeBinarySha256) return false
+    let nodeHeadersDigest
+    try {
+      nodeHeadersDigest = sha256NodeHeaders(path.join(root, 'include', 'node'))
+    } catch {
+      return false
+    }
+    if (nodeHeadersDigest !== descriptor.nodeHeadersSha256) return false
   }
   return found > 0
 }

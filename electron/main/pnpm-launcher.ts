@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs'
+import { lstatSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 
 /** A direct executable invocation suitable for Node's shell-free spawn. */
@@ -40,11 +40,13 @@ export function bundledPnpmEntry(bundledRuntimeRoot: string | undefined): string
   if (bundledRuntimeRoot === undefined || bundledRuntimeRoot.length === 0) return undefined
   const pnpmEntry = path.join(bundledRuntimeRoot, 'pnpm', 'bin', 'pnpm.mjs')
   const executable = nodeExecutablePath(bundledRuntimeRoot)
+  const nodeHeaders = path.join(bundledRuntimeRoot, 'include', 'node')
   const descriptorPath = path.join(bundledRuntimeRoot, 'versions.json')
   if (
     !isRegularFile(pnpmEntry) ||
     !isRegularFile(executable) ||
     !isRegularFile(path.join(bundledRuntimeRoot, 'LICENSE.node')) ||
+    !isNodeHeadersDirectory(nodeHeaders) ||
     !isRegularFile(descriptorPath)
   ) {
     return undefined
@@ -55,13 +57,14 @@ export function bundledPnpmEntry(bundledRuntimeRoot: string | undefined): string
     const archivePlatform = process.platform === 'win32' ? 'win' : process.platform
     const expectedArchive = `node-v${NODE_VERSION}-${archivePlatform}-${process.arch}.${archiveExtension}`
     if (
-      descriptor?.schemaVersion !== 2 ||
+      descriptor?.schemaVersion !== 3 ||
       descriptor.platform !== process.platform ||
       descriptor.arch !== process.arch ||
       descriptor.node !== NODE_VERSION ||
       descriptor.nodeArchive !== expectedArchive ||
       !isDigest(descriptor.nodeArchiveSha256) ||
       !isDigest(descriptor.nodeBinarySha256) ||
+      !isDigest(descriptor.nodeHeadersSha256) ||
       typeof descriptor.pnpm !== 'string' ||
       descriptor.pnpm.length === 0
     ) {
@@ -88,6 +91,19 @@ function isDigest(value: unknown): value is string {
 function isRegularFile(filePath: string): boolean {
   try {
     return statSync(filePath).isFile()
+  } catch {
+    return false
+  }
+}
+
+function isNodeHeadersDirectory(directoryPath: string): boolean {
+  try {
+    const directory = lstatSync(directoryPath)
+    if (directory.isSymbolicLink() || !directory.isDirectory()) return false
+    return ['node_api.h', 'node.h', 'node_version.h'].every((filename) => {
+      const metadata = lstatSync(path.join(directoryPath, filename))
+      return metadata.isFile() && !metadata.isSymbolicLink()
+    })
   } catch {
     return false
   }

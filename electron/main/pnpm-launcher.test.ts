@@ -14,22 +14,27 @@ function createRuntime(overrides: Record<string, unknown> = {}): string {
   const root = mkdtempSync(path.join(tmpdir(), 'launcher runtime '))
   roots.push(root)
   mkdirSync(path.join(root, 'bin'), { recursive: true })
+  mkdirSync(path.join(root, 'include', 'node'), { recursive: true })
   mkdirSync(path.join(root, 'pnpm', 'bin'), { recursive: true })
   writeFileSync(path.join(root, 'bin', process.platform === 'win32' ? 'node.exe' : 'node'), '')
   writeFileSync(path.join(root, 'LICENSE.node'), 'Node license')
+  writeFileSync(path.join(root, 'include', 'node', 'node_api.h'), 'Node API headers')
+  writeFileSync(path.join(root, 'include', 'node', 'node.h'), 'Node headers')
+  writeFileSync(path.join(root, 'include', 'node', 'node_version.h'), 'Node version headers')
   writeFileSync(path.join(root, 'pnpm', 'bin', 'pnpm.mjs'), '')
   const archivePlatform = process.platform === 'win32' ? 'win' : process.platform
   const archiveExtension = process.platform === 'win32' ? 'zip' : 'tar.gz'
   writeFileSync(
     path.join(root, 'versions.json'),
     `${JSON.stringify({
-      schemaVersion: 2,
+      schemaVersion: 3,
       platform: process.platform,
       arch: process.arch,
       node: '22.23.3',
       nodeArchive: `node-v22.23.3-${archivePlatform}-${process.arch}.${archiveExtension}`,
       nodeArchiveSha256: 'a'.repeat(64),
       nodeBinarySha256: 'b'.repeat(64),
+      nodeHeadersSha256: 'c'.repeat(64),
       pnpm: '11.7.0',
       ...overrides
     })}\n`
@@ -73,11 +78,12 @@ describe('the required staged bundled runtime', () => {
   })
 
   it.each([
-    ['unknown descriptor schema', { schemaVersion: 3 }],
+    ['unknown descriptor schema', { schemaVersion: 4 }],
     ['wrong target', { arch: 'wrong-arch' }],
     ['wrong Node version', { node: '24.21.0' }],
     ['invalid source digest', { nodeArchiveSha256: 'invalid' }],
     ['invalid binary digest', { nodeBinarySha256: '' }],
+    ['invalid headers digest', { nodeHeadersSha256: '' }],
     ['missing pnpm version', { pnpm: '' }]
   ])('refuses a stage with %s', (_state, overrides) => {
     const root = createRuntime(overrides)
@@ -90,6 +96,12 @@ describe('the required staged bundled runtime', () => {
   it('refuses a stage missing its standalone Node executable or license', () => {
     const root = createRuntime()
     rmSync(path.join(root, 'bin', process.platform === 'win32' ? 'node.exe' : 'node'))
+    expect(bundledPnpmEntry(root)).toBeUndefined()
+  })
+
+  it('refuses a stage missing required Node build headers', () => {
+    const root = createRuntime()
+    rmSync(path.join(root, 'include', 'node', 'node_api.h'))
     expect(bundledPnpmEntry(root)).toBeUndefined()
   })
 })

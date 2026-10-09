@@ -38,6 +38,7 @@ import path from 'node:path'
 import { Readable, Transform } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
+import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
 
 const require = createRequire(import.meta.url)
 const launcherRoot = fileURLToPath(new URL('..', import.meta.url))
@@ -140,7 +141,7 @@ async function downloadNodeArchive(target, directory) {
   return archivePath
 }
 
-async function stageNodeBinary(target, binDirectory, temporaryDirectory) {
+async function stageNodeDistribution(target, runtimeRoot, temporaryDirectory) {
   const archivePath = await downloadNodeArchive(target, temporaryDirectory)
   const extractDirectory = path.join(temporaryDirectory, 'extracted')
   mkdirSync(extractDirectory)
@@ -148,6 +149,7 @@ async function stageNodeBinary(target, binDirectory, temporaryDirectory) {
   const isWindows = target.platform === 'win32'
   const archiveEntry = isWindows ? `${archiveRoot}/node.exe` : `${archiveRoot}/bin/node`
   const licenseEntry = `${archiveRoot}/LICENSE`
+  const headersEntry = `${archiveRoot}/include/node`
   try {
     execFileSync(
       'tar',
@@ -159,12 +161,13 @@ async function stageNodeBinary(target, binDirectory, temporaryDirectory) {
         '-C',
         extractDirectory,
         archiveEntry,
-        licenseEntry
+        licenseEntry,
+        headersEntry
       ],
       { windowsHide: true }
     )
   } catch (error) {
-    fail(`could not extract the official Node binary and license: ${String(error)}`)
+    fail(`could not extract the official Node binary, license, and headers: ${String(error)}`)
   }
   const extractedBinary = isWindows
     ? path.join(extractDirectory, 'node.exe')
@@ -172,14 +175,29 @@ async function stageNodeBinary(target, binDirectory, temporaryDirectory) {
   if (!existsSync(extractedBinary) || !statSync(extractedBinary).isFile()) {
     fail(`official Node archive has no expected binary: ${archiveEntry}`)
   }
+  const binDirectory = path.join(runtimeRoot, 'bin')
   mkdirSync(binDirectory, { recursive: true })
-  const destination = nodeExecutable(path.dirname(binDirectory), target)
+  const destination = nodeExecutable(runtimeRoot, target)
   copyFileSync(extractedBinary, destination)
   if (!isWindows) chmodSync(destination, 0o755)
   const licensePath = path.join(extractDirectory, 'LICENSE')
   if (!existsSync(licensePath)) fail(`official Node archive has no license: ${licenseEntry}`)
-  copyFileSync(licensePath, path.join(path.dirname(binDirectory), 'LICENSE.node'))
-  return { executable: destination, sha256: await sha256File(destination) }
+  copyFileSync(licensePath, path.join(runtimeRoot, 'LICENSE.node'))
+  const extractedHeaders = path.join(extractDirectory, 'include', 'node')
+  let nodeHeadersSha256
+  try {
+    nodeHeadersSha256 = sha256NodeHeaders(extractedHeaders)
+  } catch (error) {
+    fail(`official Node archive has incomplete Node-API headers: ${String(error)}`)
+  }
+  const headersDestination = path.join(runtimeRoot, 'include', 'node')
+  mkdirSync(path.dirname(headersDestination), { recursive: true })
+  cpSync(extractedHeaders, headersDestination, { recursive: true, errorOnExist: true })
+  return {
+    executable: destination,
+    sha256: await sha256File(destination),
+    nodeHeadersSha256
+  }
 }
 
 /** Probe the version of the staged standalone Node executable. */
@@ -241,7 +259,8 @@ function stagedPaths(runtimeRoot, target) {
     versionsPath: path.join(runtimeRoot, 'versions.json'),
     pnpmEntry: path.join(runtimeRoot, 'pnpm', 'bin', 'pnpm.mjs'),
     bin: path.join(runtimeRoot, 'bin'),
-    nodeExecutable: nodeExecutable(runtimeRoot, target)
+    nodeExecutable: nodeExecutable(runtimeRoot, target),
+    nodeHeaders: path.join(runtimeRoot, 'include', 'node')
   }
 }
 
@@ -261,13 +280,14 @@ export async function verifyStagedRuntime(
     versionsPath,
     pnpmEntry,
     bin,
-    nodeExecutable: executable
+    nodeExecutable: executable,
+    nodeHeaders
   } = stagedPaths(runtimeRoot, target)
   if (!existsSync(versionsPath)) {
     fail(`no staged runtime at ${runtimeRoot}; run runtime:prepare first`)
   }
   const manifest = JSON.parse(readFileSync(versionsPath, 'utf8'))
-  if (manifest?.schemaVersion !== 2) {
+  if (manifest?.schemaVersion !== 3) {
     fail(`staged runtime descriptor has an unknown schema: ${versionsPath}`)
   }
   if (manifest.platform !== target.platform || manifest.arch !== target.arch) {
@@ -284,6 +304,15 @@ export async function verifyStagedRuntime(
   }
   if ((await sha256File(executable)) !== manifest.nodeBinarySha256) {
     fail(`staged Node binary checksum does not match: ${executable}`)
+  }
+  let actualNodeHeadersSha256
+  try {
+    actualNodeHeadersSha256 = sha256NodeHeaders(nodeHeaders)
+  } catch (error) {
+    fail(`staged Node headers are missing or invalid: ${String(error)}`)
+  }
+  if (actualNodeHeadersSha256 !== manifest.nodeHeadersSha256) {
+    fail(`staged Node headers checksum does not match: ${nodeHeaders}`)
   }
   const nodeVersion = probeNodeVersion(executable)
   if (manifest.node !== nodeVersion) {
@@ -314,11 +343,11 @@ async function prepareRuntime(target = resolveRuntimeTarget()) {
   let preserveTemporaryDirectory = false
   try {
     mkdirSync(stagedBin, { recursive: true })
-    const { executable, sha256: nodeBinarySha256 } = await stageNodeBinary(
-      target,
-      stagedBin,
-      temporaryDirectory
-    )
+    const {
+      executable,
+      sha256: nodeBinarySha256,
+      nodeHeadersSha256
+    } = await stageNodeDistribution(target, stagedRoot, temporaryDirectory)
     const nodeVersion = probeNodeVersion(executable)
     if (nodeVersion !== NODE_VERSION) {
       fail(`downloaded Node reports ${nodeVersion}, expected pinned ${NODE_VERSION}`)
@@ -331,13 +360,14 @@ async function prepareRuntime(target = resolveRuntimeTarget()) {
       fail(`pinned pnpm distribution has no bin/pnpm.mjs entry: ${stagedPnpm}`)
     }
     const manifest = {
-      schemaVersion: 2,
+      schemaVersion: 3,
       platform: target.platform,
       arch: target.arch,
       node: nodeVersion,
       nodeArchive: target.filename,
       nodeArchiveSha256: target.sha256,
       nodeBinarySha256,
+      nodeHeadersSha256,
       pnpm: pnpmVersion
     }
     writeFileSync(

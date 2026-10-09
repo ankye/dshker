@@ -6,6 +6,7 @@ import path from 'node:path'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
+import { sha256NodeHeaders } from '../../tools/node-runtime-integrity.mjs'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const runtimeRoot = path.join(appRoot, 'resources', 'runtime')
@@ -66,7 +67,9 @@ try {
   })
   assert.equal(result.status, 0, result.stderr)
   const descriptor = JSON.parse(readFileSync(path.join(runtimeRoot, 'versions.json'), 'utf8'))
-  assert.equal(descriptor.schemaVersion, 2)
+  assert.equal(descriptor.schemaVersion, 3)
+  const nodeHeaders = path.join(runtimeRoot, 'include', 'node')
+  assert.equal(sha256NodeHeaders(nodeHeaders), descriptor.nodeHeadersSha256)
   assert.equal(result.stdout.trim(), descriptor.pnpm)
   mkdirSync('.run/pnpm-startup-repair', { recursive: true })
   const evidencePath = '.run/pnpm-startup-repair/bundled.json'
@@ -79,7 +82,8 @@ try {
       executable: nodeExecutable,
       nodeContextProbe: contextProbe.stdout.trim(),
       schemaVersion: descriptor.schemaVersion,
-      pnpm: descriptor.pnpm
+      pnpm: descriptor.pnpm,
+      nodeHeadersSha256: descriptor.nodeHeadersSha256
     })
   )
   console.log('Real bundled pnpm probe passed:', result.stdout.trim())

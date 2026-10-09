@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { resolveRuntimeTarget, verifyStagedRuntime } from './prepare-runtime.mjs'
+import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -36,5 +38,20 @@ describe('runtime verification', () => {
     await expect(verifyStagedRuntime(missingRoot, resolveRuntimeTarget([]))).rejects.toThrow(
       `no staged runtime at ${missingRoot}`
     )
+  })
+
+  it('requires Node build headers before producing a runtime digest', () => {
+    const root = mkdtempSync(path.join(tmpdir(), `dshker-node-headers-${process.pid}-`))
+    try {
+      mkdirSync(root, { recursive: true })
+      writeFileSync(path.join(root, 'node_api.h'), 'Node API headers')
+      writeFileSync(path.join(root, 'node.h'), 'Node API headers')
+      writeFileSync(path.join(root, 'node_version.h'), 'Node version headers')
+      expect(sha256NodeHeaders(root)).toMatch(/^[a-f0-9]{64}$/u)
+      rmSync(path.join(root, 'node_api.h'))
+      expect(() => sha256NodeHeaders(root)).toThrow('node_api.h')
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })

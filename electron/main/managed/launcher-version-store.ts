@@ -1,4 +1,4 @@
-import { mkdir, readdir, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import nodePath from 'node:path'
 import { ManagedHarnessRuntimeError } from './runtime-errors'
 import { launcherGitArguments } from './launcher-harness-commands'
@@ -116,8 +116,15 @@ export async function materializeLauncherVersion(
   const target = versionDirectory(versionsDirectory, commit)
   const readiness = await readHarnessReadiness(target).catch(() => ({ kind: 'invalid' as const }))
   if (readiness.kind !== 'ready') {
+    const activeCommit = await readCurrentVersionPointer(pointerPath)
+    if (activeCommit === commit) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.worktree_invalid',
+        'The active DSH version is incomplete. Switch to another version before preparing it again.'
+      )
+    }
     await steps.loggedStep(`Removing any interrupted preparation of commit ${commit}`, () =>
-      removeVersionDirectory(target).then(() => undefined)
+      removeInterruptedVersion(gitExecutable, mainRepository, target)
     )
     await steps.loggedStep('Verifying the selected commit is on origin/master', () =>
       runText(
@@ -156,6 +163,96 @@ export async function materializeLauncherVersion(
     steps.validate(target)
   )
   await writeCurrentVersionPointer(pointerPath, commit)
+}
+
+/** Clears only the exact incomplete version path and its Git registration. */
+async function removeInterruptedVersion(
+  gitExecutable: string,
+  mainRepository: string,
+  targetDirectory: string
+): Promise<void> {
+  const registeredPaths = await listWorktreePaths(gitExecutable, mainRepository)
+  const targetPath = await comparablePath(targetDirectory)
+  let registeredTarget: string | undefined
+  for (const registeredPath of registeredPaths) {
+    if ((await comparablePath(registeredPath)) === targetPath) {
+      registeredTarget = registeredPath
+      break
+    }
+  }
+  if (registeredTarget === undefined) {
+    await removeVersionDirectory(targetDirectory)
+    return
+  }
+
+  try {
+    await runText(
+      gitExecutable,
+      launcherGitArguments([
+        '-C',
+        mainRepository,
+        'worktree',
+        'remove',
+        '--force',
+        registeredTarget
+      ])
+    )
+  } catch (error) {
+    throw worktreeOperationError('remove the incomplete DSH version worktree', error)
+  }
+  const remainingPaths = await listWorktreePaths(gitExecutable, mainRepository)
+  for (const registeredPath of remainingPaths) {
+    if ((await comparablePath(registeredPath)) === targetPath) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.worktree_invalid',
+        'The incomplete DSH version worktree could not be removed safely.'
+      )
+    }
+  }
+}
+
+async function listWorktreePaths(
+  gitExecutable: string,
+  mainRepository: string
+): Promise<readonly string[]> {
+  let output: string
+  try {
+    output = await runText(
+      gitExecutable,
+      launcherGitArguments(['-C', mainRepository, 'worktree', 'list', '--porcelain', '-z'])
+    )
+  } catch (error) {
+    throw worktreeOperationError('inspect registered DSH version worktrees', error)
+  }
+  return output
+    .split('\0')
+    .filter((record) => record.startsWith('worktree '))
+    .map((record) => record.slice('worktree '.length))
+}
+
+function worktreeOperationError(action: string, error: unknown): ManagedHarnessRuntimeError {
+  const detail = error instanceof Error ? error.message : String(error)
+  return new ManagedHarnessRuntimeError(
+    'runtime.worktree_invalid',
+    `Could not ${action}: ${detail}`
+  )
+}
+
+async function comparablePath(directory: string): Promise<string> {
+  let existingAncestor = nodePath.resolve(directory)
+  const missingSegments: string[] = []
+  while (true) {
+    try {
+      const resolved = nodePath.resolve(await realpath(existingAncestor), ...missingSegments)
+      return process.platform === 'win32' ? resolved.toLocaleLowerCase('en-US') : resolved
+    } catch (error) {
+      if (!isNodeCode(error, 'ENOENT')) throw error
+      const parent = nodePath.dirname(existingAncestor)
+      if (parent === existingAncestor) throw error
+      missingSegments.unshift(nodePath.basename(existingAncestor))
+      existingAncestor = parent
+    }
+  }
 }
 
 /**

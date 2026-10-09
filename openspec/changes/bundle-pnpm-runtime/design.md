@@ -14,27 +14,32 @@ Node distribution instead. Electron remains at its existing version and its
 ## Staging
 
 `tools/prepare-runtime.mjs` downloads the official archive for the requested
-platform/architecture and verifies its source SHA-256 before extracting only the
-Node executable and its license. It stages:
+platform/architecture and verifies its source SHA-256 before extracting the
+Node executable, license, and complete `include/node` headers from that same
+archive. Header-tree identity is recorded independently so staging and release
+verification detect missing or altered build headers. It stages:
 
 - `bin/node` or `bin/node.exe` — the independent official Node runtime.
 - `bin/pnpm` and `bin/pnpm.cmd` — wrappers that invoke the sibling standalone
   Node and pinned `pnpm.mjs`.
 - `pnpm/` — the pinned pnpm devDependency.
 - `LICENSE.node` — license from the Node archive.
-- `versions.json` — schema 2 target identity, Node version, source archive and
-  archive digest, executable digest, and pinned pnpm version.
+- `include/node/` — Node-API and V8 build headers required when DSH compiles
+  native modules.
+- `versions.json` — schema 3 target identity, Node version, source archive and
+  archive digest, executable and header-tree digests, and pinned pnpm version.
 
 The stage is smoked with the staged executable before it is used. Verification
-rechecks target, pinned archive identity, binary digest, executable version, and
-pnpm version without changing the staged directory.
+rechecks target, pinned archive identity, binary/header digests, executable
+version, and pnpm version without changing the staged directory.
 
 ## Resolution and process wiring
 
-- `resolvePnpmLauncher(resources/runtime)` requires the matching schema-2
-  runtime and returns the staged Node executable with `--expose-internals` and
-  the pinned `pnpm.mjs` entry. Missing or incomplete files return a launch
-  refusal; there is no system Node/pnpm or Electron-runtime substitution.
+- `resolvePnpmLauncher(resources/runtime)` requires the matching schema-3
+  runtime, including the required Node headers, and returns the staged Node
+  executable with `--expose-internals` and the pinned `pnpm.mjs` entry. Missing
+  or incomplete files return a launch refusal; there is no system Node/pnpm or
+  Electron-runtime substitution.
 - `resources/runtime/bin` is first on the DSH child PATH so its plugin manager
   uses the same standalone Node and pnpm. Other inherited PATH entries remain
   available for normal tools such as Git.
@@ -53,7 +58,7 @@ preparation. Each packaging job runs on a matching native runner, including
 Linux arm64, because preparation must execute the downloaded binary. The app
 ships the runtime under `extraResources/runtime`. `runtime:verify` gates the
 source stage, and packaged `release:smoke` verifies the target descriptor and
-hash of the actual shipped Node binary.
+hashes of the actual shipped Node binary and complete headers tree.
 
 The pnpm smoke is necessary but not sufficient: local DSH startup must also
 prove the native addon loads, host preparation completes, and the Web URL is

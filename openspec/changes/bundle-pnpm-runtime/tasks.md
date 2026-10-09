@@ -14,3 +14,7 @@
 - [x] Run focused tests, test-integrity static checks, and the source-file-size gate.
 - [x] Run the local app against the installed DSH checkout; confirm native host preparation, DSH Web URL readiness, and the embedded workbench renders.
 - [x] Complete GitHub Actions release gates and native packaged artifacts; publish stable `v0.1.85` with verified release assets.
+- [x] Stage the pinned Node distribution headers and require their digest in runtime schema 3.
+- [x] Recover a failed version preparation by removing only the exact stale Git worktree registration before retry.
+- [x] Add regression coverage for missing build headers and the failed-switch/retry worktree sequence.
+- [x] Run focused runtime/version-switch checks, project validation, and source-file-size validation.

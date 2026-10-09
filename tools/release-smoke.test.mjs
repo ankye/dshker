@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { bundledRuntimeHolds } from './release-smoke.mjs'
+import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
 
 const roots = []
 afterEach(() => {
@@ -30,13 +31,24 @@ function stageDescriptor(releaseDir, descriptor) {
   )
   mkdirSync(runtime, { recursive: true })
   mkdirSync(path.join(runtime, 'bin'), { recursive: true })
+  mkdirSync(path.join(runtime, 'include', 'node'), { recursive: true })
   writeFileSync(path.join(runtime, 'bin', 'node'), '')
-  writeFileSync(path.join(runtime, 'versions.json'), `${JSON.stringify(descriptor)}\n`)
+  writeFileSync(path.join(runtime, 'include', 'node', 'node_api.h'), 'Node API headers')
+  writeFileSync(path.join(runtime, 'include', 'node', 'node.h'), 'Node headers')
+  writeFileSync(path.join(runtime, 'include', 'node', 'node_version.h'), 'Node version headers')
+  const headersDigest = sha256NodeHeaders(path.join(runtime, 'include', 'node'))
+  writeFileSync(
+    path.join(runtime, 'versions.json'),
+    `${JSON.stringify({
+      ...descriptor,
+      nodeHeadersSha256: descriptor.nodeHeadersSha256 ?? headersDigest
+    })}\n`
+  )
 }
 
 function validDescriptor(overrides = {}) {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     platform: 'darwin',
     arch: 'arm64',
     node: '22.23.3',
@@ -57,7 +69,7 @@ describe('the packaged bundled runtime check', () => {
 
   it('rejects an unpacked build whose descriptor schema is unknown', async () => {
     const directory = releaseDir()
-    stageDescriptor(directory, validDescriptor({ schemaVersion: 3 }))
+    stageDescriptor(directory, validDescriptor({ schemaVersion: 4 }))
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
   })
 
@@ -90,6 +102,29 @@ describe('the packaged bundled runtime check', () => {
   it('rejects a bundled Node binary whose digest differs from the descriptor', async () => {
     const directory = releaseDir()
     stageDescriptor(directory, validDescriptor({ nodeBinarySha256: 'b'.repeat(64) }))
+    expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
+  })
+
+  it('rejects Node headers whose digest differs from the descriptor', async () => {
+    const directory = releaseDir()
+    stageDescriptor(directory, validDescriptor({ nodeHeadersSha256: 'b'.repeat(64) }))
+    expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
+  })
+
+  it('rejects a packaged runtime without required Node build headers', async () => {
+    const directory = releaseDir()
+    stageDescriptor(directory, validDescriptor())
+    const headers = path.join(
+      directory,
+      'mac-arm64',
+      `${manifest.productName}.app`,
+      'Contents',
+      'Resources',
+      'runtime',
+      'include',
+      'node'
+    )
+    rmSync(path.join(headers, 'node_api.h'))
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
   })
 })

@@ -6,16 +6,19 @@
     "electron/main/core/supervisor.ts",
     "electron/main/managed/launcher-harness-commands.ts",
     "electron/main/managed/launcher-harness-service.ts",
+    "electron/main/managed/launcher-version-store.ts",
     "electron/main/pnpm-launcher.ts",
     "networking/internal/harnessruntime/supervisor.go",
     "tools/prepare-runtime.mjs",
-    "tools/release-smoke.mjs"
+    "tools/release-smoke.mjs",
+    "tools/node-runtime-integrity.mjs"
   ],
   "test_files": [
     "electron/main/core/supervisor.test.ts",
     "electron/main/managed/launch-log.test.ts",
     "electron/main/managed/launcher-console-activity.test.ts",
     "electron/main/managed/launcher-harness-commands.test.ts",
+    "electron/main/managed/launcher-version-store.test.ts",
     "electron/main/pnpm-launcher.test.ts",
     "networking/internal/harnessruntime/supervisor_unix_test.go",
     "tools/prepare-runtime.test.mjs",
@@ -37,13 +40,29 @@
     {
       "state": "no_op",
       "test": "refuses an absent stage instead of resolving system tools"
+    },
+    {
+      "state": "recovery",
+      "test": "removes only a stale failed worktree registration before retrying the same commit"
+    },
+    {
+      "state": "rejected",
+      "test": "requires Node build headers before producing a runtime digest"
+    },
+    {
+      "state": "rejected",
+      "test": "refuses recovery with a typed error when Git worktree registrations cannot be read"
+    },
+    {
+      "state": "rejected",
+      "test": "preserves an incomplete version when it is still the active pointer target"
     }
   ],
   "field_bindings": [
     {
       "production_file": "electron/main/pnpm-launcher.ts",
-      "field": "executable, prefixArguments, and commandSearchPath",
-      "source": "platform-matched schema-2 runtime descriptor and staged files",
+      "field": "executable, prefixArguments, commandSearchPath, and required Node headers",
+      "source": "platform-matched schema-3 runtime descriptor and staged files",
       "assertion": "expect(launcher.executable).toBe(nodeExecutable)",
       "test": "runs pinned pnpm on the matching standalone Node binary",
       "state": "success",
@@ -51,24 +70,54 @@
       "missing_semantics": "missing, invalid, or mismatched runtime returns a launch refusal without substituting system tools"
     },
     {
+      "production_file": "electron/main/managed/launcher-version-store.ts",
+      "field": "exact incomplete version worktree registration and active-version pointer",
+      "source": "Git worktree list --porcelain -z for the selected commit path",
+      "assertion": "expect(registrations).not.toContain('prunable')",
+      "test": "removes only a stale failed worktree registration before retrying the same commit",
+      "state": "recovery",
+      "identity_keys": [
+        "main repository",
+        "selected commit",
+        "version directory",
+        "active pointer"
+      ],
+      "missing_semantics": "an exact stale registration is removed and verified before retry; unreadable Git state fails with a typed error, and an incomplete active target, other worktrees, and the active pointer are preserved"
+    },
+    {
       "production_file": "tools/prepare-runtime.mjs",
-      "field": "pinned Node archive target and digest",
-      "source": "NODE_ARTIFACTS keyed by exact platform and architecture",
-      "assertion": "sha256: expect.stringMatching",
-      "test": "resolves the pinned artifact for %s-%s",
+      "field": "pinned Node archive target, digest, and required header tree stage",
+      "source": "verified official Node distribution archive for exact platform and architecture",
+      "assertion": "expect(sha256NodeHeaders(root)).toMatch(/^[a-f0-9]{64}$/u)",
+      "test": "requires Node build headers before producing a runtime digest",
       "state": "success",
-      "identity_keys": ["platform", "architecture", "archive filename", "archive SHA-256"],
-      "missing_semantics": "unsupported targets and malformed options fail before download or staging"
+      "identity_keys": ["platform", "architecture", "Node archive", "include/node tree"],
+      "missing_semantics": "an archive without required Node headers cannot produce a valid staged runtime"
+    },
+    {
+      "production_file": "tools/node-runtime-integrity.mjs",
+      "field": "deterministic Node header-tree digest and required header presence",
+      "source": "regular node.h and node_version.h files under the staged include/node directory",
+      "assertion": "expect(() => sha256NodeHeaders(root)).toThrow('node_api.h')",
+      "test": "requires Node build headers before producing a runtime digest",
+      "state": "rejected",
+      "identity_keys": ["header relative paths", "header bytes", "tree digest"],
+      "missing_semantics": "missing or linked required headers are rejected rather than omitted or substituted"
     },
     {
       "production_file": "tools/release-smoke.mjs",
-      "field": "packaged Node executable digest",
-      "source": "actual resources/runtime/bin Node bytes and versions.json nodeBinarySha256",
+      "field": "packaged Node executable and complete header-tree digests",
+      "source": "actual resources/runtime bytes and schema-3 versions.json digests",
       "assertion": "expect(await bundledRuntimeHolds(directory, manifest)).toBe(true)",
       "test": "accepts an unpacked build carrying the pinned standalone runtime",
       "state": "success",
-      "identity_keys": ["release directory", "runtime target", "Node binary digest"],
-      "missing_semantics": "a missing Node binary or digest mismatch fails the packaged runtime check"
+      "identity_keys": [
+        "release directory",
+        "runtime target",
+        "Node binary digest",
+        "header-tree digest"
+      ],
+      "missing_semantics": "missing Node headers or any descriptor digest mismatch fails the packaged runtime check"
     },
     {
       "production_file": "electron/main/core/supervisor.ts",
@@ -128,7 +177,7 @@
     { "command": "node electron/main/bundled-runtime.e2e.test.mjs", "no_mock": true },
     { "command": "cd networking && go test ./internal/harnessruntime", "no_mock": true },
     {
-      "command": "npm test -- --run electron/main/pnpm-launcher.test.ts electron/main/core/supervisor.test.ts electron/main/managed/launcher-harness-commands.test.ts electron/main/managed/launch-log.test.ts electron/main/managed/launcher-console-activity.test.ts tools/prepare-runtime.test.mjs tools/release-smoke.test.mjs",
+      "command": "npm test -- --run electron/main/pnpm-launcher.test.ts electron/main/managed/launcher-version-store.test.ts electron/main/core/supervisor.test.ts electron/main/managed/launcher-harness-commands.test.ts electron/main/managed/launch-log.test.ts electron/main/managed/launcher-console-activity.test.ts tools/prepare-runtime.test.mjs tools/release-smoke.test.mjs",
       "no_mock": true
     },
     { "command": "npm run type-check", "no_mock": true },
