@@ -19,4 +19,4 @@
 - [x] Recover a failed version preparation by removing only the exact stale Git worktree registration before retry.
 - [x] Add regression coverage for missing build headers and the failed-switch/retry worktree sequence.
 - [x] Run focused runtime/version-switch checks, project validation, and source-file-size validation.
-- [ ] Complete the repaired `v0.1.86` native GitHub package matrix and verify published release assets.
+- [x] Complete the repaired `v0.1.86` native GitHub package matrix and verify published release assets.

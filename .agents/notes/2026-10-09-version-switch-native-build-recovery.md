@@ -39,17 +39,21 @@ metadata.
   `include/node`; Windows x64 and arm64 failed at runtime preparation before
   packaging. The matching official headers archive and extracted tree were
   verified against the pinned archive checksum and computed tree digest before
-  fixing the staging path. Re-run native Windows x64/arm64 jobs and release
-  smoke before publishing.
+  fixing the staging path. In the repaired release workflow, Windows x64 and
+  arm64 both staged the headers, built the unsigned installer, passed metadata,
+  headless-core and packaged-application smoke checks, and uploaded their
+  artifacts.
 - The first retry then stopped in source tests because Vitest treated the live
   archive-check script as a test module and supplied a non-file module URL.
   Moved that script under `tools/test/` without a Vitest test suffix and ran it
   as a dedicated Node command. Full suite: 1,526 tests across 170 files passed;
   the dedicated integrity gate also passed with live archive evidence.
-- Focused regression: 31 tests passed. Full suite: 1,521 tests across 170 files
-  passed. Environment, format, architecture, types, service smoke, visual
-  smoke, web build, Electron source build, desktop-app validation, test-integrity
-  static checks, and source-file-size checks passed.
-- The initial repair checkpoint created no local Launcher package or GitHub
-  Release. The subsequent user-requested `v0.1.86` tag build failed on Windows
-  before publication; its GitHub Release is still absent pending this repair.
+- Focused regression: 32 tests passed. Environment, format, architecture,
+  types, service smoke, visual smoke, web build, Electron source build,
+  desktop-app validation, test-integrity checks, and source-file-size checks
+  passed. No local Launcher installer was built.
+- Repaired workflow run `37908718234` completed successfully. All six desktop
+  targets and six standalone CLI targets passed; stable GitHub Release
+  `v0.1.86` was published with 25 assets, including Windows x64 and arm64
+  installers. The release tag resolves to commit
+  `adfdc2d6bb22c96a50fba8f30d02a855cf9b546c`.
