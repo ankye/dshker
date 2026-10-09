@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.87 — 2026-10-09
+
+### 简体中文 (zh-CN)
+
+- **修复 Windows 上切换 DSH 版本后被误判为构建未完成。** Git 会将短路径（8.3）规范成另一种路径拼写；Launcher 现在逐级检查路径组件，仍拒绝符号链接和 junction，但不再把同一目录的不同规范拼写当成不同路径。
+
+### English (en-US)
+
+- **Fixed Windows DSH version switches being misreported as incomplete.** Git can canonicalize an 8.3 path to a different spelling; the Launcher now inspects every path component, continues to reject symbolic links and junctions, and no longer mistakes equivalent spellings of the same directory for different paths.
+
 ## 0.1.86 — 2026-10-09
 
 ### 简体中文 (zh-CN)

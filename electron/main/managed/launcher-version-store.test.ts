@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -30,6 +31,17 @@ function git(repository: string, arguments_: readonly string[]): string {
     encoding: 'utf8',
     windowsHide: true
   }).trim()
+}
+
+function expectWorktreeRegistered(registrations: string, directory: string): void {
+  const expected = statSync(directory)
+  expect(expected.ino).not.toBe(0)
+  const registeredIdentities = registrations
+    .split(/\r?\n/u)
+    .filter((line) => line.startsWith('worktree '))
+    .map((line) => statSync(line.slice('worktree '.length)))
+    .map(({ dev, ino }) => `${dev}:${ino}`)
+  expect(registeredIdentities).toContain(`${expected.dev}:${expected.ino}`)
 }
 
 function commit(repository: string, message: string): string {
@@ -161,8 +173,11 @@ describe('managed DSH version worktree recovery', () => {
     expect(await readCurrentVersionPointer(pointer)).toBe(targetCommit)
     expect(existsSync(path.join(target, 'apps', 'cli', 'lib', 'bin.js'))).toBe(true)
     const registrations = git(repository, ['worktree', 'list', '--porcelain'])
-    expect(registrations).toContain(`worktree ${repository}`)
-    expect(registrations).toContain(`worktree ${target}`)
+    expect(
+      registrations.split(/\r?\n/u).filter((line) => line.startsWith('worktree '))
+    ).toHaveLength(2)
+    expectWorktreeRegistered(registrations, repository)
+    expectWorktreeRegistered(registrations, target)
     expect(registrations).not.toContain('prunable')
   })
 
@@ -183,8 +198,11 @@ describe('managed DSH version worktree recovery', () => {
     expect(existsSync(activeDirectory)).toBe(true)
     expect(readFileSync(path.join(unrelatedDirectory, 'keep.txt'), 'utf8')).toBe('preserve')
     const registrations = git(repository, ['worktree', 'list', '--porcelain'])
-    expect(registrations).toContain(`worktree ${repository}`)
-    expect(registrations).toContain(`worktree ${activeDirectory}`)
-    expect(registrations).not.toContain(`worktree ${previousDirectory}`)
+    expect(
+      registrations.split(/\r?\n/u).filter((line) => line.startsWith('worktree '))
+    ).toHaveLength(2)
+    expectWorktreeRegistered(registrations, repository)
+    expectWorktreeRegistered(registrations, activeDirectory)
+    expect(() => statSync(previousDirectory)).toThrow()
   })
 })

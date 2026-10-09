@@ -57,3 +57,10 @@ metadata.
   `v0.1.86` was published with 25 assets, including Windows x64 and arm64
   installers. The release tag resolves to commit
   `adfdc2d6bb22c96a50fba8f30d02a855cf9b546c`.
+- A subsequent Windows quality run on documentation-only commit `ba6ebef`
+  exposed that Git canonicalizes an 8.3 worktree path while direct-path
+  admission compared raw `realpath()` text. The failure occurs in version
+  preparation on Windows, not in the release's Windows package smoke. The
+  follow-up inspects each path component for symbolic links/junctions while
+  allowing filesystem-equivalent spelling; its Windows quality gate must pass
+  before a release can include this follow-up.

@@ -111,6 +111,11 @@ directory. A failed build SHALL NOT update the active-version pointer.
 If the incomplete target is the currently active version, the operation SHALL
 refuse without deleting or rebuilding that directory.
 
+Direct filesystem admission SHALL inspect every path component for symbolic
+links or Windows junctions. It SHALL accept a normalized absolute path when the
+filesystem reports an equivalent canonical spelling, including Windows 8.3
+aliases.
+
 #### Scenario: A missing failed worktree directory remains registered
 
 - **WHEN** a failed version build leaves a Git worktree registration but its

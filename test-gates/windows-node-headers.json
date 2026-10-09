@@ -2,11 +2,14 @@
   "change": "separately pinned official Node headers archive for Windows packaging",
   "risk": "standard",
   "production_files": [
+    "electron/main/managed/process-utils.ts",
     "electron/main/pnpm-launcher.ts",
     "tools/prepare-runtime.mjs",
     "tools/release-smoke.mjs"
   ],
   "test_files": [
+    "electron/main/managed/process-utils.test.ts",
+    "electron/main/managed/launcher-version-store.test.ts",
     "electron/main/pnpm-launcher.test.ts",
     "electron/main/bundled-runtime.e2e.test.mjs",
     "tools/prepare-runtime.test.mjs",
@@ -19,6 +22,10 @@
       "test": "pins one exact, independently verified headers archive for every platform target"
     },
     {
+      "state": "success",
+      "test": "accepts canonical aliases but refuses symbolic-link path components"
+    },
+    {
       "state": "rejected",
       "test": "refuses a stage with %s"
     },
@@ -28,6 +35,26 @@
     }
   ],
   "field_bindings": [
+    {
+      "production_file": "electron/main/managed/process-utils.ts",
+      "field": "normalized absolute path components and direct filesystem object types",
+      "source": "lstat of the requested path and every lexical ancestor",
+      "assertion": "await expect(assertDirectDirectory(ownedDirectory)).resolves.toBeUndefined()",
+      "test": "accepts canonical aliases but refuses symbolic-link path components",
+      "state": "success",
+      "identity_keys": ["absolute path", "component order", "filesystem object type"],
+      "missing_semantics": "a missing, non-directory ancestor, or symbolic-link/junction component fails without resolving to a replacement path"
+    },
+    {
+      "production_file": "electron/main/managed/process-utils.ts",
+      "field": "symbolic-link and Windows-junction refusal",
+      "source": "lstat of each requested path component",
+      "assertion": "await expect(assertDirectDirectory(linkedDirectory)).rejects.toThrow()",
+      "test": "accepts canonical aliases but refuses symbolic-link path components",
+      "state": "rejected",
+      "identity_keys": ["linked directory", "linked file path", "filesystem object type"],
+      "missing_semantics": "symlinked or junction paths are rejected rather than admitted through realpath equivalence"
+    },
     {
       "production_file": "tools/prepare-runtime.mjs",
       "field": "Node-version-matched headers archive identity and extracted include/node tree",
@@ -66,6 +93,10 @@
   ],
   "real_commands": [
     {
+      "command": "npm test -- --run electron/main/managed/process-utils.test.ts electron/main/managed/launcher-version-store.test.ts",
+      "no_mock": true
+    },
+    {
       "command": "node tools/test/node-headers-archive-check.mjs",
       "no_mock": true
     },
@@ -76,5 +107,8 @@
     { "command": "npm run type-check", "no_mock": true },
     { "command": "npm run format:check", "no_mock": true }
   ],
-  "runtime_evidence": [{ "artifact": ".run/node-headers-archive/verification.json" }]
+  "runtime_evidence": [
+    { "artifact": ".run/node-headers-archive/verification.json" },
+    { "artifact": ".run/windows-path-admission/verification.json" }
+  ]
 }

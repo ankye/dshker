@@ -102,6 +102,13 @@ jobs:
       # test asserting LF-formatted source failed.
       - name: Run unit tests
         run: npm test -- --run
+      - name: Upload Windows path admission evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-path-admission-${{ github.run_id }}
+          path: .run/windows-path-admission/verification.json
+          if-no-files-found: error
 
   # The peer connection is verified here and nowhere else.
   #
