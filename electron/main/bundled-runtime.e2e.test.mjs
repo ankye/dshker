@@ -7,6 +7,7 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import { build } from 'esbuild'
 import { sha256NodeHeaders } from '../../tools/node-runtime-integrity.mjs'
+import { NODE_HEADERS_ARTIFACT } from '../../tools/prepare-runtime.mjs'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 const runtimeRoot = path.join(appRoot, 'resources', 'runtime')
@@ -67,7 +68,9 @@ try {
   })
   assert.equal(result.status, 0, result.stderr)
   const descriptor = JSON.parse(readFileSync(path.join(runtimeRoot, 'versions.json'), 'utf8'))
-  assert.equal(descriptor.schemaVersion, 3)
+  assert.equal(descriptor.schemaVersion, 4)
+  assert.equal(descriptor.nodeHeadersArchive, NODE_HEADERS_ARTIFACT.filename)
+  assert.equal(descriptor.nodeHeadersArchiveSha256, NODE_HEADERS_ARTIFACT.sha256)
   const nodeHeaders = path.join(runtimeRoot, 'include', 'node')
   assert.equal(sha256NodeHeaders(nodeHeaders), descriptor.nodeHeadersSha256)
   assert.equal(result.stdout.trim(), descriptor.pnpm)
@@ -82,6 +85,8 @@ try {
       executable: nodeExecutable,
       nodeContextProbe: contextProbe.stdout.trim(),
       schemaVersion: descriptor.schemaVersion,
+      nodeHeadersArchive: descriptor.nodeHeadersArchive,
+      nodeHeadersArchiveSha256: descriptor.nodeHeadersArchiveSha256,
       pnpm: descriptor.pnpm,
       nodeHeadersSha256: descriptor.nodeHeadersSha256
     })

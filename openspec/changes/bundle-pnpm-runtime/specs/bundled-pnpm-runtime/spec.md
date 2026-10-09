@@ -12,13 +12,17 @@ DSH's native builtin loader requires a Node V8 context; Electron's
 
 `tools/prepare-runtime.mjs` SHALL stage the official Node 22.23.3 binary, its
 license and complete `include/node` headers, the pinned pnpm package, and
-`versions.json` with schema version 3, platform, architecture, Node version,
-official archive name and SHA-256, staged binary and headers-tree SHA-256, and
-pnpm version. Every supported target archive digest SHALL be pinned in source.
-Preparation SHALL execute the staged binary, smoke `pnpm --version`, and fail on
-any missing, mismatched, or un-runnable artifact. `runtime:verify` SHALL
-validate the descriptor, actual binary and headers digests, executable version,
-and pinned pnpm pair without rewriting the stage.
+`versions.json` with schema version 4, platform, architecture, Node version,
+the target Node archive name and SHA-256, the exact-version official headers
+archive name and SHA-256, staged binary and headers-tree SHA-256, and pnpm
+version. Every supported target archive digest and the headers archive digest
+SHALL be pinned in source; the extracted headers-tree digest SHALL be recorded
+in the descriptor and checked against the staged files. The headers archive is separate because
+official Windows Node ZIPs do not contain `include/node`. Preparation SHALL
+execute the staged binary, smoke `pnpm --version`, and fail on any missing,
+mismatched, or un-runnable artifact. `runtime:verify` SHALL validate the
+descriptor, actual binary and headers digests, executable version, and pinned
+pnpm pair without rewriting the stage.
 
 #### Scenario: A fresh native stage passes
 
@@ -33,6 +37,15 @@ and pinned pnpm pair without rewriting the stage.
   digest, missing Node build headers, runtime version, unknown descriptor
   schema, or cannot execute
 - **THEN** verification exits non-zero and does not rewrite the stage
+
+#### Scenario: A platform archive does not carry Node headers
+
+- **WHEN** a target Node archive omits `include/node`, as the official Windows
+  ZIPs do
+- **THEN** preparation obtains the exact-version official headers archive,
+  validates its pinned archive digest, records the extracted tree digest, and
+  stages those headers; a
+  missing or mismatched headers archive fails preparation without substitution
 
 ### Requirement: DSH commands require the bundled standalone runtime
 

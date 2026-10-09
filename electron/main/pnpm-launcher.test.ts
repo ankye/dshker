@@ -27,12 +27,14 @@ function createRuntime(overrides: Record<string, unknown> = {}): string {
   writeFileSync(
     path.join(root, 'versions.json'),
     `${JSON.stringify({
-      schemaVersion: 3,
+      schemaVersion: 4,
       platform: process.platform,
       arch: process.arch,
       node: '22.23.3',
       nodeArchive: `node-v22.23.3-${archivePlatform}-${process.arch}.${archiveExtension}`,
       nodeArchiveSha256: 'a'.repeat(64),
+      nodeHeadersArchive: 'node-v22.23.3-headers.tar.gz',
+      nodeHeadersArchiveSha256: 'd'.repeat(64),
       nodeBinarySha256: 'b'.repeat(64),
       nodeHeadersSha256: 'c'.repeat(64),
       pnpm: '11.7.0',
@@ -78,10 +80,12 @@ describe('the required staged bundled runtime', () => {
   })
 
   it.each([
-    ['unknown descriptor schema', { schemaVersion: 4 }],
+    ['unknown descriptor schema', { schemaVersion: 3 }],
     ['wrong target', { arch: 'wrong-arch' }],
     ['wrong Node version', { node: '24.21.0' }],
     ['invalid source digest', { nodeArchiveSha256: 'invalid' }],
+    ['wrong Node headers archive', { nodeHeadersArchive: 'node-v22.0.0-headers.tar.gz' }],
+    ['invalid Node headers archive digest', { nodeHeadersArchiveSha256: 'invalid' }],
     ['invalid binary digest', { nodeBinarySha256: '' }],
     ['invalid headers digest', { nodeHeadersSha256: '' }],
     ['missing pnpm version', { pnpm: '' }]

@@ -22,15 +22,18 @@ be the exact stable semantic version `v${package.json.version}`.
 Every desktop build stages and verifies the runtime DSH package operations will
 use: `npm run runtime:prepare` runs before every `electron-builder` invocation.
 It downloads the official Node 22.23.3 archive for the exact platform and
-architecture, verifies the pinned SHA-256, stages the Node binary, license,
-complete `include/node` build headers, and pinned pnpm distribution, then
-smoke-tests that pair. The schema-3 descriptor records a digest for both the
-Node executable and its header tree. `runtime:verify` checks target and archive
-identity, both digests, executable and package-manager versions. The app refuses
-package operations when this standalone runtime is absent or invalid; system
-Node/pnpm and Electron Node mode are not substitutes. The packaging matrix uses
-native runners for each runtime architecture, including Linux arm64, so the
-staged executable is actually run before packaging.
+architecture plus Node's separate version-matched headers archive, verifies
+both pinned SHA-256 values, stages the Node binary, license, complete
+`include/node` build headers, and pinned pnpm distribution, then smoke-tests
+that pair. The schema-4 descriptor records both archive identities, the Node
+executable digest, and the staged header-tree digest. `runtime:verify` checks
+target and archive identity, all digests, executable and package-manager
+versions. The separate headers archive is required because the official Windows
+Node ZIPs do not include `include/node`. The app refuses package operations
+when this standalone runtime is absent or invalid; system Node/pnpm and Electron
+Node mode are not substitutes. The packaging matrix uses native runners for
+each runtime architecture, including Linux arm64, so the staged executable is
+actually run before packaging.
 
 ## What every version must record
 

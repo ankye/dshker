@@ -13,11 +13,11 @@ Node distribution instead. Electron remains at its existing version and its
 
 ## Staging
 
-`tools/prepare-runtime.mjs` downloads the official archive for the requested
-platform/architecture and verifies its source SHA-256 before extracting the
-Node executable, license, and complete `include/node` headers from that same
-archive. Header-tree identity is recorded independently so staging and release
-verification detect missing or altered build headers. It stages:
+`tools/prepare-runtime.mjs` downloads and verifies the official archive for the
+requested platform/architecture before extracting the Node executable and
+license. It separately downloads Node's exact-version headers archive and
+verifies its pinned source SHA-256 and extracted tree SHA-256. This is required
+because official Windows Node ZIPs do not include `include/node`. It stages:
 
 - `bin/node` or `bin/node.exe` — the independent official Node runtime.
 - `bin/pnpm` and `bin/pnpm.cmd` — wrappers that invoke the sibling standalone
@@ -26,8 +26,9 @@ verification detect missing or altered build headers. It stages:
 - `LICENSE.node` — license from the Node archive.
 - `include/node/` — Node-API and V8 build headers required when DSH compiles
   native modules.
-- `versions.json` — schema 3 target identity, Node version, source archive and
-  archive digest, executable and header-tree digests, and pinned pnpm version.
+- `versions.json` — schema 4 target identity, Node version, Node and headers
+  source archive identities and digests, executable and header-tree digests,
+  and pinned pnpm version.
 
 The stage is smoked with the staged executable before it is used. Verification
 rechecks target, pinned archive identity, binary/header digests, executable
@@ -35,7 +36,7 @@ version, and pnpm version without changing the staged directory.
 
 ## Resolution and process wiring
 
-- `resolvePnpmLauncher(resources/runtime)` requires the matching schema-3
+- `resolvePnpmLauncher(resources/runtime)` requires the matching schema-4
   runtime, including the required Node headers, and returns the staged Node
   executable with `--expose-internals` and the pinned `pnpm.mjs` entry. Missing
   or incomplete files return a launch refusal; there is no system Node/pnpm or

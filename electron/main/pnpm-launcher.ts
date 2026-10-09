@@ -57,12 +57,14 @@ export function bundledPnpmEntry(bundledRuntimeRoot: string | undefined): string
     const archivePlatform = process.platform === 'win32' ? 'win' : process.platform
     const expectedArchive = `node-v${NODE_VERSION}-${archivePlatform}-${process.arch}.${archiveExtension}`
     if (
-      descriptor?.schemaVersion !== 3 ||
+      descriptor?.schemaVersion !== 4 ||
       descriptor.platform !== process.platform ||
       descriptor.arch !== process.arch ||
       descriptor.node !== NODE_VERSION ||
       descriptor.nodeArchive !== expectedArchive ||
       !isDigest(descriptor.nodeArchiveSha256) ||
+      descriptor.nodeHeadersArchive !== `node-v${NODE_VERSION}-headers.tar.gz` ||
+      !isDigest(descriptor.nodeHeadersArchiveSha256) ||
       !isDigest(descriptor.nodeBinarySha256) ||
       !isDigest(descriptor.nodeHeadersSha256) ||
       typeof descriptor.pnpm !== 'string' ||

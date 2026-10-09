@@ -11,10 +11,12 @@ metadata.
 
 ## Repair
 
-- Stage the complete `include/node` directory from the same checksum-verified
-  Node 22.23.3 distribution as the executable. Record its deterministic tree
-  SHA-256 in runtime descriptor schema 3; runtime verification and packaged
-  release smoke validate the required files and digest.
+- Stage the complete `include/node` directory from Node's separate official
+  headers archive for the same Node 22.23.3 version. Pin and verify the archive
+  SHA-256, then record the deterministic extracted tree SHA-256 in runtime
+  descriptor schema 4; runtime verification and packaged release smoke validate
+  the source identity, actual tree digest, and required files. Target Windows
+  ZIPs do not contain these headers.
 - Before retrying an incomplete commit, list Git worktrees and remove only the
   exact target registration when present. Verify it is gone before recreating
   the worktree. Do not prune unrelated worktrees. The active version pointer is
@@ -22,8 +24,9 @@ metadata.
 
 ## Verification
 
-- The official Node 22.23.3 darwin-arm64 archive staged into an isolated
-  temporary runtime, recorded schema 3 with a header-tree digest, and passed
+- Historical pre-CI check: the official Node 22.23.3 darwin-arm64 archive
+  staged into an isolated temporary runtime, recorded schema 3 with a
+  header-tree digest, and passed
   `runtime:verify`; the repository's pre-existing ignored runtime stage was not
   replaced.
 - The exact failing Harness commit was exported into a temporary source tree.
@@ -32,8 +35,16 @@ metadata.
 - The regression test created a real temporary Git repository, failed a target
   build, removed its directory while preserving Git's stale registration,
   retried that same commit, and verified successful readiness and pointer flip.
+- The first `v0.1.86` GitHub package workflow exposed that Windows Node ZIPs omit
+  `include/node`; Windows x64 and arm64 failed at runtime preparation before
+  packaging. The matching official headers archive and extracted tree were
+  verified against the pinned archive checksum and computed tree digest before
+  fixing the staging path. Re-run native Windows x64/arm64 jobs and release
+  smoke before publishing.
 - Focused regression: 31 tests passed. Full suite: 1,521 tests across 170 files
   passed. Environment, format, architecture, types, service smoke, visual
   smoke, web build, Electron source build, desktop-app validation, test-integrity
   static checks, and source-file-size checks passed.
-- No Launcher package was created and no tag or Release was published.
+- The initial repair checkpoint created no local Launcher package or GitHub
+  Release. The subsequent user-requested `v0.1.86` tag build failed on Windows
+  before publication; its GitHub Release is still absent pending this repair.

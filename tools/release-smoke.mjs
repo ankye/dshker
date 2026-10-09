@@ -6,6 +6,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
+import { NODE_HEADERS_ARTIFACT } from './prepare-runtime.mjs'
 
 const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -241,7 +242,7 @@ export async function bundledRuntimeHolds(releaseDir, manifest) {
     const nodeName = platform === 'win32' ? 'node.exe' : 'node'
     const nodePath = path.join(root, 'bin', nodeName)
     if (
-      descriptor?.schemaVersion !== 3 ||
+      descriptor?.schemaVersion !== 4 ||
       descriptor.platform !== platform ||
       descriptor.arch !== arch ||
       descriptor.node !== '22.23.3' ||
@@ -249,6 +250,8 @@ export async function bundledRuntimeHolds(releaseDir, manifest) {
       !descriptor.pnpm ||
       typeof descriptor.nodeArchive !== 'string' ||
       !/^[a-f0-9]{64}$/u.test(descriptor.nodeArchiveSha256 ?? '') ||
+      descriptor.nodeHeadersArchive !== NODE_HEADERS_ARTIFACT.filename ||
+      descriptor.nodeHeadersArchiveSha256 !== NODE_HEADERS_ARTIFACT.sha256 ||
       !/^[a-f0-9]{64}$/u.test(descriptor.nodeBinarySha256 ?? '') ||
       !/^[a-f0-9]{64}$/u.test(descriptor.nodeHeadersSha256 ?? '') ||
       !(await exists(nodePath))

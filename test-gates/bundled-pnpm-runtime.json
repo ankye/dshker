@@ -50,6 +50,10 @@
       "test": "requires Node build headers before producing a runtime digest"
     },
     {
+      "state": "success",
+      "test": "pins one exact, independently verified headers archive for every platform target"
+    },
+    {
       "state": "rejected",
       "test": "refuses recovery with a typed error when Git worktree registrations cannot be read"
     },
@@ -61,8 +65,8 @@
   "field_bindings": [
     {
       "production_file": "electron/main/pnpm-launcher.ts",
-      "field": "executable, prefixArguments, commandSearchPath, and required Node headers",
-      "source": "platform-matched schema-3 runtime descriptor and staged files",
+      "field": "executable, prefixArguments, commandSearchPath, and schema-4 Node headers source identity",
+      "source": "platform-matched schema-4 runtime descriptor and staged files",
       "assertion": "expect(launcher.executable).toBe(nodeExecutable)",
       "test": "runs pinned pnpm on the matching standalone Node binary",
       "state": "success",
@@ -86,13 +90,19 @@
     },
     {
       "production_file": "tools/prepare-runtime.mjs",
-      "field": "pinned Node archive target, digest, and required header tree stage",
-      "source": "verified official Node distribution archive for exact platform and architecture",
-      "assertion": "expect(sha256NodeHeaders(root)).toMatch(/^[a-f0-9]{64}$/u)",
-      "test": "requires Node build headers before producing a runtime digest",
+      "field": "pinned platform Node archive and separately pinned version-matched headers archive and tree digest",
+      "source": "verified official Node distribution archive plus the exact-version official headers archive",
+      "assertion": "expect(resolveRuntimeTarget(['--platform', platform, '--arch', arch])).toMatchObject({",
+      "test": "pins one exact, independently verified headers archive for every platform target",
       "state": "success",
-      "identity_keys": ["platform", "architecture", "Node archive", "include/node tree"],
-      "missing_semantics": "an archive without required Node headers cannot produce a valid staged runtime"
+      "identity_keys": [
+        "platform",
+        "architecture",
+        "Node archive",
+        "headers archive",
+        "include/node tree"
+      ],
+      "missing_semantics": "missing target or headers archives, mismatched archive/tree digests, or missing required headers fail preparation without substitution"
     },
     {
       "production_file": "tools/node-runtime-integrity.mjs",
@@ -106,8 +116,8 @@
     },
     {
       "production_file": "tools/release-smoke.mjs",
-      "field": "packaged Node executable and complete header-tree digests",
-      "source": "actual resources/runtime bytes and schema-3 versions.json digests",
+      "field": "packaged Node executable, pinned headers source archive, and complete header-tree digests",
+      "source": "actual resources/runtime bytes and schema-4 versions.json identities",
       "assertion": "expect(await bundledRuntimeHolds(directory, manifest)).toBe(true)",
       "test": "accepts an unpacked build carrying the pinned standalone runtime",
       "state": "success",
@@ -115,6 +125,7 @@
         "release directory",
         "runtime target",
         "Node binary digest",
+        "headers archive identity",
         "header-tree digest"
       ],
       "missing_semantics": "missing Node headers or any descriptor digest mismatch fails the packaged runtime check"

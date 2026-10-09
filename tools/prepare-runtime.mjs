@@ -47,6 +47,10 @@ const BIN_DESTINATION = path.join(RUNTIME_ROOT, 'bin')
 const BIN_SOURCE = path.join(launcherRoot, 'resources', 'runtime-bin')
 const NODE_VERSION = '22.23.3'
 const NODE_RELEASE_BASE = `https://nodejs.org/dist/v${NODE_VERSION}`
+export const NODE_HEADERS_ARTIFACT = Object.freeze({
+  filename: `node-v${NODE_VERSION}-headers.tar.gz`,
+  sha256: 'eff1a7e67736bdf25db421ddaa613ed605f751a7b9fe07fb473ea880d1348987'
+})
 const NODE_ARTIFACTS = Object.freeze({
   'darwin-arm64': Object.freeze({
     filename: `node-v${NODE_VERSION}-darwin-arm64.tar.gz`,
@@ -97,7 +101,14 @@ export function resolveRuntimeTarget(args = process.argv.slice(2)) {
   }
   const key = `${platform}-${arch}`
   if (!Object.hasOwn(NODE_ARTIFACTS, key)) fail(`unsupported Node runtime target: ${key}`)
-  return { platform, arch, key, ...NODE_ARTIFACTS[key] }
+  return {
+    platform,
+    arch,
+    key,
+    ...NODE_ARTIFACTS[key],
+    nodeHeadersArchive: NODE_HEADERS_ARTIFACT.filename,
+    nodeHeadersArchiveSha256: NODE_HEADERS_ARTIFACT.sha256
+  }
 }
 
 function nodeExecutable(runtimeRoot, target) {
@@ -114,12 +125,12 @@ function sha256File(filePath) {
   })
 }
 
-async function downloadNodeArchive(target, directory) {
-  const archivePath = path.join(directory, target.filename)
-  const url = `${NODE_RELEASE_BASE}/${target.filename}`
+async function downloadVerifiedArchive(filename, expectedSha256, directory, description) {
+  const archivePath = path.join(directory, filename)
+  const url = `${NODE_RELEASE_BASE}/${filename}`
   const response = await fetch(url)
   if (!response.ok || response.body === null) {
-    fail(`official Node archive download failed (${response.status}): ${url}`)
+    fail(`${description} download failed (${response.status}): ${url}`)
   }
   const hash = createHash('sha256')
   const hashingStream = new Transform({
@@ -131,25 +142,34 @@ async function downloadNodeArchive(target, directory) {
   try {
     await pipeline(Readable.fromWeb(response.body), hashingStream, createWriteStream(archivePath))
   } catch (error) {
-    fail(`official Node archive download failed: ${String(error)}`)
+    fail(`${description} download failed: ${String(error)}`)
   }
   const actual = hash.digest('hex')
-  if (actual !== target.sha256) {
+  if (actual !== expectedSha256) {
     rmSync(archivePath, { force: true })
-    fail(`official Node archive checksum mismatch for ${target.filename}`)
+    fail(`${description} checksum mismatch for ${filename}`)
   }
   return archivePath
 }
 
+async function downloadNodeArchive(target, directory) {
+  return downloadVerifiedArchive(target.filename, target.sha256, directory, 'official Node archive')
+}
+
 async function stageNodeDistribution(target, runtimeRoot, temporaryDirectory) {
   const archivePath = await downloadNodeArchive(target, temporaryDirectory)
+  const headersArchivePath = await downloadVerifiedArchive(
+    NODE_HEADERS_ARTIFACT.filename,
+    NODE_HEADERS_ARTIFACT.sha256,
+    temporaryDirectory,
+    'official Node headers archive'
+  )
   const extractDirectory = path.join(temporaryDirectory, 'extracted')
   mkdirSync(extractDirectory)
   const archiveRoot = `node-v${NODE_VERSION}-${target.platform === 'win32' ? 'win' : target.platform}-${target.arch}`
   const isWindows = target.platform === 'win32'
   const archiveEntry = isWindows ? `${archiveRoot}/node.exe` : `${archiveRoot}/bin/node`
   const licenseEntry = `${archiveRoot}/LICENSE`
-  const headersEntry = `${archiveRoot}/include/node`
   try {
     execFileSync(
       'tar',
@@ -161,13 +181,34 @@ async function stageNodeDistribution(target, runtimeRoot, temporaryDirectory) {
         '-C',
         extractDirectory,
         archiveEntry,
-        licenseEntry,
+        licenseEntry
+      ],
+      { windowsHide: true }
+    )
+  } catch (error) {
+    fail(`could not extract the official Node binary and license: ${String(error)}`)
+  }
+  const headersEntry = `node-v${NODE_VERSION}/include/node`
+  const headersExtractDirectory = path.join(extractDirectory, 'headers')
+  mkdirSync(headersExtractDirectory)
+  try {
+    execFileSync(
+      'tar',
+      [
+        '-xzf',
+        headersArchivePath,
+        '--strip-components',
+        '1',
+        '-C',
+        headersExtractDirectory,
         headersEntry
       ],
       { windowsHide: true }
     )
   } catch (error) {
-    fail(`could not extract the official Node binary, license, and headers: ${String(error)}`)
+    fail(
+      `could not extract Node ${NODE_VERSION} headers from the official headers archive: ${String(error)}`
+    )
   }
   const extractedBinary = isWindows
     ? path.join(extractDirectory, 'node.exe')
@@ -183,12 +224,12 @@ async function stageNodeDistribution(target, runtimeRoot, temporaryDirectory) {
   const licensePath = path.join(extractDirectory, 'LICENSE')
   if (!existsSync(licensePath)) fail(`official Node archive has no license: ${licenseEntry}`)
   copyFileSync(licensePath, path.join(runtimeRoot, 'LICENSE.node'))
-  const extractedHeaders = path.join(extractDirectory, 'include', 'node')
+  const extractedHeaders = path.join(headersExtractDirectory, 'include', 'node')
   let nodeHeadersSha256
   try {
     nodeHeadersSha256 = sha256NodeHeaders(extractedHeaders)
   } catch (error) {
-    fail(`official Node archive has incomplete Node-API headers: ${String(error)}`)
+    fail(`official Node headers archive has incomplete Node-API headers: ${String(error)}`)
   }
   const headersDestination = path.join(runtimeRoot, 'include', 'node')
   mkdirSync(path.dirname(headersDestination), { recursive: true })
@@ -287,7 +328,7 @@ export async function verifyStagedRuntime(
     fail(`no staged runtime at ${runtimeRoot}; run runtime:prepare first`)
   }
   const manifest = JSON.parse(readFileSync(versionsPath, 'utf8'))
-  if (manifest?.schemaVersion !== 3) {
+  if (manifest?.schemaVersion !== 4) {
     fail(`staged runtime descriptor has an unknown schema: ${versionsPath}`)
   }
   if (manifest.platform !== target.platform || manifest.arch !== target.arch) {
@@ -295,6 +336,14 @@ export async function verifyStagedRuntime(
   }
   if (manifest.nodeArchive !== target.filename || manifest.nodeArchiveSha256 !== target.sha256) {
     fail(`staged Node archive identity does not match the pinned artifact for ${target.key}`)
+  }
+  if (
+    manifest.nodeHeadersArchive !== target.nodeHeadersArchive ||
+    manifest.nodeHeadersArchiveSha256 !== target.nodeHeadersArchiveSha256
+  ) {
+    fail(
+      `staged Node headers archive identity does not match the pinned artifact for ${target.key}`
+    )
   }
   if (manifest.node !== NODE_VERSION) {
     fail(`staged Node ${manifest.node} does not match pinned ${NODE_VERSION}`)
@@ -360,12 +409,14 @@ async function prepareRuntime(target = resolveRuntimeTarget()) {
       fail(`pinned pnpm distribution has no bin/pnpm.mjs entry: ${stagedPnpm}`)
     }
     const manifest = {
-      schemaVersion: 3,
+      schemaVersion: 4,
       platform: target.platform,
       arch: target.arch,
       node: nodeVersion,
       nodeArchive: target.filename,
       nodeArchiveSha256: target.sha256,
+      nodeHeadersArchive: target.nodeHeadersArchive,
+      nodeHeadersArchiveSha256: target.nodeHeadersArchiveSha256,
       nodeBinarySha256,
       nodeHeadersSha256,
       pnpm: pnpmVersion

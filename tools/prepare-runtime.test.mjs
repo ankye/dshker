@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
-import { resolveRuntimeTarget, verifyStagedRuntime } from './prepare-runtime.mjs'
+import {
+  NODE_HEADERS_ARTIFACT,
+  resolveRuntimeTarget,
+  verifyStagedRuntime
+} from './prepare-runtime.mjs'
 import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -19,7 +23,16 @@ describe('the pinned standalone Node target', () => {
       platform,
       arch,
       filename,
-      sha256: expect.stringMatching(/^[a-f0-9]{64}$/u)
+      sha256: expect.stringMatching(/^[a-f0-9]{64}$/u),
+      nodeHeadersArchive: NODE_HEADERS_ARTIFACT.filename,
+      nodeHeadersArchiveSha256: NODE_HEADERS_ARTIFACT.sha256
+    })
+  })
+
+  it('pins one exact, independently verified headers archive for every platform target', () => {
+    expect(NODE_HEADERS_ARTIFACT).toEqual({
+      filename: 'node-v22.23.3-headers.tar.gz',
+      sha256: 'eff1a7e67736bdf25db421ddaa613ed605f751a7b9fe07fb473ea880d1348987'
     })
   })
 

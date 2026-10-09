@@ -4,11 +4,11 @@
 
 ### 简体中文 (zh-CN)
 
-- **修复切换 DSH 版本时构建失败、重试仍无法切换。** 内置 Node 运行时现在同时携带 DSH 原生模块构建所需的头文件，并校验头文件完整性；失败的版本准备重试时，会精准清理该版本残留的 Git worktree 登记，不影响当前使用中的版本。
+- **修复切换 DSH 版本时构建失败、重试仍无法切换。** 内置 Node 运行时现在从 Node 官方独立头文件包获取 DSH 原生模块构建所需的头文件，并校验来源包与头文件完整性（Windows Node 压缩包本身不含这些头文件）；失败的版本准备重试时，会精准清理该版本残留的 Git worktree 登记，不影响当前使用中的版本。
 
 ### English (en-US)
 
-- **Fixed DSH version builds failing and remaining unretryable.** The bundled Node runtime now includes and verifies the headers needed to build DSH native modules. Retrying a failed preparation removes only that version's stale Git worktree registration and leaves the active version untouched.
+- **Fixed DSH version builds failing and remaining unretryable.** The bundled Node runtime now obtains the native-build headers from Node's separately published headers archive and verifies both its source and extracted tree (the Windows Node ZIPs omit those headers). Retrying a failed preparation removes only that version's stale Git worktree registration and leaves the active version untouched.
 
 ## 0.1.85 — 2026-10-01
 

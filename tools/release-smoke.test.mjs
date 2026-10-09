@@ -6,6 +6,7 @@ import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { bundledRuntimeHolds } from './release-smoke.mjs'
 import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
+import { NODE_HEADERS_ARTIFACT } from './prepare-runtime.mjs'
 
 const roots = []
 afterEach(() => {
@@ -48,12 +49,14 @@ function stageDescriptor(releaseDir, descriptor) {
 
 function validDescriptor(overrides = {}) {
   return {
-    schemaVersion: 3,
+    schemaVersion: 4,
     platform: 'darwin',
     arch: 'arm64',
     node: '22.23.3',
     nodeArchive: 'node-v22.23.3-darwin-arm64.tar.gz',
     nodeArchiveSha256: 'a'.repeat(64),
+    nodeHeadersArchive: NODE_HEADERS_ARTIFACT.filename,
+    nodeHeadersArchiveSha256: NODE_HEADERS_ARTIFACT.sha256,
     nodeBinarySha256: createHash('sha256').update('').digest('hex'),
     pnpm: '11.7.0',
     ...overrides
@@ -69,7 +72,7 @@ describe('the packaged bundled runtime check', () => {
 
   it('rejects an unpacked build whose descriptor schema is unknown', async () => {
     const directory = releaseDir()
-    stageDescriptor(directory, validDescriptor({ schemaVersion: 4 }))
+    stageDescriptor(directory, validDescriptor({ schemaVersion: 3 }))
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
   })
 
@@ -108,6 +111,12 @@ describe('the packaged bundled runtime check', () => {
   it('rejects Node headers whose digest differs from the descriptor', async () => {
     const directory = releaseDir()
     stageDescriptor(directory, validDescriptor({ nodeHeadersSha256: 'b'.repeat(64) }))
+    expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
+  })
+
+  it('rejects a packaged runtime whose pinned Node headers source archive differs', async () => {
+    const directory = releaseDir()
+    stageDescriptor(directory, validDescriptor({ nodeHeadersArchiveSha256: 'b'.repeat(64) }))
     expect(await bundledRuntimeHolds(directory, manifest)).toBe(false)
   })
 
