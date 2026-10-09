@@ -62,5 +62,9 @@ metadata.
   admission compared raw `realpath()` text. The failure occurs in version
   preparation on Windows, not in the release's Windows package smoke. The
   follow-up inspects each path component for symbolic links/junctions while
-  allowing filesystem-equivalent spelling; its Windows quality gate must pass
-  before a release can include this follow-up.
+  allowing filesystem-equivalent spelling. Quality run `37911838844` passed
+  on Linux, Windows, and the peer suite; the uploaded Windows evidence records
+  `windowsCaseAliasAccepted: true` and `symbolicLinkComponentsRejected: true`.
+- Stable GitHub Release `v0.1.87` was then published successfully from commit
+  `1c81272195c294a0916f98b82942ba4dda9cfc56`, with 25 assets including both
+  Windows installer architectures: https://github.com/ankye/dshker/releases/tag/v0.1.87

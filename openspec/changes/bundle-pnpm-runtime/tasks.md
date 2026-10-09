@@ -20,4 +20,4 @@
 - [x] Add regression coverage for missing build headers and the failed-switch/retry worktree sequence.
 - [x] Run focused runtime/version-switch checks, project validation, and source-file-size validation.
 - [x] Complete the repaired `v0.1.86` native GitHub package matrix and verify published release assets.
-- [ ] Accept Windows canonical/8.3 path aliases while rejecting symbolic-link or junction components in managed worktree admission.
+- [x] Accept Windows canonical/8.3 path aliases while rejecting symbolic-link or junction components in managed worktree admission.
