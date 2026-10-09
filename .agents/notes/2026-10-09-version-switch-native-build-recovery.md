@@ -41,6 +41,11 @@ metadata.
   verified against the pinned archive checksum and computed tree digest before
   fixing the staging path. Re-run native Windows x64/arm64 jobs and release
   smoke before publishing.
+- The first retry then stopped in source tests because Vitest treated the live
+  archive-check script as a test module and supplied a non-file module URL.
+  Moved that script under `tools/test/` without a Vitest test suffix and ran it
+  as a dedicated Node command. Full suite: 1,526 tests across 170 files passed;
+  the dedicated integrity gate also passed with live archive evidence.
 - Focused regression: 31 tests passed. Full suite: 1,521 tests across 170 files
   passed. Environment, format, architecture, types, service smoke, visual
   smoke, web build, Electron source build, desktop-app validation, test-integrity

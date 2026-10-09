@@ -5,10 +5,10 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { NODE_HEADERS_ARTIFACT } from './prepare-runtime.mjs'
-import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
+import { NODE_HEADERS_ARTIFACT } from '../prepare-runtime.mjs'
+import { sha256NodeHeaders } from '../node-runtime-integrity.mjs'
 
-const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const evidenceDirectory = path.join(appRoot, '.run', 'node-headers-archive')
 const evidencePath = path.join(evidenceDirectory, 'verification.json')
 const temporaryDirectory = mkdtempSync(path.join(tmpdir(), 'dshker-node-headers-'))
