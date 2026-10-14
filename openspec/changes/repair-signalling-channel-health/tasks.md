@@ -11,5 +11,5 @@
 
 ## 3. Requested stable release
 
-- [ ] 3.1 Release owner: commit and push version 0.1.88 with matching lockfile and localized changelog, then verify same-commit Linux/Windows Quality and the actual peer integration step before pushing the exact v0.1.88 tag.
-- [ ] 3.2 Release owner, depends on 3.1: wait for the tag-specific package/publish workflow, verify a public stable latest Release with all 25 expected assets and matching checksums/manifests, and record evidence without packaging locally or restarting the active DSH session.
+- [x] 3.1 Release owner: commit and push version 0.1.88 with matching lockfile and localized changelog, then verify same-commit Linux/Windows Quality and the actual peer integration step before pushing the exact v0.1.88 tag.
+- [x] 3.2 Release owner, depends on 3.1: wait for the tag-specific package/publish workflow, verify a public stable latest Release with all 25 expected assets and matching checksums/manifests, and record evidence without packaging locally or restarting the active DSH session.

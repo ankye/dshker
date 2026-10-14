@@ -18,7 +18,7 @@ Independent review found two adjacent hazards: a full 32-event queue blocked pon
 
 ## Acceptance limits
 
-The user chose to finish P2P only; no Harness checkout, profile or installed application was modified or restarted. No local installer was packaged or release published.
+At the source-validation checkpoint, the user chose to finish P2P only; no Harness checkout, profile or installed application was modified or restarted, and no local installer was packaged. The later requested stable release is recorded in `2026-10-14-release-v0.1.88.md`.
 
 Validated on 2026-10-14:
 
