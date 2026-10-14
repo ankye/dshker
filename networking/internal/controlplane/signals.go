@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"sync"
 	"time"
 
@@ -30,12 +31,29 @@ type SignalEvent struct {
 // two sockets kick each other off forever.
 const SignalSuperseded = "p2p.signal_superseded"
 
+const (
+	signalHeartbeatInterval = 10 * time.Second
+	signalPongTimeout       = 5 * time.Second
+)
+
+// Keep the public refusal code separate from the failed carrier and its cause.
+// In particular, an HTTPS presence reply cannot establish WebSocket health.
+type signalHealthError struct {
+	channel string
+	code    string
+	cause   error
+}
+
+func (failure *signalHealthError) Error() string { return failure.code }
+func (failure *signalHealthError) Unwrap() error { return failure.cause }
+
 type Signals struct {
 	connection *websocket.Conn
 	ctx        context.Context
-	cancel     context.CancelFunc
+	cancel     context.CancelCauseFunc
 	events     chan SignalEvent
 	finished   chan struct{}
+	healthDone chan struct{}
 	writeMu    sync.Mutex
 
 	// closeMu guards the close reason the read loop recorded when it ended.
@@ -83,39 +101,35 @@ func (client *Client) Subscribe(ctx context.Context, deviceID string) (*Signals,
 		Version  int    `json:"version"`
 		DeviceID string `json:"deviceId"`
 	}
+	var closed websocket.CloseError
+	if errors.As(err, &closed) && closed.Reason == SignalSuperseded {
+		connection.CloseNow()
+		return nil, errors.New(SignalSuperseded)
+	}
 	if err != nil || kind != websocket.MessageText || protocol.Decode(data, &ready) != nil || ready.Type != "ready" || ready.Version != protocol.Version || ready.DeviceID != deviceID {
 		connection.CloseNow()
 		return nil, errors.New("p2p.protocol_mismatch")
 	}
-	child, cancel := context.WithCancel(ctx)
-	signals := &Signals{connection: connection, ctx: child, cancel: cancel, events: make(chan SignalEvent, 32), finished: make(chan struct{})}
+	child, cancel := context.WithCancelCause(ctx)
+	signals := &Signals{connection: connection, ctx: child, cancel: cancel, events: make(chan SignalEvent, 32), finished: make(chan struct{}), healthDone: make(chan struct{})}
 	go signals.read()
 	// Presence is registered before this call returns. The coordinator authorizes a
 	// connection attempt against presence, so a subscription that has not reported
 	// yet would make the very first attempt — by this machine or toward it — look
 	// like an offline peer, which is a race no retry loop should have to paper over.
-	if !client.beat(child, connection, deviceID, cancel) {
-		return nil, errors.New("p2p.server_unavailable")
+	if err := signals.beat(client, deviceID); err != nil {
+		close(signals.healthDone)
+		signals.failHealth(err)
+		signals.Close()
+		return nil, signals.Err()
 	}
-	go func() {
-		ticker := time.NewTicker(10 * time.Second)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-child.Done():
-				return
-			case <-ticker.C:
-				if !client.beat(child, connection, deviceID, cancel) {
-					return
-				}
-			}
-		}
-	}()
+	go signals.maintainHealth(client, deviceID)
 	return signals, nil
 }
 
-// beat sends one heartbeat and reports whether the control connection survives it.
-func (client *Client) beat(ctx context.Context, connection *websocket.Conn, deviceID string, cancel context.CancelFunc) bool {
+// beat proves both presence admission and the actual signalling carrier. Ping
+// waits for the read goroutine to process its matching Pong, even on an idle socket.
+func (signals *Signals) beat(client *Client, deviceID string) error {
 	var heartbeat struct {
 		DeviceID string `json:"deviceId"`
 		At       int64  `json:"at"`
@@ -124,32 +138,76 @@ func (client *Client) beat(ctx context.Context, connection *websocket.Conn, devi
 	// directory can tell deployments apart, and the account this machine is signed
 	// in to, because presence belongs to an account: signed in nowhere reports none
 	// and reads as offline.
-	if client.call(ctx, "POST", "/v1/heartbeat", "", client.heartbeat(), &heartbeat) != nil || heartbeat.DeviceID != deviceID {
-		cancel()
-		connection.CloseNow()
-		return false
+	if err := client.call(signals.ctx, "POST", "/v1/heartbeat", "", client.heartbeat(), &heartbeat); err != nil {
+		return &signalHealthError{channel: "https", code: err.Error(), cause: err}
 	}
-	return true
+	if heartbeat.DeviceID != deviceID {
+		return &signalHealthError{channel: "https", code: "p2p.identity_mismatch"}
+	}
+	pingCtx, cancel := context.WithTimeout(signals.ctx, signalPongTimeout)
+	defer cancel()
+	if err := signals.connection.Ping(pingCtx); err != nil {
+		return &signalHealthError{channel: "websocket", code: "p2p.server_unavailable", cause: err}
+	}
+	return nil
+}
+
+func (signals *Signals) maintainHealth(client *Client, deviceID string) {
+	defer close(signals.healthDone)
+	ticker := time.NewTicker(signalHeartbeatInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-signals.ctx.Done():
+			return
+		case <-ticker.C:
+			if err := signals.beat(client, deviceID); err != nil {
+				signals.failHealth(err)
+				return
+			}
+		}
+	}
+}
+
+func (signals *Signals) failHealth(err error) {
+	signals.stop(err)
+	// The reader can still be finalizing an explicit coordinator Close frame.
+	// Do not log its supersession or an earlier refusal as a heartbeat failure.
+	<-signals.finished
+	var trigger, failure *signalHealthError
+	if errors.As(err, &trigger) && errors.As(signals.Err(), &failure) && failure == trigger {
+		log.Printf("[p2p] signalling %s heartbeat failed: %s", failure.channel, failure.code)
+	}
+}
+
+func (signals *Signals) stop(cause error) {
+	signals.cancel(cause)
+	signals.connection.CloseNow()
 }
 
 func (signals *Signals) read() {
 	defer close(signals.finished)
 	defer close(signals.events)
-	defer signals.cancel()
-	defer signals.connection.CloseNow()
+	defer signals.stop(context.Canceled)
 	for {
 		kind, data, err := signals.connection.Read(signals.ctx)
-		if err != nil || kind != websocket.MessageText {
+		if err != nil {
 			// Keep the coordinator's stated reason before unwinding: it is the only
 			// way the supervisor can tell a displacement from a lost network and
 			// avoid reconnecting into a kick-loop.
 			signals.recordClose(err)
+			signals.failRead(err, "p2p.server_unavailable")
+			return
+		}
+		if kind != websocket.MessageText {
+			signals.failRead(nil, "p2p.protocol_mismatch")
 			return
 		}
 		var header struct {
 			Type string `json:"type"`
 		}
-		if json.Unmarshal(data, &header) != nil {
+		if err := json.Unmarshal(data, &header); err != nil {
+			signals.failRead(err, "p2p.protocol_mismatch")
 			return
 		}
 		event := SignalEvent{Type: header.Type}
@@ -159,7 +217,8 @@ func (signals *Signals) read() {
 				Type  string `json:"type"`
 				Lease Lease  `json:"lease"`
 			}
-			if protocol.Decode(data, &value) != nil {
+			if err := protocol.Decode(data, &value); err != nil {
+				signals.failRead(err, "p2p.protocol_mismatch")
 				return
 			}
 			event.Lease = value.Lease
@@ -168,7 +227,8 @@ func (signals *Signals) read() {
 				Type   string          `json:"type"`
 				Signal protocol.Signal `json:"signal"`
 			}
-			if protocol.Decode(data, &value) != nil {
+			if err := protocol.Decode(data, &value); err != nil {
+				signals.failRead(err, "p2p.protocol_mismatch")
 				return
 			}
 			event.Signal = value.Signal
@@ -178,7 +238,8 @@ func (signals *Signals) read() {
 				PairID   string `json:"pairId"`
 				Revision uint64 `json:"revision"`
 			}
-			if protocol.Decode(data, &value) != nil {
+			if err := protocol.Decode(data, &value); err != nil {
+				signals.failRead(err, "p2p.protocol_mismatch")
 				return
 			}
 			event.PairID = value.PairID
@@ -195,12 +256,44 @@ func (signals *Signals) read() {
 		case signals.events <- event:
 		case <-signals.ctx.Done():
 			return
+		default:
+			// A slow event consumer must not prevent this reader from handling Pong
+			// or coordinator Close frames. End this bounded subscription explicitly;
+			// continuing after dropping an admitted signal would corrupt negotiation.
+			err := errors.New("p2p.signal_limit")
+			log.Printf("[p2p] signalling event queue exceeded its limit: %s", err)
+			signals.cancel(err)
+			return
 		}
 	}
 }
 
+func (signals *Signals) failRead(err error, code string) {
+	if signals.Superseded() {
+		code = SignalSuperseded
+	} else if typed, ok := protocol.Refusal(err); ok {
+		code = typed
+	}
+	// CancelCause keeps owner cancellation or an earlier specific failure intact.
+	signals.cancel(&signalHealthError{channel: "websocket", code: code, cause: err})
+}
+
 func (signals *Signals) Events() <-chan SignalEvent { return signals.events }
-func (signals *Signals) Done() <-chan struct{}      { return signals.ctx.Done() }
+
+// Publish loss only after the reader has recorded the coordinator's close reason.
+// A concurrent Ping can observe the socket closing before Read returns CloseError;
+// publishing ctx.Done then would let a supervisor miss an explicit supersession.
+func (signals *Signals) Done() <-chan struct{} { return signals.finished }
+
+// Err preserves the first local failure and the coordinator's explicit
+// supersession reason even when a heartbeat concurrently observes the closure.
+func (signals *Signals) Err() error {
+	if signals.Superseded() {
+		return errors.New(SignalSuperseded)
+	}
+	return context.Cause(signals.ctx)
+}
+
 func (signals *Signals) Send(ctx context.Context, signal protocol.Signal) error {
 	signals.writeMu.Lock()
 	defer signals.writeMu.Unlock()
@@ -213,4 +306,8 @@ func (signals *Signals) Send(ctx context.Context, signal protocol.Signal) error 
 	}
 	return nil
 }
-func (signals *Signals) Close() { signals.cancel(); signals.connection.CloseNow(); <-signals.finished }
+func (signals *Signals) Close() {
+	signals.stop(context.Canceled)
+	<-signals.finished
+	<-signals.healthDone
+}

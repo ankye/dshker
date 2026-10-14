@@ -179,6 +179,13 @@ func (owner *signaling) replace() bool {
 		}
 		next, err := owner.dial(owner.ctx, owner.device)
 		if err != nil {
+			// Initial health checks run before dial publishes a subscription. A
+			// coordinator can supersede that socket in this window too; retrying
+			// here would displace its live successor just like retrying a published
+			// superseded subscription. Explicit ReconnectSignals remains available.
+			if err.Error() == controlplane.SignalSuperseded {
+				return false
+			}
 			if delay < signalingRetryCeil {
 				delay *= 2
 				if delay > signalingRetryCeil {

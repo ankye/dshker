@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.88 — 2026-10-14
+
+### 简体中文 (zh-CN)
+
+- **修复 P2P 信令长连接的失活检测缺口。** 现在同时验证 HTTPS 在线心跳和实际 WebSocket 的 Ping/Pong；无响应的信令订阅会及时结束，交给现有重连流程恢复，不会因此启动或重启 DSH。服务器确实不可达时仍明确报错。
+- **保留准确的连接失败原因。** 订阅被新连接替换时停止该订阅的自动重试，避免互相顶替；事件队列过载、协议错误和认证拒绝不再误报为普通网络故障，关闭时完整清理探活任务。
+
+### English (en-US)
+
+- **Detect unresponsive long-lived P2P signalling sockets.** HTTPS presence and actual WebSocket Ping/Pong are now checked separately. Unresponsive subscriptions close for the existing reconnect supervisor to recover, without starting or restarting DSH. An unreachable coordinator still reports an explicit failure.
+- **Keep connection failures specific.** A superseded subscription stops its automatic retry rather than displacing its successor. Event overload, protocol errors and authorization refusals retain their specific causes, and closing joins the health-check tasks.
+
 ## 0.1.87 — 2026-10-09
 
 ### 简体中文 (zh-CN)

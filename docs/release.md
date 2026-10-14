@@ -177,26 +177,30 @@ type checks, tests, smoke checks, and both renderer and Electron builds.
 
 `.github/workflows/package.yml` runs for a push to `main`, a `v*` tag, or a
 manual dispatch. It first repeats the release-input quality gates, then builds
-macOS arm64/x64 DMGs and Windows x64/arm64 NSIS installers independently. In a
+macOS arm64/x64 DMGs, Windows x64/arm64 NSIS installers, and Linux x64/arm64
+AppImage and deb packages independently. In a
 separate matrix it cross-builds the six standalone `dshkerd` archives. Every
 run verifies its release metadata and runs the packaged application smoke on its
 native runner. It then uploads each installer and CLI archive with its manifest
 and checksum as a 14-day GitHub Actions artifact.
-The packaged smoke launch budget is explicit per native runner: 20 seconds on
-macOS and 60 seconds on Windows. Timeout and child-process error details are
+The packaged smoke launch budget is explicit per native runner: 60 seconds on
+each target. Timeout and child-process error details are
 retained in the diagnostic artifact.
 
 Only a tag run publishes. Before any package job starts, the workflow requires
 a stable tag equal to `v${package.json.version}`. After all desktop and CLI jobs
 succeed, a minimal `contents: write` job downloads the named artifacts, requires
-one DMG and one EXE for each desktop architecture plus all six CLI archives,
+one DMG and one EXE for each macOS/Windows architecture, one AppImage and one deb
+for each Linux architecture, plus all six CLI archives,
 checks every asset against its manifest and checksum, writes the installer-only
-`checksums.txt` and the combined CLI checksum/manifest pair, and preserves the four manifests as
+`checksums.txt` and the combined CLI checksum/manifest pair, and preserves the six manifests as
 `release-manifest-macos-arm64.json`, `release-manifest-macos-x64.json`,
-`release-manifest-windows-x64.json`, and `release-manifest-windows-arm64.json`.
+`release-manifest-windows-x64.json`, `release-manifest-windows-arm64.json`,
+`release-manifest-linux-x64.json`, and `release-manifest-linux-arm64.json`.
 It refuses to continue if the tag already
-has a GitHub Release, and `gh release create --verify-tag --generate-notes`
-creates a public latest Release without clobbering an existing one. Pushes to
+has a GitHub Release, and `gh release create --verify-tag --notes`
+creates a public latest Release using the matching CHANGELOG entry without
+clobbering an existing one. Pushes to
 `main` and manual dispatches never execute the publishing job.
 
 The embedded Harness seed is generated during each GitHub Actions run from

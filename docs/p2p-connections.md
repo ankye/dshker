@@ -219,6 +219,8 @@ means the same thing everywhere, but what to do about it depends on the step.
 
 ### Adding a server / signing in
 
+Signal subscriptions verify both HTTPS presence and WebSocket Ping/Pong, initially and every 10 seconds thereafter. A pong has a 5-second deadline. An unresponsive socket closes so the existing reconnect supervisor can replace it; a successful HTTPS heartbeat alone cannot keep it healthy. Cancellation joins both the reader and health check. These checks do not start DSH or change the selected server or transport.
+
 | Code                                                                                         | Meaning and what to do                                                                                                                                                                   |
 | -------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `p2p.invalid_service_endpoint` / `p2p.invalid_signal_endpoint` / `p2p.invalid_stun_endpoint` | Address format is wrong. HTTPS must be `https:`, signalling must be `wss:`, STUN is `host:port`. Verify with `node tools/p2p-preflight.mjs` first.                                       |

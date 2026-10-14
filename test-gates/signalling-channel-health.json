@@ -1,0 +1,67 @@
+{
+  "change": "repair-signalling-channel-health",
+  "risk": "standard",
+  "production_files": [
+    "networking/internal/controlplane/signals.go",
+    "networking/internal/peersession/signaling.go"
+  ],
+  "test_files": [
+    "networking/internal/controlplane/signals_health_test.go",
+    "networking/internal/peersession/signalling_health_integration_test.go"
+  ],
+  "live_test_files": [
+    "networking/internal/controlplane/signals_health_test.go",
+    "networking/internal/peersession/signalling_health_integration_test.go"
+  ],
+  "state_matrix": [
+    { "state": "success", "test": "TestSignalsIdleWebSocketRemainsHealthy" },
+    { "state": "stale_timeout", "test": "TestSignalsMissingPongEndsSubscriptionWithHTTPSHealthy" },
+    { "state": "rejected", "test": "TestSignalsInitialMissingPongRefusesSubscription" },
+    { "state": "reset", "test": "TestSignalsCloseJoinsHealthAndConcurrentWrites" },
+    { "state": "rejected", "test": "TestSignalsHTTPHeartbeatRefusalIsPreserved" },
+    { "state": "stale_timeout", "test": "TestSignalsPeriodicHTTPFailureEndsSubscription" },
+    { "state": "superseded", "test": "TestSignalsSupersededReasonSurvivesCleanup" },
+    { "state": "rejected", "test": "TestSignalsInitialBurstRefusesWithSignalLimit" },
+    { "state": "rejected", "test": "TestSignalsSlowConsumerEndsWithSignalLimit" },
+    { "state": "superseded", "test": "TestSignalsSupersededWhilePongPendingPublishesFinalReason" },
+    { "state": "superseded", "test": "TestSignalsInitialSupersededWhilePongPending" },
+    { "state": "superseded", "test": "TestSignalingInitialHealthSupersededDoesNotRetry" },
+    {
+      "state": "superseded",
+      "test": "TestSignalingReplacementHealthSupersededStopsAutomaticRetry"
+    },
+    { "state": "recovery", "test": "TestSignalingHealthTimeoutReplacesActualSocket" },
+    { "state": "stale_timeout", "test": "TestSignalsReadFailurePreservesTypedCause" },
+    { "state": "rejected", "test": "TestSignalsMalformedMessagePreservesProtocolCause" },
+    { "state": "superseded", "test": "TestSignalsSupersededBeforeReadyPreservesRefusal" }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "networking/internal/controlplane/signals.go",
+      "field": "subscription lifecycle, actual pong, typed cause and device-bound presence",
+      "source": "real TLS HTTP heartbeat and upgraded WebSocket, without production test hooks",
+      "test": "TestSignalsMissingPongEndsSubscriptionWithHTTPSHealthy",
+      "assertion": "WebSocket failure was not detected independently of successful HTTPS presence",
+      "state": "stale_timeout",
+      "identity_keys": ["deviceId", "subscription", "channel", "close cause"],
+      "missing_semantics": "A missing pong ends only this subscription with a typed failure; HTTPS success cannot substitute for socket health."
+    },
+    {
+      "production_file": "networking/internal/peersession/signaling.go",
+      "field": "automatic replacement admission refusal",
+      "source": "real subscription returning the coordinator's exact superseded close reason",
+      "test": "TestSignalingReplacementHealthSupersededStopsAutomaticRetry",
+      "assertion": "superseded replacement kept redialling or claimed healthy ownership",
+      "state": "superseded",
+      "identity_keys": ["deviceId", "socket", "subscription", "dial count"],
+      "missing_semantics": "Explicit supersession stops this automatic replacement owner; ordinary server loss still retries and explicit later reconnect remains possible."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "cd networking && go test -json -race ./internal/controlplane ./internal/peersession -run '^TestSignals|^TestSignaling(InitialHealth|ReplacementHealth|HealthTimeout)' -count=1 > ../.run/signalling-channel-health/go-test.jsonl",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [{ "artifact": ".run/signalling-channel-health/go-test.jsonl" }]
+}
