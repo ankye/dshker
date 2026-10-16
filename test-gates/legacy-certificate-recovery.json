@@ -7,7 +7,8 @@
     "electron/main/p2p/device-session.ts",
     "electron/main/p2p/management.ts",
     "electron/main/p2p/tests/legacy-certificate-fixture.ts",
-    "tools/prepare-runtime.mjs"
+    "tools/prepare-runtime.mjs",
+    "networking/internal/helper/certificates.go"
   ],
   "test_files": [
     "electron/main/p2p/certificate-recovery-scope.test.ts",
@@ -17,7 +18,8 @@
     "electron/main/p2p/management-legacy-certificate.test.ts",
     "networking/integration/certificate_legacy_cli_linux_test.go",
     "networking/integration/certificate_unbound_recovery_test.go",
-    "tools/prepare-runtime.test.mjs"
+    "tools/prepare-runtime.test.mjs",
+    "networking/internal/helper/certificate_recovery_refusal_test.go"
   ],
   "live_test_files": [
     "networking/integration/certificate_legacy_cli_linux_test.go",
@@ -54,6 +56,23 @@
     }
   ],
   "field_bindings": [
+    {
+      "production_file": "networking/internal/helper/certificates.go",
+      "test": "TestCertificateRecoveryEndpointRefusalsStopBeforeReadback",
+      "assertion": "if queries != 1 || grants != 1 || recoveries != 1 || !unchanged",
+      "field": "original recovery endpoint error terminates issuance before post-issue readback",
+      "state": "rejected",
+      "source": "Actual recovery call error, the existing typed certificate mapping and the original canonical credential.",
+      "identity_keys": [
+        "deviceId",
+        "publicKey",
+        "privateKey",
+        "networkId",
+        "pendingRequestId",
+        "token"
+      ],
+      "missing_semantics": "A recovery refusal returns its typed mapped error, no success result, no post-issue readback, no replacement identity and no clearing of a valid login."
+    },
     {
       "production_file": "tools/prepare-runtime.mjs",
       "test": "returns the exact digest with its file already closed for %j",

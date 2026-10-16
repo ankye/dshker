@@ -34,9 +34,10 @@ deployment or installed DSH restart is part of this repair.
 
 ## Verification and delivery
 
-- Implemented only the three Electron owners: scoped selection admission,
-  certificate-session migration and management composition. No production Go
-  behavior or independent server deployment changes are needed.
+- Implemented the three Electron owners: scoped selection admission,
+  certificate-session migration and management composition. Real CLI rejection
+  testing additionally identified the core error-shadowing defect below. No
+  independent server deployment changes are needed.
 - Source preflight: full Vitest 176 files / 1,626 tests passed without pending
   cases, focused P2P/preload regression 34 files / 515 tests passed, foundation
   E2E 4 files / 6 tests passed. Type, environment, architecture, formatting,
@@ -78,3 +79,23 @@ deployment or installed DSH restart is part of this repair.
   exists in the runtime hash (`end` before asynchronous close); D7 tracks its
   minimal repair without retries. This is not yet proof of that CI failure's
   cause, and actual new Windows packaging remains required.
+- Quality run 38950437573 reproduced the same isolated Linux refusal failure.
+  ZIP SHA-256 `de6179190827b627263ddbf4eadfa3fc08344b62faf75ffb8014c8291160cccf`
+  was independently verified. Diagnostics proved complete canonical/index/
+  sidecar readback, unchanged identity/certificate, one newly created unused
+  grant, no renewal, and the real endpoint's HTTP 403 binding-unauthorized.
+  Inspection then found `grant, err :=` shadowed the outer `err` inside the
+  expired recovery branch. The recovery refusal was lost, post-issuance
+  readback proceeded with an empty issued device and misreported sync-failed.
+  Keep the grant error separate so the original recovery error reaches the
+  existing typed mapping; regress errors before post-issuance readback rather
+  than weakening the real CLI assertion.
+- Seven new endpoint-refusal cases reproduced the defect before the fix and
+  passed with the race detector after the three-line grant-error correction.
+  They assert exactly one pre-query, no post-issue query, retained credential,
+  pending scope/request and valid login, and no device/DSH activation. Existing
+  authorized, missing-scope, login-preservation and lost-reply recovery tests
+  passed too. The final Linux CLI execution remains required on the new commit.
+- Windows x64 packaging and packaged smoke passed in run 38950437556 after the
+  close-barrier correction; this does not prove its earlier failure's root
+  cause. All platform packages must still pass for the final release commit.

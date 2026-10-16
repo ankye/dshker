@@ -57,6 +57,17 @@ on Windows as well as Linux. Do not add retry, delay, alternate runtime or
 unverified publication to conceal an `EPERM` failure. Actual Windows packaging
 must pass for the release commit; a local unit pass is not packaging evidence.
 
+### D8. Preserve recovery refusals across grant admission
+
+The real legacy CLI refusal test exposed an inner grant-error variable hiding
+the recovery request's error from the outer issuance state machine. Keep grant
+admission errors separate, then pass the actual recovery error to the existing
+typed certificate mapping. A rejected recovery must not enter post-issuance
+readback or claim synchronization failure merely because no certificate was
+issued. Preserve its pending request, original credential, valid login and
+existing device/network/pair ownership. Test both the real server refusal and
+the helper's error propagation; do not broaden authorization or add retries.
+
 ## Risks / Trade-offs
 
 - A session may have expired too: show a login-required recovery error and preserve the device.

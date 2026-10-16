@@ -206,9 +206,9 @@ func (host *Host) issueCertificate(ctx context.Context, account *account, device
 	}
 	var issued controlplane.Device
 	if expired {
-		grant, err := account.base.EnrollmentToken(ctx, token, metadata.NetworkID)
-		if err != nil {
-			return controlplane.Device{}, certificateFailure(ctx, err)
+		grant, grantErr := account.base.EnrollmentToken(ctx, token, metadata.NetworkID)
+		if grantErr != nil {
+			return controlplane.Device{}, certificateFailure(ctx, grantErr)
 		}
 		if len(grant.Token) != 64 || grant.NetworkID != metadata.NetworkID || grant.ExpiresAt <= time.Now().Unix() {
 			return controlplane.Device{}, errors.New("p2p.invalid_server_response")
