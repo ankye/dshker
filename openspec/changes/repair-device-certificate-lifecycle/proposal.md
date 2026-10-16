@@ -9,6 +9,7 @@ Mac and Windows users must remain reachable after their 30-day device certificat
 - Preserve device identity, network bindings, pair revisions and active peer sessions; synchronize the desktop credential copy without downgrading the core's certificate.
 - Return actionable typed errors for expired credentials, missing login, rejected authorization, invalid responses and interrupted persistence.
 - Prove partial-success recovery with authenticated certificate readback, restart, network failures and identity-continuity tests.
+- Complete the explicitly requested legacy migration: when an older desktop credential has no network ID and the core requires expiry recovery, use only that signed-in account's persisted manual network selection after fresh coordinator ownership and original-device binding verification. Missing or invalid selection is an explicit refusal, not permission to guess a network.
 
 Target users are existing desktop and headless peers. Non-goals include disabling certificate verification, deleting or re-enrolling devices, changing DSH, substituting servers, automatically starting DSH, or deploying a coordination server without authorization.
 

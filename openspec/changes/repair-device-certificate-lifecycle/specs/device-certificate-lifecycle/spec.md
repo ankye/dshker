@@ -54,3 +54,26 @@ Certificate maintenance SHALL be serialized per service and bound to the core li
 #### Scenario: Concurrent or cancelled maintenance
 - **WHEN** startup, reconnect and periodic maintenance overlap or the owning process closes
 - **THEN** at most one issuance owner runs and cancelled or stale work cannot overwrite a newer certificate
+
+### Requirement: Legacy recovery uses only a verified manual network selection
+For an older desktop credential that omits its enrollment network, the desktop SHALL resolve recovery scope only after the core explicitly requires expiry recovery and a current login exists. It SHALL use only the network manually selected by that authenticated user and freshly verify coordinator ownership and membership of the original device. It MUST preserve the original credential identity and existing network and pair records.
+
+#### Scenario: Logged-in legacy device has a valid remembered selection
+- **WHEN** an expired legacy credential has no network ID and its current user's manual selection names an owned network containing that device
+- **THEN** one scoped recovery request uses the original key and exact network, persists core metadata, synchronizes only the certificate and restores connectivity without re-enrollment
+
+#### Scenario: Selection is absent or unauthorized
+- **WHEN** no manual selection exists for the current account, or its selected network was deleted, belongs to another account or does not contain the original device
+- **THEN** recovery fails explicitly without choosing another network, changing a credential or creating a device
+
+#### Scenario: Selected scope changes during verification
+- **WHEN** the account token, manual selection or owning lifecycle changes before the scoped request is admitted
+- **THEN** stale recovery is cancelled and cannot issue or persist using that obsolete scope
+
+#### Scenario: Existing credential or core metadata already owns the scope
+- **WHEN** the credential already has a network ID or the initial core request succeeds using canonical certificate state
+- **THEN** desktop selection migration is not invoked and existing scope cannot be replaced by another manual selection
+
+#### Scenario: User supplies a missing selection after login
+- **WHEN** the user explicitly selects an existing network while legacy recovery is blocked for missing scope
+- **THEN** the desktop schedules serialized lifecycle-owned recovery with that verified selection without requiring another login or starting DSH

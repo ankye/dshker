@@ -1,0 +1,153 @@
+{
+  "change": "repair-device-certificate-lifecycle-legacy-scope",
+  "risk": "data_critical",
+  "scope_note": "Only the documented legacy recovery-required transition resolves an authenticated user's explicit manual selection. Directory and original-device membership must be freshly verified, while existing recovery scope and credential shape remain unchanged. The plural tests/ helper is listed because the generic scanner classifies it as source; it remains test-only and is checked for exclusion from production bundles. Unit doubles are not live acceptance. Live acceptance uses the independent coordinator, actual dshkerd CLI and an isolated Linux OS Secret Service; its archive digest and run/head identity must verify before raw events can pass. No installed production credentials or active DSH are used. Physical Win/Mac acceptance is separate.",
+  "production_files": [
+    "electron/main/p2p/certificate-recovery-scope.ts",
+    "electron/main/p2p/device-session.ts",
+    "electron/main/p2p/management.ts",
+    "electron/main/p2p/tests/legacy-certificate-fixture.ts"
+  ],
+  "test_files": [
+    "electron/main/p2p/certificate-recovery-scope.test.ts",
+    "electron/main/p2p/device-session.test.ts",
+    "electron/main/p2p/device-session-legacy.test.ts",
+    "electron/main/p2p/management-certificate.test.ts",
+    "electron/main/p2p/management-legacy-certificate.test.ts",
+    "networking/integration/certificate_legacy_cli_linux_test.go"
+  ],
+  "live_test_files": ["networking/integration/certificate_legacy_cli_linux_test.go"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "recovers the exact verified manual scope while preserving every legacy identity field"
+    },
+    {
+      "state": "no_op",
+      "test": "never consults selection when the first canonical certificate request succeeds"
+    },
+    {
+      "state": "partial",
+      "test": "reads canonical partial success after desktop storage failure and restart without another scope"
+    },
+    {
+      "state": "recovery",
+      "test": "recovers after an explicit manual selection without another login or enrollment"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "cancels a queued certificate write when an explicit selection replaces its scope"
+    },
+    {
+      "state": "reset",
+      "test": "TestCertificateRealCoordinatorCLILegacyRecovery"
+    },
+    {
+      "state": "rejected",
+      "test": "TestCertificateRealCoordinatorCLILegacyScopeRefusals"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/p2p/certificate-recovery-scope.ts",
+      "test": "freshly verifies the current user and exact manual network with the original device",
+      "assertion": "expect(f.remembered).toHaveBeenCalledWith(serviceId, user.userId)",
+      "field": "explicit selected network belongs to the authenticated account and contains the original device",
+      "state": "success",
+      "source": "Current coordinator user, account-scoped manual selection, fresh coordinator directory and a stable token/selection/lifecycle owner.",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "deviceId",
+        "token",
+        "selectionVersion"
+      ],
+      "missing_semantics": "Missing selection remains recovery-required; foreign/deleted/unbound scope is forbidden; unavailable/malformed reads fail explicitly, and changed owners cancel rather than choosing another network."
+    },
+    {
+      "production_file": "electron/main/p2p/device-session.ts",
+      "test": "recovers the exact verified manual scope while preserving every legacy identity field",
+      "assertion": "expect(f.stored().credential).not.toHaveProperty('networkId')",
+      "field": "one scoped recovery changes only the original certificate and fully reads it back",
+      "state": "recovery",
+      "source": "Original credential identity and revision; the core's exact typed refusal admits only one verified legacy-scope transition.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "privateKey",
+        "userId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Never re-enroll, infer a network, rewrite an existing network ID, weaken persistence checks or accept stale token/selection/lifecycle work."
+    },
+    {
+      "production_file": "electron/main/p2p/management.ts",
+      "test": "recovers after an explicit manual selection without another login or enrollment",
+      "assertion": "expect(f.runtimeStart).not.toHaveBeenCalled()",
+      "field": "manual network selection schedules the same serialized lifecycle-owned certificate maintenance",
+      "state": "recovery",
+      "source": "Persisted explicit network selection under the current account, existing device-session single flight and service-session status.",
+      "identity_keys": ["serviceId", "userId", "networkId", "deviceId", "certificate"],
+      "missing_semantics": "Failed selection persistence or closed lifetime cannot schedule recovery. Login stays valid when scope is missing or forbidden; DSH and device registration are never started."
+    },
+    {
+      "production_file": "electron/main/p2p/tests/legacy-certificate-fixture.ts",
+      "test": "reads canonical partial success after desktop storage failure and restart without another scope",
+      "assertion": "expect(f.stored().credential).not.toHaveProperty('networkId')",
+      "field": "test-only legacy identity and partial-write composition; excluded from production imports and artifacts",
+      "state": "partial",
+      "source": "Isolated test-side credential state and explicit test ownership; no production root imports this helper.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "privateKey",
+        "userId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Test doubles validate only the Electron boundary, never replace required real CLI/coordinator/OS-store evidence or production dependencies."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "mkdir -p .run/legacy-certificate-recovery && npm test -- --run --reporter=json --outputFile=.run/legacy-certificate-recovery/renderer-tests.json",
+      "no_mock": true
+    },
+    {
+      "command": "npm run environment:check && npm run architecture:check && npm run format:check && npm run type-check",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go vet ./... && go test -json -race -count=1 ./internal/controlplane ./internal/helper ./internal/localrpc ./internal/core > ../.run/legacy-certificate-recovery/core-tests.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && test -f \"${DSHKER_SERVER_BINARY:?explicit verified coordinator binary required}\" && go test -json -race -count=1 -run '^TestCertificateRealCoordinatorLifecycle$' ./integration > ../.run/legacy-certificate-recovery/local-real-coordinator.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "npm run test:e2e && npm run service:smoke && npm run visual:smoke && npm run build && npm run build:electron",
+      "no_mock": true
+    },
+    {
+      "command": "gh run view \"${DSHKER_CLIENT_CI_RUN_ID:?explicit client CI run required}\" --repo ankye/dshker --json headSha,status,conclusion,url > .run/legacy-certificate-recovery/client-quality.json && gh api \"repos/ankye/dshker/actions/runs/${DSHKER_CLIENT_CI_RUN_ID}/artifacts\" --jq '.artifacts[] | select(.name == \"certificate-lifecycle-linux-process\")' > .run/legacy-certificate-recovery/certificate-artifact.json",
+      "no_mock": true
+    },
+    {
+      "command": "node --input-type=module -e 'import fs from \"node:fs\"; import crypto from \"node:crypto\"; import {execFileSync} from \"node:child_process\"; const root=\".run/legacy-certificate-recovery/\"; const revision=execFileSync(\"git\",[\"rev-parse\",\"HEAD\"],{encoding:\"utf8\"}).trim(); const ci=JSON.parse(fs.readFileSync(root+\"client-quality.json\",\"utf8\")); if(ci.headSha!==revision||ci.status!==\"completed\"||ci.conclusion!==\"success\") throw Error(\"client CI is not green for exact HEAD\"); const artifact=JSON.parse(fs.readFileSync(root+\"certificate-artifact.json\",\"utf8\")); if(artifact.expired||artifact.name!==\"certificate-lifecycle-linux-process\"||artifact.workflow_run.head_sha!==revision||artifact.workflow_run.id!==Number(process.env.DSHKER_CLIENT_CI_RUN_ID)) throw Error(\"certificate artifact ownership mismatch\"); const zip=execFileSync(\"gh\",[\"api\",\"repos/ankye/dshker/actions/artifacts/\"+artifact.id+\"/zip\"],{maxBuffer:16000000}); if(\"sha256:\"+crypto.createHash(\"sha256\").update(zip).digest(\"hex\")!==artifact.digest) throw Error(\"certificate artifact archive digest mismatch\"); fs.writeFileSync(root+\"certificate-process.zip\",zip); const raw=execFileSync(\"unzip\",[\"-p\",root+\"certificate-process.zip\",\"linux-real-process.jsonl\"],{encoding:\"utf8\"}); const rows=raw.trim().split(\"\\n\").map(JSON.parse); if(rows.some(row=>row.Action===\"fail\"||row.Action===\"skip\")) throw Error(\"certificate process failed or skipped\"); for(const name of [\"TestCertificateRealCoordinatorLifecycle\",\"TestCertificateRealCoordinatorCLICredentialReadback\",\"TestCertificateRealCoordinatorCLILegacyRecovery\",\"TestCertificateRealCoordinatorCLILegacyScopeRefusals\"]) if(!rows.some(row=>row.Action===\"pass\"&&row.Test===name)) throw Error(\"required process test did not pass: \"+name); fs.writeFileSync(root+\"linux-real-process.jsonl\",raw); for(const file of [\"out/main/index.cjs\",\"out/preload/index.cjs\",\"out/preload/workbench.cjs\"]) {const body=fs.readFileSync(file,\"utf8\"); for(const marker of [\"legacyCertificateFixture\",\"newCertificateLegacyCLI\",\"vi.mock\",\"vitest\"]) if(body.includes(marker)) throw Error(\"test support reached production bundle: \"+marker);}'",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    { "artifact": ".run/legacy-certificate-recovery/renderer-tests.json" },
+    { "artifact": ".run/legacy-certificate-recovery/core-tests.jsonl" },
+    { "artifact": ".run/legacy-certificate-recovery/local-real-coordinator.jsonl" },
+    { "artifact": ".run/legacy-certificate-recovery/client-quality.json" },
+    { "artifact": ".run/legacy-certificate-recovery/certificate-artifact.json" },
+    { "artifact": ".run/legacy-certificate-recovery/linux-real-process.jsonl" }
+  ]
+}

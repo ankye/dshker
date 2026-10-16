@@ -6,6 +6,7 @@ import { PeerCatalog } from './catalog'
 import { peerPartition } from './partitions'
 import { PeerConnections } from './connections'
 import { PeerCredentialStore } from './credentials'
+import { PeerCertificateRecoveryScope } from './certificate-recovery-scope'
 import { PeerDeviceSession } from './device-session'
 import { PeerDeviceViews } from './device-views'
 import { PeerEnrollment } from './enrollment'
@@ -58,6 +59,7 @@ export class PeerManagement {
   readonly #lifetime = new AbortController()
   #session: Session | undefined
   readonly #deviceSession: PeerDeviceSession
+  readonly #certificateScope: PeerCertificateRecoveryScope
   /** One persisted-account restore at a time per coordinator service. */
   readonly #restoreInFlight = new Map<string, Promise<void>>()
   /**
@@ -94,7 +96,8 @@ export class PeerManagement {
     this.#selection = new P2PSelectionStore({ resolveSettingsRoot: options.resolveSettingsRoot })
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot, options.catalog)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot, options.secrets)
-    this.#deviceSession = new PeerDeviceSession(this.#credentials)
+    this.#certificateScope = new PeerCertificateRecoveryScope(this.#selection)
+    this.#deviceSession = new PeerDeviceSession(this.#credentials, this.#certificateScope)
     this.#devices = new PeerDeviceViews(
       (serviceId, signal, operation) => this.#account(serviceId, signal, operation),
       async (serviceId) => {
@@ -583,7 +586,11 @@ export class PeerManagement {
   }
 
   async rememberAccountSelection(serviceId: string, userId: string, networkId: string) {
-    return this.#selection.remember(serviceId, userId, networkId)
+    this.#admit()
+    this.#certificateScope.selectionChanged(serviceId)
+    await this.#selection.remember(serviceId, userId, networkId)
+    this.#certificateScope.selectionChanged(serviceId)
+    void this.#maintainAfterLogin(serviceId)
   }
 
   async submitEnrollment(serviceId: string, revision: string, signal: AbortSignal) {

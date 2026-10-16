@@ -1,11 +1,14 @@
-import type { PeerAccounts } from './accounts'
+import type {
+  CertificateRecoveryAccounts,
+  PeerCertificateRecoveryScope
+} from './certificate-recovery-scope'
 import type { PeerCredential, PeerCredentialStore } from './credentials'
 import type { PeerChannel } from './runtime-host'
 import { exactPeerObject, PeerHelperError } from './wire'
 
 interface DeviceSession {
   rpc: Pick<PeerChannel, 'call'>
-  accounts: Pick<PeerAccounts, 'hasSession' | 'sessionToken'>
+  accounts: CertificateRecoveryAccounts
 }
 
 /** Synchronizes certificates without transferring ownership of the enrolled identity. */
@@ -14,7 +17,10 @@ export class PeerDeviceSession {
   readonly #pending = new Map<string, Promise<void>>()
   readonly #owners = new Map<string, object>()
 
-  constructor(private readonly credentials: Pick<PeerCredentialStore, 'load' | 'replace'>) {}
+  constructor(
+    private readonly credentials: Pick<PeerCredentialStore, 'load' | 'replace'>,
+    private readonly recoveryScopes: Pick<PeerCertificateRecoveryScope, 'resolve'>
+  ) {}
 
   ready(
     serviceId: string,
@@ -73,35 +79,19 @@ export class PeerDeviceSession {
     session: DeviceSession,
     signal: AbortSignal,
     reportedAccount: (credential: PeerCredential) => Promise<string>,
-    assertCurrent: () => void
+    assertLifecycle: () => void
   ): Promise<void> {
     const saved = await this.credentials.load(serviceId).catch((error: unknown) => {
       if (error instanceof PeerHelperError && error.code === 'p2p.credential_unavailable')
         throw new PeerHelperError('p2p.device_unregistered')
       throw error
     })
-    assertCurrent()
+    assertLifecycle()
     if (saved.credential.serviceId !== serviceId) throw new PeerHelperError('p2p.identity_mismatch')
     const original = saved.credential
-    const token = session.accounts.hasSession(serviceId)
-      ? session.accounts.sessionToken(serviceId)
-      : undefined
-    const result = exactPeerObject(
-      await session.rpc.call(
-        'device.certificate',
-        {
-          serviceId,
-          data: {
-            device: publicDevice(original),
-            privateKey: original.privateKey,
-            ...(original.networkId === undefined ? {} : { networkId: original.networkId }),
-            ...(token === undefined ? {} : { token })
-          }
-        },
-        signal
-      ),
-      ['deviceId', 'publicKey', 'certificate']
-    )
+    const maintained = await this.#certificate(original, session, signal, assertLifecycle)
+    const assertCurrent = maintained.assertCurrent
+    const result = exactPeerObject(maintained.response, ['deviceId', 'publicKey', 'certificate'])
     assertCurrent()
     if (result.deviceId !== original.deviceId || result.publicKey !== original.publicKey)
       throw new PeerHelperError('p2p.identity_mismatch')
@@ -140,6 +130,77 @@ export class PeerDeviceSession {
       throw new PeerHelperError('p2p.identity_mismatch')
     this.#restored.add(serviceId)
   }
+
+  async #certificate(
+    original: PeerCredential,
+    session: DeviceSession,
+    signal: AbortSignal,
+    assertLifecycle: () => void
+  ): Promise<{ response: unknown; assertCurrent: () => void }> {
+    const serviceId = original.serviceId
+    const token = session.accounts.hasSession(serviceId)
+      ? session.accounts.sessionToken(serviceId)
+      : undefined
+    try {
+      const response = await requestCertificate(
+        session,
+        original,
+        original.networkId,
+        token,
+        signal
+      )
+      return { response, assertCurrent: assertLifecycle }
+    } catch (error) {
+      assertLifecycle()
+      if (
+        !(error instanceof PeerHelperError) ||
+        error.code !== 'p2p.certificate_recovery_required' ||
+        original.networkId !== undefined ||
+        token === undefined
+      )
+        throw error
+      if (
+        !session.accounts.hasSession(serviceId) ||
+        session.accounts.sessionToken(serviceId) !== token
+      )
+        throw new PeerHelperError('p2p.request_cancelled')
+      const scope = await this.recoveryScopes.resolve(
+        serviceId,
+        original.deviceId,
+        session.accounts,
+        token,
+        signal,
+        assertLifecycle
+      )
+      await scope.recheck()
+      scope.assertCurrent()
+      const response = await requestCertificate(session, original, scope.networkId, token, signal)
+      await scope.recheck()
+      return { response, assertCurrent: scope.assertCurrent }
+    }
+  }
+}
+
+function requestCertificate(
+  session: DeviceSession,
+  credential: PeerCredential,
+  networkId: string | undefined,
+  token: string | undefined,
+  signal: AbortSignal
+): Promise<unknown> {
+  return session.rpc.call(
+    'device.certificate',
+    {
+      serviceId: credential.serviceId,
+      data: {
+        device: publicDevice(credential),
+        privateKey: credential.privateKey,
+        ...(networkId === undefined ? {} : { networkId }),
+        ...(token === undefined ? {} : { token })
+      }
+    },
+    signal
+  )
 }
 
 function publicDevice(credential: PeerCredential) {

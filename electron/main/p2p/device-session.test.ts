@@ -37,9 +37,11 @@ function fixture() {
   )
   const accounts = {
     hasSession: vi.fn(() => true),
-    sessionToken: vi.fn((): string | undefined => 'e'.repeat(64))
+    sessionToken: vi.fn((): string | undefined => 'e'.repeat(64)),
+    currentUser: vi.fn(),
+    refreshDirectory: vi.fn()
   }
-  const owner = new PeerDeviceSession({ load, replace })
+  const owner = new PeerDeviceSession({ load, replace }, { resolve: vi.fn() })
   const reportedAccount = vi.fn(async () => 'f'.repeat(12))
   const ready = (active = signal(), maintain: boolean | 'after-login' = false) =>
     owner.ready(
