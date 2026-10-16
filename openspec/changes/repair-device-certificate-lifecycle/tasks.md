@@ -11,6 +11,6 @@
 
 ## 3. Integration and delivery
 
-- [ ] 3.1 Verify the separate server's real query and existing renewal/recovery contracts against local client/core processes, including lost-response and restart identity continuity.
-- [ ] 3.2 Update both READMEs, CHANGELOG and Agent Note; verify OpenSpec strict, source-size and default test-integrity gates.
-- [ ] 3.3 Run required source tests, type/architecture/format/smoke checks and source builds, review changes, then commit/push and tag for GitHub Actions packaging; record Windows/macOS CI and published Release evidence independently of manual cross-machine acceptance.
+- [x] 3.1 Verify the separate server's real query and existing renewal/recovery contracts against local client/core processes, including lost-response and restart identity continuity.
+- [x] 3.2 Update both READMEs, CHANGELOG and Agent Note; verify OpenSpec strict, source-size and default test-integrity gates.
+- [x] 3.3 Run required source tests, type/architecture/format/smoke checks and source builds, review changes, then commit/push and tag for GitHub Actions packaging; record Windows/macOS CI and published Release evidence independently of manual cross-machine acceptance.
