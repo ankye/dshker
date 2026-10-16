@@ -17,6 +17,11 @@ describe('P2P failure vocabulary', () => {
       'p2p.runtime_unavailable',
       'p2p.lease_expired',
       'p2p.identity_mismatch',
+      'p2p.certificate_recovery_required',
+      'p2p.certificate_recovery_forbidden',
+      'p2p.certificate_sync_failed',
+      'p2p.certificate_persist_failed',
+      'p2p.credential_read_failed',
       'p2p.remote_path_forbidden',
       'p2p.operation_failed'
     ]) {

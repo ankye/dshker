@@ -45,7 +45,9 @@ type Client struct {
 	// account is the account this machine is signed in to. Presence is reported
 	// per account, so the heartbeat carries it; an empty account means the machine
 	// is signed in nowhere and reports no presence at all.
-	account string
+	account       string
+	certificateMu sync.RWMutex
+	certificate   *tls.Certificate
 }
 
 // SetTelemetry records what to report on subsequent heartbeats. The launcher
@@ -106,42 +108,24 @@ func (endpoints Endpoints) Validate() error {
 func (client *Client) Close() { client.transport.CloseIdleConnections() }
 
 func (client *Client) WithDevice(device Device, private ed25519.PrivateKey, authority Identity) (*Client, error) {
-	if authority.Version != protocol.Version || len(authority.PublicKey) != ed25519.PublicKeySize || authority.ServiceID != protocol.KeyID(authority.PublicKey) || authority.HTTPSOrigin != client.endpoints.HTTPSOrigin || authority.WSSURL != client.endpoints.WSSURL || authority.STUNAddress != client.endpoints.STUNAddress {
-		return nil, errors.New("p2p.invalid_service_identity")
-	}
-	if len(private) != ed25519.PrivateKeySize || !private.Public().(ed25519.PublicKey).Equal(ed25519.PublicKey(device.PublicKey)) || !protocol.ValidID(device.DeviceID) || !protocol.ValidID(device.UserID) {
-		return nil, errors.New("p2p.identity_mismatch")
-	}
-	certificate, err := x509.ParseCertificate(device.Certificate)
-	if err != nil {
-		return nil, errors.New("p2p.invalid_device_certificate")
-	}
-	ca, err := x509.ParseCertificate(authority.Certificate)
-	if err != nil || !ca.IsCA || ca.CheckSignatureFrom(ca) != nil {
-		return nil, errors.New("p2p.invalid_service_identity")
-	}
-	caPublic, ok := ca.PublicKey.(ed25519.PublicKey)
-	if !ok || !caPublic.Equal(ed25519.PublicKey(authority.PublicKey)) {
-		return nil, errors.New("p2p.identity_mismatch")
-	}
-	pool := x509.NewCertPool()
-	pool.AddCert(ca)
-	if _, err = certificate.Verify(x509.VerifyOptions{Roots: pool, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}}); err != nil || certificate.Subject.CommonName != device.DeviceID {
-		return nil, errors.New("p2p.invalid_device_certificate")
-	}
-	public, valid := certificate.PublicKey.(ed25519.PublicKey)
-	if !valid || !public.Equal(ed25519.PublicKey(device.PublicKey)) {
-		return nil, errors.New("p2p.identity_mismatch")
+	if _, err := client.ValidateDevice(device, private, authority, false); err != nil {
+		return nil, err
 	}
 	next, err := New(client.endpoints, client.transport.TLSClientConfig.RootCAs)
 	if err != nil {
 		return nil, err
 	}
-	next.transport.TLSClientConfig.Certificates = []tls.Certificate{{Certificate: [][]byte{device.Certificate}, PrivateKey: private}}
+	next.transport.TLSClientConfig.GetClientCertificate = next.clientCertificate
+	if err := next.UpdateCertificate(device, private, authority); err != nil {
+		next.Close()
+		return nil, err
+	}
 	next.deviceID = device.DeviceID
 	// Heartbeats run on this device client, so the report has to come with it:
 	// a fresh Client starts with empty telemetry and would report nothing.
-	next.telemetry = client.telemetry
+	client.mu.Lock()
+	next.telemetry, next.account = client.telemetry, client.account
+	client.mu.Unlock()
 	return next, nil
 }
 

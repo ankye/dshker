@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.89 — 2026-10-16
+
+### 简体中文 (zh-CN)
+
+- **修复设备证书到期后 Win/Mac 无法连接。** 在证书到期前自动续期；已过期时使用原设备密钥和已登录账号对所选网络的授权恢复，不删除设备、不重建配对，也不启动 DSH。
+- **中断恢复不丢设备身份。** 续期或恢复成功但响应丢失时，可通过原设备密钥安全读回证书；凭据写入失败会明确提示，重试不会使用旧副本覆盖新证书。
+
+### English (en-US)
+
+- **Fix Win/Mac connections failing after device certificates expire.** Certificates renew before expiry. Expired devices recover using their original key and the signed-in account's authorization for the selected network, without deleting devices, rebuilding pairings or starting DSH.
+- **Keep device identity through interrupted recovery.** A device-key-authenticated readback retrieves certificates when an issuance reply is lost. Credential persistence failures remain explicit, and retrying cannot replace a renewed certificate with a stale copy.
+
 ## 0.1.88 — 2026-10-14
 
 ### 简体中文 (zh-CN)

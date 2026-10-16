@@ -165,6 +165,7 @@ jobs:
         if: steps.coordinator.outputs.available == 'true'
         env:
           COORDINATOR_SSH_KEY: ${{ secrets.COORDINATOR_SSH_KEY }}
+          COORDINATOR_REF: ba933fccba043d4c6a4a035bc47f97eb70fe615f
         run: |
           # The key is written to the runner's own temp dir, read only by this step's
           # git, and removed before the step ends even if the clone fails.
@@ -172,9 +173,12 @@ jobs:
           umask 077
           printf '%s\n' "$COORDINATOR_SSH_KEY" > "$key"
           trap 'rm -f "$key"' EXIT
-          GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new" \
-            git clone --depth 1 git@github.com:ankye/dshker-server.git \
+          export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+          git clone --no-checkout --depth 1 git@github.com:ankye/dshker-server.git \
             "${RUNNER_TEMP}/dshker-server"
+          git -C "${RUNNER_TEMP}/dshker-server" fetch --depth 1 origin "$COORDINATOR_REF"
+          git -C "${RUNNER_TEMP}/dshker-server" checkout --detach "$COORDINATOR_REF"
+          test "$(git -C "${RUNNER_TEMP}/dshker-server" rev-parse HEAD)" = "$COORDINATOR_REF"
 
       # Built with downloaded modules, not -mod=vendor: that repository gitignores
       # its vendor directory, so a clean clone has none and a vendored build fails
@@ -199,7 +203,7 @@ jobs:
         if: steps.coordinator.outputs.available == 'true'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y -qq libsecret-tools gnome-keyring dbus-x11
+          sudo apt-get install -y -qq libsecret-tools gnome-keyring dbus-x11 sqlite3
 
       # Only the two cases suffixed RealDSH are excluded: they drive a real built
       # DSH Harness, which this job has none of. They are matched by that suffix so
@@ -208,6 +212,23 @@ jobs:
       # Nothing else is excluded. A case that cannot run on this platform says so
       # itself with t.Skip and names the reason, which keeps a platform limit and a
       # real regression from looking alike in a CI exclusion list.
+      - name: Verify certificate lifecycle and OS credential readback
+        if: steps.coordinator.outputs.available == 'true'
+        env:
+          DSHKER_SERVER_BINARY: ${{ runner.temp }}/dshker-server/bin/dshker-server
+        working-directory: networking
+        run: |
+          mkdir -p ../.run/certificate-lifecycle
+          dbus-run-session -- bash -c 'set -e; echo | gnome-keyring-daemon --unlock --components=secrets >/dev/null 2>&1; go test -json -race -count=1 -run "^TestCertificateRealCoordinator" ./integration/' > ../.run/certificate-lifecycle/linux-real-process.jsonl
+
+      - name: Upload certificate process verification
+        if: always() && steps.coordinator.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: certificate-lifecycle-linux-process
+          path: .run/certificate-lifecycle/linux-real-process.jsonl
+          if-no-files-found: error
+
       - name: Run the peer connection suite
         if: steps.coordinator.outputs.available == 'true'
         env:

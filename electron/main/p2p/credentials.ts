@@ -162,8 +162,13 @@ export class PeerCredentialStore {
     })
   }
 
-  replace(credential: PeerCredential, expectedRevision: string): Promise<PeerCredentialReadback> {
+  replace(
+    credential: PeerCredential,
+    expectedRevision: string,
+    assertCurrent?: () => void
+  ): Promise<PeerCredentialReadback> {
     return this.#serialize(async () => {
+      assertCurrent?.()
       assertPeerCredential(credential)
       const previous = await this.#readRouted(credential.serviceId)
       const previousCredential = previous.kind === 'registered' ? previous.credential : undefined
@@ -175,6 +180,7 @@ export class PeerCredentialStore {
         previousCredential.publicKey !== credential.publicKey
       )
         throw new PeerHelperError('p2p.credential_conflict')
+      assertCurrent?.()
       if (this.#secrets) return this.#writeCore(credential, previous)
       const path = await this.#path(credential.serviceId, false)
       const temporary = path + '.' + randomUUID() + '.tmp'
@@ -183,10 +189,12 @@ export class PeerCredentialStore {
         await file.writeFile(encryptCredential(credential))
         await file.sync()
         await file.close()
+        assertCurrent?.()
         await rename(temporary, path)
-      } catch {
+      } catch (error) {
         await file.close()
         await unlink(temporary).catch(() => undefined)
+        if (error instanceof PeerHelperError) throw error
         throw new PeerHelperError('p2p.credential_write_failed')
       }
       return this.#read(path, credential.serviceId)
@@ -332,7 +340,9 @@ export class PeerCredentialStore {
       return { kind: 'registered', revision, credential: value }
     } catch (error) {
       if (error instanceof PeerHelperError) throw error
-      throw new PeerHelperError('p2p.credential_unavailable')
+      if ((error as NodeJS.ErrnoException)?.code === 'ENOENT')
+        throw new PeerHelperError('p2p.credential_unavailable')
+      throw new PeerHelperError('p2p.credential_read_failed')
     }
   }
 

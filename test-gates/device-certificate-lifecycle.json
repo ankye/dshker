@@ -1,0 +1,414 @@
+{
+  "change": "repair-device-certificate-lifecycle",
+  "risk": "data_critical",
+  "scope_note": "The flat source list includes one test-only management fixture because the validator classifies tests/ helpers as source; production import isolation is checked separately. Local Go/TLS and real coordinator protocol tests do not stand in for an OS credential provider. The Linux production CLI/Secret Service result is fetched from the exact successful client CI revision before verify can pass. Local Darwin Keychain and the active installed DSH are not used. Physical Win/Mac retest remains a separate user acceptance gate.",
+  "production_files": [
+    "electron/main/p2p/device-session.ts",
+    "electron/main/p2p/credentials.ts",
+    "electron/main/p2p/enrollment-bootstrap.ts",
+    "electron/main/p2p/management.ts",
+    "electron/main/p2p/tests/management-fixture.ts",
+    "networking/internal/controlplane/client.go",
+    "networking/internal/controlplane/certificates.go",
+    "networking/internal/helper/credentials.go",
+    "networking/internal/helper/host.go",
+    "networking/internal/helper/restore_own.go",
+    "networking/internal/helper/certificate_store.go",
+    "networking/internal/helper/certificates.go",
+    "networking/internal/localrpc/methods.go",
+    "src/shared/p2p-management.ts",
+    "src/app/shared/i18n/i18n.refusals.ts",
+    "src/app/shell/components/P2PJoinPanel.vue"
+  ],
+  "test_files": [
+    "electron/main/p2p/device-session.test.ts",
+    "electron/main/p2p/credential-migration.test.ts",
+    "electron/main/p2p/enrollment-bootstrap.test.ts",
+    "electron/main/p2p/management-certificate.test.ts",
+    "electron/main/p2p/management-ipc.test.ts",
+    "src/shared/p2p-management.test.ts",
+    "src/app/shared/i18n/i18n.refusals.test.ts",
+    "src/app/shell/tests/P2PJoinPanel.test.ts",
+    "networking/internal/controlplane/certificates_test.go",
+    "networking/internal/helper/certificates_test.go",
+    "networking/internal/helper/certificate_failures_test.go",
+    "networking/internal/localrpc/methods_test.go",
+    "networking/integration/certificate_lifecycle_test.go",
+    "networking/integration/certificate_cli_linux_test.go"
+  ],
+  "live_test_files": [
+    "networking/integration/certificate_lifecycle_test.go",
+    "networking/integration/certificate_cli_linux_test.go"
+  ],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestCertificateRenewalRealTLSAndSameClientHotUpdate"
+    },
+    {
+      "state": "no_op",
+      "test": "TestCertificateOutsideWindowPersistsExactLegacySchema"
+    },
+    {
+      "state": "partial",
+      "test": "TestCertificatePersistenceFailuresRetainServerProgressForRetry"
+    },
+    {
+      "state": "recovery",
+      "test": "TestCertificateLostRecoveryReplySurvivesRestartWithoutAnotherGrant"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestCertificateCancellationAndShutdownCannotInstallOrIssue"
+    },
+    {
+      "state": "reset",
+      "test": "TestCertificateRealCoordinatorLifecycle"
+    },
+    {
+      "state": "rejected",
+      "test": "TestCertificateReadbackRejectsIdentityAndCertificateSubstitution"
+    },
+    {
+      "state": "success",
+      "test": "TestCertificateRealCoordinatorCLICredentialReadback"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/p2p/device-session.ts",
+      "test": "changes only the certificate, reads it back and restores the original device with separate presence",
+      "assertion": "expect(f.stored().credential).toEqual({ ...credential, certificate: newerCertificate })",
+      "field": "certificate-only revision/write/readback",
+      "state": "success",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "electron/main/p2p/credentials.ts",
+      "test": "rejects a queued certificate replacement that lost its owner before storage",
+      "assertion": "await expect(store.load(credential.serviceId)).resolves.toEqual(saved)",
+      "field": "credential ownership before protected write",
+      "state": "stale_timeout",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "electron/main/p2p/enrollment-bootstrap.ts",
+      "test": "does not create a replacement enrollment after %s",
+      "assertion": "expect(f.host.register).not.toHaveBeenCalled()",
+      "field": "unreadable versus absent credential",
+      "state": "no_op",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "electron/main/p2p/management.ts",
+      "test": "retries with the new login after an overlapping unauthorized startup attempt settles",
+      "assertion": "expect(certificateRequests[1][1]).toHaveProperty('data.token', '8'.repeat(64))",
+      "field": "login session and certificate flight ownership",
+      "state": "recovery",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "electron/main/p2p/tests/management-fixture.ts",
+      "test": "starts restoration after successful login independently of the login request lifetime",
+      "assertion": "expect(f.runtimeStart).not.toHaveBeenCalled()",
+      "field": "test-only isolated management composition; never a production import",
+      "state": "success",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/controlplane/client.go",
+      "test": "TestCertificateRenewalRealTLSAndSameClientHotUpdate",
+      "assertion": "renewal changed original device, user, key or name",
+      "field": "same-client TLS snapshot replacement",
+      "state": "success",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/controlplane/certificates.go",
+      "test": "TestCertificateReadbackRejectsIdentityAndCertificateSubstitution",
+      "assertion": "untrusted readback escaped validation",
+      "field": "service/device/key/certificate validation",
+      "state": "rejected",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/helper/credentials.go",
+      "test": "TestCertificateOutsideWindowPersistsExactLegacySchema",
+      "assertion": "version-1 credential schema changed",
+      "field": "canonical credential version and complete readback",
+      "state": "no_op",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "test": "TestCertificateCancellationAndShutdownCannotInstallOrIssue",
+      "assertion": "cancelled operation issued or activated",
+      "field": "host/account lifetime and issuance ownership",
+      "state": "stale_timeout",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/helper/restore_own.go",
+      "test": "TestCertificateRealCoordinatorLifecycle",
+      "assertion": "headless canonical restore did not resume one original device",
+      "field": "original canonical identity at headless startup",
+      "state": "reset",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/helper/certificate_store.go",
+      "test": "TestCertificatePersistenceFailuresRetainServerProgressForRetry",
+      "assertion": "successful retry retained stale pending operation",
+      "field": "explicit network/pending request metadata",
+      "state": "partial",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/helper/certificates.go",
+      "test": "TestCertificateRenewalIsSerializedAndCanonicalDefeatsStaleShell",
+      "assertion": "stale shell downgraded canonical certificate",
+      "field": "serialized issuance and canonical non-downgrade",
+      "state": "recovery",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "networking/internal/localrpc/methods.go",
+      "test": "TestCertificateMethodIsMainOnly",
+      "assertion": "device certificate operation is not admitted only as a shell request",
+      "field": "published shell-only method admission",
+      "state": "rejected",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "src/shared/p2p-management.ts",
+      "test": "names every distinguishable failure the core reports",
+      "assertion": "expect(P2P_MANAGEMENT_ERROR_CODES).toContain(code)",
+      "field": "typed foreground error vocabulary",
+      "state": "success",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.refusals.ts",
+      "test": "distinguishes certificate synchronization from system credential persistence failures",
+      "assertion": "expect(persist).toBe('p2p.refusal.certificatePersistFailed')",
+      "field": "typed bilingual refusal keys",
+      "state": "success",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PJoinPanel.vue",
+      "test": "shows the specific certificate maintenance failure %s while retaining enrollment",
+      "assertion": "expect(domain.p2pEnrollment.state(serviceId).registration).toEqual(registered)",
+      "field": "visible refusal, original enrollment and recovery guidance",
+      "state": "recovery",
+      "source": "Explicit original device/account/network and certificate lifecycle owner; assertions read back the owning boundary.",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "publicKey",
+        "userId",
+        "networkId",
+        "certificate",
+        "revision"
+      ],
+      "missing_semantics": "Missing authorization, unreadable state, invalid identity and failed persistence are typed failures; never re-enroll, guess a network, downgrade canonical data or report false success."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "mkdir -p .run/certificate-lifecycle && npm test -- --run --reporter=json --outputFile=.run/certificate-lifecycle/renderer-tests.json",
+      "no_mock": true
+    },
+    {
+      "command": "npm run environment:check && npm run architecture:check && npm run format:check && npm run type-check",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go vet ./... && go test -json -race -count=1 ./internal/controlplane ./internal/helper ./internal/localrpc ./internal/core > ../.run/certificate-lifecycle/core-tests.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && test -f \"${DSHKER_SERVER_BINARY:?explicit verified server binary required}\" && go test -json -race -count=1 -run '^TestCertificateRealCoordinatorLifecycle$' ./integration > ../.run/certificate-lifecycle/local-real-coordinator.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "npm run service:smoke && npm run visual:smoke && npm run build && npm run build:electron",
+      "no_mock": true
+    },
+    {
+      "command": "gh run view \"${DSHKER_CLIENT_CI_RUN_ID:?explicit client CI run required}\" --repo ankye/dshker --json headSha,status,conclusion,url > .run/certificate-lifecycle/client-quality.json",
+      "no_mock": true
+    },
+    {
+      "command": "node --input-type=module -e 'import fs from \"node:fs\"; import {execFileSync} from \"node:child_process\"; const ci=JSON.parse(fs.readFileSync(\".run/certificate-lifecycle/client-quality.json\",\"utf8\")); const revision=execFileSync(\"git\",[\"rev-parse\",\"HEAD\"],{encoding:\"utf8\"}).trim(); if(ci.headSha!==revision||ci.status!==\"completed\"||ci.conclusion!==\"success\") throw Error(\"client CI identity or quality gate is not verified\"); const events=fs.readFileSync(\".run/certificate-lifecycle/linux-real-process.jsonl\",\"utf8\").trim().split(\"\\n\").map(JSON.parse); if(events.some(e=>e.Action===\"fail\"||e.Action===\"skip\")) throw Error(\"production certificate process has failure or skip\"); for(const name of [\"TestCertificateRealCoordinatorLifecycle\",\"TestCertificateRealCoordinatorCLICredentialReadback\"]) if(!events.some(e=>e.Action===\"pass\"&&e.Test===name)) throw Error(\"required certificate process did not pass: \"+name); for(const p of [\"out/main/index.cjs\",\"out/preload/index.cjs\",\"out/preload/workbench.cjs\"]) {const body=fs.readFileSync(p,\"utf8\"); for(const marker of [\"certificateFixture\",\"certificateSecrets\",\"newCertificateFixture\",\"vitest\",\"vi.mock\"]) if(body.includes(marker)) throw Error(\"test support reached production bundle: \"+marker);}'",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/certificate-lifecycle/renderer-tests.json"
+    },
+    {
+      "artifact": ".run/certificate-lifecycle/core-tests.jsonl"
+    },
+    {
+      "artifact": ".run/certificate-lifecycle/local-real-coordinator.jsonl"
+    },
+    {
+      "artifact": ".run/certificate-lifecycle/linux-real-process.jsonl"
+    },
+    {
+      "artifact": ".run/certificate-lifecycle/client-quality.json"
+    }
+  ]
+}

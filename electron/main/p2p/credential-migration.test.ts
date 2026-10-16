@@ -1,3 +1,4 @@
+import { safeStorage } from 'electron'
 import { createHash } from 'node:crypto'
 import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -170,6 +171,40 @@ describe.skipIf(process.platform === 'linux')(
       await expect(store.loadRegistration(credential.serviceId)).rejects.toMatchObject({
         code: 'p2p.credential_unavailable'
       })
+    })
+
+    it('does not classify an unreadable encrypted record as absent', async () => {
+      const { root, file, dispose } = await legacyRoot()
+      cleanup = dispose
+      await writeLegacyRecord(file)
+      vi.spyOn(safeStorage, 'decryptString').mockImplementationOnce(() => {
+        throw new Error('test-only provider read failure')
+      })
+      const store = new PeerCredentialStore(root, fakeSecrets())
+      await expect(store.loadRegistration(credential.serviceId)).rejects.toMatchObject({
+        code: 'p2p.credential_read_failed'
+      })
+      await expect(readFile(file, 'utf8')).resolves.toContain('dshker.peer-credential')
+    })
+
+    it('rejects a queued certificate replacement that lost its owner before storage', async () => {
+      const { root, dispose } = await legacyRoot()
+      cleanup = dispose
+      const secrets = fakeSecrets()
+      const store = new PeerCredentialStore(root, secrets)
+      const saved = await store.create(credential)
+      let current = true
+      const assertCurrent = () => {
+        if (!current) throw new PeerHelperError('p2p.request_cancelled')
+      }
+      const pending = store.replace(
+        { ...credential, name: 'must not persist' },
+        saved.revision,
+        assertCurrent
+      )
+      current = false
+      await expect(pending).rejects.toMatchObject({ code: 'p2p.request_cancelled' })
+      await expect(store.load(credential.serviceId)).resolves.toEqual(saved)
     })
 
     it('keeps the legacy record when the provider write fails', async () => {

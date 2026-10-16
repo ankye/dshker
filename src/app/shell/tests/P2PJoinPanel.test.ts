@@ -288,6 +288,48 @@ describe('P2P 「我的网络」 card', () => {
     expect(ui.get('[data-testid="p2p-network-reason"]').text()).toContain('p2p.device_unregistered')
   })
 
+  it.each([
+    ['p2p.certificate_recovery_required', '原网络所有者'],
+    ['p2p.certificate_recovery_forbidden', '无权恢复']
+  ])(
+    'shows actionable certificate recovery copy for %s while retaining enrollment',
+    async (code, copy) => {
+      const ui = await render({
+        serviceSessions: sessionReader([{ serviceId, state: 'offline', code }])
+      })
+      const domain = await import('@/app/domains/remote-connections')
+      domain.p2pEnrollment.state(serviceId).registration = registered
+      await flushPromises()
+      const reason = ui.get('[data-testid="p2p-network-reason"]').text()
+      expect(reason).toContain(code)
+      expect(reason).toContain(copy)
+      expect(reason).toContain('配对')
+      expect(domain.p2pEnrollment.state(serviceId).registration).toEqual(registered)
+      expect(ui.find('[data-testid="p2p-join-network"]').exists()).toBe(false)
+    }
+  )
+
+  it.each([
+    ['p2p.certificate_sync_failed', '网络设备证书同步失败'],
+    ['p2p.certificate_persist_failed', '系统凭据存储']
+  ])(
+    'shows the specific certificate maintenance failure %s while retaining enrollment',
+    async (code, copy) => {
+      const ui = await render({
+        serviceSessions: sessionReader([{ serviceId, state: 'offline', code }])
+      })
+      const domain = await import('@/app/domains/remote-connections')
+      domain.p2pEnrollment.state(serviceId).registration = registered
+      await flushPromises()
+      const reason = ui.get('[data-testid="p2p-network-reason"]').text()
+      expect(reason).toContain(code)
+      expect(reason).toContain(copy)
+      expect(reason).toContain('原设备和配对会保留')
+      expect(domain.p2pEnrollment.state(serviceId).registration).toEqual(registered)
+      expect(ui.find('[data-testid="p2p-join-network"]').exists()).toBe(false)
+    }
+  )
+
   it('offers no leave without a session and says why, rather than failing on click', async () => {
     const leaveNetwork = vi.fn<P2PManagementApi['leaveNetwork']>()
     const ui = await render({ leaveNetwork })

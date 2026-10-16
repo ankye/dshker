@@ -24,11 +24,13 @@ type Main interface {
 	Call(context.Context, string, any) (json.RawMessage, error)
 }
 type Host struct {
-	ctx      context.Context
-	mu       sync.Mutex
-	main     Main
-	accounts map[string]*account
-	roots    *x509.CertPool
+	ctx          context.Context
+	cancel       context.CancelFunc
+	mu           sync.Mutex
+	credentialMu sync.Mutex
+	main         Main
+	accounts     map[string]*account
+	roots        *x509.CertPool
 	// deviceKeys is the machine's own key store, separate from any account's
 	// credential: see machineDeviceKey.
 	deviceKeys secret.Store
@@ -74,7 +76,10 @@ type scopedRequest struct {
 	Data      json.RawMessage `json:"data"`
 }
 
-func New(ctx context.Context) *Host   { return &Host{ctx: ctx, accounts: make(map[string]*account)} }
+func New(ctx context.Context) *Host {
+	child, cancel := context.WithCancel(ctx)
+	return &Host{ctx: child, cancel: cancel, accounts: make(map[string]*account)}
+}
 func (host *Host) BindMain(main Main) { host.mu.Lock(); host.main = main; host.mu.Unlock() }
 
 // callMain resolves the current callback owner for every call. An already
@@ -169,6 +174,7 @@ func (host *Host) SetRoots(roots *x509.CertPool) {
 	host.mu.Unlock()
 }
 func (host *Host) Close() {
+	host.cancel()
 	host.mu.Lock()
 	host.closed = true
 	accounts := make([]*account, 0, len(host.accounts))
@@ -217,6 +223,12 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	if closedAtAdmission {
 		return nil, errors.New("p2p.helper_unavailable")
 	}
+	// Every operation belongs to both its caller and the core lifetime.
+	operation, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(host.ctx, cancel)
+	defer stop()
+	defer cancel()
+	ctx = operation
 	if method == "service.configure" {
 		return host.configure(ctx, payload)
 	}
@@ -266,6 +278,9 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 		// pass, so repair a displaced/closed signal socket here before asking the
 		// engine to reconnect pairs. A healthy socket is left untouched.
 		if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" {
+			if err := account.maintainCertificate(ctx); err != nil {
+				return nil, err
+			}
 			account.mu.Lock()
 			manager := account.manager
 			account.mu.Unlock()
@@ -289,6 +304,9 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	defer account.mu.Unlock()
 	if method == "device.restore" {
 		return host.restore(ctx, account, request.Data)
+	}
+	if method == "device.certificate" {
+		return host.certificate(ctx, account, request.Data)
 	}
 	return host.manage(ctx, account, method, request.Data)
 }
@@ -443,6 +461,7 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 	// is maintained the same way, from the pairs the same account reads.
 	go host.accounts[identity.ServiceID].maintainDirectory(host.ctx)
 	go host.accounts[identity.ServiceID].maintainCatalog(host.ctx)
+	go host.accounts[identity.ServiceID].maintainCertificates(host.ctx)
 	return identity, nil
 }
 
@@ -452,8 +471,29 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		PrivateKey []byte                      `json:"privateKey"`
 		Pins       []controlplane.PairIdentity `json:"pins"`
 	}
-	if protocol.DecodeExact(data, &request) != nil || account.manager != nil {
+	if protocol.DecodeExact(data, &request) != nil {
 		return nil, errors.New("p2p.invalid_device_state")
+	}
+	defer clear(request.PrivateKey)
+	reportedAccount := request.Device.UserID
+	ownedDevice, err := host.restoreDeviceOwner(ctx, account, request.Device, request.PrivateKey)
+	if err != nil {
+		return nil, err
+	}
+	request.Device = ownedDevice
+	device, err := host.prepareCertificate(ctx, account, request.Device, request.PrivateKey, "", "")
+	if err != nil {
+		return nil, err
+	}
+	request.Device = device
+	if account.manager != nil {
+		if !sameDevice(account.device, device) {
+			return nil, errors.New("p2p.identity_mismatch")
+		}
+		account.client.SetAccount(reportedAccount)
+		return struct {
+			DeviceID string `json:"deviceId"`
+		}{device.DeviceID}, nil
 	}
 	client, err := account.base.WithDevice(request.Device, request.PrivateKey, account.identity)
 	if err != nil {
@@ -508,29 +548,13 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 			State     peersession.State `json:"state"`
 		}{account.identity.ServiceID, state})
 	}
-	client.SetAccount(request.Device.UserID)
-	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: request.PrivateKey, Roots: roots}, request.Pins, owner, emit)
+	client.SetAccount(reportedAccount)
+	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: append(ed25519.PrivateKey(nil), request.PrivateKey...), Roots: roots}, request.Pins, owner, emit)
 	if err != nil {
 		client.Close()
 		return nil, err
 	}
 	account.client, account.manager, account.device = client, manager, request.Device
-	// Take ownership of the credential this restore carried.
-	//
-	// The core holds the machine's private key but used to keep nothing that says
-	// what that key was enrolled as, so the only complete copy lived in the shell,
-	// encrypted with a key only Electron can use. A core with no desktop attached
-	// therefore could not act as the device it already had the key for: `dshkerd
-	// serve` came up, answered RPC and never reached the coordinator. Recording it
-	// here is what converges an existing installation — the shell restores once, as
-	// it always did, and from then on the core can restore itself.
-	//
-	// A store that cannot hold it is logged rather than failing the restore: this
-	// session is already usable, and refusing it would turn a machine that works
-	// today into one that does not.
-	if err := host.SaveCredential(account.identity.ServiceID, request.Device, request.PrivateKey); err != nil {
-		log.Printf("[p2p] credential could not be recorded for service %s: %v", account.identity.ServiceID, err)
-	}
 	// A restored session starts with no pins, and the peer session admits a
 	// connection only for a pair it has pinned. The catalog pass is what pins, and
 	// answering this call is what the shell takes as "online", so the pass runs

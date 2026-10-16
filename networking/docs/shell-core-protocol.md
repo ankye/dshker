@@ -11,6 +11,36 @@ to TCP, and it never carries a credential to a peer.
 
 ## 1. Channels
 
+### Device certificate maintenance
+
+`device.certificate` is a main-process-only shell-role operation. Its request is
+`{serviceId,data:{device,privateKey,networkId?,token?}}`; `device` retains the
+complete coordinator Device schema, `privateKey` uses standard base64, and the
+optional fields name an explicit existing network and user-session token. Its
+response is exactly `{deviceId,publicKey,certificate}`, with both byte fields
+in standard base64. It never returns a private key or adds a renderer capability.
+
+The core verifies both supplied and canonical identity. A newer canonical
+certificate wins over a stale desktop copy. Expired credentials authenticate only
+the explicit original-key HTTPS query/recovery flow, never device mTLS. Missing
+recovery scope/session returns `p2p.certificate_recovery_required`; rejected
+authorization returns `p2p.certificate_recovery_forbidden`; unreadable or
+inconsistent progress returns `p2p.certificate_sync_failed`; failed durable write
+or readback returns `p2p.certificate_persist_failed`. Same-identity
+`device.restore` is idempotent and preserves its existing peer manager; a
+different identity returns `p2p.identity_mismatch`.
+
+Canonical version-1 credentials keep their exact schema. The protected
+`account.certificate.<serviceId>` sidecar is exactly
+`{version:1,networkId,pendingRequestId}`. Empty `networkId` denotes missing
+legacy recovery scope and never selects a network. Pending issuance IDs survive
+partial operations until authenticated readback and local persistence complete.
+
+Startup, reconnection and an hourly core-lifetime loop maintain certificates
+inside the server's seven-day renewal window. Updating a verified certificate
+changes future TLS handshakes without replacing a peer manager, ending active
+peer transports, or starting/stopping DSH.
+
 Exactly three things cross the boundary:
 
 1. one bootstrap record on the child's stdin,
@@ -191,7 +221,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | core      | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.runtime_binding`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
 | managed   | `managed.checkout_prepare`, `managed.checkout_verify`, `managed.git_register`, `managed.repository_inspect`                                                                                                                                                                                                       | shell  |
-| device    | `device.createCSR`, `device.createKey`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                                                                                    | shell  |
+| device    | `device.createCSR`, `device.createKey`, `device.certificate`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                                                              | shell  |
 | directory | `directory.inspect`, `directory.refresh`                                                                                                                                                                                                                                                                          | shell  |
 | devices   | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                                                                                                                  | shell  |
 | network   | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                                                                                                             | shell  |

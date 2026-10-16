@@ -74,11 +74,42 @@ describe('connection refusal copy', () => {
     expect(enUSRefusals[fallback]).toContain('did not succeed')
   })
 
+  it('explains certificate recovery without asking for replacement enrollment or pairing', () => {
+    const required = refusalKeyForCode('p2p.certificate_recovery_required')
+    const forbidden = refusalKeyForCode('p2p.certificate_recovery_forbidden')
+    expect(required).toBe('p2p.refusal.certificateRecoveryRequired')
+    expect(forbidden).toBe('p2p.refusal.certificateRecoveryForbidden')
+    expect(zhCNRefusals[required]).toContain('原网络所有者')
+    expect(zhCNRefusals[forbidden]).toContain('无权')
+    expect(enUSRefusals[required]).toContain('device and pairs are retained')
+    expect(enUSRefusals[forbidden]).toContain('cannot recover')
+    expect(refusalKeyForCode('p2p.invalid_device_certificate')).toBe(
+      'p2p.refusal.invalidDeviceCertificate'
+    )
+    const unreadable = refusalKeyForCode('p2p.credential_read_failed')
+    expect(unreadable).toBe('p2p.refusal.credentialReadFailed')
+    expect(zhCNRefusals[unreadable]).toContain('原设备和配对会保留')
+    expect(enUSRefusals[unreadable]).toContain('could not be read')
+  })
+
   it('keeps both languages complete for every category', () => {
     expect(Object.keys(enUSRefusals).sort()).toEqual(Object.keys(zhCNRefusals).sort())
     for (const key of Object.keys(zhCNRefusals) as (keyof typeof zhCNRefusals)[]) {
       expect(zhCNRefusals[key].length).toBeGreaterThan(0)
       expect(enUSRefusals[key].length).toBeGreaterThan(0)
     }
+  })
+
+  it('distinguishes certificate synchronization from system credential persistence failures', () => {
+    const sync = refusalKeyForCode('p2p.certificate_sync_failed')
+    const persist = refusalKeyForCode('p2p.certificate_persist_failed')
+    expect(sync).toBe('p2p.refusal.certificateSyncFailed')
+    expect(persist).toBe('p2p.refusal.certificatePersistFailed')
+    expect(zhCNRefusals[sync]).toContain('网络设备证书同步失败')
+    expect(enUSRefusals[sync]).toContain('could not be synchronized')
+    expect(zhCNRefusals[persist]).toContain('系统凭据存储')
+    expect(enUSRefusals[persist]).toContain('could not be saved to the system credential store')
+    expect(zhCNRefusals[sync]).toContain('原设备和配对会保留')
+    expect(zhCNRefusals[persist]).toContain('原设备和配对会保留')
   })
 })

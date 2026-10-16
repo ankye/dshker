@@ -1,6 +1,7 @@
 package helper
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"encoding/json"
 	"errors"
@@ -107,6 +108,8 @@ func credentialKey(serviceID string) string { return credentialPrefix + serviceI
 // installation converges on the first launch after updating without the user
 // enrolling again.
 func (host *Host) SaveCredential(serviceID string, device controlplane.Device, private ed25519.PrivateKey) error {
+	host.credentialMu.Lock()
+	defer host.credentialMu.Unlock()
 	host.mu.Lock()
 	store := host.deviceKeys
 	account := host.accounts[serviceID]
@@ -142,8 +145,18 @@ func (host *Host) SaveCredential(serviceID string, device controlplane.Device, p
 	if err != nil {
 		return errors.New("p2p.invalid_device_state")
 	}
-	if err := store.Set(credentialKey(serviceID), data); err != nil {
-		return errors.New("p2p.secret_provider_unavailable")
+	previous, readErr := store.Get(credentialKey(serviceID))
+	if readErr != nil && !errors.Is(readErr, secret.ErrMissing) {
+		return errors.New("p2p.certificate_persist_failed")
+	}
+	if !bytes.Equal(previous, data) {
+		if err := store.Set(credentialKey(serviceID), data); err != nil {
+			return errors.New("p2p.secret_provider_unavailable")
+		}
+	}
+	readback, err := store.Get(credentialKey(serviceID))
+	if err != nil || !bytes.Equal(readback, data) {
+		return errors.New("p2p.certificate_persist_failed")
 	}
 	// The index is written after the record it names, so a crash between the two
 	// leaves an unlisted record rather than a listed one that does not exist.
@@ -164,24 +177,41 @@ type credentialIndexRecord struct {
 	Services []string `json:"services"`
 }
 
-// credentialIndex reads the recorded service list, treating an absent or unusable
-// index as empty: a machine with no records is the ordinary first-run state.
+// Only an absent index denotes first run; an unreadable index never authorizes
+// overwriting the list of enrolled identities.
 func credentialIndex(store secret.Store) []string {
+	services, _ := readCredentialIndex(store)
+	return services
+}
+
+func readCredentialIndex(store secret.Store) ([]string, error) {
+	if store == nil {
+		return nil, errors.New("p2p.certificate_sync_failed")
+	}
 	data, err := store.Get(credentialIndexName)
+	if errors.Is(err, secret.ErrMissing) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, errors.New("p2p.certificate_sync_failed")
 	}
 	var record credentialIndexRecord
 	if protocol.DecodeExact(data, &record) != nil || record.Version != 1 {
-		return nil
+		return nil, errors.New("p2p.certificate_sync_failed")
 	}
 	services := make([]string, 0, len(record.Services))
 	for _, serviceID := range record.Services {
-		if protocol.ValidID(serviceID) {
-			services = append(services, serviceID)
+		if !protocol.ValidID(serviceID) {
+			return nil, errors.New("p2p.certificate_sync_failed")
 		}
+		for _, previous := range services {
+			if previous == serviceID {
+				return nil, errors.New("p2p.certificate_sync_failed")
+			}
+		}
+		services = append(services, serviceID)
 	}
-	return services
+	return services, nil
 }
 
 // writeCredentialIndex publishes the list, which is the only way it is written.
@@ -193,20 +223,31 @@ func writeCredentialIndex(store secret.Store, services []string) error {
 	if err := store.Set(credentialIndexName, data); err != nil {
 		return errors.New("p2p.secret_provider_unavailable")
 	}
+	readback, err := store.Get(credentialIndexName)
+	if err != nil || !bytes.Equal(data, readback) {
+		return errors.New("p2p.certificate_persist_failed")
+	}
 	return nil
 }
 
 func addCredentialIndex(store secret.Store, serviceID string) error {
-	for _, existing := range credentialIndex(store) {
+	services, err := readCredentialIndex(store)
+	if err != nil {
+		return err
+	}
+	for _, existing := range services {
 		if existing == serviceID {
 			return nil
 		}
 	}
-	return writeCredentialIndex(store, append(credentialIndex(store), serviceID))
+	return writeCredentialIndex(store, append(services, serviceID))
 }
 
 func removeCredentialIndex(store secret.Store, serviceID string) error {
-	listed := credentialIndex(store)
+	listed, err := readCredentialIndex(store)
+	if err != nil {
+		return err
+	}
 	next := make([]string, 0, len(listed))
 	for _, existing := range listed {
 		if existing != serviceID {
@@ -251,10 +292,7 @@ func (host *Host) LoadCredential(serviceID string) (storedCredential, error) {
 	}
 	var record storedCredential
 	if protocol.DecodeExact(data, &record) != nil || record.ServiceID != serviceID || !record.valid() {
-		// A record this build cannot use is not an identity. Reporting it as absent
-		// keeps the machine enrollable instead of failing every launch on a value
-		// that no operation can repair.
-		return storedCredential{}, secret.ErrMissing
+		return storedCredential{}, errors.New("p2p.invalid_device_state")
 	}
 	return record, nil
 }
@@ -263,6 +301,8 @@ func (host *Host) LoadCredential(serviceID string) (storedCredential, error) {
 // or removing a service does not leave the core able to speak as a device the
 // user retired.
 func (host *Host) DeleteCredential(serviceID string) error {
+	host.credentialMu.Lock()
+	defer host.credentialMu.Unlock()
 	host.mu.Lock()
 	store := host.deviceKeys
 	host.mu.Unlock()
@@ -270,6 +310,9 @@ func (host *Host) DeleteCredential(serviceID string) error {
 		return nil
 	}
 	if err := store.Delete(credentialKey(serviceID)); err != nil && !errors.Is(err, secret.ErrMissing) {
+		return errors.New("p2p.secret_provider_unavailable")
+	}
+	if err := store.Delete(certificateMetadataKey(serviceID)); err != nil && !errors.Is(err, secret.ErrMissing) {
 		return errors.New("p2p.secret_provider_unavailable")
 	}
 	return removeCredentialIndex(store, serviceID)

@@ -504,6 +504,19 @@ describe('P2P named management admission', () => {
     }
   })
 
+  it.each(['p2p.certificate_sync_failed', 'p2p.certificate_persist_failed'])(
+    'preserves the typed certificate failure %s across foreground IPC',
+    async (code) => {
+      const { owner, invoke } = fixture()
+      owner.createInvite.mockRejectedValueOnce(new PeerHelperError(code))
+      expect(await invoke('createInvite', page().event, request('createInvite'))).toEqual({
+        ok: false,
+        code,
+        message: code
+      })
+    }
+  )
+
   it('routes cancellation to the exact pending IPC request and preserves write uncertainty', async () => {
     const { owner, invoke } = fixture()
     let finish!: () => void

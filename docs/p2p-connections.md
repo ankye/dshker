@@ -235,6 +235,29 @@ Signal subscriptions verify both HTTPS presence and WebSocket Ping/Pong, initial
 
 ### Registering this device
 
+Device certificates renew automatically in their final seven days. An expired
+certificate does not mean the device or its pairings must be replaced:
+
+- `p2p.certificate_recovery_required`: sign in to an account authorized for the
+  existing network and select that network, then retry. The original device key
+  is required. Do not delete the device or re-register it.
+- `p2p.certificate_recovery_forbidden`: the signed-in account cannot authorize
+  recovery in that network. Check its ownership or membership with the network
+  owner. Your valid account session and the original device remain intact.
+- `p2p.credential_read_failed`: saved device credentials could not be read or
+  decrypted. Check access to the system credential store and retry. This does
+  not mean the credentials are absent; the app will not create a replacement.
+- `p2p.certificate_sync_failed`: the current certificate could not be verified
+  or synchronized with the coordinator. Check the server connection and retry;
+  the original device and its pairings are retained.
+- `p2p.certificate_persist_failed`: the certificate could not be saved and read
+  back from the system credential store. Restore access and retry; a certificate
+  already issued by the server can be recovered without replacing the device.
+
+Self-hosted coordinators need authenticated `/v1/certificate-query` support to
+read back an issuance whose response was lost. An unsupported server is an
+explicit protocol failure, not permission to bypass certificate checks.
+
 | Code                                                                            | Meaning and what to do                                                                                                    |
 | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `p2p.device_unregistered`                                                       | This machine is not registered yet. Complete registration first.                                                          |

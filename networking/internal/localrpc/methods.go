@@ -71,6 +71,7 @@ var Methods = []Method{
 	// the contract. Publishing them is additive within version 1.
 	{"device.createCSR", RoleShell},
 	{"device.createKey", RoleShell},
+	{"device.certificate", RoleShell},
 	{"device.enroll", RoleShell},
 	{"device.enrollmentResult", RoleShell},
 	{"device.enrollmentToken", RoleShell},

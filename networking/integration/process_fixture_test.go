@@ -94,6 +94,9 @@ type fixture struct {
 	userSession        controlplane.UserSession
 }
 
+// realCoordinator names the existing production-process harness for live gates.
+type realCoordinator = fixture
+
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	binary := os.Getenv("DSHKER_SERVER_BINARY")

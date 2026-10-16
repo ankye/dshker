@@ -8,6 +8,13 @@ import (
 	"testing"
 )
 
+func TestCertificateMethodIsMainOnly(t *testing.T) {
+	method, exists := Lookup("device.certificate")
+	if !exists || method.Role != RoleShell {
+		t.Fatal("device certificate operation is not admitted only as a shell request", method)
+	}
+}
+
 func TestMethodTableIsWellFormed(t *testing.T) {
 	if len(Methods) == 0 {
 		t.Fatal("the published method table is empty")

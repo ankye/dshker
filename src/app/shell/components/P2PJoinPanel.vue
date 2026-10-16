@@ -8,6 +8,7 @@ import {
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
+import { refusalKeyForCode } from '@/app/shared/i18n/i18n.refusals'
 import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
 
 /**
@@ -435,7 +436,8 @@ async function leave(): Promise<void> {
           class="p2p-network-reason"
           data-testid="p2p-network-reason"
         >
-          {{ t('p2p.myNetwork.offlineReason') }} <code>{{ sessionRefusal }}</code>
+          {{ t('p2p.myNetwork.offlineReason') }} {{ t(refusalKeyForCode(sessionRefusal)) }}
+          <code>{{ sessionRefusal }}</code>
         </p>
         <p v-if="leaveError" role="alert" class="remote-error" data-testid="p2p-leave-error">
           {{ t('p2p.myNetwork.leaveError') }} <code>{{ leaveError }}</code>

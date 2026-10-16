@@ -27,6 +27,14 @@ import (
 // one whose desktop still owns the only copy, has no record to restore and reports
 // zero.
 func (host *Host) RestoreOwnCredentials(ctx context.Context) (restored int) {
+	operation, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(host.ctx, cancel)
+	defer stop()
+	defer cancel()
+	ctx = operation
+	if host.ctx.Err() != nil || ctx.Err() != nil {
+		return 0
+	}
 	host.mu.Lock()
 	store := host.deviceKeys
 	host.mu.Unlock()
@@ -36,7 +44,12 @@ func (host *Host) RestoreOwnCredentials(ctx context.Context) (restored int) {
 		// working exactly as before.
 		return 0
 	}
-	for _, serviceID := range credentialIndex(store) {
+	services, err := readCredentialIndex(store)
+	if err != nil {
+		log.Printf("[p2p] credential index unreadable: %v", err)
+		return 0
+	}
+	for _, serviceID := range services {
 		if ctx.Err() != nil {
 			return restored
 		}
@@ -101,18 +114,21 @@ func (host *Host) restoreStoredCredential(ctx context.Context, credential stored
 		PrivateKey: credential.PrivateKey,
 		// Pins are the core's own: the catalog pass inside restore re-pins every
 		// active pair, so a restore hands over none.
-		Pins: nil,
+		Pins: []controlplane.PairIdentity{},
 	})
 	if err != nil {
 		return errors.New("p2p.invalid_device_state")
 	}
 	account.mu.Lock()
 	defer account.mu.Unlock()
-	// An account a desktop already restored is left exactly as it is: the shell's
-	// session owns it, and replacing it would drop a working subscription.
 	if account.manager != nil {
-		return nil
+		// Maintenance must not change a signed-in user's heartbeat presence back
+		// to the certificate's original device owner.
+		_, err := host.prepareCertificate(ctx, account, credential.device(), credential.PrivateKey, "", "")
+		return err
 	}
+	// restore is idempotent for this identity and maintains its certificate while
+	// preserving any manager a desktop already activated.
 	if _, err := host.restore(ctx, account, payload); err != nil {
 		return err
 	}

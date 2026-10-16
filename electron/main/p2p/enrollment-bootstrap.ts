@@ -1,4 +1,5 @@
 import type { PeerCredentialStore } from './credentials'
+import { PeerHelperError } from './wire'
 
 /** One network as the enrollment policy needs to see it. */
 export interface EnrollmentNetwork {
@@ -42,8 +43,13 @@ export async function enrollWhenMissing(
   name: string,
   signal: AbortSignal
 ): Promise<boolean> {
-  const stored = await host.credentials.loadRegistration(serviceId).catch(() => undefined)
+  const stored = await host.credentials.loadRegistration(serviceId).catch((error: unknown) => {
+    if (error instanceof PeerHelperError && error.code === 'p2p.credential_unavailable')
+      return undefined
+    throw error
+  })
   if (stored?.kind === 'registered') return true
+  if (stored?.kind === 'pending') return false
   if (!(await host.signIn(serviceId, signal))) return false
   const owned = await host.networks(serviceId, signal)
   const network = owned[0] ?? (await host.createNetwork(serviceId, signal))

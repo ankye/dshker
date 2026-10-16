@@ -6,6 +6,7 @@ import { PeerCatalog } from './catalog'
 import { peerPartition } from './partitions'
 import { PeerConnections } from './connections'
 import { PeerCredentialStore } from './credentials'
+import { PeerDeviceSession } from './device-session'
 import { PeerDeviceViews } from './device-views'
 import { PeerEnrollment } from './enrollment'
 import { enrollWhenMissing } from './enrollment-bootstrap'
@@ -15,7 +16,7 @@ import { PeerRuntimeHost, type PeerChannel } from './runtime-host'
 import { diagnoseShellFailure, PeerSessionRegistry, restoreUserSession } from './session-registry'
 import { P2PSelectionStore } from './selection-preferences'
 import { PeerServices, type PeerServiceInput } from './services'
-import { exactPeerObject, PeerHelperError } from './wire'
+import { PeerHelperError } from './wire'
 import { memberAsPair } from './management-projection'
 import { removeNetworkAuthority, removePairAuthority } from './management-authority'
 import { CoreAutoConnect } from './auto-connect'
@@ -56,8 +57,7 @@ export class PeerManagement {
   readonly #host: PeerRuntimeHost
   readonly #lifetime = new AbortController()
   #session: Session | undefined
-  /** Services whose enrolled device has been restored into the live helper. */
-  readonly #restored = new Set<string>()
+  readonly #deviceSession: PeerDeviceSession
   /** One persisted-account restore at a time per coordinator service. */
   readonly #restoreInFlight = new Map<string, Promise<void>>()
   /**
@@ -94,6 +94,7 @@ export class PeerManagement {
     this.#selection = new P2PSelectionStore({ resolveSettingsRoot: options.resolveSettingsRoot })
     this.#catalog = new PeerCatalog(options.resolveSettingsRoot, options.catalog)
     this.#credentials = new PeerCredentialStore(options.resolveSettingsRoot, options.secrets)
+    this.#deviceSession = new PeerDeviceSession(this.#credentials)
     this.#devices = new PeerDeviceViews(
       (serviceId, signal, operation) => this.#account(serviceId, signal, operation),
       async (serviceId) => {
@@ -270,14 +271,13 @@ export class PeerManagement {
   }
 
   /**
-   * Re-establishes any service that is not currently online.
+   * Synchronizes enrolled services and re-establishes offline sessions.
    *
    * A session is not self-healing: the coordinator can drop it, the network can
    * change, or the machine can wake from sleep, and nothing in the one-shot
-   * startup pass would notice. Only services that are already offline are
-   * retried, so an online service's session is never disturbed by the sweep.
-   * Nothing else has to be re-synced here: the core re-reads the coordinator's
-   * members on its own loop and announces the result.
+   * startup pass would notice. Online services synchronize their certificate
+   * without replacing their device or peer sessions. Offline services restore
+   * their device too. The core maintains the member directory independently.
    *
    * Failure is per service and never escapes: an unreachable coordinator leaves
    * the app usable and simply offline, exactly as at startup.
@@ -342,11 +342,8 @@ export class PeerManagement {
     if (!snapshot) return
     for (const service of snapshot.record.services) {
       if (this.#lifetime.signal.aborted) return
-      // A session that stayed up needs nothing from this sweep: the catalog of
-      // paired computers is the core's, and the core re-reads it on its own.
-      if (this.#sessions.find(service.serviceId)?.state === 'online') continue
       try {
-        await this.#readyAsDevice(service.serviceId, this.#lifetime.signal)
+        await this.#readyAsDevice(service.serviceId, this.#lifetime.signal, true)
         this.#sessions.record(service.serviceId, 'online', '')
       } catch (error) {
         this.#sessions.record(service.serviceId, 'offline', this.#refusalCode(error))
@@ -460,15 +457,29 @@ export class PeerManagement {
       this.#session.connections.invalidate(serviceId)
       this.#session.services.forget(serviceId)
     }
-    this.#restored.delete(serviceId)
+    this.#deviceSession.forget(serviceId)
     this.#restoreInFlight.delete(serviceId)
     return committed
   }
 
-  login(serviceId: string, username: string, password: string, signal: AbortSignal) {
-    return this.#account(serviceId, signal, (accounts, active) =>
+  async login(serviceId: string, username: string, password: string, signal: AbortSignal) {
+    const user = await this.#account(serviceId, signal, (accounts, active) =>
       accounts.login(serviceId, username, password, active)
     )
+    void this.#maintainAfterLogin(serviceId)
+    return user
+  }
+
+  async #maintainAfterLogin(serviceId: string): Promise<void> {
+    try {
+      await this.#readyAsDevice(serviceId, this.#lifetime.signal, 'after-login')
+      if (this.#lifetime.signal.aborted) return
+      this.#sessions.record(serviceId, 'online', '')
+      await this.#reconcile(serviceId)
+    } catch (error) {
+      if (!this.#lifetime.signal.aborted)
+        this.#sessions.record(serviceId, 'offline', this.#refusalCode(error))
+    }
   }
   register(serviceId: string, email: string, password: string, signal: AbortSignal) {
     return this.#account(serviceId, signal, (accounts, active) =>
@@ -589,53 +600,25 @@ export class PeerManagement {
   /**
    * Ready session with the enrolled device restored into the helper.
    *
-   * Pairing, connections and remote browsing all speak as the enrolled device, but
-   * nothing restored the saved credential after enrollment, so those calls failed
-   * with device_unregistered. Restoring is idempotent: the helper refusing a
-   * second restore counts as restored.
+   * Pairing, connections and remote browsing all speak as the enrolled device.
+   * Restore that original identity with its current certificate. Background
+   * maintenance also synchronizes an already-restored device without replacing it.
    */
-  async #readyAsDevice(serviceId: string, signal: AbortSignal): Promise<Session> {
+  async #readyAsDevice(
+    serviceId: string,
+    signal: AbortSignal,
+    maintain: boolean | 'after-login' = false
+  ): Promise<Session> {
     const session = await this.#ready(signal)
     await session.services.activate(serviceId, this.#signal(signal))
-    await this.#restoreUserSession(serviceId, session, this.#signal(signal)).catch(() => undefined)
-    if (this.#restored.has(serviceId)) return session
-    const saved = await this.#credentials.load(serviceId).catch(() => undefined)
-    if (!saved || saved.credential.serviceId !== serviceId)
-      throw new PeerHelperError('p2p.device_unregistered')
-    // Presence is reported for one account, and it has to be the account signed in
-    // here: a machine bound to two accounts that kept reporting the one its
-    // credential was first issued for stayed invisible to the account using it.
-    const reportedUser = await this.#reportedAccount(serviceId, session, saved.credential, signal)
-    try {
-      exactPeerObject(
-        await session.rpc.call(
-          'device.restore',
-          {
-            serviceId,
-            data: {
-              device: {
-                deviceId: saved.credential.deviceId,
-                userId: reportedUser,
-                name: saved.credential.name,
-                publicKey: saved.credential.publicKey,
-                certificate: saved.credential.certificate
-              },
-              privateKey: saved.credential.privateKey,
-              // Pins are the core's: its own catalog pass re-pins every active
-              // pair into this session, so a restore hands over none.
-              pins: []
-            }
-          },
-          this.#signal(signal)
-        ),
-        ['deviceId']
-      )
-    } catch (error) {
-      // Already restored in this helper process: not an error.
-      if (!(error instanceof PeerHelperError) || error.code !== 'p2p.invalid_device_state')
-        throw error
-    }
-    this.#restored.add(serviceId)
+    await this.#restoreUserSession(serviceId, session, this.#signal(signal))
+    await this.#deviceSession.ready(
+      serviceId,
+      session,
+      this.#signal(signal),
+      (credential) => this.#reportedAccount(serviceId, session, credential, signal),
+      maintain
+    )
     return session
   }
 
@@ -948,7 +931,7 @@ export class PeerManagement {
 
   #clearSession(): void {
     this.#sessions.clear('p2p.helper_unavailable')
-    this.#restored.clear()
+    this.#deviceSession.clear()
     this.#restoreInFlight.clear()
     this.#session?.projects.close()
     this.#session?.connections.close()

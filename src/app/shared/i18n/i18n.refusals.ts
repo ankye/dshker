@@ -27,6 +27,18 @@ export const zhCNRefusals = {
   'p2p.refusal.runtimeUnavailable':
     '网络已连上，但对方的工作台没有启动起来。请在对方电脑上查看运行页。',
   'p2p.refusal.pairUnauthorized': '这台电脑的配对授权已失效，需要在远程连接页重新配对。',
+  'p2p.refusal.certificateRecoveryRequired':
+    '这台电脑的设备证书已到期。请在本机登录原网络所有者账号，使用已记录的网络恢复证书；原设备和配对会保留。若未记录原网络，请联系管理员核对。',
+  'p2p.refusal.certificateRecoveryForbidden':
+    '当前账号无权恢复这台电脑的设备证书。请登录原网络所有者账号，或联系该网络的管理员；原设备和配对仍保留。',
+  'p2p.refusal.certificateSyncFailed':
+    '这台电脑的网络设备证书同步失败。请重试；若仍失败，请联系管理员核对协调服务器与本机证书记录。原设备和配对会保留。',
+  'p2p.refusal.certificatePersistFailed':
+    '无法将设备证书保存到系统凭据存储或确认保存结果。请检查系统凭据存储是否可用后重试；原设备和配对会保留。',
+  'p2p.refusal.invalidDeviceCertificate':
+    '这台电脑的设备证书未通过验证。请联系管理员核对协调服务器与原设备凭据。',
+  'p2p.refusal.credentialReadFailed':
+    '无法读取这台电脑已保存的设备凭据。请检查系统凭据存储与本机设置目录后重试；原设备和配对会保留。',
   'p2p.refusal.connecting': '正在建立连接，稍等片刻即可。'
 } as const
 
@@ -51,6 +63,18 @@ export const enUSRefusals: Record<keyof typeof zhCNRefusals, string> = {
     'The network connected, but the workbench on the other computer did not come up. Check its Run page.',
   'p2p.refusal.pairUnauthorized':
     'This computer’s pairing authorization is gone. Pair it again from Remote Connections.',
+  'p2p.refusal.certificateRecoveryRequired':
+    'This computer’s device certificate has expired. Sign in here as the original network owner to recover it using the recorded network. The device and pairs are retained. If no original network is recorded, contact the administrator.',
+  'p2p.refusal.certificateRecoveryForbidden':
+    'This account cannot recover this computer’s device certificate. Sign in as the original network owner or contact that network’s administrator. The device and pairs are retained.',
+  'p2p.refusal.certificateSyncFailed':
+    'This computer’s network device certificate could not be synchronized. Retry; if it still fails, ask the administrator to check the coordinator and local certificate records. The device and pairs are retained.',
+  'p2p.refusal.certificatePersistFailed':
+    'The device certificate could not be saved to the system credential store or its saved state confirmed. Check that the system credential store is available, then retry. The device and pairs are retained.',
+  'p2p.refusal.invalidDeviceCertificate':
+    'This computer’s device certificate failed verification. Ask the administrator to check the coordinator and the original device credential.',
+  'p2p.refusal.credentialReadFailed':
+    'This computer’s saved device credential could not be read. Check the system credential store and local settings directory, then retry. The device and pairs are retained.',
   'p2p.refusal.connecting': 'The connection is still being established.'
 }
 
@@ -82,6 +106,18 @@ export function refusalKeyForCode(code: string): keyof typeof zhCNRefusals {
     return 'p2p.refusal.runtimeUnavailable'
   }
   switch (code) {
+    case 'p2p.certificate_recovery_required':
+      return 'p2p.refusal.certificateRecoveryRequired'
+    case 'p2p.certificate_recovery_forbidden':
+      return 'p2p.refusal.certificateRecoveryForbidden'
+    case 'p2p.certificate_sync_failed':
+      return 'p2p.refusal.certificateSyncFailed'
+    case 'p2p.certificate_persist_failed':
+      return 'p2p.refusal.certificatePersistFailed'
+    case 'p2p.invalid_device_certificate':
+      return 'p2p.refusal.invalidDeviceCertificate'
+    case 'p2p.credential_read_failed':
+      return 'p2p.refusal.credentialReadFailed'
     case 'p2p.peer_offline':
       return 'p2p.refusal.peerOffline'
     // Refused because this computer has no such connection or session — or
