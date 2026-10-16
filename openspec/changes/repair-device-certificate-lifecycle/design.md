@@ -46,6 +46,17 @@ After validation, recheck account token, selected network, cancellation and the 
 
 An explicit network selection schedules the same lifecycle-owned maintenance so a user whose legacy credential lacked a selection can recover without logging out again. Repeated requests share the existing per-service flight. Tests cover missing/manual selection, wrong account, deleted/unbound network, account/selection changes, cancellation, storage interruption, unchanged valid certificates and restart. A real CLI/OS credential test starts with expired legacy state and no recovery metadata, proves the unscoped refusal, then recovers with the verified exact network and original key and reads every persisted identity back after restart. No implementation test reads or rewrites installed production credentials or restarts the active DSH.
 
+### D7. Release-input file handle closure
+
+The follow-up CI exposed a Windows runtime-stage rename failure. Its cause is
+not established, but review identified an independent close-barrier defect:
+the runtime hash resolved on stream `end`, before the asynchronous file close.
+Make the hash finish only after its input handle is closed, retain the existing
+verified stage and rollback protocol, and test immediate stage rename/removal
+on Windows as well as Linux. Do not add retry, delay, alternate runtime or
+unverified publication to conceal an `EPERM` failure. Actual Windows packaging
+must pass for the release commit; a local unit pass is not packaging evidence.
+
 ## Risks / Trade-offs
 
 - A session may have expired too: show a login-required recovery error and preserve the device.

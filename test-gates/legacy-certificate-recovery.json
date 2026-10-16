@@ -6,7 +6,8 @@
     "electron/main/p2p/certificate-recovery-scope.ts",
     "electron/main/p2p/device-session.ts",
     "electron/main/p2p/management.ts",
-    "electron/main/p2p/tests/legacy-certificate-fixture.ts"
+    "electron/main/p2p/tests/legacy-certificate-fixture.ts",
+    "tools/prepare-runtime.mjs"
   ],
   "test_files": [
     "electron/main/p2p/certificate-recovery-scope.test.ts",
@@ -14,9 +15,14 @@
     "electron/main/p2p/device-session-legacy.test.ts",
     "electron/main/p2p/management-certificate.test.ts",
     "electron/main/p2p/management-legacy-certificate.test.ts",
-    "networking/integration/certificate_legacy_cli_linux_test.go"
+    "networking/integration/certificate_legacy_cli_linux_test.go",
+    "networking/integration/certificate_unbound_recovery_test.go",
+    "tools/prepare-runtime.test.mjs"
   ],
-  "live_test_files": ["networking/integration/certificate_legacy_cli_linux_test.go"],
+  "live_test_files": [
+    "networking/integration/certificate_legacy_cli_linux_test.go",
+    "networking/integration/certificate_unbound_recovery_test.go"
+  ],
   "state_matrix": [
     {
       "state": "success",
@@ -48,6 +54,16 @@
     }
   ],
   "field_bindings": [
+    {
+      "production_file": "tools/prepare-runtime.mjs",
+      "test": "returns the exact digest with its file already closed for %j",
+      "assertion": "expect(closed).toHaveBeenCalledWith(descriptor)",
+      "field": "verified runtime digest is not published before its owned file descriptor closes",
+      "state": "success",
+      "source": "Exact file bytes, a synchronous read/close barrier and the existing verified-stage publication path.",
+      "identity_keys": ["filePath", "descriptor", "digest", "stage"],
+      "missing_semantics": "Missing or unreadable files throw before producing a digest; no EPERM retry, delay or alternate runtime publication."
+    },
     {
       "production_file": "electron/main/p2p/certificate-recovery-scope.ts",
       "test": "freshly verifies the current user and exact manual network with the original device",
@@ -126,7 +142,7 @@
       "no_mock": true
     },
     {
-      "command": "cd networking && test -f \"${DSHKER_SERVER_BINARY:?explicit verified coordinator binary required}\" && go test -json -race -count=1 -run '^TestCertificateRealCoordinatorLifecycle$' ./integration > ../.run/legacy-certificate-recovery/local-real-coordinator.jsonl",
+      "command": "cd networking && test -f \"${DSHKER_SERVER_BINARY:?explicit verified coordinator binary required}\" && go test -json -race -count=1 -run '^TestCertificateRealCoordinator(Lifecycle|UnboundRecovery)$' ./integration > ../.run/legacy-certificate-recovery/local-real-coordinator.jsonl",
       "no_mock": true
     },
     {

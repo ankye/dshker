@@ -37,7 +37,7 @@ deployment or installed DSH restart is part of this repair.
 - Implemented only the three Electron owners: scoped selection admission,
   certificate-session migration and management composition. No production Go
   behavior or independent server deployment changes are needed.
-- Source preflight: full Vitest 176 files / 1,624 tests passed without pending
+- Source preflight: full Vitest 176 files / 1,626 tests passed without pending
   cases, focused P2P/preload regression 34 files / 515 tests passed, foundation
   E2E 4 files / 6 tests passed. Type, environment, architecture, formatting,
   renderer/Electron source builds, service/visual source smoke and the desktop
@@ -62,3 +62,19 @@ deployment or installed DSH restart is part of this repair.
 - Independent final review, exact-revision CI, default verify, native GitHub
   packages and public stable Release checks remain pending. Physical Win/Mac
   acceptance remains a separate post-install user check, not inferred from CI.
+
+## CI refusal and release-input investigation
+
+- Quality run 38947647330 at ec82874 passed both launcher jobs, but the real
+  Linux CLI's owned/unbound-network rejection returned certificate-sync-failed
+  rather than recovery-forbidden. Missing/empty legacy metadata recovery and
+  foreign/missing network refusals passed. The original assertion remains
+  unchanged; failure-only sanitized diagnostics and a direct real-coordinator
+  regression investigate the actual cause rather than accepting another code.
+- Package run 38947647261 passed all CLI targets and five desktop targets, but
+  Windows x64 failed while renaming the verified runtime stage. No local
+  installer was built or tag created. Review found no unjoined child process
+  and no basis to attribute the failure to antivirus. A real close-barrier gap
+  exists in the runtime hash (`end` before asynchronous close); D7 tracks its
+  minimal repair without retries. This is not yet proof of that CI failure's
+  cause, and actual new Windows packaging remains required.

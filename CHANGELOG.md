@@ -6,11 +6,13 @@
 
 - **修复旧版本升级后“能登录，但网络连不上”。** 旧凭据未记录网络 ID、设备证书已过期时，现在会读取当前账号明确选中的网络，重新验证网络归属和原设备绑定后恢复证书；保留设备标识、密钥、网络与配对，无需删除或重新登记电脑。
 - **补选网络即可继续恢复。** 尚未选择网络时保留明确提示；选好已有网络后自动重试。不会猜选第一个网络，也不会用其他账号的选择覆盖已有恢复范围；取消、账号切换和保存失败均明确处理。
+- **收紧内置运行时打包的文件关闭时序。** 校验输入文件完全关闭后才发布已验证的运行时目录，不用重试或替代运行时掩盖文件访问错误。
 
 ### English (en-US)
 
 - **Fix “signed in, but unable to connect” after upgrading older installations.** When an expired legacy credential has no network ID, the Launcher now uses the current account's explicitly selected network only after freshly verifying ownership and the original device's membership. Device identity, keys, networks and pairings are retained without deleting or re-enrolling the computer.
 - **Resume recovery after selecting a network.** Missing selection remains explicit; choosing an existing network schedules recovery. The Launcher never guesses the first network or overwrites an established scope with another account's selection, and handles cancellation, account changes and persistence failures explicitly.
+- **Close runtime verification inputs before publishing the staged directory.** Packaging now waits for the owned file handle to close, without hiding file-access failures behind retries or an alternate runtime.
 
 ## 0.1.89 — 2026-10-16
 

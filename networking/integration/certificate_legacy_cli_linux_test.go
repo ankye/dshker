@@ -5,9 +5,13 @@ package integration
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -119,6 +123,7 @@ func TestCertificateRealCoordinatorCLILegacyScopeRefusals(t *testing.T) {
 			before := certificateLegacyIssuanceCounts(t, legacy.f)
 			request := certificateLegacyRequest(legacy, networkID, token)
 			if code := refusalOf(t, legacy.ctx, legacy.parent, "device.certificate", request); code != "p2p.certificate_recovery_forbidden" {
+				certificateLegacyDiagnoseRefusal(t, legacy, networkID, token, before)
 				t.Fatalf("unauthorized exact scope refused with %q", code)
 			}
 			assertCertificateCLICanonical(t, legacy.ctx, legacy.parent, legacy.f, legacy.expired)
@@ -363,12 +368,217 @@ func certificateLegacyIssuanceRows(t *testing.T, f *realCoordinator) map[string]
 
 func certificateLegacyQuery(t *testing.T, f *realCoordinator, query string) []byte {
 	t.Helper()
-	data, err := os.ReadFile(f.configPath)
-	must(t, err)
-	var config map[string]string
-	must(t, json.Unmarshal(data, &config))
-	command := exec.CommandContext(f.ctx, "sqlite3", "-readonly", "-batch", "-json", config["databasePath"], query)
-	output, err := command.Output()
+	output, err := certificateLegacyQueryResult(f, query)
 	must(t, err)
 	return output
+}
+
+func certificateLegacyQueryResult(f *realCoordinator, query string) ([]byte, error) {
+	data, err := os.ReadFile(f.configPath)
+	if err != nil {
+		return nil, err
+	}
+	var config map[string]string
+	if err := json.Unmarshal(data, &config); err != nil {
+		return nil, err
+	}
+	if !filepath.IsAbs(config["databasePath"]) {
+		return nil, errors.New("isolated coordinator database path is absent or relative")
+	}
+	command := exec.CommandContext(f.ctx, "sqlite3", "-readonly", "-batch", "-json", config["databasePath"], query)
+	return command.Output()
+}
+
+// Run only after the original refusal assertion has failed. Diagnostics never
+// retry the RPC, accept another code or change the successful execution path.
+func certificateLegacyDiagnoseRefusal(t *testing.T, legacy *certificateLegacyCLI, networkID, token string, before certificateLegacyIssuance) {
+	t.Helper()
+	certificateLegacyDiagnoseCanonical(t, legacy)
+	certificateLegacyDiagnoseMetadata(t, legacy, networkID)
+	current, err := legacy.f.client.ReadCertificate(legacy.ctx, legacy.expired.DeviceID, legacy.f.config[0].Private, legacy.f.authority)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: signed readback error=%v", err)
+	} else {
+		t.Logf("legacy refusal diagnostic: signed readback original_identity=%t certificate_unchanged=%t", current.DeviceID == legacy.expired.DeviceID && current.UserID == legacy.expired.UserID && current.Name == legacy.expired.Name && bytes.Equal(current.PublicKey, legacy.expired.PublicKey), bytes.Equal(current.Certificate, legacy.expired.Certificate))
+		certificateLegacyDiagnoseLeaf(t, "server", current.Certificate)
+	}
+	certificateLegacyDiagnoseCounts(t, legacy, "after-original-rpc", before)
+	// Only the owned but unbound network can reach the real recovery endpoint;
+	// foreign and missing networks are already refused during grant admission.
+	if networkID == legacy.unbound.NetworkID {
+		certificateLegacyDiagnoseRecoveryHTTP(t, legacy, networkID, token)
+		certificateLegacyDiagnoseCounts(t, legacy, "after-direct-http-probe", before)
+	}
+}
+
+func certificateLegacyDiagnosticRecord(t *testing.T, legacy *certificateLegacyCLI, kind, key string) ([]byte, bool) {
+	t.Helper()
+	data, err := legacy.store.Get(key)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: OS %s read error=%v", kind, err)
+		return nil, false
+	}
+	payload, err := legacy.parent.Call(legacy.ctx, "core.secret_get", map[string]string{"key": key})
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: core %s read error=%v", kind, err)
+		return data, true
+	}
+	var response struct {
+		Value string `json:"value"`
+	}
+	if err := protocol.DecodeExact(payload, &response); err != nil {
+		t.Logf("legacy refusal diagnostic: core %s response_schema_valid=false", kind)
+		return data, true
+	}
+	readback, err := base64.StdEncoding.DecodeString(response.Value)
+	defer clear(readback)
+	t.Logf("legacy refusal diagnostic: %s core_OS_bytes_equal=%t core_base64_valid=%t", kind, bytes.Equal(data, readback), err == nil)
+	return data, true
+}
+
+func certificateLegacyDiagnoseCanonical(t *testing.T, legacy *certificateLegacyCLI) {
+	t.Helper()
+	data, ok := certificateLegacyDiagnosticRecord(t, legacy, "canonical", "account.credential."+legacy.f.authority.ServiceID)
+	if !ok {
+		return
+	}
+	defer clear(data)
+	var stored struct {
+		Version     int                    `json:"version"`
+		ServiceID   string                 `json:"serviceId"`
+		Endpoints   controlplane.Endpoints `json:"endpoints"`
+		ServiceKey  []byte                 `json:"serviceKey"`
+		DeviceID    string                 `json:"deviceId"`
+		UserID      string                 `json:"userId"`
+		Name        string                 `json:"name"`
+		PublicKey   []byte                 `json:"publicKey"`
+		Certificate []byte                 `json:"certificate"`
+		PrivateKey  []byte                 `json:"privateKey"`
+	}
+	err := protocol.DecodeExact(data, &stored)
+	defer clear(stored.PrivateKey)
+	identity := stored.Version == 1 && stored.ServiceID == legacy.f.authority.ServiceID && stored.Endpoints == legacy.f.endpoints && bytes.Equal(stored.ServiceKey, legacy.f.authority.PublicKey) && stored.DeviceID == legacy.expired.DeviceID && stored.UserID == legacy.expired.UserID && stored.Name == legacy.expired.Name && bytes.Equal(stored.PublicKey, legacy.expired.PublicKey) && bytes.Equal(stored.PrivateKey, legacy.f.config[0].Private)
+	t.Logf("legacy refusal diagnostic: canonical schema_valid=%t original_identity=%t certificate_unchanged=%t", err == nil, identity, bytes.Equal(stored.Certificate, legacy.expired.Certificate))
+	certificateLegacyDiagnoseLeaf(t, "canonical", stored.Certificate)
+}
+
+func certificateLegacyDiagnoseMetadata(t *testing.T, legacy *certificateLegacyCLI, networkID string) {
+	t.Helper()
+	data, ok := certificateLegacyDiagnosticRecord(t, legacy, "index", "account.credential-index")
+	if ok {
+		defer clear(data)
+		var index struct {
+			Version  int      `json:"version"`
+			Services []string `json:"services"`
+		}
+		err := protocol.DecodeExact(data, &index)
+		t.Logf("legacy refusal diagnostic: index schema_valid=%t original_service_only=%t", err == nil, index.Version == 1 && len(index.Services) == 1 && index.Services[0] == legacy.f.authority.ServiceID)
+	}
+	data, ok = certificateLegacyDiagnosticRecord(t, legacy, "sidecar", "account.certificate."+legacy.f.authority.ServiceID)
+	if !ok {
+		return
+	}
+	defer clear(data)
+	var metadata struct {
+		Version          int    `json:"version"`
+		NetworkID        string `json:"networkId"`
+		PendingRequestID string `json:"pendingRequestId"`
+	}
+	err := protocol.DecodeExact(data, &metadata)
+	t.Logf("legacy refusal diagnostic: sidecar schema_valid=%t version_valid=%t network_empty=%t network_matches_request=%t pending_present=%t pending_valid=%t", err == nil, metadata.Version == 1, metadata.NetworkID == "", metadata.NetworkID == networkID, metadata.PendingRequestID != "", metadata.PendingRequestID == "" || protocol.ValidID(metadata.PendingRequestID))
+}
+
+func certificateLegacyDiagnoseLeaf(t *testing.T, source string, data []byte) {
+	t.Helper()
+	leaf, err := x509.ParseCertificate(data)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: %s leaf_parse_valid=false", source)
+		return
+	}
+	t.Logf("legacy refusal diagnostic: %s leaf_not_before=%s leaf_not_after=%s observed_at=%s", source, leaf.NotBefore.UTC().Format(time.RFC3339Nano), leaf.NotAfter.UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano))
+}
+
+func certificateLegacyDiagnoseCounts(t *testing.T, legacy *certificateLegacyCLI, phase string, before certificateLegacyIssuance) {
+	t.Helper()
+	query := "SELECT (SELECT count(*) FROM tokens) AS grants,(SELECT coalesce(sum(used),0) FROM tokens) AS used,(SELECT count(*) FROM renewals) AS renewals"
+	data, err := certificateLegacyQueryResult(legacy.f, query)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: phase=%s issuance_read error=%v", phase, err)
+		return
+	}
+	var after []certificateLegacyIssuance
+	if json.Unmarshal(data, &after) != nil || len(after) != 1 {
+		t.Logf("legacy refusal diagnostic: phase=%s issuance_schema_valid=false", phase)
+		return
+	}
+	t.Logf("legacy refusal diagnostic: phase=%s before=%+v after=%+v", phase, before, after[0])
+}
+
+func certificateLegacyDiagnoseRecoveryHTTP(t *testing.T, legacy *certificateLegacyCLI, networkID, token string) {
+	t.Helper()
+	grant, err := legacy.f.client.EnrollmentToken(legacy.ctx, token, networkID)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: direct recovery grant error=%v", err)
+		return
+	}
+	csr, err := controlplane.DeviceCSR(legacy.f.config[0].Private)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: direct recovery CSR construction failed")
+		return
+	}
+	body, err := json.Marshal(map[string]string{"deviceId": legacy.expired.DeviceID, "requestId": protocol.NewID(), "csr": csr, "token": grant.Token})
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: direct recovery request encoding failed")
+		return
+	}
+	defer clear(body)
+	root, err := x509.ParseCertificate(legacy.f.root)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: direct recovery TLS root parsing failed")
+		return
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(root)
+	transport := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots}, MaxResponseHeaderBytes: 16 * 1024, IdleConnTimeout: 30 * time.Second}
+	defer transport.CloseIdleConnections()
+	client := &http.Client{Transport: transport, Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	request, err := http.NewRequestWithContext(legacy.ctx, http.MethodPost, legacy.f.endpoints.HTTPSOrigin+"/v1/recover-certificate", bytes.NewReader(body))
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: direct recovery request construction failed")
+		return
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := client.Do(request)
+	if err != nil {
+		t.Logf("legacy refusal diagnostic: direct recovery transport error=%v", err)
+		return
+	}
+	defer response.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(response.Body, protocol.MaxControlBytes+1))
+	defer clear(data)
+	if err != nil || len(data) > protocol.MaxControlBytes {
+		t.Logf("legacy refusal diagnostic: direct recovery status=%d protocol=%s body_read_valid=false transport_error=%v", response.StatusCode, response.Proto, err)
+		return
+	}
+	var failure struct {
+		Code string `json:"code"`
+	}
+	validCode := protocol.DecodeExact(data, &failure) == nil && certificateLegacyDiagnosticCode(failure.Code)
+	if !validCode {
+		t.Logf("legacy refusal diagnostic: direct recovery status=%d protocol=%s refusal_schema_valid=false", response.StatusCode, response.Proto)
+		return
+	}
+	t.Logf("legacy refusal diagnostic: direct recovery status=%d protocol=%s code=%s", response.StatusCode, response.Proto, failure.Code)
+}
+
+func certificateLegacyDiagnosticCode(code string) bool {
+	if len(code) < len("p2p.a") || len(code) > 80 || code[:4] != "p2p." {
+		return false
+	}
+	for _, character := range code[4:] {
+		if character != '_' && (character < 'a' || character > 'z') {
+			return false
+		}
+	}
+	return true
 }

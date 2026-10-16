@@ -1,9 +1,18 @@
 // @vitest-environment node
-import { describe, expect, it } from 'vitest'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { describe, expect, it, vi } from 'vitest'
+import fs, {
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  mkdtempSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
 import {
   NODE_HEADERS_ARTIFACT,
   resolveRuntimeTarget,
+  sha256File,
   verifyStagedRuntime
 } from './prepare-runtime.mjs'
 import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
@@ -42,6 +51,65 @@ describe('the pinned standalone Node target', () => {
     )
     expect(() => resolveRuntimeTarget(['--arch'])).toThrow('--arch requires a value')
     expect(() => resolveRuntimeTarget(['--unknown'])).toThrow('unknown option: --unknown')
+  })
+})
+
+describe('the runtime hash publication barrier', () => {
+  it.each([
+    ['', 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'],
+    ['abc', 'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad']
+  ])('returns the exact digest with its file already closed for %j', (content, digest) => {
+    const root = mkdtempSync(path.join(tmpdir(), 'dshker-runtime-hash-'))
+    const filePath = path.join(root, 'node.exe')
+    writeFileSync(filePath, content)
+    const opened = vi.spyOn(fs, 'openSync')
+    const closed = vi.spyOn(fs, 'closeSync')
+    try {
+      expect(sha256File(filePath)).toBe(digest)
+      const index = opened.mock.calls.findIndex(([openedPath]) => openedPath === filePath)
+      expect(index).toBeGreaterThanOrEqual(0)
+      const descriptor = opened.mock.results[index].value
+      expect(closed).toHaveBeenCalledWith(descriptor)
+      expect(() => fstatSync(descriptor)).toThrowError(expect.objectContaining({ code: 'EBADF' }))
+    } finally {
+      opened.mockRestore()
+      closed.mockRestore()
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('allows immediate stage publication and deletion after hashing the Windows binary', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'dshker-runtime-publish-'))
+    const stage = path.join(root, '.runtime-stage', 'runtime')
+    const published = path.join(root, 'runtime')
+    const bin = path.join(stage, 'bin')
+    try {
+      mkdirSync(bin, { recursive: true })
+      writeFileSync(path.join(bin, 'node.exe'), 'abc')
+      expect(sha256File(path.join(bin, 'node.exe'))).toBe(
+        'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'
+      )
+      renameSync(stage, published)
+      expect(existsSync(stage)).toBe(false)
+      expect(existsSync(path.join(published, 'bin', 'node.exe'))).toBe(true)
+      rmSync(published, { recursive: true })
+      expect(existsSync(published)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
+  })
+
+  it('refuses a missing binary without producing a digest or retaining its directory', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'dshker-runtime-missing-'))
+    try {
+      expect(() => sha256File(path.join(root, 'node.exe'))).toThrowError(
+        expect.objectContaining({ code: 'ENOENT' })
+      )
+      rmSync(root, { recursive: true })
+      expect(existsSync(root)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
 

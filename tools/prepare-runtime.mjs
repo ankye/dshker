@@ -23,7 +23,6 @@ import {
   chmodSync,
   copyFileSync,
   cpSync,
-  createReadStream,
   createWriteStream,
   existsSync,
   mkdtempSync,
@@ -115,14 +114,9 @@ function nodeExecutable(runtimeRoot, target) {
   return path.join(runtimeRoot, 'bin', target.platform === 'win32' ? 'node.exe' : 'node')
 }
 
-function sha256File(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = createHash('sha256')
-    const input = createReadStream(filePath)
-    input.on('error', reject)
-    input.on('data', (chunk) => hash.update(chunk))
-    input.on('end', () => resolve(hash.digest('hex')))
-  })
+/** Close the owned descriptor before a verified stage can be renamed. */
+export function sha256File(filePath) {
+  return createHash('sha256').update(readFileSync(filePath)).digest('hex')
 }
 
 async function downloadVerifiedArchive(filename, expectedSha256, directory, description) {
