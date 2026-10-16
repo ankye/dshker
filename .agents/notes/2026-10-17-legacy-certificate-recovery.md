@@ -52,17 +52,18 @@ deployment or installed DSH restart is part of this repair.
 - Added Linux production-CLI/OS-credential tests for missing/empty legacy
   metadata, exact authenticated selection, unauthorized scope, complete
   identity/sidecar readback, grant accounting and coordinator/core restart.
-  Linux compilation/vet passed; actual Secret Service execution remains a CI
-  gate and has not yet been accepted from compilation alone.
+  Linux compilation/vet passed; actual Secret Service execution was still a CI
+  gate at this preflight and was not accepted from compilation alone.
 - Source-size gate measured all nine changed code files with no violation
   (largest: management.ts, 957 lines). The dedicated data-critical manifest is
   `test-gates/legacy-certificate-recovery.json`; static validation is authoring
   feedback only. Default verify additionally requires a successful CI for the
   exact client commit and the original Linux evidence ZIP's SHA-256 and source
   binding before parsing real process results.
-- Independent final review, exact-revision CI, default verify, native GitHub
-  packages and public stable Release checks remain pending. Physical Win/Mac
-  acceptance remains a separate post-install user check, not inferred from CI.
+- At this preflight, independent final review, exact-revision CI, default verify,
+  native GitHub packages and public stable Release checks were pending. Physical
+  Win/Mac acceptance remains a separate post-install user check, not inferred
+  from CI.
 
 ## CI refusal and release-input investigation
 
@@ -99,3 +100,49 @@ deployment or installed DSH restart is part of this repair.
 - Windows x64 packaging and packaged smoke passed in run 38950437556 after the
   close-barrier correction; this does not prove its earlier failure's root
   cause. All platform packages must still pass for the final release commit.
+
+## Final verification and published release
+
+- Release source is `daf2ac3e7ec53c4b02ec97f6d182e7c37b29445c`.
+  Quality run 38951991003 completed successfully on that exact commit,
+  including the complete peer suite. Real Linux certificate evidence has
+  17 passed test items, no failure or skip; artifact 12068549065's original ZIP
+  SHA-256 is `b77771c00f8e0eabe092e61b3b4c8165fd7518876e50ecbcc0cf09c4fe74593f`.
+  Missing/empty legacy metadata, exact recovery, all scope refusals and restart
+  readback passed without changing the original identity/network/pair checks.
+- Default test-integrity verification completed with exit 0: 9 test files,
+  7 actual commands and 6 evidence artifacts. The exact CI commit and original
+  ZIP digest were verified before consuming raw events. Full local tests:
+  176 Vitest files / 1,630 cases, 270 core race cases and real coordinator
+  lifecycle/unbound tests all passed without pending/skipped cases. Required
+  source checks/builds, E2E and smoke checks passed. Desktop workspace validation,
+  strict OpenSpec validation, 14-file size gate and independent review passed.
+  Source/synthetic checks are not physical Win/Mac account or performance proof.
+- Main package run 38951991036 attempt 2 passed all 13 build jobs. Its first
+  macOS Intel DMG failed to detach a busy CI volume; one fresh-runner rerun of
+  only that job passed, including packaged smoke. No hdiutil workaround or
+  production retry was added.
+- Annotated `v0.1.90` tag object
+  `ff2f13b6b501d3252f0c5b0664590767dff42a69` points to the release source.
+  Commits and tag use `ankye sheng <shengxiehua@gmail.com>`.
+  Tag package run 38954814082 attempt 2 passed all 13 build jobs and Publish.
+  Its first Windows ARM64 job hit runtime-stage rename EPERM despite the
+  corrected hash close barrier; the holder is not identified. Diagnostic ZIP
+  12070473078 SHA-256 is
+  `f7c74d3d7c8c224ff34468c625743826cc4dc259fb70dda0b9072b4d3c2f1119`.
+  One fresh-runner rerun of only that failed job passed metadata, headless-core
+  and packaged-app checks. This is recorded as a build-time refusal and
+  successful rerun, not proof that the close-barrier repair explains EPERM.
+- Public Release 415324493 is
+  [v0.1.90](https://github.com/ankye/dshker/releases/tag/v0.1.90):
+  draft false, prerelease false, and the latest stable update-feed release.
+  Independent read-only verification confirmed the annotated source binding,
+  all 25 nonempty uploaded assets, eight installer/six CLI archive checksums,
+  six desktop manifests, combined CLI manifest and exact CHANGELOG body.
+  `.run/legacy-certificate-recovery/public-release-verification.json` records
+  the result. Local installer packaging was not used.
+- No installed production credential, existing device/network/pair, active DSH
+  or independent server was modified for verification. Both physical Windows
+  and Mac machines must update and re-test their original network; that manual
+  cross-machine acceptance is not claimed from CI. Signing/notarization status
+  is unchanged from the documented unsigned distribution channel.
