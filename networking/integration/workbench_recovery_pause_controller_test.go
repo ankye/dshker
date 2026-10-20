@@ -7,6 +7,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -32,6 +33,53 @@ type recoveryPauseChild struct {
 	process recoveryExactProcess
 	done    chan struct{}
 	err     error // published by closing done
+}
+
+// Only the original child completion grants this observation. It never reopens
+// a PID, restarts a helper, or lets a missing receipt consume the outer deadline
+// after that child has already exited. done publishes the original Wait error.
+func (child *recoveryPauseChild) waitReceipt(ctx context.Context, root, name string, value any) error {
+	if child == nil || child.done == nil {
+		return errors.New("test.pause_runner_observation_required")
+	}
+	exited := func() error {
+		return errors.Join(fmt.Errorf("test.pause_runner_exited_before_receipt: %s", name), child.err, ctx.Err())
+	}
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-child.done:
+			return exited()
+		default:
+		}
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := recoveryPauseRead(root, name, value); !os.IsNotExist(err) {
+			if err != nil {
+				return err
+			}
+			select {
+			case <-child.done:
+				return exited()
+			default:
+				return nil
+			}
+		}
+		select {
+		case <-child.done:
+			return exited()
+		case <-ctx.Done():
+			select {
+			case <-child.done:
+				return exited()
+			default:
+				return ctx.Err()
+			}
+		case <-ticker.C:
+		}
+	}
 }
 
 type recoveryPauseRun struct {

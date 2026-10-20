@@ -329,7 +329,7 @@ func TestWorkbenchRecoveryPauseParentGoneGuardLive(t *testing.T) {
 		}
 	}()
 	var ready recoveryPauseOrphanReceipt
-	recoveryPauseAwait(t, ctx, root, "orphan-ready.json", &ready)
+	must(t, runner.waitReceipt(ctx, root, "orphan-ready.json", &ready))
 	if ready.Runner != runner.process.Proof() || ready.Core.ParentPID != ready.Runner.PID {
 		t.Fatal("test.pause_orphan_runner_identity_mismatch")
 	}
@@ -366,7 +366,7 @@ func TestWorkbenchRecoveryPauseParentGoneGuardLive(t *testing.T) {
 	}{ID: filepath.Base(root)}))
 	armed = true
 	var paused recoveryPauseOrphanReceipt
-	recoveryPauseAwait(t, ctx, root, "orphan-paused.json", &paused)
+	must(t, runner.waitReceipt(ctx, root, "orphan-paused.json", &paused))
 	if paused.Core != ready.Core || paused.Runner != ready.Runner || paused.Owner != ready.Owner || paused.Pause.CreationSHA != ready.Core || paused.OperationRoot == "" || paused.Pause.PausedAt.IsZero() {
 		t.Fatal("test.pause_orphan_pause_identity_mismatch")
 	}

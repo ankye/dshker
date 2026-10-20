@@ -1083,6 +1083,35 @@ service A/B terminal isolation, transient retry preservation and a late old-scop
 in-flight refusal after exact reauthorization. Do not replace fresh membership
 proof with a catalog revision or mark background maintenance as new authority.
 
+### D28 — Native pause receipts admit concurrent publication, not retries
+
+The frozen D27 physical run passed its 3s and 35s business pauses, but the
+independent parent-gone safety preflight failed before the flap business case.
+Its first recorded read failure is a Windows sharing violation for paused.json;
+the failure path released the controller early, then an outer file-only wait
+hid the runner's early exit behind its original 85s deadline. The actual holder
+of the conflicting handle was not captured. This is not evidence of an ICE
+failure, a leaked writer, or an antivirus cause. The writer already closes its
+synced temporary file before Rename.
+
+After retaining the aggregate FAIL, every raw hash and the owned packet/process
+cleanup receipts, end that freeze only for a test-helper repair. Windows receipt
+reads must request READ, WRITE and DELETE sharing on their first open, allowing
+the existing atomic Rename publication contract. Other platforms retain their
+existing read operation. Do not catch a sharing error and retry, relax strict
+nonce/schema/timing admission, change the hold or recovery budget, or replace
+the receipt. The orphan-runner acknowledgement wait must also observe that
+exact runner's completion and report an early exit at its named phase rather
+than wait out the deadline. Existing guard/controller release ownership remains.
+
+Prove the Windows contract with an actual DELETE-access/full-sharing handle:
+the old reader must fail and the new single-open reader must read the exact
+strict receipt. Invalid content remains rejected. Prove early child exit is
+reported without losing its original failure. Then freeze a new identity and
+repeat both native safety preflights and all three business profiles. A pass
+from the historical short/long cases cannot approve the failed aggregate or
+replace the still-pending crash, 8h and native interaction gates.
+
 ## Risks / Trade-offs
 
 - Runtime refusal could cause repeated workbench requests → keep existing backoff

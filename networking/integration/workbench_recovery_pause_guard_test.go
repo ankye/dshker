@@ -280,7 +280,7 @@ func recoveryPauseWrite(root, name string, value any) error {
 }
 
 func recoveryPauseRead(root, name string, value any) error {
-	data, err := os.ReadFile(filepath.Join(root, name))
+	data, err := recoveryPauseReadBytes(filepath.Join(root, name))
 	if err != nil {
 		return err
 	}

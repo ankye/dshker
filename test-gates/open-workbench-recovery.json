@@ -142,6 +142,10 @@
     "tools/workbench-recovery-identity.mjs"
   ],
   "test_files": [
+    "networking/integration/workbench_recovery_pause_read_windows_test.go",
+    "networking/integration/workbench_recovery_pause_read_other_test.go",
+    "networking/integration/workbench_recovery_pause_reader_windows_test.go",
+    "networking/integration/workbench_recovery_pause_wait_pure_test.go",
     "tools/headless-core-smoke.test.mjs",
     "electron/main/p2p/auto-connect.test.ts",
     "electron/main/p2p/management-maintenance.test.ts",
@@ -3013,6 +3017,10 @@
   ],
   "unit_commands": [
     {
+      "command": "cd networking && go test -tags live -json -race -count=1 -run '^TestWorkbenchRecoveryPauseReceiptWait' ./integration",
+      "coverage_limit": "Pure exact-child/strict-receipt admission only. The Windows DELETE-handle and native-open-error cases require the separately recorded native Windows test executable; neither proves a business pause or eight-hour idle."
+    },
+    {
       "command": "cd networking && go test -tags live -json -race -count=1 -run '^(TestRecoveryBootstrap|TestCoreReadyGeneration|TestCoreAutomaticWorkbench|TestCorePrebuiltBinary|TestCoreRefusedEntryReadback)' ./integration",
       "coverage_limit": "Pure fixture, history-entry and binary-input admission only; does not run a core, native credentials, Harness or physical recovery."
     },
@@ -3071,8 +3079,16 @@
     "contract": "test-gates/remote-tab-closing-interaction.json",
     "ledger": ".run/remote-tab-closing/interaction.jsonl"
   },
-  "acceptance_status": "Historical full20 Go races, 1,868 TS tests and D25 admission evidence remain preserved; later D26 source validation passed 1,891 TS tests and focused transport races. Package run 39392280655 passed all targets at 210d49d, but Quality run 39392280651 failed test-only Windows errno and core-fixture owner assumptions, now corrected pending final-SHA CI. D27 removes global terminal reset authority and passes focused scope/epoch/Host regressions; independent review and final source gates remain required. The user exited the original app and authorized native candidate verification: a diagnostic 210d49d artifact retained the user's newly established login and original device/network through one normal quit and reopen. That does not explain the previously absent credential or satisfy final-candidate native interaction/ledger acceptance. Historical failed physical profiles remain failed. Fresh frozen-source pause/crash, 28,800 seconds of original bidirectional Cookie/WS/session/runtime zero-business idle plus ten recovery rounds, final CI and default test-integrity verification are separate pending gates. No eight-hour, final native UI or stable release acceptance is claimed.",
+  "acceptance_status": "D27 source gates passed 1,893 TS tests, scoped Go races, builds and independent review. At f70ea2e, Quality 39398875636 and Package 39398875616 passed all jobs/targets. The frozen 904ea974 physical aggregate nevertheless FAILED: 3s/35s business recovery passed in 454ms/828ms, but flap was never injected because its native safety preflight hit a receipt-sharing failure. Raw proof, captures and exact-owned cleanup are sealed; the 35s old WebSocket was replaced, not continuously alive. D28 changes only test helpers: Windows first-open sharing and exact child early-exit observation, with real DELETE-handle red/green, 22 Windows helper and 32 Mac pure cases, cleanup and independent review passed. Fresh physical pause/crash and final-SHA CI remain required. A diagnostic 210d49d native artifact retained the user's newly established login/device/network through normal quit/reopen, but does not explain the prior missing credential or satisfy final-candidate interaction/ledger acceptance. All historical failures remain failed. Original bidirectional Cookie/WS/session/runtime zero-business idle for 28,800 seconds plus ten recovery rounds, default test-integrity verify and stable release remain pending. No overnight or final native UI acceptance is claimed.",
   "runtime_evidence": [
+    {
+      "artifact": ".run/open-workbench-recovery/d28-helper/windows-receipt-helper-native.log",
+      "scope": "Native Windows receipt/DELETE-handle and exact child completion regressions only; no core business pause, crash, original credentials or eight-hour acceptance."
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d27-program-pause-20261020/physical-verification.json",
+      "scope": "Preserved aggregate FAIL: short 454ms and long 828ms business subsets pass, but flap never starts because its parent-gone native safety preflight fails. This artifact is retained evidence, not a passed release gate."
+    },
     {
       "artifact": ".run/d27-terminal-maintenance/helper-race-final.jsonl",
       "scope": "D27 memory-only Host and production auto-connect unit regressions under the race detector; not physical or native-account acceptance."
