@@ -17,10 +17,8 @@ import type { PeerRpc } from './rpc'
 export interface AutoConnectPort {
   /** Brings every authorized pair of one service up to intent once. */
   reconcile(serviceId: string, signal?: AbortSignal): Promise<void>
-  /** Clears every backoff and retries now, after the machine itself changed state. */
+  /** Cancels transient backoff and retries now while retaining terminal refusals. */
   retryNow(serviceId: string, signal?: AbortSignal): Promise<void>
-  /** Forgets terminal refusals so a re-authorized pair is attempted again. */
-  clearRefusals(serviceId: string, signal?: AbortSignal): Promise<void>
 }
 
 /** A reconciliation pass starts attempts; it does not await their outcome. */
@@ -61,9 +59,5 @@ export class CoreAutoConnect implements AutoConnectPort {
 
   async retryNow(serviceId: string, signal?: AbortSignal): Promise<void> {
     await this.#send('peer.autoconnect_retry_now', serviceId, signal)
-  }
-
-  async clearRefusals(serviceId: string, signal?: AbortSignal): Promise<void> {
-    await this.#send('peer.autoconnect_clear_refusals', serviceId, signal)
   }
 }

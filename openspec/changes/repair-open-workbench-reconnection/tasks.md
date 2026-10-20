@@ -52,6 +52,7 @@
 - [x] 4.20 Release: make the packaged-core smoke request the existing authenticated `core.desktop_attach`/`core.desktop_handoff` lifecycle before cleaning its isolated state, so Windows CI does not terminate the serving process forcefully while its independent runtime owner still holds `owner.log`; add protocol-focused Node tests to release-input checks. Both handshake success and refusal behavior pass local tests; cross-platform package CI is the remaining confirmation.
 - [ ] 4.21 Client/QA/reviewer: preserve D26's explicitly refused optional-workbench transport through durable promotion, exact old-mux detachment and suspension/recovery without false readiness; retain unexplained-binding and HTTP/WS failures. Correct independently stale CI method-table, current-user, catalog and target-device inputs; prove focused races and real coordinator/core regressions before treating the peer suite as green.
 - [ ] 4.22 Release/QA/reviewer: let packaged smoke exclusively own its exit after success evidence or failure diagnostics finish, even when the probe window is the last Windows window; refuse diagnostic-write failure with exit 1. Prove normal close/tray behavior unchanged and confirm the final Windows ARM64 package in CI without weakening renderer checks.
+- [x] 4.23 Client/root/reviewer: remove D27's legacy global terminal-reset shell operation and ordinary catalog/resume callers; preserve transient RetryNow and exact epoch-fenced durable Reauthorize only. Prove real shell/core admission, service A/B isolation, late old-scope results and unchanged retry budgets before freezing physical candidates. Focused races and 1,893 desktop source tests passed; independent review closed the historical Entry fixture race without relaxing ready admission. Physical acceptance is still separate under 4.19.
 
 Current verification: D24 source 5cb2d390 passed the fresh source/TS gates (with
 the retained prose-path validator failure and separately passing continuation).
@@ -198,3 +199,11 @@ pending. The independent server's installed binary was read back and matched
 the frozen artifact SHA and current runtime build inputs; its dirty build VCS
 label alone was not evidence of an outdated deployment. Server CI
 `39375336585` passed. No tag or stable release has been published for D26 yet.
+
+Continuation: Quality `39392280651` passed Linux desktop verification but Windows
+exposed a test-only native filesystem error-shape assumption in smoke lifecycle.
+Its exact-operation oracle is corrected without weakening exit/error ownership;
+final native CI is pending. The user explicitly closed the original Mac app and
+authorized candidate UI verification, preserving all original account, device,
+network and pairing records. Native interaction proof must now be collected from
+the actual candidate rather than substituted from headless or smoke results.

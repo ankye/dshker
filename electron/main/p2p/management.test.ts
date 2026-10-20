@@ -492,15 +492,7 @@ describe('formal P2P management composition', () => {
     expect(seen).toEqual([serviceId])
   })
 
-  /**
-   * `p2p.pair_unauthorized` is final because retrying it is pointless — but it is
-   * also what "the pin does not exist yet" looks like, and a pair refused in that
-   * window was never attempted again whatever the core did afterwards, because
-   * only a change of the machine's own network state cleared the refusals. The
-   * core announces a new catalog revision exactly when it has re-derived the pairs
-   * and their pins, so that announcement is the signal to try once more.
-   */
-  it('retries a pair refused before its pin existed, once the core announces a catalog revision', async () => {
+  it('retains a terminal refusal when the core announces an ordinary catalog revision', async () => {
     const f = await loggedIn()
     // A paired machine is an enrolled one: the attempt goes through the device
     // session before it can name a pair at all.
@@ -533,17 +525,18 @@ describe('formal P2P management composition', () => {
       }
       return base!(method, payload, signal)
     })
-    // A network change is the one trigger that clears refusals today, so it is
-    // what establishes the first attempt and its terminal refusal.
+    // Resume establishes the first attempt but cannot grant new authorization.
     f.owner.resumeConnectivity()
     const pairId = '2'.repeat(12)
     await vi.waitFor(() => expect(attempts.get(pairId)).toBe(1))
-    // The refusal is final: the backoff that would retry within a second is not
-    // scheduled at all.
-    await new Promise((resolve) => setTimeout(resolve, 1400))
-    expect(attempts.get(pairId)).toBe(1)
     await f.catalogChanged({ serviceId, revision: 'c'.repeat(64) })
-    await vi.waitFor(() => expect(attempts.get(pairId)).toBe(2))
+    const reconcileIndex = f.call.mock.calls.reduce(
+      (latest, [method], index) => (method === 'peer.autoconnect_reconcile' ? index : latest),
+      -1
+    )
+    expect(reconcileIndex).toBeGreaterThanOrEqual(0)
+    await f.call.mock.results[reconcileIndex]!.value
+    expect(attempts.get(pairId)).toBe(1)
   })
 
   /**

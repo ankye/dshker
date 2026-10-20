@@ -236,9 +236,8 @@ func TestTransientRefusalIsRetried(t *testing.T) {
 	}
 }
 
-// TestClearRefusalsResumesAReauthorizedPair covers the rule that a change in this
-// machine's own authorization state forgets the recorded stops.
-func TestClearRefusalsResumesAReauthorizedPair(t *testing.T) {
+// TestExactReauthorizationResumesThePair covers the durable authority boundary.
+func TestExactReauthorizationResumesThePair(t *testing.T) {
 	test := newHarness()
 	test.fail["svc-1:pair-a"] = "p2p.pair_unauthorized"
 	engine := test.engine([]Intent{{"svc-1", "pair-a"}})
@@ -253,14 +252,14 @@ func TestClearRefusalsResumesAReauthorizedPair(t *testing.T) {
 	test.mu.Lock()
 	delete(test.fail, "svc-1:pair-a")
 	test.mu.Unlock()
-	engine.ClearRefusals()
-	engine.Reconcile(context.Background())
+	engine.Reauthorize(Intent{"svc-1", "pair-a"})
+	waitFor(t, func() bool { return test.attemptCount() == 2 })
 
 	if test.attemptCount() != 2 {
 		t.Fatalf("attempts = %d, want a second attempt after re-authorization", test.attemptCount())
 	}
 	if _, stopped := engine.Refusal("svc-1", "pair-a"); stopped {
-		t.Fatal("the refusal survived ClearRefusals")
+		t.Fatal("the refusal survived exact durable reauthorization")
 	}
 }
 

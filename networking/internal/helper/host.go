@@ -317,23 +317,20 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	if method == "peer.entry" {
 		return account.entry(request.Data)
 	}
-	if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" ||
-		method == "peer.autoconnect_clear_refusals" {
+	if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" {
 		// The coordinator subscription is owned by the restored account, not by
 		// the pair retry engine. Reconcile is also the daemon's periodic liveness
 		// pass, so repair a displaced/closed signal socket here before asking the
 		// engine to reconnect pairs. A healthy socket is left untouched.
-		if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" {
-			if err := account.maintainCertificate(ctx); err != nil {
+		if err := account.maintainCertificate(ctx); err != nil {
+			return nil, err
+		}
+		account.mu.Lock()
+		manager := account.manager
+		account.mu.Unlock()
+		if manager != nil {
+			if err := manager.ReconnectSignals(ctx); err != nil {
 				return nil, err
-			}
-			account.mu.Lock()
-			manager := account.manager
-			account.mu.Unlock()
-			if manager != nil {
-				if err := manager.ReconnectSignals(ctx); err != nil {
-					return nil, err
-				}
 			}
 		}
 		return host.autoConnectOperation(ctx, method)

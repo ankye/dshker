@@ -1059,6 +1059,30 @@ exits only through its existing awaited result dispatch; ordinary desktop close
 and tray behavior are unchanged. This is a release-evidence lifecycle repair,
 not permission to skip a failed renderer check or extend a deadline.
 
+### D27 — Ordinary shell maintenance cannot reset terminal authority
+
+The final cross-layer review found that the legacy shell
+`peer.autoconnect_clear_refusals` route still clears the entire Host's terminal
+set and retry counts, ignoring its service envelope and without the exact intent
+epoch fence. A catalog revision for service A or a normal system resume can
+therefore restart a terminally refused service B. This bypasses D18's exact
+durably authorized Reauthorize boundary and can amplify requests; it is not a
+permission to bypass the coordinator's authentication checks.
+
+Remove this global reset operation from the unreleased table-2 shell contract,
+Host dispatch, Engine and shell port rather than adding a compatibility alias.
+An old request receives the existing unknown-method refusal. A catalog revision
+only reconciles; ordinary resume may clear transient waits through RetryNow but
+must preserve terminal refusals. Only the existing exact durable network-choice
+publication may call Reauthorize for its service/pair and advance its epoch.
+Account/manager replacement retains its existing independent lifecycle semantics.
+No renderer capability, server wire, fallback, timeout or quota change is added.
+
+Verify actual shell catalog/resume dispatch, core method admission, independent
+service A/B terminal isolation, transient retry preservation and a late old-scope
+in-flight refusal after exact reauthorization. Do not replace fresh membership
+proof with a catalog revision or mark background maintenance as new authority.
+
 ## Risks / Trade-offs
 
 - Runtime refusal could cause repeated workbench requests → keep existing backoff

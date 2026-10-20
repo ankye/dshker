@@ -66,6 +66,23 @@ func TestHandleRoutesThePeerHalfOfTheTable(t *testing.T) {
 	}
 }
 
+func TestRemovedGlobalTerminalResetIsUnknownBeforePeerDispatch(t *testing.T) {
+	peer := &fakePeer{}
+	server := Serve{Peer: peer}
+	for _, serviceID := range []string{"aaaaaaaaaaaa", "bbbbbbbbbbbb"} {
+		payload, err := json.Marshal(map[string]any{"serviceId": serviceID, "data": struct{}{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := server.Handle(context.Background(), "peer.autoconnect_clear_refusals", payload); err == nil || err.Error() != "p2p.invalid_operation" {
+			t.Fatal("removed terminal reset did not retain unknown-method refusal", serviceID, err)
+		}
+	}
+	if len(peer.handled) != 0 {
+		t.Fatal("removed terminal reset reached the peer host", peer.handled)
+	}
+}
+
 // TestHandleRefusesInboundCallbacks pins the direction of the parent-role
 // methods: they are calls the core makes, so one arriving is refused and is
 // never handed to the peer host.

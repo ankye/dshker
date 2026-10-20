@@ -124,13 +124,8 @@ export class PeerManagement {
       // paired computers, so a Run menu that already listed them cannot see a
       // computer that was paired on another machine otherwise.
       onCatalogChange: (serviceId, revision) => {
-        // A new revision means the core has just re-derived the pairs and their
-        // pins, which is the one thing a terminal refusal was waiting for.
-        // `p2p.pair_unauthorized` is treated as final because retrying it is
-        // pointless — but it is also what a read that had not happened yet looks
-        // like, and without this a pair refused in that window was never attempted
-        // again, whatever the core did afterwards.
-        void this.#session?.autoConnect.clearRefusals(serviceId)
+        // A catalog revision is a notification, not fresh authorization for any
+        // terminal intent. The core's exact durable publication owns that reset.
         void this.#reconcile(serviceId)
         for (const listener of this.#catalogListeners) listener(serviceId, revision)
       }
@@ -320,7 +315,6 @@ export class PeerManagement {
     const snapshot = await this.#catalog.inspect().catch(() => undefined)
     for (const service of snapshot?.record.services ?? []) {
       if (this.#lifetime.signal.aborted) return
-      await session.autoConnect.clearRefusals(service.serviceId)
       await session.autoConnect.retryNow(service.serviceId)
     }
   }

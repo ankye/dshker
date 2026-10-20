@@ -115,7 +115,6 @@ var Methods = []Method{
 	// instead of keeping a second copy of the schedule. Additive within version 1.
 	{"peer.autoconnect_reconcile", RoleShell},
 	{"peer.autoconnect_retry_now", RoleShell},
-	{"peer.autoconnect_clear_refusals", RoleShell},
 	{"peer.connect", RoleShell},
 	{"peer.entry", RoleShell},
 	{"peer.disconnect", RoleShell},

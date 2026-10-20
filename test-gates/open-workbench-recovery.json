@@ -12,9 +12,11 @@
     "networking/internal/helper/selected_session_scope.go",
     "networking/internal/helper/account_logout.go",
     "electron/main/p2p/accounts.ts",
+    "electron/main/p2p/auto-connect.ts",
     "electron/main/p2p/certificate-recovery-projection.ts",
     "electron/main/p2p/certificate-recovery-scope.ts",
     "electron/main/p2p/tests/legacy-certificate-fixture.ts",
+    "electron/main/p2p/tests/management-fixture.ts",
     "networking/internal/helper/account_transport.go",
     "networking/internal/helper/certificate_recovery_scope.go",
     "networking/internal/helper/user_management.go",
@@ -139,6 +141,12 @@
     "tools/workbench-recovery-identity.mjs"
   ],
   "test_files": [
+    "electron/main/p2p/auto-connect.test.ts",
+    "electron/main/p2p/management-maintenance.test.ts",
+    "networking/internal/helper/autoconnect_maintenance_test.go",
+    "networking/integration/core_connection_binary_test.go",
+    "networking/integration/core_connection_owner_test.go",
+    "networking/integration/core_connection_owner_contract_test.go",
     "electron/main/smoke-lifecycle.test.ts",
     "electron/main/managed/dsh-command-search-path.test.ts",
     "electron/main/managed/harness-web-runtime.test.ts",
@@ -357,6 +365,22 @@
   ],
   "state_matrix": [
     {
+      "state": "no_op",
+      "test": "reconciles catalog A without clearing terminal A or B"
+    },
+    {
+      "state": "recovery",
+      "test": "ordinary resume retries transient work while preserving terminal A and B"
+    },
+    {
+      "state": "superseded",
+      "test": "TestReauthorizeFencesOldInflightRefusalAndKeepsOneConnectOwner"
+    },
+    {
+      "state": "rejected",
+      "test": "TestRemovedGlobalTerminalResetIsUnknownBeforePeerDispatch"
+    },
+    {
       "state": "partial",
       "test": "TestCandidateWorkbenchBrowserKeepsEntryAcrossReadyRefusalAndReady"
     },
@@ -455,6 +479,76 @@
   ],
   "field_bindings": [
     {
+      "production_file": "electron/main/p2p/tests/management-fixture.ts",
+      "field": "test-only core dispatcher preserves terminal scopes through actual shell callbacks",
+      "source": "The changed-file gate classifies this helper as production by extension; it remains a test-only import and supplies the production core auto-connect adapter with exact service envelopes.",
+      "test": "ordinary resume retries transient work while preserving terminal A and B",
+      "assertion": "expect(f.attempts.get(`${serviceId}:${terminalPair}`)).toBe(1)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "otherServiceId", "terminalPair", "transientPair"],
+      "missing_semantics": "The fixture is not a production transport and cannot satisfy real coordinator, physical or native UI acceptance; production dependency paths must remain zero."
+    },
+    {
+      "production_file": "electron/main/p2p/auto-connect.ts",
+      "field": "only scoped reconcile and transient retry operations are exposed",
+      "source": "CoreAutoConnect forwards the current service envelope and caller signal without a global terminal reset operation.",
+      "test": "forwards each operation to its core method with the service envelope",
+      "assertion": "'peer.autoconnect_retry_now'",
+      "state": "success",
+      "identity_keys": ["serviceId", "AbortSignal", "method"],
+      "missing_semantics": "An ordinary catalog revision or resume cannot grant authorization by clearing terminal refusals; no compatibility alias is published."
+    },
+    {
+      "production_file": "electron/main/p2p/management.ts",
+      "field": "real shell catalog and resume callbacks retain terminal service isolation",
+      "source": "PeerManagement receives the catalog change callback and public resumeConnectivity action; the test-only core fixture records every exact service envelope.",
+      "test": "reconciles catalog A without clearing terminal A or B",
+      "assertion": "expect(f.attempts.get(`${otherServiceId}:${terminalPair}`)).toBe(1)",
+      "state": "no_op",
+      "identity_keys": ["serviceId", "otherServiceId", "terminalPair", "catalog revision"],
+      "missing_semantics": "The shell cannot treat a catalog notification as fresh durable authorization for any terminal intent. This is a shell callback unit oracle, not a native UI or real coordinator claim."
+    },
+    {
+      "production_file": "networking/internal/autoconnect/engine.go",
+      "field": "only exact Reauthorize advances the intent epoch and invalidates terminal results",
+      "source": "Reconcile, Wake and RetryNow retain terminal entries; exact durable Reauthorize fences late old terminal or transient results without overlapping owners.",
+      "test": "TestReauthorizeFencesOldInflightRefusalAndKeepsOneConnectOwner",
+      "assertion": "late old-scope refusal poisoned the new epoch or broke single-flight",
+      "state": "superseded",
+      "identity_keys": ["ServiceID", "PairID", "epoch", "inFlight", "maximum"],
+      "missing_semantics": "Fresh authorization cannot reset another pair or service, and a superseded operation cannot restore old terminal or backoff state."
+    },
+    {
+      "production_file": "networking/internal/helper/autoconnect.go",
+      "field": "ordinary Host maintenance retains terminal services and retries transient work",
+      "source": "Real Host.Handle and the production Engine process reconcile/retry_now against memory-only test identities; the removed global reset reaches unknown-operation refusal.",
+      "test": "TestHostMaintenanceRetainsTerminalServicesAndRejectsGlobalReset",
+      "assertion": "maintenance retried terminal work or lost transient RetryNow",
+      "state": "recovery",
+      "identity_keys": ["serviceA", "serviceB", "pair", "calls"],
+      "missing_semantics": "No HTTP, native credential access or substitute runtime is performed by this focused unit oracle."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "removed terminal-reset request cannot reach an engine mutation",
+      "source": "The configured Host's actual dispatch rejects the removed operation for each service while both terminal refusals remain unchanged.",
+      "test": "TestHostMaintenanceRetainsTerminalServicesAndRejectsGlobalReset",
+      "assertion": "removed reset operation was not unknown",
+      "state": "rejected",
+      "identity_keys": ["serviceA", "serviceB", "pair", "p2p.invalid_operation"],
+      "missing_semantics": "There is no compatibility alias or hidden reset branch."
+    },
+    {
+      "production_file": "networking/internal/localrpc/methods.go",
+      "field": "the shell method table no longer grants global reset authority",
+      "source": "The composed method table and actual core Server.Handle refuse the removed request before peer dispatch, while preserving ordinary maintenance methods.",
+      "test": "TestRemovedGlobalTerminalResetIsUnknownBeforePeerDispatch",
+      "assertion": "removed terminal reset reached the peer host",
+      "state": "rejected",
+      "identity_keys": ["method", "p2p.invalid_operation", "peer dispatch"],
+      "missing_semantics": "An old caller receives the existing unknown-method refusal, never a broader replacement operation."
+    },
+    {
       "production_file": "electron/main.ts",
       "field": "RESOLVE_DSH_COMMAND_SEARCH_PATH is injected into the launcher and managed installation runtime owners",
       "source": "The main composition constructs one resolver from process.platform, process.env and the staged bundled runtime bin, then supplies resolveDshCommandSearchPath to both runtime owners.",
@@ -504,7 +598,7 @@
       "test": "exits with failure when neither success nor failure payload can be written",
       "assertion": "expect(f.app.exit).toHaveBeenCalledExactlyOnceWith(1)",
       "state": "rejected",
-      "identity_keys": ["controls.outputPath", "syscall:open", "IS_SMOKE_TEST", "app-exit:1"],
+      "identity_keys": ["controls.outputPath", "native syscall", "IS_SMOKE_TEST", "app-exit:1"],
       "missing_semantics": "A second diagnostic-write failure is reported and still ends with exactly one failure exit; it cannot leave the smoke process alive."
     },
     {
@@ -2905,6 +2999,16 @@
       "missing_semantics": "Removed owners refuse further work."
     }
   ],
+  "unit_commands": [
+    {
+      "command": "cd networking && go test -tags live -json -race -count=1 -run '^(TestRecoveryBootstrap|TestCoreReadyGeneration|TestCoreAutomaticWorkbench|TestCorePrebuiltBinary|TestCoreRefusedEntryReadback)' ./integration",
+      "coverage_limit": "Pure fixture, history-entry and binary-input admission only; does not run a core, native credentials, Harness or physical recovery."
+    },
+    {
+      "command": "cd networking && go test -json -race -count=1 ./internal/autoconnect ./internal/helper ./internal/localrpc",
+      "coverage_limit": "D27 production owner/Host unit regressions use memory-only identities and test TLS/control oracles; not live coordinator or physical acceptance."
+    }
+  ],
   "real_commands": [
     {
       "command": "cd networking && go test -json -race -count=1 ./integration -run '^TestRealDSHReadinessDiagnostic'",
@@ -2955,8 +3059,20 @@
     "contract": "test-gates/remote-tab-closing-interaction.json",
     "ledger": ".run/remote-tab-closing/interaction.jsonl"
   },
-  "acceptance_status": "Final local Go validation passed all 20 packages with 1,586 named tests under the race detector and go vet, with exact test-only Keychain keys absent before and after. The full desktop source operator passed all 1,868 TS tests and environment, formatting, architecture, type, service, visual-smoke, renderer/Electron build, dependency and parent-workspace gates at one unchanged source digest. D25's 93 focused candidate-admission tests and the independent review's finish-first cleanup-race fix are also preserved. Historical D24 35-second physical pause and earlier first-cause duplex/forward-stress runs remain failed and unchanged. Fresh D25 program-pause, isolated core-crash, 28,800 seconds of original bidirectional Cookie/WS/session/runtime idle plus ten automatic recovery rounds, same-SHA GitHub CI packages and installed-app/native UI validation remain distinct pending tiers. The user has no separate Mac desktop environment; native UI must be verified by the user's installation. No 8-hour or installed-app acceptance is claimed from local source gates.",
+  "acceptance_status": "Historical full20 Go races, 1,868 TS tests and D25 admission evidence remain preserved; later D26 source validation passed 1,891 TS tests and focused transport races. Package run 39392280655 passed all targets at 210d49d, but Quality run 39392280651 failed test-only Windows errno and core-fixture owner assumptions, now corrected pending final-SHA CI. D27 removes global terminal reset authority and passes focused scope/epoch/Host regressions; independent review and final source gates remain required. The user exited the original app and authorized native candidate verification: a diagnostic 210d49d artifact retained the user's newly established login and original device/network through one normal quit and reopen. That does not explain the previously absent credential or satisfy final-candidate native interaction/ledger acceptance. Historical failed physical profiles remain failed. Fresh frozen-source pause/crash, 28,800 seconds of original bidirectional Cookie/WS/session/runtime zero-business idle plus ten recovery rounds, final CI and default test-integrity verification are separate pending gates. No eight-hour, final native UI or stable release acceptance is claimed.",
   "runtime_evidence": [
+    {
+      "artifact": ".run/d27-terminal-maintenance/helper-race-final.jsonl",
+      "scope": "D27 memory-only Host and production auto-connect unit regressions under the race detector; not physical or native-account acceptance."
+    },
+    {
+      "artifact": ".run/peer-ci-integration-39392280651/owner-barrier-pure-race-final.jsonl",
+      "scope": "Pure CI-helper completed-owner and explicit binary-input admission; no native credential provider or real core is executed."
+    },
+    {
+      "artifact": ".run/peer-ci-integration-39392280651/owner-entry-history-race-final.jsonl",
+      "scope": "Final pure helper regressions include historical refused Entry after a real owner successor; accepts only the two exact refusal codes and never retries Connect."
+    },
     {
       "artifact": ".run/open-workbench-recovery/candidate-workbench-browser-race.jsonl",
       "scope": "Local signed-receipt and real Pion HTTP/WS focused race tests with test-only control/runtime oracles; not a no-mock production coordinator, Harness or physical-machine acceptance run."

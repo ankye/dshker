@@ -529,6 +529,26 @@ in-memory workbench intent; opening an explicit workbench creates a new intent.
 - **THEN** background transport does not invent workbench intent, and any explicit
   runtime request retains the owning subsystem's typed refusal
 
+### Requirement: Ordinary maintenance preserves terminal intent scope
+
+Catalog updates and ordinary system resume SHALL NOT clear terminal refusals or
+grant fresh authorization. Catalog updates SHALL reconcile existing intent, and
+resume MAY cancel transient backoff while preserving terminal intent. Only the
+existing exact service/pair's freshly authorized durable publication may reset
+its terminal state through the epoch-fenced Reauthorize owner.
+
+#### Scenario: Another service changes or the system resumes
+
+- **WHEN** service B has a terminally refused intent and service A announces a catalog revision, or the desktop resumes normally
+- **THEN** B SHALL retain its terminal refusal and SHALL NOT redial without its own fresh exact authorization
+- **AND** the old global clear-refusals shell method SHALL be absent and an attempted invocation SHALL fail with the existing unknown-method refusal
+
+#### Scenario: Exact durable authorization supersedes an in-flight result
+
+- **WHEN** the exact service/pair is successfully reauthorized while an old connect result remains in flight
+- **THEN** only that intent's epoch SHALL advance and its old result SHALL NOT republish a terminal refusal or backoff
+- **AND** other intents SHALL retain their original terminal state and one connect owner remains joined
+
 ### Requirement: Choose network authority without duplicating a computer
 
 One remote computer SHALL retain one connection record and browser tab even when

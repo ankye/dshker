@@ -187,21 +187,20 @@ func (host *Host) RepairSignals(ctx context.Context) {
 	}
 }
 
-// autoConnectOperation answers the three engine methods the shell drives.
+// autoConnectOperation answers ordinary maintenance without granting authorization.
 //
 // The shell no longer owns a reconnection implementation; it reports the events it
 // uniquely observes (a stage that dropped, a catalog revision that landed) and the
 // core decides what they mean.
 func (host *Host) autoConnectOperation(ctx context.Context, method string) (any, error) {
-	engine := host.AutoConnectEngine()
 	switch method {
-	case "peer.autoconnect_clear_refusals":
-		engine.ClearRefusals()
+	case "peer.autoconnect_reconcile":
+		host.AutoConnectEngine().Reconcile(ctx)
 	case "peer.autoconnect_retry_now":
-		engine.RetryNow(ctx)
-		return struct{}{}, nil
+		host.AutoConnectEngine().RetryNow(ctx)
+	default:
+		return nil, errors.New("p2p.invalid_operation")
 	}
-	engine.Reconcile(ctx)
 	return struct{}{}, nil
 }
 

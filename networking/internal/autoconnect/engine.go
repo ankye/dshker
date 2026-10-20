@@ -47,8 +47,8 @@ var liveStages = map[string]bool{
 //
 // Leaving `pair_unauthorized` and `network_revoked` out of this set is what once
 // turned "removed by another device" into a silent retry loop that never succeeded
-// and never said why. `ClearRefusals` still forgets them when this machine's own
-// state changes, so a re-authorized pair is attempted again.
+// and never said why. Only exact durable Reauthorize publication resets a stop;
+// ordinary machine wakeups retain it.
 var terminalCodes = map[string]bool{
 	"p2p.not_enabled":            true,
 	"p2p.pair_unauthorized":      true,
@@ -202,15 +202,6 @@ func (engine *Engine) RetryNow(ctx context.Context) {
 	}
 	engine.mu.Unlock()
 	engine.Reconcile(ctx)
-}
-
-// ClearRefusals forgets every terminal refusal so a re-authorized pair is
-// attempted again.
-func (engine *Engine) ClearRefusals() {
-	engine.mu.Lock()
-	engine.terminal = make(map[string]string)
-	engine.attempts = make(map[string]int)
-	engine.mu.Unlock()
 }
 
 // Reauthorize is called only after this exact intent's fresh authorization was

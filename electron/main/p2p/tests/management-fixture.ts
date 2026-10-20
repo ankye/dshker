@@ -141,18 +141,12 @@ export function fixture() {
       if (method === 'pairs.list') return []
       /*
        * Reconnection now lives in the core, so this fake core has to behave like
-       * one: a reconcile means "connect every active pair of this service", and
-       * clearing refusals means a pair that was refused before is eligible again.
+       * one: maintenance connects active pairs while preserving terminal intent.
        * Without this the shell's forwarding would be untestable here — the calls
        * would succeed and nothing would ever connect, which is exactly how the
        * behavior could silently disappear.
        */
-      if (method === 'peer.autoconnect_clear_refusals') {
-        refused.clear()
-        return {}
-      }
       if (method === 'peer.autoconnect_reconcile' || method === 'peer.autoconnect_retry_now') {
-        if (method === 'peer.autoconnect_retry_now') refused.clear()
         const scopedService = (_payload as { serviceId?: string }).serviceId ?? ''
         for (const computer of record.computers) {
           if (computer.serviceId !== scopedService) continue

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { EventEmitter } from 'node:events'
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { appendFile, mkdir, mkdtemp, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import ts from 'typescript'
@@ -294,8 +294,18 @@ describe('packaged smoke exit ownership', () => {
   })
 
   it('exits with failure when both smoke and failure tracing are unwritable', async () => {
+    let nativeTraceError!: NodeJS.ErrnoException
     const f = await fixture(true, 'win32', false, async (outputPath) => {
-      await mkdir(`${outputPath}.trace`)
+      const tracePath = `${outputPath}.trace`
+      await mkdir(tracePath)
+      // Windows can open the directory and reject the write without a path;
+      // compare the exact same native operation, including its original fields.
+      nativeTraceError = await appendFile(tracePath, 'native trace refusal\n', 'utf8').then(
+        () => {
+          throw new Error('Appending a trace to a directory unexpectedly succeeded')
+        },
+        (error: NodeJS.ErrnoException) => error
+      )
     })
     await f.completion
     expect(f.app.quit).not.toHaveBeenCalled()
@@ -305,8 +315,13 @@ describe('packaged smoke exit ownership', () => {
       'DSHKer Launcher smoke test failed.',
       'DSHKer Launcher could not write smoke failure diagnostics.'
     ])
+    expect(f.reportError.mock.calls[0]![1]).not.toBe(f.reportError.mock.calls[1]![1])
     for (const [, error] of f.reportError.mock.calls) {
-      expect(error).toMatchObject({ path: `${controls.outputPath}.trace`, syscall: 'open' })
+      expect(error).toBeInstanceOf(Error)
+      expect(error.message).toBe(nativeTraceError.message)
+      expect(Object.fromEntries(Object.entries(error))).toEqual(
+        Object.fromEntries(Object.entries(nativeTraceError))
+      )
       expect(error.code).toMatch(/^(EISDIR|EPERM|EACCES)$/)
     }
   })

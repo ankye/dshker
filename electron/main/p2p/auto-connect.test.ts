@@ -16,15 +16,14 @@ describe('shell reconnection client', () => {
   it('forwards each operation to its core method with the service envelope', async () => {
     const call = vi.fn(async (_method: string, _payload: unknown, _signal: AbortSignal) => ({}))
     const client = new CoreAutoConnect({ call })
+    expect(client).not.toHaveProperty('clearRefusals')
 
     await client.reconcile('svc-1')
     await client.retryNow('svc-1')
-    await client.clearRefusals('svc-1')
 
     expect(call.mock.calls.map((entry) => entry[0])).toEqual([
       'peer.autoconnect_reconcile',
-      'peer.autoconnect_retry_now',
-      'peer.autoconnect_clear_refusals'
+      'peer.autoconnect_retry_now'
     ])
     for (const entry of call.mock.calls) {
       expect(entry[1]).toEqual({ serviceId: 'svc-1', data: {} })
@@ -45,8 +44,7 @@ describe('shell reconnection client', () => {
 
     await expect(client.reconcile('svc-1')).resolves.toBeUndefined()
     await expect(client.retryNow('svc-1')).resolves.toBeUndefined()
-    await expect(client.clearRefusals('svc-1')).resolves.toBeUndefined()
-    expect(call).toHaveBeenCalledTimes(3)
+    expect(call).toHaveBeenCalledTimes(2)
   })
 
   it('passes a caller signal through instead of imposing its own budget', async () => {

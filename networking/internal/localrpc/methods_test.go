@@ -23,6 +23,17 @@ func TestCachedPairPinIsNotAPublishedAuthority(t *testing.T) {
 	}
 }
 
+func TestGlobalTerminalResetIsNotAPublishedAuthority(t *testing.T) {
+	if _, exists := Lookup("peer.autoconnect_clear_refusals"); exists {
+		t.Fatal("ordinary shell maintenance still publishes global terminal reset authority")
+	}
+	for _, name := range []string{"peer.autoconnect_reconcile", "peer.autoconnect_retry_now"} {
+		if method, exists := Lookup(name); !exists || method.Role != RoleShell {
+			t.Fatal("ordinary reconnection maintenance is not a shell operation", name, method)
+		}
+	}
+}
+
 func TestNetworkSelectionMethodsArePublishedOnlyForShellRequests(t *testing.T) {
 	for _, name := range []string{"pairs.network_choices", "pairs.select_network"} {
 		method, exists := Lookup(name)

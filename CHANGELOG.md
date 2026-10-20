@@ -4,6 +4,7 @@
 
 ### 简体中文 (zh-CN)
 
+- **目录刷新和唤醒不再重试无关的拒绝连接。** 普通刷新保留每台电脑的终态原因；只有该连接明确重新获得授权后，才清理它自己的拒绝记录，避免跨服务清空状态和额外拨号。
 - **工作台暂不可用时保留真实设备连接。** 新握手明确返回工作台拒绝后，设备通道保持已连接并保留原错误，不误报网页就绪；旧入口停止转发失效运行时，后续恢复仍需通过 HTTP 与 WebSocket 验证，不重启远端 DSH。
 - **连接恢复不再被旧握手的清理占住。** 已确认结束的旧握手保留自身清理责任，但不再吞掉下一次握手；旧状态尚未确认时，先核实服务器的原票据结果再交接。日志补充握手请求、拒绝、收发和槽位交接原因，不记录令牌、签名或网页内容，不延长恢复时限。
 - **证书到期时保留真实登录结果，退出账号清理旧连接。** 登录确认期间证书刚好过期，不再因后续设备激活失败而丢失已确认的账号结果。退出账号会撤销本机旧账号的远程通道和后台重连任务，迟到的设备列表或证书恢复结果不会重新激活旧会话；请求中断或服务器撤销未确认仍明确报错，不会冒充成功、影响新账号或停止远端 DSH。
@@ -20,6 +21,7 @@
 
 ### English (en-US)
 
+- **Keep terminal refusals scoped across refresh and wake.** Ordinary catalog updates and system resume no longer clear unrelated connection refusals. Only that exact connection's fresh durable authorization resets its refusal, preventing cross-service redials.
 - **Keep a connected device when its workbench is temporarily unavailable.** An explicit workbench refusal preserves the real device transport and its error without claiming browser readiness. Stale runtime forwarding is detached; later recovery still requires HTTP and WebSocket verification and does not restart remote DSH.
 - **Keep old handshake cleanup from swallowing a replacement connection.** A confirmed ended handshake retains its cleanup owner without blocking its successor. Unknown old authority is checked against the server's exact ticket before handoff. Bounded diagnostics record admission, rejection, signalling and ownership transitions without tokens, signatures or page content; recovery deadlines are unchanged.
 - **Keep confirmed sign-in results across certificate expiry and retire old connections on sign-out.** Expiry during authentication no longer lets later device activation replace a confirmed account result. Signing out retires that account's local gateways and reconnect jobs; delayed directory or certificate-recovery results cannot reactivate the old session. Interrupted or unconfirmed server revocation remains an explicit failure; it cannot claim success, affect a replacement account or stop remote DSH.

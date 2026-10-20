@@ -23,6 +23,7 @@ import (
 	"github.com/ankye/dshker/networking/internal/controlplane"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/peersession"
+	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/ankye/dshker/networking/internal/runtimebridge"
 )
 
@@ -195,13 +196,7 @@ func coreTrustArguments(t *testing.T, f *fixture) []string {
 // the given parent callbacks, and returns the caller plus a stop function.
 func startCoreDaemon(t *testing.T, handler localrpc.Handler, args ...string) (*localrpc.Peer, func()) {
 	t.Helper()
-	binary := filepath.Join(t.TempDir(), "dshkerd")
-	if runtime.GOOS == "windows" {
-		binary += ".exe"
-	}
-	build := exec.Command("go", "build", "-buildvcs=false", "-o", binary, corePackage)
-	build.Stderr = os.Stderr
-	must(t, build.Run())
+	binary := coreDaemonBinaryForTest(t)
 
 	endpoint := coreEndpoint(t)
 	secret := strings.Repeat("b", 64)
@@ -355,7 +350,7 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 
 	// The transport is connected without claiming workbench readiness:
 	// the two computers are connected even though neither has a workbench to show.
-	if answer.State.Stage != "connected" || answer.State.PairID != pairID || answer.State.RuntimeGeneration != 0 || answer.State.Error != "p2p.runtime_unavailable" {
+	if answer.State.Stage != "connected" || answer.State.PairID != pairID || answer.State.RuntimeGeneration != 0 || answer.State.Error != "runtime.worktree_invalid" {
 		t.Fatalf("connect without a workbench reported %+v", answer.State)
 	}
 	if path := answer.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {
@@ -512,70 +507,104 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 	runtimeURL, stopRuntime := startStubDSH(t)
 	defer stopRuntime()
 
-	// The owner's answer is switched between attempts; every case below states what
-	// the pair must do with that answer.
+	// Both callbacks only read the binding of this already-running test runtime.
+	// Automatic resume has no cold-start permission and must never call Open.
 	var ownerMu sync.Mutex
+	openCalls, resumeCalls, localOwnerCalls := 0, 0, 0
 	answer := func() (runtimebridge.Binding, error) {
 		return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
+	}
+	readOwner := func(resume bool) runtimebridge.RuntimeOwner {
+		return func(_ context.Context, pair string) (runtimebridge.Binding, error) {
+			ownerMu.Lock()
+			defer ownerMu.Unlock()
+			if pair != f.config[0].Device.DeviceID {
+				return runtimebridge.Binding{}, errors.New("p2p.identity_mismatch")
+			}
+			if resume {
+				resumeCalls++
+			} else {
+				openCalls++
+			}
+			return answer()
+		}
 	}
 	f.devices[1].SetAccount(f.config[1].Device.UserID)
 	remote, err := peersession.New(
 		ctx,
 		f.devices[1],
-		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private, CoreInstanceID: integrationCoreInstanceID(t)},
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private, CoreInstanceID: integrationCoreInstanceID(t), ResumeOwner: readOwner(true)},
 		[]controlplane.PairIdentity{},
-		func(context.Context, string) (runtimebridge.Binding, error) {
-			ownerMu.Lock()
-			current := answer
-			ownerMu.Unlock()
-			return current()
-		},
+		readOwner(false),
 		func(peersession.State) {},
 	)
 	must(t, err)
 	integrationActivateManager(t, ctx, remote, f, 1)
 	defer remote.Close()
 
+	pairID := f.config[1].Device.DeviceID
+	owner := &recoveryBootstrapOwner{pair: pairID, changed: make(chan struct{})}
 	parent, stopCore := startCoreDaemon(t, func(_ context.Context, method string, payload json.RawMessage) (any, error) {
 		switch method {
-		case "runtime.connect":
+		case "runtime.connect", "runtime.resume":
+			ownerMu.Lock()
+			localOwnerCalls++
+			ownerMu.Unlock()
 			return nil, errors.New("p2p.unexpected_runtime_owner")
 		case "peer.state":
-			_ = payload
+			var event struct {
+				ServiceID string            `json:"serviceId"`
+				State     peersession.State `json:"state"`
+			}
+			if protocol.DecodeExact(payload, &event) != nil || event.ServiceID != f.authority.ServiceID {
+				return nil, errors.New("p2p.invalid_payload")
+			}
+			owner.observe(event.State)
 			return struct{}{}, nil
 		}
 		return nil, errors.New("p2p.invalid_operation")
 	}, coreTrustArguments(t, f)...)
 	defer stopCore()
+	owner.mu.Lock()
+	owner.peer = parent
+	owner.mu.Unlock()
 
 	identity := configureCoreService(t, ctx, parent, f)
 	restoreCoreDevice(t, ctx, parent, f)
-	pairID := f.config[1].Device.DeviceID
+	// Desktop mode delegates the initial reconcile to its shell (serve owns a
+	// periodic sweep). Drive that one public operation, then only observe it.
+	callCore(t, ctx, parent, "peer.autoconnect_reconcile", map[string]any{"serviceId": identity.ServiceID, "data": struct{}{}})
+	current, err := recoveryInitialBarrier(ctx, parent, parent.Call, f, owner)
+	must(t, err)
+	ownerMu.Lock()
+	initialOpen, initialResume := openCalls, resumeCalls
+	ownerMu.Unlock()
+	if initialOpen != 0 || initialResume != 0 {
+		t.Fatalf("initial transport started or resumed a workbench: open=%d resume=%d", initialOpen, initialResume)
+	}
 
-	connect := func(generation uint64) peersession.Connected {
-		raw := callCore(t, ctx, parent, "peer.connect", struct {
-			ServiceID string `json:"serviceId"`
-			Data      struct {
-				PairID           string `json:"pairId"`
-				Generation       uint64 `json:"generation"`
-				RequestWorkbench bool   `json:"requestWorkbench"`
-			} `json:"data"`
-		}{ServiceID: identity.ServiceID, Data: struct {
-			PairID           string `json:"pairId"`
-			Generation       uint64 `json:"generation"`
-			RequestWorkbench bool   `json:"requestWorkbench"`
-		}{PairID: pairID, Generation: generation, RequestWorkbench: true}})
+	// The caller is the child test, never its parent: an RPC refusal must fail
+	// this row directly rather than calling FailNow on a captured parent T.
+	connect := func(t *testing.T, generation uint64) peersession.Connected {
+		t.Helper()
+		raw := callCore(t, ctx, parent, "peer.connect", map[string]any{"serviceId": identity.ServiceID, "data": map[string]any{
+			"pairId": pairID, "generation": generation, "requestWorkbench": true,
+		}})
 		var connected peersession.Connected
-		must(t, json.Unmarshal(raw, &connected))
+		must(t, protocol.DecodeExact(raw, &connected))
+		if connected.State.PairID != pairID || connected.State.Generation != generation || !protocol.ValidNonce(connected.State.AttemptID) {
+			t.Fatalf("explicit connect changed its exact attempt scope: %+v", connected.State)
+		}
 		return connected
 	}
 
-	generation := uint64(0)
 	for _, scenario := range []struct {
-		name        string
-		owner       func() (runtimebridge.Binding, error)
-		wantAddress bool
-		wantError   string
+		name              string
+		owner             func() (runtimebridge.Binding, error)
+		automatic         bool
+		wantAddress       bool
+		wantError         string
+		runtimeGeneration uint64
 		// why records the shipped defect this row exists for.
 		why string
 	}{
@@ -584,69 +613,103 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 			owner: func() (runtimebridge.Binding, error) {
 				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
 			},
-			wantAddress: false,
-			wantError:   "p2p.runtime_unavailable",
-			why:         "the stream layer demanded a workbench, so this failed the connection in both directions",
+			wantError: "runtime.worktree_invalid",
+			why:       "the stream layer demanded a workbench, so this failed the connection in both directions",
 		},
 		{
 			name: "recovered",
 			owner: func() (runtimebridge.Binding, error) {
 				return runtimebridge.Binding{Generation: 2, URL: runtimeURL}, nil
 			},
-			wantAddress: true,
-			why:         "a pair that connected without one must still be able to pick one up",
+			automatic: true, wantAddress: true, runtimeGeneration: 2,
+			why: "a pair that connected without one must still be able to pick one up",
 		},
 		{
 			name: "lost again after having one",
 			owner: func() (runtimebridge.Binding, error) {
 				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
 			},
-			wantAddress: false,
-			wantError:   "p2p.runtime_unavailable",
-			why:         "the attachment stayed bound to the dead session, so its address answered every request with a failure while the UI said ready",
+			wantError: "runtime.worktree_invalid",
+			why:       "the attachment stayed bound to the dead session, so its address answered every request with a failure while the UI said ready",
 		},
 		{
 			name: "answered with an unusable address",
 			owner: func() (runtimebridge.Binding, error) {
 				return runtimebridge.Binding{Generation: 3, URL: "http://10.0.0.1:1/"}, nil
 			},
-			wantAddress: false,
-			wantError:   "p2p.runtime_invalid",
-			why:         "a non-loopback answer must not become a tunnel, and must not kill the link either",
+			automatic: true, wantError: "p2p.runtime_invalid",
+			why: "a non-loopback answer must not become a tunnel, and must not kill the link either",
 		},
 		{
 			name: "recovered a second time",
 			owner: func() (runtimebridge.Binding, error) {
 				return runtimebridge.Binding{Generation: 4, URL: runtimeURL}, nil
 			},
-			wantAddress: true,
-			why:         "recovery must not be a one-time affair",
+			automatic: true, wantAddress: true, runtimeGeneration: 4,
+			why: "recovery must not be a one-time affair",
 		},
 	} {
-		t.Run(scenario.name, func(t *testing.T) {
+		if !t.Run(scenario.name, func(t *testing.T) {
 			ownerMu.Lock()
 			answer = scenario.owner
+			beforeOpen, beforeResume := openCalls, resumeCalls
 			ownerMu.Unlock()
-			generation++
 
-			// Each row dispatches a fresh connect, and the coordinator's per-second
-			// request budget is shared by all of them. Without this the later rows
-			// failed with p2p.rate_limited on a fast runner.
-			waitForRequestBudget()
-
-			connected := connect(generation)
-			// The connection itself is established in every single case. That is the
-			// contract: maintenance belongs to the daemon, a workbench is cargo.
 			wantStage := "connected"
 			if scenario.wantAddress {
 				wantStage = "ready"
 			}
-			if connected.State.Stage != wantStage || connected.State.PairID != pairID || connected.State.Error != scenario.wantError {
+			var connected peersession.Connected
+			if scenario.automatic {
+				// Intent remains set after refusal. Let the actual core engine own
+				// recovery instead of guessing a generation or retrying stale/busy.
+				attemptCtx, stop := context.WithTimeout(ctx, 25*time.Second)
+				defer stop()
+				state, err := coreWaitWorkbenchOutcome(attemptCtx, parent, parent.Call, f, owner, current.Generation, wantStage, scenario.wantError, scenario.runtimeGeneration)
+				must(t, err)
+				connected.State = state
+				if scenario.wantAddress {
+					raw := callCore(t, ctx, parent, "peer.entry", map[string]any{"serviceId": identity.ServiceID, "data": map[string]any{"pairId": pairID, "generation": state.Generation}})
+					var entry struct {
+						ServiceID string            `json:"serviceId"`
+						State     peersession.State `json:"state"`
+						URL       string            `json:"url"`
+					}
+					must(t, protocol.DecodeExact(raw, &entry))
+					if entry.ServiceID != identity.ServiceID || entry.State != state {
+						t.Fatalf("automatic recovery changed its exact entry owner: %+v", entry)
+					}
+					connected.URL = entry.URL
+				}
+			} else {
+				// Only completed transport-only/ready owners are quiescent. The
+				// same D24 barrier and exact +1 admission guard explicit opens.
+				waitForRequestBudget()
+				must(t, owner.check(parent, current, peersession.State{}))
+				var generation uint64
+				if current.Stage == "connected" {
+					generation, err = recoveryInitialGeneration(current, pairID)
+				} else {
+					generation, err = coreReadySuccessorGeneration(current, pairID)
+				}
+				must(t, err)
+				connected = connect(t, generation)
+			}
+			ownerMu.Lock()
+			opened, resumed, local := openCalls-beforeOpen, resumeCalls-beforeResume, localOwnerCalls
+			ownerMu.Unlock()
+			if local != 0 || scenario.automatic && (opened != 0 || resumed == 0) || !scenario.automatic && opened != 1 {
+				t.Fatalf("runtime authority changed: automatic=%t open=%d resume=%d local=%d", scenario.automatic, opened, resumed, local)
+			}
+			// Maintenance belongs to the daemon; a workbench remains optional cargo.
+			if connected.State.Stage != wantStage || connected.State.PairID != pairID || connected.State.Error != scenario.wantError || connected.State.RuntimeGeneration != scenario.runtimeGeneration {
 				t.Fatalf("%s: connection not established (%s): %+v", scenario.name, scenario.why, connected.State)
 			}
 			if path := connected.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {
 				t.Fatalf("%s: no direct path: %+v", scenario.name, path)
 			}
+			current = connected.State
+			t.Logf("workbench-outcome automatic=%t open=%d resume=%d state=%+v", scenario.automatic, opened, resumed, current)
 			if scenario.wantAddress {
 				if connected.URL == "" {
 					t.Fatalf("%s: no address, so the tab stays dead (%s)", scenario.name, scenario.why)
@@ -657,14 +720,15 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 				return
 			}
 			if connected.URL != "" {
-				// An address handed out here is the dangerous case: it looks usable and
-				// is not.
 				t.Fatalf("%s: handed out an address with no workbench behind it (%s): %q", scenario.name, scenario.why, connected.URL)
 			}
-			if connected.State.RuntimeGeneration != 0 {
-				t.Fatalf("%s: transport-only state retained a stale runtime generation", scenario.name)
+			if err := coreReadRefusedHistoricalEntry(ctx, parent.Call, identity.ServiceID, pairID, connected); err != nil {
+				t.Fatalf("%s: transport-only historical entry readback: %v", scenario.name, err)
 			}
-		})
+		}) {
+			// A failed row has no authoritative completed owner for the next one.
+			return
+		}
 	}
 }
 

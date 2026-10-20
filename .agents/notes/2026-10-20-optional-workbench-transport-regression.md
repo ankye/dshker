@@ -72,6 +72,23 @@ general inability to establish ICE.
   eight-hour evidence remain failed/incomplete, not replaced by local passes.
   Final-SHA CI, package smoke and installed UI remain separate pending gates.
 
+## Windows CI and current verification continuation
+
+Quality run `39392280651` passed Linux desktop checks but its Windows unit job
+found one test-only platform assumption: directory append can fail in `write`
+without a `path` field on Windows, rather than `open` with `path`. The smoke
+lifecycle test now obtains an independent error from that same real filesystem
+operation on its current platform and compares the exact message and native
+fields, while retaining separate error identities, stderr order, no quit and
+exact failure exit. Independent review found no weakened assertion. The local
+related suite passed 20 tests; final native Windows CI is still required.
+
+The user has now exited the original Mac app and explicitly authorized direct
+candidate UI verification. Confirm no original process remains before opening
+the candidate, preserve the existing account/devices/networks/pairs, and do not
+use logout, deletion or credential replacement to make it pass. This authority
+does not relabel earlier smoke or headless evidence as native interaction proof.
+
 ## Server provenance correction
 
 The production service was inspected read-only. Its live executable and installed
