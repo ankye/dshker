@@ -362,3 +362,14 @@ tests, 426 suites, all source/build checks and parent validation. Receipt
 SHA-256 `a3589ed5d29641fccaf9ed49734f1388984ec9196254b8a854d70a321c54ac71`.
 All 47 final test-gate evidence paths exist. The 28,800-second physical idle,
 post-idle recovery, physical pause/crash and installed UI are still pending.
+
+Release validation found Windows x64 and arm64 packaged-core smoke failures at
+temporary-state cleanup: `owner.log` was still held after the test sent
+`SIGTERM`. The Node Windows child-process signal path terminates the serving
+process instead of executing its graceful shutdown; the independent runtime
+owner correctly survives that crash, so deleting its log is refused. The smoke
+now uses the existing authenticated desktop attach/handoff sequence and waits
+for the serving process to exit cleanly before removing its isolated state.
+Two Node protocol tests cover same-peer attach/handoff ordering and explicit
+refusal; both pass locally. The helper test is now in package release-input
+checks. CI must confirm this fix on the Windows package matrix.

@@ -13,6 +13,8 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { once } from 'node:events'
+import { createConnection } from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { performance } from 'node:perf_hooks'
@@ -197,13 +199,114 @@ async function startServing(executable, state, timeoutMs) {
   return { child, readiness }
 }
 
-async function stopServing(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return
-  const stopped = new Promise((resolve) => child.once('close', resolve))
-  child.kill('SIGTERM')
-  const timer = setTimeout(() => child.kill('SIGKILL'), 5_000)
-  await stopped
-  clearTimeout(timer)
+async function callCore(socket, readLine, id, method) {
+  socket.write(`${JSON.stringify({ version: 1, id, method, payload: {}, error: '' })}\n`)
+  const frame = JSON.parse(await readLine())
+  if (frame.version !== 1 || frame.id !== id || frame.method !== '' || frame.error !== '') {
+    throw new Error(`${method} was not acknowledged by the headless core`)
+  }
+  return frame.payload
+}
+
+export async function requestServingShutdown(
+  state,
+  connectSocket = createConnection,
+  timeoutMs = 10_000
+) {
+  const bootstrap = JSON.parse(await readFile(path.join(state, 'core.json'), 'utf8'))
+  if (
+    bootstrap.version !== 1 ||
+    typeof bootstrap.socket !== 'string' ||
+    !/^[a-f0-9]{64}$/.test(bootstrap.secret)
+  ) {
+    throw new Error('the headless core published an invalid shutdown endpoint')
+  }
+  const socket = connectSocket(bootstrap.socket)
+  socket.setTimeout(timeoutMs, () => socket.destroy(new Error('headless shutdown timed out')))
+  let buffered = ''
+  const lines = []
+  const readers = []
+  let readError
+  const readLine = () => {
+    if (readError) return Promise.reject(readError)
+    if (lines.length > 0) return Promise.resolve(lines.shift())
+    return new Promise((resolve, reject) => readers.push({ resolve, reject }))
+  }
+  const failReaders = (error) => {
+    readError = error
+    for (const reader of readers.splice(0)) reader.reject(error)
+  }
+  socket.on('data', (chunk) => {
+    buffered += String(chunk)
+    if (buffered.length > 1_048_576) {
+      socket.destroy(new Error('headless shutdown response exceeded the protocol limit'))
+      return
+    }
+    let boundary = buffered.indexOf('\n')
+    while (boundary >= 0) {
+      const line = buffered.slice(0, boundary)
+      buffered = buffered.slice(boundary + 1)
+      const reader = readers.shift()
+      if (reader) reader.resolve(line)
+      else lines.push(line)
+      boundary = buffered.indexOf('\n')
+    }
+  })
+  socket.on('error', failReaders)
+  socket.on('end', () =>
+    failReaders(new Error('headless core closed before shutdown acknowledgement'))
+  )
+  try {
+    await once(socket, 'connect')
+    socket.write(`${JSON.stringify({ version: 1, secret: bootstrap.secret })}\n`)
+    const authentication = JSON.parse(await readLine())
+    if (authentication.version !== 1 || authentication.authenticated !== true) {
+      throw new Error('headless core rejected the isolated smoke client')
+    }
+    const attached = await callCore(socket, readLine, 1, 'core.desktop_attach')
+    if (attached?.attached !== true) throw new Error('headless core did not admit the smoke client')
+    const handoff = await callCore(socket, readLine, 2, 'core.desktop_handoff')
+    if (handoff?.handoff !== true) throw new Error('headless core refused orderly shutdown')
+  } finally {
+    socket.end()
+    if (!socket.destroyed) await once(socket, 'close')
+  }
+}
+
+async function stopServing(child, state, timeoutMs) {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return {
+      ok: child.exitCode === 0 && child.signalCode === null,
+      detail: 'serve exited before smoke cleanup'
+    }
+  }
+  const closed = new Promise((resolve, reject) => {
+    child.once('close', (code, signal) => resolve({ code, signal }))
+    child.once('error', reject)
+  })
+  closed.catch(() => {})
+  await requestServingShutdown(state)
+  let timer
+  try {
+    const result = await Promise.race([
+      closed,
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('headless core did not exit after desktop handoff')),
+          timeoutMs
+        )
+      })
+    ])
+    if (result.code !== 0 || result.signal !== null) {
+      return {
+        ok: false,
+        detail: `serve exited ${result.signal ?? result.code} after desktop handoff`
+      }
+    }
+    return { ok: true, detail: 'authenticated desktop handoff completed and serve exited cleanly' }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 async function main() {
@@ -219,6 +322,7 @@ async function main() {
   let core = { ok: false, detail: 'the core was never resolved' }
   let state = ''
   let child = undefined
+  let stateMayBeRemoved = true
   try {
     if (args.build) {
       // The gate builds for the target it verifies and never copies an artifact
@@ -296,8 +400,31 @@ async function main() {
     failures.push('smoke')
     observations.push({ name: 'smoke', ok: false, detail: String(error?.message ?? error) })
   } finally {
-    if (child !== undefined) await stopServing(child)
-    if (state !== '') await rm(state, { force: true, recursive: true })
+    if (child !== undefined) {
+      try {
+        const shutdown = await stopServing(child, state, Math.max(args.timeoutMs, 20_000))
+        observations.push({ name: 'serve-process-graceful-exit', ...shutdown })
+        if (!shutdown.ok) {
+          failures.push('serve-process-graceful-exit')
+          stateMayBeRemoved = false
+          child.unref()
+          child.stdout?.destroy()
+          child.stderr?.destroy()
+        }
+      } catch (error) {
+        observations.push({
+          name: 'serve-process-graceful-exit',
+          ok: false,
+          detail: String(error?.message ?? error)
+        })
+        failures.push('serve-process-graceful-exit')
+        stateMayBeRemoved = false
+        child.unref()
+        child.stdout?.destroy()
+        child.stderr?.destroy()
+      }
+    }
+    if (state !== '' && stateMayBeRemoved) await rm(state, { force: true, recursive: true })
   }
 
   const evidence = {

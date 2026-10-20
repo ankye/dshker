@@ -1,9 +1,12 @@
 import { spawn } from 'node:child_process'
-import { lstat, mkdtemp, readFile, rm } from 'node:fs/promises'
+import { once } from 'node:events'
+import { lstat, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import net from 'node:net'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
+import { requestServingShutdown } from './headless-core-smoke.mjs'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const script = path.join(appRoot, 'tools', 'headless-core-smoke.mjs')
@@ -36,8 +39,6 @@ describe('headless core smoke', () => {
     expect(evidence.ok).toBe(false)
     expect(evidence.failures).toContain('core-binary')
     expect(evidence.observations[0].name).toBe('core-binary')
-    // The evidence is written even on failure, so the gate always leaves the
-    // observation that explains it.
     const written = JSON.parse(
       await readFile(path.join(root, '.run', 'headless-core', 'latest.json'), 'utf8')
     )
@@ -61,8 +62,6 @@ describe('headless core smoke', () => {
       present = false
     }
     if (!present) {
-      // A machine without the core cannot prove the entry point; the failure
-      // path above is the part that must hold everywhere.
       expect(true).toBe(true)
       return
     }
@@ -76,7 +75,105 @@ describe('headless core smoke', () => {
       'core-binary',
       'serve-publishes-its-own-endpoint',
       'named-command-over-the-private-endpoint',
-      'refusal-keeps-its-code'
+      'refusal-keeps-its-code',
+      'serve-process-graceful-exit'
     ])
   }, 120_000)
+})
+
+describe('headless smoke authenticated shutdown', () => {
+  it('attaches and hands off on the same authenticated connection', async () => {
+    const secret = 'a'.repeat(64)
+    const state = await mkdtemp(path.join(os.tmpdir(), 'dshker-headless-smoke-test-'))
+    const server = net.createServer()
+    const methods = []
+    let auth
+    let serveClosed
+    let buffer = ''
+    server.on('connection', (socket) => {
+      serveClosed = once(socket, 'close')
+      socket.on('data', (chunk) => {
+        buffer += String(chunk)
+        let boundary = buffer.indexOf('\n')
+        while (boundary >= 0) {
+          const line = buffer.slice(0, boundary)
+          buffer = buffer.slice(boundary + 1)
+          const frame = JSON.parse(line)
+          if (auth === undefined) {
+            auth = frame
+            socket.write('{"version":1,"authenticated":true}\n')
+          } else {
+            methods.push(frame.method)
+            const result =
+              frame.method === 'core.desktop_attach' ? { attached: true } : { handoff: true }
+            socket.write(
+              `${JSON.stringify({ version: 1, id: frame.id, method: '', payload: result, error: '' })}\n`
+            )
+          }
+          boundary = buffer.indexOf('\n')
+        }
+      })
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+    expect(address).toBeTruthy()
+    expect(typeof address).toBe('object')
+    await writeFile(
+      path.join(state, 'core.json'),
+      JSON.stringify({ version: 1, socket: 'private-core-endpoint', secret })
+    )
+
+    try {
+      await requestServingShutdown(state, () => net.createConnection(address), 2_000)
+      await serveClosed
+      expect(auth).toEqual({ version: 1, secret })
+      expect(methods).toEqual(['core.desktop_attach', 'core.desktop_handoff'])
+    } finally {
+      server.closeAllConnections?.()
+      server.close()
+      await rm(state, { force: true, recursive: true })
+    }
+  })
+
+  it('refuses an invalid authenticated handoff response', async () => {
+    const state = await mkdtemp(path.join(os.tmpdir(), 'dshker-headless-smoke-invalid-'))
+    await writeFile(
+      path.join(state, 'core.json'),
+      JSON.stringify({ version: 1, socket: 'private-core-endpoint', secret: 'b'.repeat(64) })
+    )
+    const server = net.createServer((socket) => {
+      let buffer = ''
+      socket.on('data', (chunk) => {
+        buffer += String(chunk)
+        let boundary = buffer.indexOf('\n')
+        while (boundary >= 0) {
+          const line = buffer.slice(0, boundary)
+          buffer = buffer.slice(boundary + 1)
+          const frame = JSON.parse(line)
+          if (typeof frame.secret === 'string') {
+            socket.write('{"version":1,"authenticated":true}\n')
+          } else {
+            socket.write(
+              `${JSON.stringify({ version: 1, id: frame.id, method: '', payload: {}, error: 'p2p.owner_busy' })}\n`
+            )
+          }
+          boundary = buffer.indexOf('\n')
+        }
+      })
+    })
+    server.listen(0, '127.0.0.1')
+    await once(server, 'listening')
+    const address = server.address()
+
+    try {
+      await expect(
+        requestServingShutdown(state, () => net.createConnection(address), 2_000)
+      ).rejects.toThrow(/core\.desktop_attach was not acknowledged/)
+    } finally {
+      server.closeAllConnections?.()
+      server.close()
+      await rm(state, { force: true, recursive: true })
+    }
+  })
 })
