@@ -68,6 +68,7 @@ func TestCertificateRealCoordinatorCLILegacyRecovery(t *testing.T) {
 			}
 			certificateLegacyVerifySelection(t, legacy, session)
 			recovered := certificateLegacyRecover(t, legacy, session.Token)
+			waitForRequestBudget()
 			assertCertificateLegacyServer(t, legacy, recovered, ownership)
 			assertCertificateCLICanonical(t, legacy.ctx, legacy.parent, legacy.f, recovered)
 			assertCertificateCLIIndexAndMetadata(t, legacy.store, legacy.f.authority.ServiceID, legacy.network.NetworkID)

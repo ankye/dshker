@@ -163,10 +163,13 @@ catalog service (`p2p.not_enabled` / `p2p.service_unconfigured`) and one lifecyc
 maintenance request ran inside the coordinator's existing per-source budget
 window (`p2p.rate_limited`). Test-only fixture setup now enables the exact
 coordinator service and spaces the independent maintenance assertion with the
-existing request-budget helper. These edits have not passed a new CI run yet.
-The matching Package run `39371808799` passed for the preceding source SHA; it
-does not cover these edits. Server CI `39371618100` reached the Go package's
-implicit 10-minute test timeout after 77 coordinator tests passed; the manifest
-now gives the full race suite a 15-minute test deadline and the Linux job 20
-minutes. The rerun, server deployment, 8-hour physical profile, crash/pause
-profiles and stable release remain pending; no release is claimed.
+existing request-budget helper. The matching Package run `39371808799` passed
+for the preceding source SHA; it does not cover these edits. Follow-up commits
+`f346959` (server CI timeout) and
+`6c260f5` (client fixture corrections) are pushed. Client Quality run
+`39375357657` confirmed the lifecycle test now passes, but the new Linux CLI
+recovery test still hit the unchanged source-IP budget on its final real
+certificate readback (`p2p.rate_limited`). A second test-only budget boundary is
+added before that independent readback; it has not passed CI yet. Server run
+`39375336585` is in progress. Server deployment, the 8-hour physical profile,
+crash/pause profiles and stable release remain pending; no release is claimed.
