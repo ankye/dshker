@@ -203,6 +203,7 @@
     "networking/integration/reconnect_stability_test.go",
     "networking/integration/network_revocation_test.go",
     "networking/integration/certificate_lifecycle_test.go",
+    "networking/integration/certificate_legacy_cli_linux_test.go",
     "networking/integration/core_connection_test.go",
     "networking/integration/headless_credential_test.go",
     "networking/internal/peersession/manager_admission_test.go",
@@ -334,7 +335,8 @@
     "networking/integration/workbench_recovery_owner_test.go",
     "networking/integration/workbench_recovery_reverse_runtime_test.go",
     "networking/integration/workbench_recovery_reverse_host_test.go",
-    "networking/integration/workbench_recovery_reverse_client_test.go"
+    "networking/integration/workbench_recovery_reverse_client_test.go",
+    "networking/integration/certificate_legacy_cli_linux_test.go"
   ],
   "state_matrix": [
     {

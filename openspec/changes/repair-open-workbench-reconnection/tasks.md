@@ -156,3 +156,17 @@ an overnight cause or acceptance pass. All test processes were joined and the
 original installed Mac/Windows processes remained unchanged. Section 4 addresses
 the confirmed destructive/recovery scheduling and uncertain-decision defects;
 it does not retroactively relabel this or earlier failed evidence as passed.
+
+Latest CI follow-up (2026-10-20): app Quality run `39371808773` failed in the
+Linux real-process certificate suite because its CLI fixture had no enabled
+catalog service (`p2p.not_enabled` / `p2p.service_unconfigured`) and one lifecycle
+maintenance request ran inside the coordinator's existing per-source budget
+window (`p2p.rate_limited`). Test-only fixture setup now enables the exact
+coordinator service and spaces the independent maintenance assertion with the
+existing request-budget helper. These edits have not passed a new CI run yet.
+The matching Package run `39371808799` passed for the preceding source SHA; it
+does not cover these edits. Server CI `39371618100` reached the Go package's
+implicit 10-minute test timeout after 77 coordinator tests passed; the manifest
+now gives the full race suite a 15-minute test deadline and the Linux job 20
+minutes. The rerun, server deployment, 8-hour physical profile, crash/pause
+profiles and stable release remain pending; no release is claimed.

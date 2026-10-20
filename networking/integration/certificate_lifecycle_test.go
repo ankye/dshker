@@ -303,6 +303,7 @@ func TestCertificateRealCoordinatorLifecycle(t *testing.T) {
 		_, err = server.Handle(f.ctx, "device.restore", payload)
 		must(t, err)
 		// A headless maintenance sweep must retain the user's presence account.
+		waitForRequestBudget()
 		if count := host.RestoreOwnCredentials(f.ctx); count != 1 {
 			t.Fatal("same identity headless maintenance failed", count)
 		}

@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/controlplane"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/protocol"
@@ -184,7 +185,15 @@ func newCertificateLegacyCLI(t *testing.T, metadataExists bool) *certificateLega
 	legacy.binary, legacy.state = cliBinary(t), stateDirectoryForCLI(t)
 	rootsPath := filepath.Join(t.TempDir(), "coordinator-roots.pem")
 	writeRootsPEM(t, rootsPath, f.root)
-	legacy.arguments = []string{"serve", "--state", legacy.state, "--data", dataRoot, "--catalog", t.TempDir(), "--roots", rootsPath}
+	catalogRoot := t.TempDir()
+	catalogStore, err := catalog.Open(catalogRoot)
+	must(t, err)
+	enabledCatalog, err := catalogStore.Enable()
+	must(t, err)
+	enabledCatalog.Record.Services = []catalog.Service{integrationCatalogService(f)}
+	_, err = catalogStore.Commit(enabledCatalog.Revision, enabledCatalog.Record)
+	must(t, err)
+	legacy.arguments = []string{"serve", "--state", legacy.state, "--data", dataRoot, "--catalog", catalogRoot, "--roots", rootsPath}
 	ctx, cancel := context.WithTimeout(f.ctx, 90*time.Second)
 	legacy.ctx = ctx
 	t.Cleanup(cancel)
