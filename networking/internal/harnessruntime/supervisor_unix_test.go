@@ -48,6 +48,34 @@ func TestChildNeverReceivesInheritedElectronNodeMode(t *testing.T) {
 	}
 }
 
+func TestSupervisorOverridesChildPathAndPreservesInheritedEnvironment(t *testing.T) {
+	t.Setenv("DSHKER_PATH_TEST_MARKER", "preserve-me")
+	base := t.TempDir()
+	supervisor := NewSupervisor()
+	environmentPath := filepath.Join(base, "child-environment")
+	view, err := supervisor.StartCommand(Command{
+		Executable: "/bin/sh",
+		Arguments:  []string{"-c", `printf 'PATH=%s\nMARKER=%s\n' "$PATH" "$DSHKER_PATH_TEST_MARKER" > "$1"`, "child", environmentPath},
+		Directory:  base,
+		Path:       "/runtime/bin:/user/tool bin:/usr/bin",
+	}, Identity{LaunchID: "launch_path", SubjectID: "subject_path", LogPath: filepath.Join(base, "child.log")})
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	waitFor(t, "child exit", func() bool {
+		current, _ := supervisor.Status(view.SubjectID)
+		return current.State == StateStopped
+	})
+	output, err := os.ReadFile(environmentPath)
+	if err != nil {
+		t.Fatalf("read child environment: %v", err)
+	}
+	want := "PATH=/runtime/bin:/user/tool bin:/usr/bin\nMARKER=preserve-me\n"
+	if string(output) != want {
+		t.Fatalf("child environment = %q, want %q", output, want)
+	}
+}
+
 // TestStopLeavesNoGrandchild proves the supervision is a tree kill rather than a
 // signal to one process: the fake child starts its own child and records both
 // pids, and neither may survive the stop.

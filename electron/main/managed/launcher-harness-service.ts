@@ -117,6 +117,8 @@ export interface LauncherHarnessServiceOptions {
     /** PATH required by pnpm's shell entrypoint and its subprocesses. */
     readonly commandSearchPath: string
   }>
+  /** Resolves the child-only PATH lazily when a DSH Web launch is requested. */
+  readonly resolveDshCommandSearchPath: () => Promise<string>
   /**
    * The core's DSH Web child, which now owns the process, the port and the log.
    *
@@ -761,6 +763,7 @@ export class LauncherHarnessService {
       if (readiness.kind !== 'ready') {
         throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)
       }
+      const commandSearchPath = await this.#options.resolveDshCommandSearchPath()
       request = {
         launchId: randomUUID(),
         subjectId: LAUNCHER_HARNESS_SUBJECT,
@@ -770,7 +773,7 @@ export class LauncherHarnessService {
         pnpmExecutable: this.#options.pnpmExecutable,
         pnpmPrefixArguments: this.#options.pnpmLauncher.prefixArguments,
         pnpmResolutionError: this.#options.pnpmLauncher.resolutionError ?? '',
-        pnpmCommandSearchPath: this.#options.pnpmLauncher.commandSearchPath,
+        pnpmCommandSearchPath: commandSearchPath,
         diagnosticsPatchPath: this.#options.diagnosticsPatchPath,
         port: this.#port,
         logPath: this.#options.launchLogPath

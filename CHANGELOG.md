@@ -4,6 +4,7 @@
 
 ### 简体中文 (zh-CN)
 
+- **工作台暂不可用时保留真实设备连接。** 新握手明确返回工作台拒绝后，设备通道保持已连接并保留原错误，不误报网页就绪；旧入口停止转发失效运行时，后续恢复仍需通过 HTTP 与 WebSocket 验证，不重启远端 DSH。
 - **连接恢复不再被旧握手的清理占住。** 已确认结束的旧握手保留自身清理责任，但不再吞掉下一次握手；旧状态尚未确认时，先核实服务器的原票据结果再交接。日志补充握手请求、拒绝、收发和槽位交接原因，不记录令牌、签名或网页内容，不延长恢复时限。
 - **证书到期时保留真实登录结果，退出账号清理旧连接。** 登录确认期间证书刚好过期，不再因后续设备激活失败而丢失已确认的账号结果。退出账号会撤销本机旧账号的远程通道和后台重连任务，迟到的设备列表或证书恢复结果不会重新激活旧会话；请求中断或服务器撤销未确认仍明确报错，不会冒充成功、影响新账号或停止远端 DSH。
 - **同一网络下的电脑分别使用设备请求配额。** 已恢复设备的账户、网络和目录请求携带原设备证书，同时保留真实登录账号的授权检查；不再与另一台电脑挤占公共 IP 配额。匿名登录和证书恢复仍走各自明确的认证流程，不提高服务器限额，也不在失败后切换认证方式。
@@ -15,9 +16,11 @@
 - **修复远程工作台挂机后“显示已连接，网页却打不开”。** 临时断线后，自动恢复已经明确打开的工作台及原端口上的 HTTP/WebSocket 转发，而不只恢复设备通道；普通后台配对仍不会启动未打开的 DSH。
 - **恢复页签读取当前连接入口。** 新连接就绪后从核心重新验证设备、配对与连接代次，不复用过期地址；主动断开、撤权和迟到的旧连接不会恢复不应打开的内容。
 - **自动恢复尊重主动停止。** 只重新附着目标电脑上仍在运行的 DSH，不会自动启动已停止的 DSH；旧客户端不支持安全恢复时明确拒绝，不改用启动请求。
+- **DSH 命令继承桌面用户的 PATH。** macOS/Linux 从配置的登录交互式 shell 读取 PATH，Windows 保留 DSHKer 收到的用户 PATH；仅传给 DSH 及其子进程，不修改系统或 Launcher 环境。shell 无法解析时明确拒绝启动，不拼猜测路径。
 
 ### English (en-US)
 
+- **Keep a connected device when its workbench is temporarily unavailable.** An explicit workbench refusal preserves the real device transport and its error without claiming browser readiness. Stale runtime forwarding is detached; later recovery still requires HTTP and WebSocket verification and does not restart remote DSH.
 - **Keep old handshake cleanup from swallowing a replacement connection.** A confirmed ended handshake retains its cleanup owner without blocking its successor. Unknown old authority is checked against the server's exact ticket before handoff. Bounded diagnostics record admission, rejection, signalling and ownership transitions without tokens, signatures or page content; recovery deadlines are unchanged.
 - **Keep confirmed sign-in results across certificate expiry and retire old connections on sign-out.** Expiry during authentication no longer lets later device activation replace a confirmed account result. Signing out retires that account's local gateways and reconnect jobs; delayed directory or certificate-recovery results cannot reactivate the old session. Interrupted or unconfirmed server revocation remains an explicit failure; it cannot claim success, affect a replacement account or stop remote DSH.
 - **Keep authenticated computers on separate request budgets.** Restored devices carry their original certificate for ordinary account, network and directory requests while retaining the real signed-in account's authorization checks. They no longer compete in the public IP bucket. Public login and certificate recovery keep their explicit authentication owners; limits are unchanged and failures never select another authentication path.
@@ -29,6 +32,7 @@
 - **Fix remote workbenches staying unavailable after an idle disconnect.** Automatic recovery restores an explicitly opened workbench and its original HTTP/WebSocket gateway, not just the device transport. Background pairings still do not activate unopened DSH workbenches.
 - **Read current entries when tabs recover.** The shell verifies the current core-owned peer, pairing and attempt instead of reusing a stale address. Explicit disconnects, revocations and late older attempts cannot restore unauthorized content.
 - **Respect a deliberately stopped DSH.** Recovery only reattaches a running target runtime. It never substitutes a start request when safe resume is unavailable on an older peer.
+- **Pass the desktop user's PATH to DSH commands.** macOS/Linux read PATH from the configured login-interactive shell, while Windows preserves the user PATH inherited by DSHKer. The composed value is limited to DSH and its descendants; an unavailable shell produces an explicit launch refusal instead of a guessed path.
 
 ## 0.1.90 — 2026-10-17
 

@@ -353,9 +353,9 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 	var answer peersession.Connected
 	must(t, json.Unmarshal(connected, &answer))
 
-	// The connection is established and reported ready. This is the whole point:
+	// The transport is connected without claiming workbench readiness:
 	// the two computers are connected even though neither has a workbench to show.
-	if answer.State.Stage != "connected" || answer.State.PairID != pairID {
+	if answer.State.Stage != "connected" || answer.State.PairID != pairID || answer.State.RuntimeGeneration != 0 || answer.State.Error != "p2p.runtime_unavailable" {
 		t.Fatalf("connect without a workbench reported %+v", answer.State)
 	}
 	if path := answer.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {
@@ -364,6 +364,9 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 	// And it carries no address, because there is no workbench to address.
 	if answer.URL != "" {
 		t.Fatalf("a connection with no workbench still produced an address %q", answer.URL)
+	}
+	if code := refusalOf(t, ctx, parent, "peer.entry", map[string]any{"serviceId": identity.ServiceID, "data": map[string]any{"pairId": pairID, "generation": 1}}); code != "p2p.not_connected" {
+		t.Fatalf("transport-only connection granted a workbench entry: %q", code)
 	}
 	refusalMu.Lock()
 	asked := refusals
@@ -572,6 +575,7 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 		name        string
 		owner       func() (runtimebridge.Binding, error)
 		wantAddress bool
+		wantError   string
 		// why records the shipped defect this row exists for.
 		why string
 	}{
@@ -581,6 +585,7 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
 			},
 			wantAddress: false,
+			wantError:   "p2p.runtime_unavailable",
 			why:         "the stream layer demanded a workbench, so this failed the connection in both directions",
 		},
 		{
@@ -597,6 +602,7 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 				return runtimebridge.Binding{}, errors.New("runtime.worktree_invalid")
 			},
 			wantAddress: false,
+			wantError:   "p2p.runtime_unavailable",
 			why:         "the attachment stayed bound to the dead session, so its address answered every request with a failure while the UI said ready",
 		},
 		{
@@ -605,6 +611,7 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 				return runtimebridge.Binding{Generation: 3, URL: "http://10.0.0.1:1/"}, nil
 			},
 			wantAddress: false,
+			wantError:   "p2p.runtime_invalid",
 			why:         "a non-loopback answer must not become a tunnel, and must not kill the link either",
 		},
 		{
@@ -634,7 +641,7 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 			if scenario.wantAddress {
 				wantStage = "ready"
 			}
-			if connected.State.Stage != wantStage || connected.State.PairID != pairID {
+			if connected.State.Stage != wantStage || connected.State.PairID != pairID || connected.State.Error != scenario.wantError {
 				t.Fatalf("%s: connection not established (%s): %+v", scenario.name, scenario.why, connected.State)
 			}
 			if path := connected.State.Path; path.Protocol != "udp" || path.LocalType == "" || path.RemoteType == "" {
@@ -653,6 +660,9 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 				// An address handed out here is the dangerous case: it looks usable and
 				// is not.
 				t.Fatalf("%s: handed out an address with no workbench behind it (%s): %q", scenario.name, scenario.why, connected.URL)
+			}
+			if connected.State.RuntimeGeneration != 0 {
+				t.Fatalf("%s: transport-only state retained a stale runtime generation", scenario.name)
 			}
 		})
 	}

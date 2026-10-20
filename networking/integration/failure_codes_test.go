@@ -46,7 +46,8 @@ func TestCoreDaemonKeepsFailureCodesDistinguishable(t *testing.T) {
 	defer stopCore()
 	identity := configureCoreService(t, ctx, parent, f)
 	restoreCoreDevice(t, ctx, parent, f)
-	pairID := f.config[0].Pin.Pair.PairID
+	// The public pairId is the far device's stable identity, not a SQL pair row.
+	pairID := f.config[1].Device.DeviceID
 
 	// Authorization: a pair this device never pinned. The coordinator never sees
 	// the request, and the shell must be able to say "this pair is not yours"

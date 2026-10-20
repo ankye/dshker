@@ -50,6 +50,8 @@
 - [x] 4.18 Client/root/reviewer: after preserving D24's real 35-second pause failure, prove and repair answer-side terminal reservation versus cleanup ordering, including re-subscription's historical Prepared with a missing terminal event; retain one fenced, bounded and joinable admission owner, exact durable State proof and credential-free decision logs. Verify blocked End/transport cleanup, sequential Prepared/offer, unknown/foreign/pending/current-committed State, all authority changes and late cleanup. The final D25 joint race run passed 93 named Go tests with zero race/skip/failure after independent review closed the finish-first retirement-receipt race. This completes deterministic repair only; it does not claim physical recovery.
 - [ ] 4.19 QA/root: repeat the physical program-pause and isolated core-crash profiles on the repaired exact source, then keep the original Mac↔Windows Cookie/WS/session/runtime in both directions for 28,800 seconds of zero-business-traffic idle and run ten production automatic recovery rounds. Preserve every result and the unchanged 25-second recovery budget; no manual reconnect, page reopen, DSH restart, relay or timeout change can satisfy this gate. Installed-app/native UI acceptance is recorded separately from source and physical headless evidence.
 - [x] 4.20 Release: make the packaged-core smoke request the existing authenticated `core.desktop_attach`/`core.desktop_handoff` lifecycle before cleaning its isolated state, so Windows CI does not terminate the serving process forcefully while its independent runtime owner still holds `owner.log`; add protocol-focused Node tests to release-input checks. Both handshake success and refusal behavior pass local tests; cross-platform package CI is the remaining confirmation.
+- [ ] 4.21 Client/QA/reviewer: preserve D26's explicitly refused optional-workbench transport through durable promotion, exact old-mux detachment and suspension/recovery without false readiness; retain unexplained-binding and HTTP/WS failures. Correct independently stale CI method-table, current-user, catalog and target-device inputs; prove focused races and real coordinator/core regressions before treating the peer suite as green.
+- [ ] 4.22 Release/QA/reviewer: let packaged smoke exclusively own its exit after success evidence or failure diagnostics finish, even when the probe window is the last Windows window; refuse diagnostic-write failure with exit 1. Prove normal close/tray behavior unchanged and confirm the final Windows ARM64 package in CI without weakening renderer checks.
 
 Current verification: D24 source 5cb2d390 passed the fresh source/TS gates (with
 the retained prose-path validator failure and separately passing continuation).
@@ -173,3 +175,26 @@ certificate readback (`p2p.rate_limited`). A second test-only budget boundary is
 added before that independent readback; it has not passed CI yet. Server run
 `39375336585` is in progress. Server deployment, the 8-hour physical profile,
 crash/pause profiles and stable release remain pending; no release is claimed.
+
+Latest D26 follow-up (2026-10-20): Quality run `39376523526` exposed one real
+optional-workbench regression: an explicit runtime refusal was discarded and
+its missing gateway then closed the established device transport. D26 retains
+that refusal and transport without claiming ready, detaches the exact old mux,
+and verifies a later ready workbench through the same browser entry. Local
+focused races passed 69 cases including the initiated ready/refusal/ready path;
+the full peersession/runtimebridge/autoconnect race suites passed. Independent
+CLI/current-user/catalog/method-table fixture corrections still need CI's
+isolated credential environment; they were not run against the shared Mac
+Keychain. Direct real-coordinator two-peer tests passed both-direction and
+reverse-reconnect cases; this does not replace the failed historical physical
+pause profile or the incomplete eight-hour test.
+
+Package run `39376523547` also exposed a smoke exit race, not an observed P2P or
+renderer crash: Windows destroyed its sole probe window before writing its
+result, so window-all-closed quit prematurely. The smoke exit owner and explicit
+failure exit are repaired, with red/green lifecycle tests including unwritable
+payload and trace paths. Native Windows ARM64 package confirmation remains
+pending. The independent server's installed binary was read back and matched
+the frozen artifact SHA and current runtime build inputs; its dirty build VCS
+label alone was not evidence of an outdated deployment. Server CI
+`39375336585` passed. No tag or stable release has been published for D26 yet.

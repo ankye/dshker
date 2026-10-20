@@ -115,7 +115,7 @@ func readyInboundOrderFixture(t *testing.T, withPredecessor bool) (*Manager, *se
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, endpoint, err := runtimebridge.Attach(manager.ctx, mux, runtimebridge.Binding{Generation: 7, URL: "http://127.0.0.1:1/?token=ordered-predecessor-test"}, true, nil)
+		_, endpoint, err := runtimebridge.Attach(manager.ctx, mux, runtimebridge.Binding{Generation: 7, URL: "http://127.0.0.1:1/?token=ordered-predecessor-test"}, false, nil)
 		if err != nil {
 			t.Fatal(err)
 		}

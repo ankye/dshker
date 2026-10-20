@@ -57,22 +57,15 @@ interface RuntimeRecord {
 export class ManagedHarnessWebRuntimeSupervisor {
   readonly #records = new Map<string, RuntimeRecord>()
   readonly #runtime: () => CoreHarnessRuntimePort | undefined
-  readonly #pnpmCommandSearchPath: string
+  readonly #resolveDshCommandSearchPath: () => Promise<string>
 
-  constructor(
-    options: {
-      readonly runtime?: () => CoreHarnessRuntimePort | undefined
-      /**
-       * PATH the core applies to this installation's child when the bundled
-       * runtime is staged, so the embedded Web plugin manager and its package
-       * scripts resolve the Launcher's own pnpm and node instead of a system
-       * installation. Empty keeps the child on the core's inherited PATH.
-       */
-      readonly pnpmCommandSearchPath?: string
-    } = {}
-  ) {
+  constructor(options: {
+    readonly runtime?: () => CoreHarnessRuntimePort | undefined
+    /** Child-only PATH, including platform-appropriate user command entries. */
+    readonly resolveDshCommandSearchPath: () => Promise<string>
+  }) {
     this.#runtime = options.runtime ?? (() => undefined)
-    this.#pnpmCommandSearchPath = options.pnpmCommandSearchPath ?? ''
+    this.#resolveDshCommandSearchPath = options.resolveDshCommandSearchPath
   }
 
   /** Starts the worktree's standard `dsh web --no-open` command through the core. */
@@ -88,6 +81,7 @@ export class ManagedHarnessWebRuntimeSupervisor {
     // identity is re-checked here as it always was. The built entry is the
     // core's to verify, because the core is what runs it.
     await assertRegisteredNodeExecutable(input.node)
+    const commandSearchPath = await this.#resolveDshCommandSearchPath()
     const answered = await this.#requireRuntime().start({
       launchId: input.launchId,
       subjectId: input.installationId,
@@ -97,7 +91,7 @@ export class ManagedHarnessWebRuntimeSupervisor {
       pnpmExecutable: '',
       pnpmPrefixArguments: [],
       pnpmResolutionError: '',
-      pnpmCommandSearchPath: this.#pnpmCommandSearchPath,
+      pnpmCommandSearchPath: commandSearchPath,
       diagnosticsPatchPath: '',
       port: { mode: 'auto' },
       logPath: ''

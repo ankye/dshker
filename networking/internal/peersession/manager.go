@@ -122,6 +122,7 @@ type session struct {
 	controlMu        sync.Mutex
 	result           Connected
 	err              error
+	workbenchRefusal string
 	// refusal is the named code for a failed attempt, so a caller that returns
 	// the failure to the shell does not hand it the raw transport sentence.
 	refusal string

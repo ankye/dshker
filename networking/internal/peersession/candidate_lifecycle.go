@@ -106,7 +106,15 @@ func (manager *Manager) runCandidate(connection *session, initiator bool) {
 			return manager.stageCandidate(connection, mux, binding, initiator)
 		}
 		owners := runtimebridge.WorkbenchOwners{Open: manager.runtimeOwner(connection), Resume: manager.runtimeResumeOwner(connection)}
-		_, _, _, _, _, err = runtimebridge.Establish(connection.ctx, connection.transport, connection.lease, initiator, connection.requestWorkbench, connection.resumeWorkbench, owners, install)
+		var refusal string
+		_, _, _, _, refusal, err = runtimebridge.Establish(connection.ctx, connection.transport, connection.lease, initiator, connection.requestWorkbench, connection.resumeWorkbench, owners, install)
+		if err == nil {
+			// The target may promote from a committed event while Ready is still
+			// in flight. Retain negotiation before either side dispatches Ready.
+			connection.mu.Lock()
+			connection.workbenchRefusal, connection.result.State.Error = refusal, refusal
+			connection.mu.Unlock()
+		}
 	}
 	if err == nil && initiator {
 		err = manager.probeCandidate(connection)
@@ -167,12 +175,22 @@ func (manager *Manager) stageCandidate(connection *session, mux *peer.Mux, bindi
 func (manager *Manager) probeCandidate(connection *session) error {
 	connection.mu.Lock()
 	gateway, endpoint := connection.stagedGateway, connection.stagedEndpoint
+	refusal, generation := connection.workbenchRefusal, connection.result.State.RuntimeGeneration
 	connection.mu.Unlock()
 	if !connection.requestWorkbench {
-		return nil
+		if gateway == nil && endpoint == nil && refusal == "" && generation == 0 {
+			return nil
+		}
+		return errors.New("p2p.runtime_invalid")
 	}
-	if gateway == nil || endpoint == nil {
+	if gateway == nil && endpoint == nil {
+		if refusal != "" && generation == 0 {
+			return nil
+		}
 		return errors.New("p2p.runtime_unavailable")
+	}
+	if gateway == nil || endpoint == nil || refusal != "" || generation == 0 {
+		return errors.New("p2p.runtime_invalid")
 	}
 	// This URL belongs solely to the candidate mux. The stable browser endpoint
 	// still serves the old primary; probing it would validate the wrong path.
@@ -318,6 +336,9 @@ func (manager *Manager) transportChanged(connection *session) {
 	}
 	state.Error = ""
 	connection.mu.Lock()
+	if recovered && state.RuntimeGeneration == 0 {
+		state.Error = connection.workbenchRefusal
+	}
 	connection.result.State = state
 	connection.mu.Unlock()
 	manager.mu.Unlock()

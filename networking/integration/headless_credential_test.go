@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ankye/dshker/networking/internal/catalog"
+	"github.com/ankye/dshker/networking/internal/controlplane"
 )
 
 // An enrolled machine has to come back as its own device with no desktop attached.
@@ -38,17 +42,8 @@ func TestHeadlessCoreRestoresItsOwnCredential(t *testing.T) {
 		"serve", "--state", state, "--data", dataRoot,
 		"--catalog", catalogRoot, "--roots", rootsPath)
 
-	// The catalog is what records which services this machine knows, and the
-	// headless restore reads it to learn which credentials to look for. The shell
-	// enables it on first use; a headless run has to be given the same start.
-	if _, stderr, code := runCLICommand(t, binary, "call", "core.catalog_enable", "{}",
-		"--state", state); code != 0 {
-		stop()
-		t.Fatalf("core.catalog_enable: %s", stderr)
-	}
-
-	// Configure against the real coordinator, which also records the service in the
-	// catalog the headless restore later reads.
+	// Configure verifies the running coordinator. Catalog registration is a
+	// separate public operation, just as it is when the desktop adds a service.
 	stdout, stderr, code := runCLICommand(t, binary, "service", "configure",
 		"--origin", f.endpoints.HTTPSOrigin, "--wss", f.endpoints.WSSURL,
 		"--stun", f.endpoints.STUNAddress, "--state", state)
@@ -56,14 +51,13 @@ func TestHeadlessCoreRestoresItsOwnCredential(t *testing.T) {
 		stop()
 		t.Fatalf("service configure: %s", stderr)
 	}
-	var configured struct {
-		ServiceID string `json:"serviceId"`
-	}
+	var configured controlplane.Identity
 	if json.Unmarshal([]byte(stdout), &configured) != nil || configured.ServiceID == "" {
 		stop()
 		t.Fatalf("service configure answered %s", stdout)
 	}
 	serviceID := configured.ServiceID
+	registerHeadlessCatalogService(t, binary, state, f, configured)
 	// Initial setup supplies the real issued login independently of device owner.
 	sessionRecord := integrationSessionRecord(t, f.userSession)
 	secretPayload, err := json.Marshal(map[string]string{
@@ -124,6 +118,56 @@ func TestHeadlessCoreRestoresItsOwnCredential(t *testing.T) {
 		time.Sleep(250 * time.Millisecond)
 	}
 	t.Fatalf("the restarted core never restored its own device: %s", last)
+}
+
+// Register only the coordinator that service.configure verified. The CLI's
+// published catalog operations own this initial setup; restart must restore it.
+func registerHeadlessCatalogService(t *testing.T, binary, state string, f *fixture, identity controlplane.Identity) {
+	t.Helper()
+	service := catalog.Service{
+		ServiceID: identity.ServiceID, DisplayName: "integration-coordinator",
+		HTTPSOrigin: identity.HTTPSOrigin, WSSURL: identity.WSSURL, STUNAddress: identity.STUNAddress,
+		PublicKey: base64.StdEncoding.EncodeToString(identity.PublicKey), Certificate: base64.StdEncoding.EncodeToString(identity.Certificate),
+	}
+	if service != integrationCatalogService(f) {
+		t.Fatal("service.configure did not return the real coordinator identity and endpoints")
+	}
+	stdout, stderr, code := runCLICommand(t, binary, "call", "core.catalog_enable", "{}", "--state", state)
+	if code != 0 {
+		t.Fatalf("core.catalog_enable: %s", stderr)
+	}
+	type catalogView struct {
+		Enabled  bool           `json:"enabled"`
+		Revision string         `json:"revision"`
+		Record   catalog.Record `json:"record"`
+	}
+	var enabled catalogView
+	must(t, json.Unmarshal([]byte(stdout), &enabled))
+	if !enabled.Enabled || enabled.Revision == "" || enabled.Record.CatalogID == "" || len(enabled.Record.Services) != 0 || len(enabled.Record.Computers) != 0 || len(enabled.Record.ForgottenServiceIDs) != 0 {
+		t.Fatal("initial headless catalog is not an enabled, empty record")
+	}
+	record := enabled.Record
+	record.Services = []catalog.Service{service}
+	payload, err := json.Marshal(map[string]any{"expectedRevision": enabled.Revision, "record": record})
+	must(t, err)
+	stdout, stderr, code = runCLICommand(t, binary, "call", "core.catalog_commit", string(payload), "--state", state)
+	if code != 0 {
+		t.Fatalf("core.catalog_commit: %s", stderr)
+	}
+	var committed catalogView
+	must(t, json.Unmarshal([]byte(stdout), &committed))
+	if !committed.Enabled || committed.Revision == "" || committed.Revision == enabled.Revision || !reflect.DeepEqual(committed.Record, record) {
+		t.Fatal("catalog commit did not record the exact verified service")
+	}
+	stdout, stderr, code = runCLICommand(t, binary, "call", "core.catalog_inspect", "{}", "--state", state)
+	if code != 0 {
+		t.Fatalf("core.catalog_inspect: %s", stderr)
+	}
+	var readback catalogView
+	must(t, json.Unmarshal([]byte(stdout), &readback))
+	if !reflect.DeepEqual(readback, committed) {
+		t.Fatal("headless catalog readback differs from the committed service and revision")
+	}
 }
 
 // writeRootsPEM publishes the coordinator's certificate as the trust anchor the

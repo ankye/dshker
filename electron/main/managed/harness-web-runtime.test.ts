@@ -94,7 +94,8 @@ describe('managed installation runtime supervisor', () => {
     const core = fakeCore()
     const input = await startInput()
     const view = await new ManagedHarnessWebRuntimeSupervisor({
-      runtime: () => core.port
+      runtime: () => core.port,
+      resolveDshCommandSearchPath: async () => '/test/path'
     }).start(input)
 
     expect(core.calls).toEqual([
@@ -109,7 +110,7 @@ describe('managed installation runtime supervisor', () => {
           pnpmExecutable: '',
           pnpmPrefixArguments: [],
           pnpmResolutionError: '',
-          pnpmCommandSearchPath: '',
+          pnpmCommandSearchPath: '/test/path',
           diagnosticsPatchPath: '',
           port: { mode: 'auto' },
           logPath: ''
@@ -132,7 +133,7 @@ describe('managed installation runtime supervisor', () => {
     const input = await startInput()
     await new ManagedHarnessWebRuntimeSupervisor({
       runtime: () => core.port,
-      pnpmCommandSearchPath: '/runtime/bin:/usr/bin'
+      resolveDshCommandSearchPath: async () => '/runtime/bin:/usr/bin'
     }).start(input)
 
     const request = core.calls[0]?.value as CoreHarnessLaunchRequest
@@ -140,9 +141,27 @@ describe('managed installation runtime supervisor', () => {
     expect(request.pnpmExecutable).toBe('')
   })
 
+  it('refuses to start a managed installation when the command PATH is unresolved', async () => {
+    const core = fakeCore()
+    const input = await startInput()
+    const refusal = Object.assign(new Error('The configured login shell is unavailable.'), {
+      code: 'runtime.spawn_failed'
+    })
+    const supervisor = new ManagedHarnessWebRuntimeSupervisor({
+      runtime: () => core.port,
+      resolveDshCommandSearchPath: () => Promise.reject(refusal)
+    })
+
+    await expect(supervisor.start(input)).rejects.toBe(refusal)
+    expect(core.calls).toEqual([])
+  })
+
   it('reads the launch state the core reports rather than a cached guess', async () => {
     const core = fakeCore({ status: () => Promise.resolve(undefined) })
-    const supervisor = new ManagedHarnessWebRuntimeSupervisor({ runtime: () => core.port })
+    const supervisor = new ManagedHarnessWebRuntimeSupervisor({
+      runtime: () => core.port,
+      resolveDshCommandSearchPath: async () => '/test/path'
+    })
     await expect(supervisor.launchFor('installation-1')).rejects.toMatchObject({
       code: 'runtime.not_found'
     })
@@ -150,7 +169,9 @@ describe('managed installation runtime supervisor', () => {
   })
 
   it('refuses to supervise anything without the core', async () => {
-    const supervisor = new ManagedHarnessWebRuntimeSupervisor()
+    const supervisor = new ManagedHarnessWebRuntimeSupervisor({
+      resolveDshCommandSearchPath: async () => '/test/path'
+    })
     await expect(supervisor.stop('installation-1')).rejects.toMatchObject({
       code: 'runtime.child_unavailable'
     })
@@ -162,7 +183,8 @@ describe('managed installation runtime supervisor', () => {
     })
     const core = fakeCore()
     const supervisor = new ManagedHarnessWebRuntimeSupervisor({
-      runtime: () => ({ ...core.port, start: () => Promise.reject(refusal) })
+      runtime: () => ({ ...core.port, start: () => Promise.reject(refusal) }),
+      resolveDshCommandSearchPath: async () => '/test/path'
     })
     await expect(supervisor.start(await startInput())).rejects.toBe(refusal)
     expect(core.calls).toEqual([])

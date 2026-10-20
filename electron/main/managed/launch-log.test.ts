@@ -37,7 +37,8 @@ describe('launch log file', () => {
         executable: 'pnpm',
         prefixArguments: [],
         commandSearchPath: ''
-      }
+      },
+      resolveDshCommandSearchPath: async () => '/test/path'
     })
     return { service, logPath, cleanup: () => rm(root, { recursive: true, force: true }) }
   }

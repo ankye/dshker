@@ -1,9 +1,14 @@
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { promisify } from 'node:util'
 import { describe, expect, it } from 'vitest'
+import type {
+  CoreHarnessLaunchRequest,
+  CoreHarnessLaunchView,
+  CoreHarnessRuntimePort
+} from '../core/harness-runtime'
 import {
   assertPortSetting,
   parseAnnouncedWebUrl,
@@ -14,13 +19,15 @@ import {
   localPathOf,
   gitUrlOf,
   formatLauncherLifecycleEvent,
-  classifyChildConsoleStream
+  classifyChildConsoleStream,
+  LauncherHarnessService
 } from './launcher-harness-service'
 import { LAUNCH_PREFERENCES_FORMAT, parseLaunchPreferencesPort } from './launch-preferences'
 import {
   cleanLauncherHarnessCheckout,
   launcherProfilePluginArguments
 } from './launcher-harness-commands'
+import { writeCurrentVersionPointer } from './launcher-version-store'
 
 const execFileAsync = promisify(execFile)
 
@@ -69,6 +76,95 @@ describe('launcherProfilePluginArguments', () => {
       'dsh-example',
       '--config.offline=true'
     ])
+  })
+})
+
+describe('LauncherHarnessService DSH PATH handoff', () => {
+  it('passes the lazily resolved PATH into the existing core launch request', async () => {
+    const temporaryRoot = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-command-path-'))
+    const root = await realpath(temporaryRoot)
+    const commit = 'a'.repeat(40)
+    const versionDirectory = nodePath.join(root, 'versions', commit)
+    const profileDirectory = nodePath.join(root, 'dsh-home', 'profiles', 'web')
+    const requests: CoreHarnessLaunchRequest[] = []
+    const launchView = (state: CoreHarnessLaunchView['state']): CoreHarnessLaunchView => ({
+      launchId: 'launch-path-test',
+      subjectId: 'launcher-harness',
+      state,
+      url: state === 'running' ? 'http://127.0.0.1:3088/?token=test' : undefined,
+      directory: versionDirectory,
+      port: { mode: 'auto' },
+      diagnostics: {
+        stdoutBytes: 0,
+        stderrBytes: 0,
+        stdoutTruncated: false,
+        stderrTruncated: false
+      }
+    })
+    const runtime: CoreHarnessRuntimePort = {
+      start: async (request) => {
+        requests.push(request)
+        return launchView('running')
+      },
+      stop: async () => launchView('stopped'),
+      status: async () => launchView('running'),
+      console: async (cursor) => ({ entries: [], cursor }),
+      portGet: async () => ({ mode: 'auto' }),
+      portSet: async (_filePath, port) => port
+    }
+
+    try {
+      await mkdir(nodePath.join(versionDirectory, 'apps', 'cli', 'lib'), { recursive: true })
+      await mkdir(nodePath.join(versionDirectory, 'packages', 'settings', 'settings'), {
+        recursive: true
+      })
+      await mkdir(profileDirectory, { recursive: true })
+      await writeFile(nodePath.join(versionDirectory, '.git'), 'gitdir: test\n', 'utf8')
+      await writeFile(
+        nodePath.join(versionDirectory, 'package.json'),
+        JSON.stringify({ version: '1.0.0' }),
+        'utf8'
+      )
+      await writeFile(nodePath.join(versionDirectory, 'apps', 'cli', 'lib', 'bin.js'), '', 'utf8')
+      await writeFile(
+        nodePath.join(versionDirectory, 'packages', 'settings', 'settings', 'package.json'),
+        JSON.stringify({ version: '1.0.0' }),
+        'utf8'
+      )
+      await writeFile(
+        nodePath.join(profileDirectory, 'package.json'),
+        JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: [] } } }),
+        'utf8'
+      )
+      await writeCurrentVersionPointer(nodePath.join(root, 'harness-current.json'), commit)
+      const service = new LauncherHarnessService({
+        harnessDirectory: nodePath.join(root, 'harness'),
+        versionsDirectory: nodePath.join(root, 'versions'),
+        currentVersionPointerPath: nodePath.join(root, 'harness-current.json'),
+        pluginSourcesDirectory: nodePath.join(root, 'plugins'),
+        dshHomeDirectory: nodePath.join(root, 'dsh-home'),
+        launchPreferencesPath: nodePath.join(root, 'launch-preferences.json'),
+        launchLogPath: nodePath.join(root, 'logs', 'dsh-web.log'),
+        diagnosticsPatchPath: nodePath.join(root, 'verbose.patch.yml'),
+        gitExecutable: 'git',
+        pnpmExecutable: '/runtime/bin/node',
+        pnpmLauncher: {
+          executable: '/runtime/bin/node',
+          prefixArguments: ['/runtime/pnpm/bin/pnpm.mjs'],
+          commandSearchPath: '/runtime/bin:/usr/bin'
+        },
+        resolveDshCommandSearchPath: async () => '/runtime/bin:/usr/bin:/opt/cocos/bin',
+        runtime: () => runtime
+      })
+
+      await service.start()
+
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin:/opt/cocos/bin')
+      await service.stop()
+    } finally {
+      await rm(temporaryRoot, { recursive: true, force: true })
+    }
   })
 })
 

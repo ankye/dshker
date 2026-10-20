@@ -42,7 +42,8 @@ describe('launcher console activity', () => {
         executable: 'pnpm',
         prefixArguments: [],
         commandSearchPath: ''
-      }
+      },
+      resolveDshCommandSearchPath: async () => '/test/path'
     }
     return {
       service: new LauncherHarnessService(options),

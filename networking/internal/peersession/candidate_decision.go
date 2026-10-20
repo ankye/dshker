@@ -479,6 +479,12 @@ func (manager *Manager) promoteCandidateFrom(connection *session, state protocol
 		slots, candidates, endpoints = manager.inbound, manager.inboundCandidates, manager.inboundEndpoints
 	}
 	old, oldEndpoint := slots[connection.PairID], endpoints[connection.PairID]
+	if endpoint == nil && oldEndpoint != nil && old != nil {
+		old.mu.Lock()
+		oldMux := old.mux
+		old.mu.Unlock()
+		oldEndpoint.Detach(oldMux)
+	}
 	if initiator && endpoint != nil && oldEndpoint != nil {
 		if err := oldEndpoint.Replace(mux, binding); err != nil {
 			unlock()
@@ -511,9 +517,10 @@ func (manager *Manager) promoteCandidateFrom(connection *session, state protocol
 	connection.mu.Lock()
 	connection.endpoint = endpoint
 	result := connection.result
-	result.State.RuntimeGeneration, result.State.Error = binding.Generation, ""
+	result.State.RuntimeGeneration, result.State.Error = binding.Generation, connection.workbenchRefusal
+	result.URL = ""
 	if endpoint != nil {
-		result.State.Stage, result.URL = "ready", endpoint.LocalURL()
+		result.State.Stage, result.State.Error, result.URL = "ready", "", endpoint.LocalURL()
 	} else {
 		result.State.Stage = "connected"
 	}

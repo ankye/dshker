@@ -1021,6 +1021,44 @@ before promotion resumes. The receipt is limited to the exact previous owner
 and queued job, is created only behind the full committed-admission barrier,
 and does not convert arbitrary `not_connected` errors into terminal proof.
 
+### D26 — Optional workbench refusal retains its verified device transport
+
+Release CI reached a live direct transport, then lost it because runCandidate
+discarded Establish's explicit workbench refusal and treated the missing gateway
+as a failed connection. Retain the existing workbench.optional contract: a
+negotiated refusal with no binding may commit a transport-only primary through
+the same current-scope, both-ready and durable decision barriers. Its public
+state is connected, runtime generation zero, an empty entry and the precise
+workbench refusal; it is never ready. This is an explicit protocol outcome,
+not a substitute runtime or a successful browser-open claim.
+
+Store that refusal before either side dispatches Ready, including a target whose
+committed event precedes its Ready HTTP reply. Keep it on the exact session so
+suspension can project an empty error and transport recovery can restore the
+original connected-state refusal. Preserve workbench intent and the existing
+retry classification/backoff. An unexplained missing binding, malformed scope,
+or a binding whose HTTP/WS probe fails still fails the candidate. A usable
+binding always requires the existing candidate-specific probe before promotion.
+
+When a transport-only candidate replaces a prior runtime carrier, detach only
+that predecessor's exact mux before publishing the new state. Keep the stable
+listener registered for a later verified workbench. Delayed predecessor cleanup
+cannot detach its replacement. Do not broaden the existing recovered-predecessor
+rule or infer current runtime health from an old generation alone.
+
+Verify explicit refusal versus unexplained empty binding, failed HTTP/WS probes,
+target promotion with blocked Ready, connected/suspended/connected refusal
+projection, exact old-endpoint detachment and later ready recovery. Keep existing
+real coordinator/core no-workbench and recovery tests; align independent stale
+CLI/catalog/method-table inputs without treating all CI failures as transport loss.
+
+The Windows packaged-smoke runner also owns its termination explicitly. Closing
+its sole probe window must not trigger the normal Windows window-all-closed quit
+before success evidence or failure diagnostics have been written. Smoke mode
+exits only through its existing awaited result dispatch; ordinary desktop close
+and tray behavior are unchanged. This is a release-evidence lifecycle repair,
+not permission to skip a failed renderer check or extend a deadline.
+
 ## Risks / Trade-offs
 
 - Runtime refusal could cause repeated workbench requests → keep existing backoff

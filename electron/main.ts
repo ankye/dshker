@@ -18,6 +18,7 @@ import {
   ManagedHarnessRuntimeError,
   ManagedInstallationService,
   ManagedWorkspaceService,
+  createManagedDshCommandSearchPathResolver,
   type ManagedPathStyle
 } from './main/managed'
 import { SessionUsageReader } from './main/managed/session-usage-reader'
@@ -111,6 +112,12 @@ const BUNDLED_RUNTIME_ROOT = app.isPackaged
 const PNPM_LAUNCHER = resolvePnpmLauncher(BUNDLED_RUNTIME_ROOT)
 /** The bundled pnpm entry when a complete runtime is staged; undefined otherwise. */
 const BUNDLED_PNPM_ENTRY = bundledPnpmEntry(BUNDLED_RUNTIME_ROOT)
+const RESOLVE_DSH_COMMAND_SEARCH_PATH = createManagedDshCommandSearchPathResolver({
+  platform: process.platform,
+  environment: process.env,
+  bundledRuntimeBin:
+    BUNDLED_PNPM_ENTRY === undefined ? undefined : path.join(BUNDLED_RUNTIME_ROOT, 'bin')
+})
 
 /**
  * Resolves the system Git executable without a shell lookup.
@@ -296,6 +303,7 @@ async function registerLauncherServices(
     gitExecutable: GIT_EXECUTABLE,
     pnpmExecutable: PNPM_LAUNCHER.executable,
     pnpmLauncher: PNPM_LAUNCHER,
+    resolveDshCommandSearchPath: RESOLVE_DSH_COMMAND_SEARCH_PATH,
     runtime: () => coreHarnessRuntime
   })
   // The core owns the remote route now, and it starts after this service is
@@ -395,10 +403,8 @@ async function registerLauncherServices(
     temporaryDirectory: app.getPath('temp'),
     runtimeSupervisor: new ManagedHarnessWebRuntimeSupervisor({
       runtime: () => coreHarnessRuntime,
-      // A staged bundled runtime also serves installation-launched Web sessions:
-      // the core substitutes its private bin PATH on those children, so their
-      // plugin manager and package scripts resolve the bundled pnpm and node.
-      pnpmCommandSearchPath: BUNDLED_PNPM_ENTRY === undefined ? '' : PNPM_LAUNCHER.commandSearchPath
+      // DSH and commands launched by DSH receive the same user PATH contract.
+      resolveDshCommandSearchPath: RESOLVE_DSH_COMMAND_SEARCH_PATH
     }),
     checkout: coreCheckout
   })
@@ -573,9 +579,17 @@ if (IS_SMOKE_TEST) {
       app.exit(0)
     })
     .catch(async (error: unknown) => {
-      console.error('DSHKer Launcher smoke test failed.', error)
-      await writeSmokeFailure(error)
-      app.exit(1)
+      try {
+        console.error('DSHKer Launcher smoke test failed.', error)
+        await writeSmokeFailure(error)
+      } catch (diagnosticsError: unknown) {
+        console.error(
+          'DSHKer Launcher could not write smoke failure diagnostics.',
+          diagnosticsError
+        )
+      } finally {
+        app.exit(1)
+      }
     })
 } else {
   void start().catch((error: unknown) => {
@@ -585,6 +599,8 @@ if (IS_SMOKE_TEST) {
 }
 
 app.on('window-all-closed', () => {
+  // Smoke owns its exit after its success payload or failure diagnostics finish.
+  if (IS_SMOKE_TEST) return
   // With minimise-to-tray enabled the app keeps running in the tray after the
   // window closes; only quit when the user chose close-to-quit or the tray
   // is not active.

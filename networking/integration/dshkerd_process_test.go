@@ -26,6 +26,28 @@ const (
 	corePackage       = "github.com/ankye/dshker/networking/cmd/dshkerd"
 )
 
+func assertCoreVersion(t *testing.T, payload json.RawMessage) {
+	t.Helper()
+	var reported struct {
+		Version            int      `json:"version"`
+		MethodTableVersion int      `json:"methodTableVersion"`
+		Methods            []string `json:"methods"`
+	}
+	must(t, json.Unmarshal(payload, &reported))
+	if reported.Version != 1 || reported.MethodTableVersion != 2 {
+		t.Fatalf("core.version = %s", payload)
+	}
+	var expected []string
+	for _, method := range localrpc.Methods {
+		if method.Role == localrpc.RoleShell {
+			expected = append(expected, method.Name)
+		}
+	}
+	if !slices.Equal(reported.Methods, expected) || !slices.Contains(reported.Methods, "peer.connect") || !slices.Contains(reported.Methods, "remote.roots") {
+		t.Fatalf("core.version methods = %v, want %v", reported.Methods, expected)
+	}
+}
+
 func desktopStateRoot(t *testing.T) string {
 	t.Helper()
 	state := t.TempDir()
@@ -104,21 +126,10 @@ func TestCoreDaemonServesThePrivateChannel(t *testing.T) {
 	})
 	payload, err := parent.Call(ctx, "core.version", struct{}{})
 	must(t, err)
-	var reported struct {
-		Version            int      `json:"version"`
-		MethodTableVersion int      `json:"methodTableVersion"`
-		Methods            []string `json:"methods"`
-	}
-	must(t, json.Unmarshal(payload, &reported))
-	if reported.Version != 1 || reported.MethodTableVersion != 1 {
-		t.Fatalf("core.version = %s", payload)
-	}
 	// The daemon answers the whole published table: the peer half is composed
 	// beside the core's own stores, so a peer method is no longer reported as
 	// p2p.not_implemented.
-	if !slices.Contains(reported.Methods, "peer.connect") || !slices.Contains(reported.Methods, "remote.roots") {
-		t.Fatalf("core.version methods = %v", reported.Methods)
-	}
+	assertCoreVersion(t, payload)
 
 	// The peer host really executes inside this process: device.createKey is
 	// served with no coordinator and no configured service at all.
@@ -226,9 +237,7 @@ func TestCoreDaemonServesWithADataRoot(t *testing.T) {
 	})
 	payload, err := parent.Call(ctx, "core.version", struct{}{})
 	must(t, err)
-	if !strings.Contains(string(payload), "\"methodTableVersion\":1") {
-		t.Fatalf("core.version = %s", payload)
-	}
+	assertCoreVersion(t, payload)
 	// The catalog directory the shell passes is opened at boot, and before the user
 	// enables anything the core reports it as not enabled rather than as a failure.
 	inspected, err := parent.Call(ctx, "core.catalog_inspect", struct{}{})

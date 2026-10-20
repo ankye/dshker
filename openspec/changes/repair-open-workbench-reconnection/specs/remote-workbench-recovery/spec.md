@@ -436,6 +436,14 @@ have passed the existing readiness checks.
   and retries through the existing bounded-backoff policy
 - **AND** it does not report workbench readiness or serve stale content
 
+#### Scenario: A candidate explicitly negotiates an unavailable workbench
+
+- **WHEN** a verified candidate receives an explicit workbench refusal and no runtime binding
+- **THEN** its exact transport and mux MAY become a connected primary only after the unchanged authoritative candidate decision barriers, retaining the typed refusal and workbench intent without a browser entry
+- **AND** the refusal SHALL be retained before Ready dispatch and across connected/suspended/connected transitions; suspension itself SHALL keep its existing empty-error projection
+- **AND** promotion SHALL detach the predecessor's exact runtime mux before publishing connected while retaining the stable listener for later verified recovery
+- **AND** unexplained empty bindings and failed probes of a provided binding SHALL NOT be accepted as this explicit transport-only outcome
+
 ### Requirement: Background connections do not activate workbenches
 
 A pair that has never received an explicit workbench request SHALL remain a

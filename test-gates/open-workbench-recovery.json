@@ -3,6 +3,11 @@
   "risk": "interactive",
   "risk_scopes": ["data_critical_recovery", "interactive_remote_tab_lifecycle"],
   "production_files": [
+    "electron/main.ts",
+    "electron/main/managed/dsh-command-search-path.ts",
+    "electron/main/managed/harness-web-runtime.ts",
+    "electron/main/managed/index.ts",
+    "electron/main/managed/launcher-harness-service.ts",
     "networking/internal/helper/selected_session_dispatch.go",
     "networking/internal/helper/selected_session_scope.go",
     "networking/internal/helper/account_logout.go",
@@ -134,6 +139,18 @@
     "tools/workbench-recovery-identity.mjs"
   ],
   "test_files": [
+    "electron/main/smoke-lifecycle.test.ts",
+    "electron/main/managed/dsh-command-search-path.test.ts",
+    "electron/main/managed/harness-web-runtime.test.ts",
+    "electron/main/managed/launcher-harness-service.test.ts",
+    "electron/main/managed/launch-log.test.ts",
+    "electron/main/managed/launcher-console-activity.test.ts",
+    "networking/internal/harnessruntime/supervisor_test.go",
+    "networking/internal/harnessruntime/supervisor_unix_test.go",
+    "networking/internal/peersession/candidate_workbench_test.go",
+    "networking/internal/peersession/candidate_workbench_browser_test.go",
+    "networking/integration/cli_account_test.go",
+    "networking/integration/failure_codes_test.go",
     "networking/internal/helper/selected_session_scope_test.go",
     "networking/internal/helper/selected_session_authority_test.go",
     "networking/internal/helper/directory_authority_test.go",
@@ -340,6 +357,54 @@
   ],
   "state_matrix": [
     {
+      "state": "partial",
+      "test": "TestCandidateWorkbenchBrowserKeepsEntryAcrossReadyRefusalAndReady"
+    },
+    {
+      "state": "recovery",
+      "test": "TestCandidateWorkbenchBrowserKeepsEntryAcrossReadyRefusalAndReady"
+    },
+    {
+      "state": "success",
+      "test": "puts the bundled runtime first, then inherited paths, then unique login-shell paths"
+    },
+    {
+      "state": "no_op",
+      "test": "caches only successful values and leaves the launcher environment unchanged"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "bounds login-shell execution, reports timeout as a typed launch error and retries failures"
+    },
+    {
+      "state": "rejected",
+      "test": "refuses to start a managed installation when the command PATH is unresolved"
+    },
+    {
+      "state": "success",
+      "test": "waits for success evidence before exiting on %s"
+    },
+    {
+      "state": "partial",
+      "test": "writes renderer failure diagnostics after destroy before exiting"
+    },
+    {
+      "state": "reset",
+      "test": "preserves normal close behavior on %s with tray=%s"
+    },
+    {
+      "state": "partial",
+      "test": "TestCandidateWorkbenchRefusalKeepsCommittedTransportAndDetachesOldRuntime"
+    },
+    {
+      "state": "superseded",
+      "test": "TestCandidateWorkbenchRefusalSurvivesCommittedEventBeforeReadyReply"
+    },
+    {
+      "state": "rejected",
+      "test": "TestCandidateWorkbenchProbeRequiresBindingOrExplicitRefusal"
+    },
+    {
       "state": "success",
       "test": "TestWorkbenchRecoveryCrossClient"
     },
@@ -389,6 +454,272 @@
     }
   ],
   "field_bindings": [
+    {
+      "production_file": "electron/main.ts",
+      "field": "RESOLVE_DSH_COMMAND_SEARCH_PATH is injected into the launcher and managed installation runtime owners",
+      "source": "The main composition constructs one resolver from process.platform, process.env and the staged bundled runtime bin, then supplies resolveDshCommandSearchPath to both runtime owners.",
+      "test": "passes the lazily resolved PATH into the existing core launch request",
+      "assertion": "expect(requests[0]?.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin:/opt/cocos/bin')",
+      "state": "success",
+      "identity_keys": [
+        "platform",
+        "bundledRuntimeBin",
+        "launchId",
+        "subjectId",
+        "pnpmCommandSearchPath"
+      ],
+      "missing_semantics": "Runtime owners require the resolver and cannot silently select an inherited or bundled-only child PATH after resolution fails.",
+      "coverage_limit": "The test executes the launcher service request boundary. The main entry's resolver injection is source-inspected wiring; this test does not boot the complete Electron composition."
+    },
+    {
+      "production_file": "electron/main.ts",
+      "field": "IS_SMOKE_TEST owns app.exit(0) only after success evidence is written",
+      "source": "The actual smoke-dispatch and window-all-closed entry blocks are AST-extracted and executed for win32 and darwin while the real smoke output write is held.",
+      "test": "waits for success evidence before exiting on %s",
+      "assertion": "expect(exitBeforeWrite).toBe(0)",
+      "state": "success",
+      "identity_keys": [
+        "IS_SMOKE_TEST",
+        "platform",
+        "controls.outputPath",
+        "evidence-written",
+        "app-exit:0"
+      ],
+      "missing_semantics": "Destroying the smoke window cannot call app.quit or exit before the success payload is durable; the fixture mocks Electron and renderer observations."
+    },
+    {
+      "production_file": "electron/main.ts",
+      "field": "renderer smoke failure diagnostics finish before app.exit(1)",
+      "source": "runSmokeTest rejects with renderer probe failed, destroys the window, and the actual entry waits for writeSmokeFailure before its failure exit.",
+      "test": "writes renderer failure diagnostics after destroy before exiting",
+      "assertion": "error: { message: 'renderer probe failed' }",
+      "state": "partial",
+      "identity_keys": ["controls.outputPath", "ok:false", "renderer probe failed", "app-exit:1"],
+      "missing_semantics": "A failed renderer probe cannot publish success or quit through window-all-closed before its diagnostic payload is written."
+    },
+    {
+      "production_file": "electron/main.ts",
+      "field": "smoke failure exit remains owned when both evidence payload writes fail",
+      "source": "The actual entry catch/finally executes against an output path made unwritable by a directory, so both success and failure writes fail.",
+      "test": "exits with failure when neither success nor failure payload can be written",
+      "assertion": "expect(f.app.exit).toHaveBeenCalledExactlyOnceWith(1)",
+      "state": "rejected",
+      "identity_keys": ["controls.outputPath", "syscall:open", "IS_SMOKE_TEST", "app-exit:1"],
+      "missing_semantics": "A second diagnostic-write failure is reported and still ends with exactly one failure exit; it cannot leave the smoke process alive."
+    },
+    {
+      "production_file": "electron/main.ts",
+      "field": "non-smoke window-all-closed keeps platform and tray quit ownership",
+      "source": "The actual window-all-closed entry block runs with IS_SMOKE_TEST=false for win32, linux and darwin with explicit tray-active cases.",
+      "test": "preserves normal close behavior on %s with tray=%s",
+      "assertion": "expect(f.app.quit).toHaveBeenCalledTimes(quits)",
+      "state": "reset",
+      "identity_keys": ["IS_SMOKE_TEST", "platform", "trayActive", "quits"],
+      "missing_semantics": "Smoke exit ownership cannot change ordinary macOS or tray close behavior; ordinary closes never call app.exit."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "bundled runtime, inherited PATH and unique login-shell entries retain their exact ordering",
+      "source": "createManagedDshCommandSearchPathResolver combines bundledRuntimeBin, the inherited PATH and the configured shell's nonce-marked PATH without losing spaces.",
+      "test": "puts the bundled runtime first, then inherited paths, then unique login-shell paths",
+      "assertion": "'/opt/DSHKer/runtime/bin:/usr/bin:/bin:/opt/dev/.local/bin:/opt/Tools With Spaces/bin'",
+      "state": "success",
+      "identity_keys": ["platform:darwin", "SHELL:/bin/zsh", "bundledRuntimeBin", "PATH"],
+      "missing_semantics": "Empty or invalid marked shell output refuses launch instead of substituting a guessed tool directory."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "Windows reads PATH case-insensitively without starting a login shell",
+      "source": "readInheritedPath admits one distinct Windows PATH value and the resolver deduplicates runtime entries using case-insensitive identity.",
+      "test": "does not start a shell on Windows and preserves the case-insensitive inherited PATH",
+      "assertion": "expect(executeLoginShell).not.toHaveBeenCalled()",
+      "state": "success",
+      "identity_keys": ["platform:win32", "Path", "pAtH", "bundledRuntimeBin"],
+      "missing_semantics": "Windows never resolves a shell or inserts user directories absent from its inherited PATH."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "distinct Windows PATH spellings are an explicit admission failure",
+      "source": "readInheritedPath compares all case-insensitive PATH keys before constructing the child command path.",
+      "test": "rejects conflicting Windows PATH spellings instead of choosing one",
+      "assertion": "message: 'The inherited PATH variables conflict.'",
+      "state": "rejected",
+      "identity_keys": ["platform:win32", "PATH", "Path", "runtime.spawn_failed"],
+      "missing_semantics": "Conflicting values are refused rather than choosing one spelling as authority."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "missing inherited Windows PATH cannot be replaced by a bundled-only path",
+      "source": "The Windows resolver checks the inherited PATH before admitting bundledRuntimeBin.",
+      "test": "refuses a Windows launch when the inherited PATH is missing",
+      "assertion": "message: 'The inherited Windows PATH is unavailable.'",
+      "state": "rejected",
+      "identity_keys": ["platform:win32", "PATH", "bundledRuntimeBin", "runtime.spawn_failed"],
+      "missing_semantics": "An installed bundled runtime does not turn missing user command configuration into a successful launch."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "configured POSIX shell is required and must belong to the supported invocation set",
+      "source": "resolveLoginShellPath and loginShellInvocation read the exact SHELL path and refuse unavailable or unsupported shells before execution.",
+      "test": "rejects an unavailable or unsupported configured POSIX shell without substituting another shell",
+      "assertion": "message: 'The configured login shell is unsupported.'",
+      "state": "rejected",
+      "identity_keys": ["platform:linux", "SHELL", "PATH", "runtime.spawn_failed"],
+      "missing_semantics": "No shell lookup or alternate-shell invocation can replace the operator's missing or unsupported configured shell."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "only one non-empty nonce-marked shell PATH is admitted",
+      "source": "parseLoginShellPath rejects absent, duplicate and empty begin/end payloads while preserving spaces inside path entries.",
+      "test": "accepts only one non-empty marked PATH and preserves spaces in entries",
+      "assertion": ").toBe('/bin:/opt/Tool Bin')",
+      "state": "rejected",
+      "identity_keys": ["marker", "delimiter", "PATH", "platform:linux"],
+      "missing_semantics": "Shell startup text outside the marked payload is ignored; malformed payloads cannot become an empty or substituted command PATH."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "8-second shell timeout produces a typed launch refusal and leaves resolution retryable",
+      "source": "resolveLoginShellPath maps ETIMEDOUT to runtime.spawn_failed and the memoizer releases a failed pending resolution.",
+      "test": "bounds login-shell execution, reports timeout as a typed launch error and retries failures",
+      "assertion": "message: 'The configured login shell did not finish within 8 seconds.'",
+      "state": "stale_timeout",
+      "identity_keys": ["SHELL:/bin/bash", "ETIMEDOUT", "runtime.spawn_failed", "PATH"],
+      "missing_semantics": "A timeout cannot fall back to another PATH or become cached success; the test injects the timeout rather than proving a live shell timeout."
+    },
+    {
+      "production_file": "electron/main/managed/dsh-command-search-path.ts",
+      "field": "successful PATH resolution is memoized without mutating the launcher environment",
+      "source": "The child-only resolver returns its cached successful value while retaining both the supplied environment.PATH and process.env.PATH.",
+      "test": "caches only successful values and leaves the launcher environment unchanged",
+      "assertion": "expect(process.env.PATH).toBe(originalLauncherPath)",
+      "state": "no_op",
+      "identity_keys": ["environment.PATH", "process.env.PATH", "SHELL:/bin/zsh", "resolved PATH"],
+      "missing_semantics": "Repeated launch requests cannot rewrite process-wide PATH or rerun a shell after a successful resolution."
+    },
+    {
+      "production_file": "electron/main/managed/index.ts",
+      "field": "public managed module exports createManagedDshCommandSearchPathResolver",
+      "source": "The managed barrel adds export * from './dsh-command-search-path' for the main composition's resolver import.",
+      "test": "caches only successful values and leaves the launcher environment unchanged",
+      "assertion": "expect(second).toBe(first)",
+      "state": "no_op",
+      "identity_keys": [
+        "createManagedDshCommandSearchPathResolver",
+        "resolved PATH",
+        "environment.PATH"
+      ],
+      "missing_semantics": "The public module must expose the owning resolver rather than copying a second implementation.",
+      "coverage_limit": "This unit test imports the owning resolver file directly. The barrel export is source-inspected wiring; it is not an independently exercised public-import runtime assertion."
+    },
+    {
+      "production_file": "electron/main/managed/harness-web-runtime.ts",
+      "field": "managed installation start carries the resolved child PATH in pnpmCommandSearchPath",
+      "source": "ManagedHarnessWebRuntimeSupervisor awaits resolveDshCommandSearchPath after registered Node admission and includes the result in the existing core start request.",
+      "test": "passes the staged bundled runtime PATH to the core child",
+      "assertion": "expect(request.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin')",
+      "state": "success",
+      "identity_keys": ["installationId", "launchId", "nodeExecutable", "pnpmCommandSearchPath"],
+      "missing_semantics": "The installed worktree retains its registered Node identity; the child PATH is a named field in the same core-owned start operation."
+    },
+    {
+      "production_file": "electron/main/managed/harness-web-runtime.ts",
+      "field": "a resolver refusal prevents any managed installation core start request",
+      "source": "A rejected resolveDshCommandSearchPath result is returned unchanged before the core runtime start call.",
+      "test": "refuses to start a managed installation when the command PATH is unresolved",
+      "assertion": "await expect(supervisor.start(input)).rejects.toBe(refusal)",
+      "state": "rejected",
+      "identity_keys": ["installationId", "launchId", "refusal", "runtime.spawn_failed"],
+      "missing_semantics": "Unresolved command PATH cannot dispatch a child using an inherited, empty or substituted value; the test also requires core.calls to stay empty."
+    },
+    {
+      "production_file": "electron/main/managed/launcher-harness-service.ts",
+      "field": "launcher-harness core start receives the lazily resolved user command PATH",
+      "source": "LauncherHarnessService.start waits for resolveDshCommandSearchPath only after selecting the current valid worktree, then writes pnpmCommandSearchPath on its existing launch request.",
+      "test": "passes the lazily resolved PATH into the existing core launch request",
+      "assertion": "expect(requests[0]?.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin:/opt/cocos/bin')",
+      "state": "success",
+      "identity_keys": [
+        "harness-current.json",
+        "launchId",
+        "subjectId:launcher-harness",
+        "pnpmCommandSearchPath"
+      ],
+      "missing_semantics": "The service cannot silently reuse the pnpm launcher's narrower PATH instead of the resolved DSH child path; this is a test runtime port, not a production DSH process."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_decision.go",
+      "field": "explicit refusal detaches the exact predecessor mux while preserving the initiated browser endpoint and URL",
+      "source": "D26 same Manager, fixed authority/device keys and signed predecessor tickets negotiate ready then explicit runtime refusal through real Pion carriers.",
+      "test": "TestCandidateWorkbenchBrowserKeepsEntryAcrossReadyRefusalAndReady",
+      "assertion": "refusal did not detach the exact old mux from the retained browser endpoint",
+      "state": "partial",
+      "identity_keys": [
+        "pairId",
+        "attemptId",
+        "generation",
+        "PreviousAttemptID",
+        "PreviousGeneration",
+        "endpoint",
+        "old mux",
+        "LocalURL"
+      ],
+      "missing_semantics": "A requested runtime refusal keeps connected transport with zero runtime generation and no ready entry; the retained live browser URL returns 502 and does not reach the old runtime."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_decision.go",
+      "field": "a later ready candidate replaces the retained browser attachment and reuses its exact entry URL",
+      "source": "D26 initiated ready-refusal-ready sequence reads back generation 9 and the replacement runtime binding, closes its temporary probe endpoint and exercises the same URL against new runtime content.",
+      "test": "TestCandidateWorkbenchBrowserKeepsEntryAcrossReadyRefusalAndReady",
+      "assertion": "later ready candidate did not replace the retained browser attachment",
+      "state": "recovery",
+      "identity_keys": [
+        "pairId",
+        "attemptId",
+        "generation",
+        "runtimeGeneration",
+        "endpoint",
+        "new mux",
+        "entry.URL"
+      ],
+      "missing_semantics": "The stable endpoint must remain open and accept Replace; late detach from either predecessor cannot remove the newly ready mux. This test uses signed local receipts and HTTP/WS test oracles, not a production coordinator or real Harness."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager.go",
+      "field": "exact negotiated workbench refusal survives transport suspension",
+      "source": "D26 real committed candidate transport, explicit refusal and subsequent transport-state projection",
+      "test": "TestCandidateWorkbenchRefusalKeepsCommittedTransportAndDetachesOldRuntime",
+      "assertion": "transport recovery lost the original workbench refusal",
+      "state": "recovery",
+      "identity_keys": [
+        "pairId",
+        "attemptId",
+        "generation",
+        "runtimeGeneration",
+        "workbenchRefusal"
+      ],
+      "missing_semantics": "An explicit workbench refusal retains connected transport with zero runtime generation and no entry; missing binding without a refusal is not readiness."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_lifecycle.go",
+      "field": "negotiation is retained before a committed event can precede the Ready reply",
+      "source": "D26 controlled in-flight Ready reply with production candidate decision handling",
+      "test": "TestCandidateWorkbenchRefusalSurvivesCommittedEventBeforeReadyReply",
+      "assertion": "early committed event discarded the exact workbench refusal",
+      "state": "superseded",
+      "identity_keys": ["pairId", "attemptId", "generation", "workbenchRefusal"],
+      "missing_semantics": "A late Ready reply cannot erase the exact refusal or close an already committed device transport."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_lifecycle.go",
+      "field": "provided workbenches cannot skip authenticated HTTP and WebSocket readiness probes",
+      "source": "D26 explicit negative admission matrix and HTTP/WebSocket refusal endpoints",
+      "test": "TestCandidateWorkbenchBindingStillRequiresHTTPAndWebSocketProbe",
+      "assertion": "provided workbench skipped its required probe",
+      "state": "rejected",
+      "identity_keys": ["runtimeGeneration", "requestWorkbench", "workbenchRefusal"],
+      "missing_semantics": "Unrequested or incomplete bindings are refused; only an explicit refusal with no binding may retain a requested transport-only connection."
+    },
     {
       "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
       "field": "read-phase join transfers exact cleanup without joining a generic Host callback",
@@ -517,9 +848,9 @@
     {
       "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
       "field": "exact terminal retirement survives old cleanup before successor promotion",
-      "source": "D25 actual held-TURN/End cleanup finishes and erases the old retiring entry before the same queued admission resumes",
+      "source": "D25 actual End cleanup erases the old retiring entry while the test-owned promotion completion barrier still holds the same queued admission",
       "test": "TestInboundAdmissionCurrentCommittedRetirementSurvivesOldFinishFirst",
-      "assertion": "old cleanup erased exact terminal authority or caused the retained successor to fail",
+      "assertion": "completed old cleanup erased exact retirement authority: error=%v successor=%t",
       "state": "recovery",
       "identity_keys": [
         "pairId",
@@ -2600,7 +2931,7 @@
       "no_mock": true
     },
     {
-      "command": "cd networking && test -f \"${DSHKER_SERVER_BINARY:?explicit verified coordinator required}\" && test -f \"${DSHKER_TEST_HARNESS_ROOT:?explicit built Harness required}/apps/cli/lib/bin.js\" && go test -json -race -count=1 -timeout=8m ./integration -run '^TestTwoPeerProcess(ConnectsInBothDirectionsAtOnce|ReconnectKeepsTheReverseDirection)$|^TestManagersAlternateOfflineAndRecover$|^TestManagerRepeatedReconnectKeepsOneAddress$|^TestManagerNetworkRevocationRealDSH$|^TestManagersSelectedAccount|^TestManagerRealDSH$|^TestHostsRealDSHSameNAT' > ../.run/open-workbench-recovery/manager-integration.jsonl",
+      "command": "cd networking && test -f \"${DSHKER_SERVER_BINARY:?explicit verified coordinator required}\" && test -f \"${DSHKER_TEST_HARNESS_ROOT:?explicit built Harness required}/apps/cli/lib/bin.js\" && go test -json -race -count=1 -timeout=8m ./integration -run '^TestTwoPeerProcess(ConnectsInBothDirectionsAtOnce|ReconnectKeepsTheReverseDirection)$|^TestManagersAlternateOfflineAndRecover$|^TestManagerRepeatedReconnectKeepsOneAddress$|^TestManagerNetworkRevocationRealDSH$|^TestManagersSelectedAccount|^TestManagerRealDSH$|^TestHostsSameNATColdRestoreDirectoryAndCandidatesRealDSH$' > ../.run/open-workbench-recovery/manager-integration.jsonl",
       "no_mock": true
     },
     {
@@ -2626,6 +2957,23 @@
   },
   "acceptance_status": "Final local Go validation passed all 20 packages with 1,586 named tests under the race detector and go vet, with exact test-only Keychain keys absent before and after. The full desktop source operator passed all 1,868 TS tests and environment, formatting, architecture, type, service, visual-smoke, renderer/Electron build, dependency and parent-workspace gates at one unchanged source digest. D25's 93 focused candidate-admission tests and the independent review's finish-first cleanup-race fix are also preserved. Historical D24 35-second physical pause and earlier first-cause duplex/forward-stress runs remain failed and unchanged. Fresh D25 program-pause, isolated core-crash, 28,800 seconds of original bidirectional Cookie/WS/session/runtime idle plus ten automatic recovery rounds, same-SHA GitHub CI packages and installed-app/native UI validation remain distinct pending tiers. The user has no separate Mac desktop environment; native UI must be verified by the user's installation. No 8-hour or installed-app acceptance is claimed from local source gates.",
   "runtime_evidence": [
+    {
+      "artifact": ".run/open-workbench-recovery/candidate-workbench-browser-race.jsonl",
+      "scope": "Local signed-receipt and real Pion HTTP/WS focused race tests with test-only control/runtime oracles; not a no-mock production coordinator, Harness or physical-machine acceptance run."
+    },
+    {
+      "artifact": ".run/p2p-ci-recheck-20261020/optional-workbench-final-race.log",
+      "scope": "Final focused optional-workbench race regression log; physical, 8-hour idle and installed-app/native UI gates remain separate and pending."
+    },
+    {
+      "artifact": ".run/p2p-ci-recheck-20261020/optional-workbench-focused.log"
+    },
+    {
+      "artifact": ".run/p2p-ci-recheck-20261020/optional-workbench-race.log"
+    },
+    {
+      "artifact": ".run/p2p-ci-recheck-20261020/direct-bidirectional-current.log"
+    },
     {
       "artifact": ".run/open-workbench-recovery/d25-inbound-wake-green-20261020/summary.json"
     },

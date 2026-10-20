@@ -308,7 +308,7 @@ func hostColdAssertDirectory(t *testing.T, f *realCoordinator, view helper.Direc
 // This is a production Gin process plus two fresh production Host compositions,
 // with test-only isolated secret stores and two real DSH children. It is not an
 // OS credential-provider, binary-serve, Electron UI or physical-machine pass.
-func TestHostsRealDSHSameNATColdRestoreDirectoryAndCandidates(t *testing.T) {
+func TestHostsSameNATColdRestoreDirectoryAndCandidatesRealDSH(t *testing.T) {
 	// Start the required runtimes before server enrollment so their startup is
 	// not an artificial pause that drains the coordinator's startup budget.
 	var runtimes [2]string

@@ -23,6 +23,27 @@ func waitFor(t *testing.T, description string, condition func() bool) {
 	t.Fatalf("%s did not happen before the deadline", description)
 }
 
+func TestWithPathReplacesPathCaseInsensitivelyAndPreservesOtherEnvironment(t *testing.T) {
+	inherited := []string{
+		"PATH=C:\\Windows\\System32",
+		"Path=C:\\Home\\dev\\bin",
+		"HOME=C:\\Home\\dev",
+		"DSHKER_MARKER=preserve-me",
+	}
+
+	got := withPath(inherited, `C:\DSHKer\runtime\bin;C:\Home\dev\AppData\Roaming\npm`)
+
+	if len(got) != 3 {
+		t.Fatalf("environment = %q, want one PATH plus both inherited values", got)
+	}
+	if got[0] != "HOME=C:\\Home\\dev" || got[1] != "DSHKER_MARKER=preserve-me" {
+		t.Fatalf("non-PATH environment = %q", got[:2])
+	}
+	if got[2] != `PATH=C:\DSHKer\runtime\bin;C:\Home\dev\AppData\Roaming\npm` {
+		t.Fatalf("PATH override = %q", got[2])
+	}
+}
+
 // TestSupervisorOwnsTheChildEndToEnd drives the whole lifecycle the shell used
 // to implement: the command is built and spawned, the child announces its own
 // loopback URL, its output reaches the log and the console, and a stop leaves no

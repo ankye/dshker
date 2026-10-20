@@ -30,9 +30,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/ankye/dshker/networking/internal/controlplane"
 	"github.com/ankye/dshker/networking/internal/protocol"
 )
 
@@ -52,9 +54,18 @@ const (
 
 type accountCoordinator struct {
 	server *httptest.Server
+	mu     sync.Mutex
 	// seen records each path the CLI actually reached, which is how these tests
 	// prove the command dispatched rather than refusing locally.
-	seen map[string]int
+	seen         map[string]int
+	session      controlplane.UserSession
+	currentReads []accountCurrentRead
+}
+
+type accountCurrentRead struct {
+	method        string
+	authorization string
+	user          controlplane.User
 }
 
 func newAccountCoordinator(t *testing.T) *accountCoordinator {
@@ -149,11 +160,26 @@ func newAccountCoordinator(t *testing.T) *accountCoordinator {
 			writer.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		writeAccountJSON(writer, map[string]any{
-			"user":      map[string]any{"userId": testUserID, "username": body.Username},
-			"token":     strings.Repeat("a", 64),
-			"expiresAt": time.Now().Add(time.Hour).Unix(),
+		coordinator.session = controlplane.UserSession{
+			User:      controlplane.User{UserID: testUserID, Username: body.Username},
+			Token:     strings.Repeat("a", 64),
+			ExpiresAt: time.Now().Add(time.Hour).Unix(),
+		}
+		writeAccountJSON(writer, coordinator.session)
+	})
+	handler.HandleFunc("/v1/user", func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			writer.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		if coordinator.session.Token == "" || request.Header.Get("Authorization") != "Bearer "+coordinator.session.Token {
+			writer.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		coordinator.currentReads = append(coordinator.currentReads, accountCurrentRead{
+			method: request.Method, authorization: request.Header.Get("Authorization"), user: coordinator.session.User,
 		})
+		writeAccountJSON(writer, coordinator.session.User)
 	})
 	handler.HandleFunc("/v1/network/join", func(writer http.ResponseWriter, request *http.Request) {
 		coordinator.seen["join"]++
@@ -163,9 +189,38 @@ func newAccountCoordinator(t *testing.T) *accountCoordinator {
 			"networkId": testNetworkID,
 		})
 	})
-	coordinator.server = httptest.NewTLSServer(handler)
+	coordinator.server = httptest.NewTLSServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		coordinator.mu.Lock()
+		defer coordinator.mu.Unlock()
+		handler.ServeHTTP(writer, request)
+	}))
 	t.Cleanup(coordinator.server.Close)
 	return coordinator
+}
+
+func (coordinator *accountCoordinator) count(path string) int {
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	return coordinator.seen[path]
+}
+
+func (coordinator *accountCoordinator) assertConfirmedSession(t *testing.T, output string, reads int) {
+	t.Helper()
+	coordinator.mu.Lock()
+	defer coordinator.mu.Unlock()
+	var session controlplane.UserSession
+	must(t, json.Unmarshal([]byte(output), &session))
+	if session != coordinator.session || session.User != (controlplane.User{UserID: testUserID, Username: "operator@example.com"}) || session.ExpiresAt <= time.Now().Unix() {
+		t.Fatal("the CLI did not return the issued session for the selected account")
+	}
+	if len(coordinator.currentReads) != reads {
+		t.Fatalf("login confirmed the current account %d times, want %d", len(coordinator.currentReads), reads)
+	}
+	for _, read := range coordinator.currentReads {
+		if read.method != http.MethodGet || read.authorization != "Bearer "+session.Token || read.user != session.User {
+			t.Fatal("current-account read did not confirm the issued bearer and exact user")
+		}
+	}
 }
 
 // origin is the address the core was configured with. The identity answer has to
@@ -266,19 +321,17 @@ func TestHeadlessCLIRegistersLogsInAndJoins(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("user.register: %s", stderr)
 	}
-	if !strings.Contains(stdout, "operator@example.com") {
-		t.Fatalf("user.register answered %s", stdout)
-	}
-	if coordinator.seen["register"] != 1 {
-		t.Fatalf("the coordinator saw %d register calls, want 1", coordinator.seen["register"])
+	coordinator.assertConfirmedSession(t, stdout, 1)
+	if coordinator.count("register") != 1 {
+		t.Fatalf("the coordinator saw %d register calls, want 1", coordinator.count("register"))
 	}
 	// Registration is two coordinator operations, not one: /v1/register creates the
 	// account and answers with the user only, so the core signs in with the same
 	// credentials to hand back a usable session. Asserting it here keeps that from
 	// being mistaken for a duplicate call later.
-	if coordinator.seen["login"] != 1 {
+	if coordinator.count("login") != 1 {
 		t.Fatalf("register performed %d logins, want the one that yields a session",
-			coordinator.seen["login"])
+			coordinator.count("login"))
 	}
 
 	// login: a separate operation, and the one that yields a usable session.
@@ -288,12 +341,10 @@ func TestHeadlessCLIRegistersLogsInAndJoins(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("user.login: %s", stderr)
 	}
-	if !strings.Contains(stdout, testUserID) {
-		t.Fatalf("user.login answered %s", stdout)
-	}
+	coordinator.assertConfirmedSession(t, stdout, 2)
 	// The second login: register's own sign-in above was the first.
-	if coordinator.seen["login"] != 2 {
-		t.Fatalf("the coordinator saw %d login calls, want 2", coordinator.seen["login"])
+	if coordinator.count("login") != 2 {
+		t.Fatalf("the coordinator saw %d login calls, want 2", coordinator.count("login"))
 	}
 
 	// A rejected credential reaches the terminal as a refusal, not a success with an
