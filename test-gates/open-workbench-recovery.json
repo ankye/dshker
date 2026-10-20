@@ -137,10 +137,12 @@
     "src/app/shell/components/RuntimeTabStrip.vue",
     "src/app/shell/components/RuntimeTabAddMenu.vue",
     "tools/visual-smoke.mjs",
+    "tools/headless-core-smoke.mjs",
     "tools/workbench-recovery-live.mjs",
     "tools/workbench-recovery-identity.mjs"
   ],
   "test_files": [
+    "tools/headless-core-smoke.test.mjs",
     "electron/main/p2p/auto-connect.test.ts",
     "electron/main/p2p/management-maintenance.test.ts",
     "networking/internal/helper/autoconnect_maintenance_test.go",
@@ -478,6 +480,16 @@
     }
   ],
   "field_bindings": [
+    {
+      "production_file": "tools/headless-core-smoke.mjs",
+      "field": "packaged core shutdown requires authenticated attach and handoff acknowledgement",
+      "source": "requestServingShutdown uses the exact smoke core's private endpoint and requires attach then handoff on the same authenticated socket before cleanup.",
+      "test": "attaches and hands off on the same authenticated connection",
+      "assertion": "expect(methods).toEqual(['core.desktop_attach', 'core.desktop_handoff'])",
+      "state": "success",
+      "identity_keys": ["core.json", "secret", "socket", "method", "frame.id"],
+      "missing_semantics": "An invalid acknowledgement fails and preserves scratch state for diagnosis instead of force-killing the serving core or deleting live owner resources. This focused protocol test is not the cross-platform package run."
+    },
     {
       "production_file": "electron/main/p2p/tests/management-fixture.ts",
       "field": "test-only core dispatcher preserves terminal scopes through actual shell callbacks",
