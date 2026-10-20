@@ -137,6 +137,9 @@ type session struct {
 	predecessorWindow       uint64
 	predecessorWasSuspended bool
 	commitDispatched        bool
+	graceOwner              *candidateGraceOwner
+	committedObserved       chan struct{}
+	committedOnce           sync.Once
 	promoted                bool
 	remoteReplaced          bool
 	scopeRetired            bool
@@ -152,7 +155,7 @@ type session struct {
 
 func newSession(parent context.Context) *session {
 	ctx, cancel := context.WithCancel(parent)
-	return &session{ctx: ctx, cancel: cancel, ready: make(chan struct{}), done: make(chan struct{}), changed: make(chan struct{}, 1), cancelRequested: make(chan struct{}), signalInbox: make(chan protocol.Signal, 1)}
+	return &session{ctx: ctx, cancel: cancel, ready: make(chan struct{}), done: make(chan struct{}), changed: make(chan struct{}, 1), cancelRequested: make(chan struct{}), committedObserved: make(chan struct{}), signalInbox: make(chan protocol.Signal, 1)}
 }
 
 func New(ctx context.Context, client *controlplane.Client, config Config, pins []controlplane.PairIdentity, owner runtimebridge.RuntimeOwner, emit func(State)) (*Manager, error) {

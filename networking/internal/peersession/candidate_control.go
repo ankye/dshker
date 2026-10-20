@@ -152,7 +152,14 @@ func (manager *Manager) validateCandidateState(connection *session, state protoc
 	if ticket == nil {
 		return errors.New("p2p.candidate_scope_mismatch")
 	}
-	return manager.validateCandidateReceipt(*ticket, state)
+	if err := manager.validateCandidateReceipt(*ticket, state); err != nil {
+		return err
+	}
+	if state.Decision.Status == "committed" && state.FromReady && state.ToReady &&
+		state.CurrentActiveAttemptID == ticket.Lease.AttemptID && state.CurrentActiveGeneration == ticket.Lease.Generation {
+		connection.committedOnce.Do(func() { close(connection.committedObserved) })
+	}
+	return nil
 }
 
 func (manager *Manager) validateCandidateReceipt(ticket protocol.CandidateTicket, state protocol.CandidateState) error {

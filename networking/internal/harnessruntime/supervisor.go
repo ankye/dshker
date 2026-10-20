@@ -211,6 +211,8 @@ func openLaunchLog(path string) (*os.File, error) {
 }
 
 func (active *record) closeLog() {
+	active.mutex.Lock()
+	defer active.mutex.Unlock()
 	if active.log != nil {
 		_ = active.log.Close()
 		active.log = nil
@@ -244,6 +246,7 @@ func (active *record) observe(supervisor *Supervisor, stream string, reader io.R
 			active.consume(supervisor, stream, string(buffer[:read]))
 		}
 		if err != nil {
+			active.observeStreamEnd(supervisor, stream, err)
 			return
 		}
 	}

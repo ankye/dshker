@@ -4,6 +4,8 @@
 
 ### 简体中文 (zh-CN)
 
+- **短暂断线不抢先替换原连接。** 两端在原连接的恢复期内保留当前网页通道；原连接恢复便取消未提交的替换握手。保留已提交决定、设备重启和工作台升级各自的明确交接规则，不延长断线或恢复时限。
+- **启动日志区分管道结束和进程退出。** 记录输出流的 EOF、关闭或读取失败以及该子进程的退出回执；不把零输出误判为进程未执行，也不记录读取错误里的路径或凭据。修复日志关闭与输出写入之间的并发访问。
 - **目录刷新和唤醒不再重试无关的拒绝连接。** 普通刷新保留每台电脑的终态原因；只有该连接明确重新获得授权后，才清理它自己的拒绝记录，避免跨服务清空状态和额外拨号。
 - **工作台暂不可用时保留真实设备连接。** 新握手明确返回工作台拒绝后，设备通道保持已连接并保留原错误，不误报网页就绪；旧入口停止转发失效运行时，后续恢复仍需通过 HTTP 与 WebSocket 验证，不重启远端 DSH。
 - **连接恢复不再被旧握手的清理占住。** 已确认结束的旧握手保留自身清理责任，但不再吞掉下一次握手；旧状态尚未确认时，先核实服务器的原票据结果再交接。日志补充握手请求、拒绝、收发和槽位交接原因，不记录令牌、签名或网页内容，不延长恢复时限。
@@ -21,6 +23,8 @@
 
 ### English (en-US)
 
+- **Keep the original connection's recovery window.** Both endpoints retain its browser channel while recovery is still possible; recovery cancels an uncommitted replacement. Committed decisions, remote-core replacement and workbench upgrades keep their explicit handoff rules without extending disconnect or recovery deadlines.
+- **Distinguish output-stream termination from process exit.** Startup logs record EOF, closed or failed readers separately from that exact child's Wait receipt, without copying paths or credentials from read errors. Log closure and output writes now share one synchronized owner.
 - **Keep terminal refusals scoped across refresh and wake.** Ordinary catalog updates and system resume no longer clear unrelated connection refusals. Only that exact connection's fresh durable authorization resets its refusal, preventing cross-service redials.
 - **Keep a connected device when its workbench is temporarily unavailable.** An explicit workbench refusal preserves the real device transport and its error without claiming browser readiness. Stale runtime forwarding is detached; later recovery still requires HTTP and WebSocket verification and does not restart remote DSH.
 - **Keep old handshake cleanup from swallowing a replacement connection.** A confirmed ended handshake retains its cleanup owner without blocking its successor. Unknown old authority is checked against the server's exact ticket before handoff. Bounded diagnostics record admission, rejection, signalling and ownership transitions without tokens, signatures or page content; recovery deadlines are unchanged.

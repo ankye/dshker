@@ -54,8 +54,24 @@
 - [ ] 4.22 Release/QA/reviewer: let packaged smoke exclusively own its exit after success evidence or failure diagnostics finish, even when the probe window is the last Windows window; refuse diagnostic-write failure with exit 1. Prove normal close/tray behavior unchanged and confirm the final Windows ARM64 package in CI without weakening renderer checks.
 - [x] 4.23 Client/root/reviewer: remove D27's legacy global terminal-reset shell operation and ordinary catalog/resume callers; preserve transient RetryNow and exact epoch-fenced durable Reauthorize only. Prove real shell/core admission, service A/B isolation, late old-scope results and unchanged retry budgets before freezing physical candidates. Focused races and 1,893 desktop source tests passed; independent review closed the historical Entry fixture race without relaxing ready admission. Physical acceptance is still separate under 4.19.
 - [x] 4.24 QA/root/reviewer: after sealing the D27 physical aggregate FAIL, correct the Windows test receipt reader's first-open sharing contract and observe exact orphan-runner early exit. Prove real DELETE-handle red/green, strict invalid receipt refusal and immediate named-stage failure without retries, budget changes or production edits; independently review before freezing and repeating the unchanged native preflights plus short/long/flap profiles. Native Windows 22 helper cases and Mac 32 pure cases passed; cleanup, compilation and independent review passed. These complete the helper repair only: historical 454ms/828ms subset passes remain distinct from the failed aggregate and still-pending fresh physical/crash/8h/native acceptance.
+- [x] 4.25 Client/root/reviewer: implement D29's exact predecessor grace gate before either endpoint publishes Ready, keeping the existing early observer and renew owner alive; close the coalesced-recovery notification race, recheck before commit dispatch and retain durable committed authority. The complete peersession/peer/runtimebridge race suites and vet passed after independent review closed incomplete-committed-broadcast and Stage-to-reservation recovery races. Actual local Pion HTTP and the original WS survive cancellation; grace, lease and business deadlines remain unchanged. This completes deterministic/source repair only: physical 25s, short-profile zero-attempt/resume, crash, idle and native acceptance remain separate under 4.19.
+- [ ] 4.26 Server/client/QA: implement D30's bounded shutdown-stage and bootstrap/stream termination diagnostics, consume exact stop errors and fail before post-stop database mutation. Reproduce and repair the actual shutdown owner under the existing 5s fixture guard in the independent server planning scope; prove races, source boundaries and current CI before deployment or another physical freeze. Do not label the startup, ICE and stop failures as one cause or mark source diagnostics as physical acceptance.
 
-Current verification: D24 source 5cb2d390 passed the fresh source/TS gates (with
+Current verification: D29's complete local peer/session/bridge race suites,
+vet and independent source review pass, including exact committed admission,
+coalesced recovery and the actual Engine-to-reservation race. D30's initial and
+program failure observers, bounded stream diagnostics and platform-specific
+process-stop tests have passing focused source evidence. The fresh desktop/source
+operator passed all nine commands, including 1,893 tests with zero failed/pending
+cases and renderer/Electron source builds; the separate parent app validator
+also passed. D30's
+independent coordinator shutdown-owner repair and final joint CI remain pending.
+Neither these local tests nor the earlier
+native sign-in/reopen diagnostic prove physical pause/crash, eight-hour original
+sessions or final installed-app acceptance. D28's aggregate remains FAIL, all
+original packet/process evidence remains retained, and no release is published.
+
+Historical D24 verification: source 5cb2d390 passed the fresh source/TS gates (with
 the retained prose-path validator failure and separately passing continuation).
 Its physical program profile then failed: 3-second and repeated-short pauses
 passed, but the 35-second pause exceeded the unchanged 25-second bidirectional

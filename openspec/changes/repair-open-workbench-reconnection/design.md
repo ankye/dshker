@@ -1112,6 +1112,78 @@ repeat both native safety preflights and all three business profiles. A pass
 from the historical short/long cases cannot approve the failed aggregate or
 replace the still-pending crash, 8h and native interaction gates.
 
+### D29 — Both endpoints retain the exact predecessor's recovery window
+
+The sealed D28 flap proof shows that candidate promotion, not a browser deadline,
+detached the original WebSocket while its predecessor was still inside the
+existing ICE grace window. The underlying reason that the old ICE stream stopped
+responding is not yet proven: packet captures show requests reaching the Mac
+interface while the opposite direction continues exchanging STUN. Interface
+receipt is not proof of socket delivery or STUN authentication.
+
+For a grace-recovery candidate, both endpoints must wait before their first
+Ready dispatch, after establishment/probe but before stopping the existing early
+decision observer. That observer and the existing renewal worker retain their
+ownership while waiting. Match the exact predecessor pointer and signed previous
+attempt/generation, directed user/network/device scope, current candidate slot,
+account, pin and registration/core fences. A mismatch is a typed refusal, never
+permission to substitute a predecessor or bypass the gate.
+
+Only an actual predecessor context/transport termination releases this gate.
+Current Ready recovery cancels the still-uncommitted candidate instead. A cleared
+graceTimer or a non-ready snapshot alone is not terminal proof. Keep the existing
+single transport observer and use closed cancellation/termination broadcasts;
+do not add a competing consumer to Transport.Changes or session.changed. The
+observer must publish exact-candidate cancellation even when a coalesced recovery
+arrives before the public projection ever became suspended. Recheck ownership at
+wake and immediately before source commit dispatch. A dispatched or verified
+committed decision retains the existing durable-resolution authority and cannot
+be rolled back.
+
+Do not gate an explicit remote-core replacement or a transport-only/refused
+primary's workbench upgrade: those are not recovery of an existing usable
+workbench. Keep the original 20s grace, 25s business criterion, signed ticket,
+120s preparation deadline and capped lease renewals. Expired/cancelled candidates
+fail under their original authority; waiting does not extend or recreate them.
+Prove both-end Ready/Commit exclusion, original mux/WS survival, coalesced wake,
+recovery/expiry/dispatch races, stale scope and the two excluded paths before a
+new physical source freeze. The failed D28 aggregate remains failed.
+
+### D30 — Preserve shutdown and bootstrap first causes
+
+Quality run 39403408877 failed while stopping the real coordinator during the
+certificate lifecycle test. The fixture's whole-process 5s guard starts before
+the server's separate 5s HTTP drain, followed by additional unjoined cleanup.
+This is a confirmed budget incompatibility, not proof of the actual stalled
+phase. Neither generic WebSocket presence nor infrastructure flakiness explains
+the failure without a phase receipt.
+
+Add bounded credential-free lifecycle receipts for stop request, signal result,
+HTTP drain, control/hub/listener shutdown, process Wait/copier completion and
+forced cleanup. Preserve signal/Wait errors and stop the test at a failed graceful
+boundary instead of mutating the certificate database and restarting afterward.
+Retain the unchanged 5s fixture guard. In the independent server's existing
+planning owner, first reproduce incomplete HTTP-header and already-closing socket
+boundaries with deterministic barriers; fix the proven owner rather than merely
+changing a timeout constant or widening the test guard. Any production server
+change requires its own race suite, independent review, explicit CI pin and
+verified deployment; no live restart is authorized by a diagnostic alone.
+
+D28 also failed before fault injection in two independent phases: a Windows DSH
+child stayed starting with zero observed output, and an initial ICE connection
+never selected a path. Preserve those as separate failures. Add bounded stream
+termination/launch-stage facts and initial-barrier scoped diagnostics without raw
+credentials, arbitrary stderr, process adoption, retries or deadline extension.
+An EOF receipt cannot establish why Node did not publish its URL, and a network
+interface capture cannot establish delivery to Pion's ICE worker.
+
+Program-pause exits must also retain a bounded stack before owned process
+cleanup, including an unexpected original-WS EOF during injection. Observe only
+after the original assertion has failed, using an independent at-most-10s window
+and the exact last-observed directed scope, or explicit unknown. Do not repeat the
+existing 45s deadline observer, consume another owner's event stream, or count
+diagnostic time as acceptance. Unknown attempt scope cannot dispatch Entry.
+
 ## Risks / Trade-offs
 
 - Runtime refusal could cause repeated workbench requests → keep existing backoff

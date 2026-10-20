@@ -49,6 +49,7 @@
     "networking/internal/peer/transport_lifecycle.go",
     "networking/internal/peersession/candidate_connect.go",
     "networking/internal/peersession/candidate_control.go",
+    "networking/internal/peersession/candidate_grace.go",
     "networking/internal/peersession/candidate_control_diagnostics.go",
     "networking/internal/peersession/candidate_inbound_admission.go",
     "networking/internal/peersession/candidate_decision.go",
@@ -93,6 +94,8 @@
     "networking/internal/core/runtimebinding.go",
     "networking/internal/core/runtime_route.go",
     "networking/internal/harnessruntime/authority.go",
+    "networking/internal/harnessruntime/supervisor.go",
+    "networking/internal/harnessruntime/supervisor_stream_diagnostics.go",
     "networking/internal/helper/autoconnect.go",
     "networking/internal/helper/certificates.go",
     "networking/internal/helper/credentials.go",
@@ -161,6 +164,7 @@
     "electron/main/managed/launcher-console-activity.test.ts",
     "networking/internal/harnessruntime/supervisor_test.go",
     "networking/internal/harnessruntime/supervisor_unix_test.go",
+    "networking/internal/harnessruntime/supervisor_stream_diagnostics_test.go",
     "networking/internal/peersession/candidate_workbench_test.go",
     "networking/internal/peersession/candidate_workbench_browser_test.go",
     "networking/integration/cli_account_test.go",
@@ -174,6 +178,11 @@
     "networking/internal/helper/account_auth_expiry_test.go",
     "networking/internal/helper/account_auth_transport_test.go",
     "networking/integration/process_fixture_test.go",
+    "networking/integration/process_stop_diagnostics_test.go",
+    "networking/integration/process_stop_diagnostics_unix_test.go",
+    "networking/integration/process_stop_diagnostics_windows_test.go",
+    "networking/integration/workbench_recovery_initial_diagnostic_test.go",
+    "networking/integration/workbench_recovery_program_diagnostic_test.go",
     "networking/integration/server_admission_diagnostics_test.go",
     "networking/internal/helper/account_auth_recovery_test.go",
     "networking/internal/peersession/account_recovery_test.go",
@@ -256,6 +265,11 @@
     "networking/internal/peersession/candidate_inbound_publication_test.go",
     "networking/internal/peersession/candidate_inbound_committed_startup_test.go",
     "networking/internal/peersession/candidate_control_diagnostics_test.go",
+    "networking/internal/peersession/candidate_grace_test.go",
+    "networking/internal/peersession/candidate_grace_scope_test.go",
+    "networking/internal/peersession/candidate_grace_wire_test.go",
+    "networking/internal/peersession/candidate_grace_engine_test.go",
+    "networking/internal/peersession/candidate_grace_runtime_test.go",
     "networking/internal/peersession/direction_test.go",
     "networking/internal/peersession/lifecycle_test.go",
     "networking/internal/peersession/manager_test.go",
@@ -2505,6 +2519,44 @@
       "missing_semantics": "No proxy-to-local-supervisor substitution; each operation preserves the authority refusal."
     },
     {
+      "production_file": "networking/internal/harnessruntime/supervisor_stream_diagnostics.go",
+      "field": "exact child stream termination does not imply process exit",
+      "source": "D30 bounded stdout/stderr EOF, closed and read-failed receipt without raw errors",
+      "test": "TestSupervisorStreamTerminationRetainsBoundedReadCause",
+      "assertion": "diagnostic changed child authority or manufactured output",
+      "state": "partial",
+      "identity_keys": ["launch", "pid", "stream", "reason", "childWait"],
+      "missing_semantics": "Zero observed bytes is not proof of no child execution; a pending Wait is not an OS-liveness assertion."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_grace.go",
+      "field": "both endpoints retain the exact predecessor before Ready",
+      "source": "D29 signed previous-owner gate while the early decision observer and lease owner remain alive",
+      "test": "TestCandidateGraceBothEndpointsPublishReadyOnlyAfterTerminal",
+      "assertion": "waiting endpoint published readiness",
+      "state": "partial",
+      "identity_keys": [
+        "previous attempt",
+        "generation",
+        "directed scope",
+        "slot",
+        "registration",
+        "core",
+        "pin"
+      ],
+      "missing_semantics": "Original Ready recovery cancels the uncommitted candidate; only terminal old authority releases the gate. Committed decisions, remote-core replacement and transport-only upgrades retain their distinct authority."
+    },
+    {
+      "production_file": "networking/internal/harnessruntime/supervisor.go",
+      "field": "launch log close shares the stream writer's exact mutex",
+      "source": "D30 deterministic reader EOF versus closeLog race",
+      "test": "TestSupervisorStreamTerminationAndLogCloseHaveOneFileOwner",
+      "assertion": "EOF receipts lost while the exact launch log closed",
+      "state": "recovery",
+      "identity_keys": ["launch", "record mutex", "log file", "stream"],
+      "missing_semantics": "The race repair does not explain the Windows startup or ICE stall and cannot count as physical acceptance."
+    },
+    {
       "production_file": "networking/internal/localrpc/serve.go",
       "field": "authentication acknowledgement follows startup cancellation",
       "source": "caller context bound to the complete authentication exchange",
@@ -3017,6 +3069,18 @@
   ],
   "unit_commands": [
     {
+      "command": "cd networking && go test -json -race -count=1 ./internal/peersession ./internal/peer ./internal/runtimebridge",
+      "coverage_limit": "D29 source owner, real local Pion HTTP/WS and controlled control-plane regressions only; not physical cross-machine, crash, native UI or eight-hour acceptance."
+    },
+    {
+      "command": "cd networking && go test -json -race -count=1 -tags live ./integration -run '^TestRecoveryInitial(Diagnostic|MacSnapshot)|^TestRecoveryProgramFailure|^TestProcessStop(Diagnostics|Readback|Timeout)'",
+      "coverage_limit": "D30 deterministic diagnostic scheduling, scope/redaction and exact child stop guard only; excludes Mac Keychain, real coordinator, physical recovery and idle acceptance."
+    },
+    {
+      "command": "cd networking && go test -json -race -count=1 ./internal/harnessruntime",
+      "coverage_limit": "D30 source-level supervisor/stream and child-process ownership regressions only; no installed native UI, physical peer or eight-hour evidence."
+    },
+    {
       "command": "cd networking && go test -tags live -json -race -count=1 -run '^TestWorkbenchRecoveryPauseReceiptWait' ./integration",
       "coverage_limit": "Pure exact-child/strict-receipt admission only. The Windows DELETE-handle and native-open-error cases require the separately recorded native Windows test executable; neither proves a business pause or eight-hour idle."
     },
@@ -3079,8 +3143,32 @@
     "contract": "test-gates/remote-tab-closing-interaction.json",
     "ledger": ".run/remote-tab-closing/interaction.jsonl"
   },
-  "acceptance_status": "D27 source gates passed 1,893 TS tests, scoped Go races, builds and independent review. At f70ea2e, Quality 39398875636 and Package 39398875616 passed all jobs/targets. The frozen 904ea974 physical aggregate nevertheless FAILED: 3s/35s business recovery passed in 454ms/828ms, but flap was never injected because its native safety preflight hit a receipt-sharing failure. Raw proof, captures and exact-owned cleanup are sealed; the 35s old WebSocket was replaced, not continuously alive. D28 changes only test helpers: Windows first-open sharing and exact child early-exit observation, with real DELETE-handle red/green, 22 Windows helper and 32 Mac pure cases, cleanup and independent review passed. Fresh physical pause/crash and final-SHA CI remain required. A diagnostic 210d49d native artifact retained the user's newly established login/device/network through normal quit/reopen, but does not explain the prior missing credential or satisfy final-candidate interaction/ledger acceptance. All historical failures remain failed. Original bidirectional Cookie/WS/session/runtime zero-business idle for 28,800 seconds plus ten recovery rounds, default test-integrity verify and stable release remain pending. No overnight or final native UI acceptance is claimed.",
+  "acceptance_status": "Pre-physical-freeze source report: D29 local peer/session/bridge race suites passed 410 named cases; vet and independent review closed exact committed-receipt and Engine-to-reservation races. Local production candidate flow retains the original Pion HTTP/WS; physical 25s and short-profile zero attempts/resumes are not proved. D30 stream/bootstrap/program/child-stop source checks passed, and a freshly compiled four-source-matching Windows helper passed three native cases once with unchanged inputs; its earlier nonmatching artifact remains nonfinal. These are not full-product or physical acceptance. Desktop gates passed 1,893 tests, all nine source commands and the separate parent validator. D28's frozen bac6c498 physical aggregate remains FAIL: startup and initial ICE failed before injection in two cases, and flap reached five pauses but promotion ended its original WS. Raw/capture/cleanup receipts are sealed. D29 fixes premature handoff, not the unproven reason packets reached the Mac interface without a corresponding ICE response. At this report the independent server shutdown-owner repair and matching CI remain pending. Earlier f70ea2e CI and 210d49d native login/reopen evidence are historical. Final acceptance must come from the real-command artifacts and native ledger, not this pre-freeze narrative: original 28,800-second duplex Cookie/WS/session/runtime idle, ten automatic recovery rounds, current physical pause/crash, native interaction and default verify have not passed. Every historical failed aggregate stays failed; no stable release is claimed.",
   "runtime_evidence": [
+    {
+      "artifact": ".run/d29-peer-final-20261020/race.jsonl",
+      "scope": "D29 complete local peer/session/bridge races: 410 named passes with zero failure/skip; real local Pion and controlled oracles are not physical or native UI acceptance."
+    },
+    {
+      "artifact": ".run/d30-stop-platform-20261020/final-windows-native-69703f82fa43/summary.json",
+      "scope": "Fresh binary matches the four stop-helper source files before/after compile and execution; three actual native Windows cases pass once. No credential store, core, DSH or physical recovery is exercised."
+    },
+    {
+      "artifact": ".run/d30-unit-final-20261020/supervisor.jsonl",
+      "scope": "D30 local supervisor/stream race regressions: 56 named passes, no failure/skip. Not physical peer, native UI or idle acceptance."
+    },
+    {
+      "artifact": ".run/d30-unit-final-20261020/diagnostic-pure.jsonl",
+      "scope": "D30 deterministic initial/program diagnostics and Unix exact child-stop regressions: 24 named passes, no failure/skip; no original credentials or physical process fault."
+    },
+    {
+      "artifact": ".run/d29-source-final-20261020/vitest.json",
+      "scope": "Desktop source suite: 1,893 passes and zero failed/pending. Separate source build logs and parent validation do not prove physical/native interaction."
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d28-program-pause-20261020/physical-verification.json",
+      "scope": "Preserved aggregate FAIL at bac6c498: short startup, long initial ICE and flap original-WS promotion failures remain distinct. Native safety preflights passed, not business acceptance."
+    },
     {
       "artifact": ".run/open-workbench-recovery/d28-helper/windows-receipt-helper-native.log",
       "scope": "Native Windows receipt/DELETE-handle and exact child completion regressions only; no core business pause, crash, original credentials or eight-hour acceptance."

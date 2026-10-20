@@ -655,3 +655,31 @@ credential-free typed admission decisions with exact scope and owner identity.
   changes while the exact old-ticket read is pending
 - **THEN** the late result cannot publish a successor into the replacement scope
 - **AND** shutdown joins the owned worker without waiting inside the receive loop
+
+### Requirement: Grace recovery cannot prematurely retire the original workbench
+
+For an exact suspended predecessor with an existing usable workbench, each
+endpoint SHALL retain that predecessor's original recovery authority before
+publishing candidate Ready. The candidate SHALL wait for actual predecessor
+termination or cancel itself if the original transport recovers. Scope mismatch
+and expiry SHALL fail explicitly. Waiting SHALL NOT extend the original grace,
+ticket, lease or business deadline, consume another owner's event channel, or
+roll back a dispatched or verified committed coordinator decision.
+
+#### Scenario: A replacement becomes ready during the original grace
+
+- **WHEN** either endpoint has staged a replacement but its exact original
+  workbench transport has not terminated and remains in recovery
+- **THEN** that endpoint publishes no candidate Ready or Commit and preserves
+  its original mux and browser connections
+- **AND** recovery cancels the uncommitted replacement even if disconnected and
+  connected notifications were coalesced before the public projection changed
+
+#### Scenario: Original authority ends before recovery
+
+- **WHEN** the exact predecessor terminates under its unchanged grace or lease
+  and the candidate's original authorization and scope remain valid
+- **THEN** candidate readiness may proceed through the existing both-ready CAS
+- **AND** explicit remote-core replacement and transport-only workbench upgrade
+  keep their distinct existing behavior rather than waiting for an unrelated
+  healthy transport to terminate

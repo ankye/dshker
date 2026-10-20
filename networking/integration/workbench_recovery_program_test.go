@@ -63,6 +63,16 @@ func recoveryObserveProgramPause(t *testing.T, ctx context.Context, controller *
 
 func recoveryProgramPauseCase(t *testing.T, ctx context.Context, config recoveryCrossConfig, f *realCoordinator, owned recoveryOwnedCore, events <-chan peersession.State, owner *recoveryWindowsOwner, windows *recoveryWindowsRuntime, reverseInitial *recoveryReverseStatus, browser *recoveryBrowser, workspace recoveryWorkspace, session string, stream *recoveryWS, first peersession.Connected, macPID int) {
 	t.Helper()
+	latest := first.State
+	observation := recoveryProgramFailureObserver{}
+	defer func() {
+		observation.capture(t.Failed(), func(diagnostic context.Context) {
+			scope := recoveryProgramFailureScope(f.authority.ServiceID, first.State.PairID, latest)
+			t.Logf("program-pause-first-failure-observation acceptance=false maxExtra=10s scopeKnown=%t pair=%s attempt=%s generation=%d", recoveryDiagnosticExact(scope), scope.PairID, scope.AttemptID, scope.Generation)
+			recoveryCrossCollectStack(t, diagnostic, config, scope)
+			recoveryCoreCurrentDiagnostic(t, diagnostic, owned.Peer, scope)
+		})
+	}()
 	plan, err := recoveryProgramCasePlan(config.NetworkFaultCase)
 	must(t, err)
 	controller := recoveryStartProgramPause(t, ctx, owned.Binary, owned.Process.cmd.Process.Pid, os.Getpid())
@@ -77,7 +87,6 @@ func recoveryProgramPauseCase(t *testing.T, ctx context.Context, config recovery
 		stream.mu.Unlock()
 	}
 	t.Logf("program-pause-begin case=%s durationMilliseconds=%d repeats=%d clearMilliseconds=%d corePid=%d parentPid=%d forwardAttempt=%s reverseAttempt=%s forwardWS=%s reverseWS=%s scope=isolated-core-program windowsOwner=production-serve macOwner=production-engine-composition firewallChanged=false networkChanged=false", plan.Name, plan.Duration.Milliseconds(), plan.Repeats, plan.Clear.Milliseconds(), owned.Process.cmd.Process.Pid, os.Getpid(), first.State.AttemptID, reverseInitial.State.AttemptID, stream.id, reverseInitial.WSID)
-	latest := first.State
 	var released recoveryPauseProof
 	for round := 1; round <= plan.Repeats; round++ {
 		proof, pauseErr := recoveryObserveProgramPause(t, ctx, controller, plan, stream, events, first.State, &latest)
@@ -108,6 +117,7 @@ func recoveryProgramPauseCase(t *testing.T, ctx context.Context, config recovery
 	remaining, err := recoveryProgramBudget(nowTick, released.ReleaseStartedTickMilliseconds)
 	if err != nil {
 		t.Errorf("program recovery deadline expired before readback: %v", err)
+		observation.recorded = true
 		recoveryCrossFailureDiagnostics(t, ctx, config, owned.Peer, events, first.State.PairID, latest)
 		t.FailNow()
 	}
@@ -119,6 +129,7 @@ func recoveryProgramPauseCase(t *testing.T, ctx context.Context, config recovery
 		if !deadlineReported {
 			deadlineReported = true
 			t.Errorf("program automatic recovery/readback exceeded 25s from release start; state=%s", recoveryJSON(t, latest))
+			observation.recorded = true
 			recoveryCrossFailureDiagnostics(t, ctx, config, owned.Peer, events, first.State.PairID, latest)
 		}
 	}

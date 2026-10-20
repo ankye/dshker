@@ -32,6 +32,9 @@ type candidateReadyReceipt struct {
 
 func (manager *Manager) readyCandidateReceipt(connection *session) (*candidateReadyReceipt, error) {
 	for connection.ctx.Err() == nil {
+		if err := manager.candidateGraceReady(connection); err != nil {
+			return nil, err
+		}
 		if connection.cancellationRequested() {
 			return nil, manager.resolveCandidateCancellation(connection)
 		}
@@ -197,6 +200,12 @@ func (manager *Manager) commitCandidate(connection *session) (protocol.Candidate
 	if !manager.ownsCandidateLocked(connection, true) || connection.ctx.Err() != nil || !connection.transport.LiveState().Ready {
 		manager.mu.Unlock()
 		return protocol.CandidateState{}, errors.New("p2p.connection_cancelled")
+	}
+	if !connection.commitDispatched {
+		if err := manager.candidateGraceCommitLocked(connection); err != nil {
+			manager.mu.Unlock()
+			return protocol.CandidateState{}, err
+		}
 	}
 	// Recovery may win until commit dispatch. After this point a late recovery
 	// cannot decide that the remote CAS did not happen.

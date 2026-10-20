@@ -119,6 +119,9 @@ func (manager *Manager) runCandidate(connection *session, initiator bool) {
 	if err == nil && initiator {
 		err = manager.probeCandidate(connection)
 	}
+	if err == nil {
+		err = manager.awaitCandidateGrace(connection)
+	}
 	// Only the early observer is cancelled. Its join publishes any dispatched
 	// unknown Cancel before the same-ticket main resolver takes control.
 	unknownCancel := observer.stop()
@@ -315,6 +318,12 @@ func (manager *Manager) transportChanged(connection *session) {
 	}
 	state := connectionState(connection)
 	if recovered {
+		// Coalesced disconnected/connected events can arrive before the public
+		// projection ever became suspended. Cancellation still belongs to the
+		// exact captured recovery candidate, even when no projection changes.
+		if candidate != nil && candidate.predecessor == connection && candidate.predecessorWasSuspended && (!candidate.requestWorkbench || state.RuntimeGeneration > 0) {
+			candidate.requestCancel()
+		}
 		if state.Stage != "suspended" {
 			manager.mu.Unlock()
 			return
@@ -323,9 +332,6 @@ func (manager *Manager) transportChanged(connection *session) {
 			state.Stage = "ready"
 		} else {
 			state.Stage = "connected"
-		}
-		if candidate != nil && candidate.predecessorWasSuspended && (!candidate.requestWorkbench || state.RuntimeGeneration > 0) {
-			candidate.requestCancel()
 		}
 	} else {
 		if !live.Suspended || state.Stage == "suspended" {

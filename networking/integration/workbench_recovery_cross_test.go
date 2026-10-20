@@ -76,9 +76,10 @@ type recoveryDiagnosticScope struct {
 }
 
 type recoveryCrossDiagnostic struct {
-	Scope     recoveryDiagnosticScope `json:"scope"`
-	Stack     string                  `json:"stack"`
-	Truncated bool                    `json:"truncated"`
+	Scope           recoveryDiagnosticScope       `json:"scope"`
+	MacLastObserved recoveryMacDiagnosticSnapshot `json:"macLastObserved"`
+	Stack           string                        `json:"stack"`
+	Truncated       bool                          `json:"truncated"`
 }
 
 // Mac host: writes a test-owned configuration for the Windows test process and
@@ -116,6 +117,7 @@ func TestWorkbenchRecoveryCrossHost(t *testing.T) {
 	available.Store(true)
 	reverseEvents := make(chan peersession.State, 4096)
 	var auto recoveryNetworkAutoOwner
+	var diagnosticObservation recoveryMacDiagnosticObservation
 	if phase == "network-fault" || phase == "program-pause" || phase == "core-crash" || phase == "duplex" {
 		auto = recoveryMacAutoOwner(t, ctx, f, reverseEvents)
 	}
@@ -125,6 +127,11 @@ func TestWorkbenchRecoveryCrossHost(t *testing.T) {
 		if auto != nil {
 			emit = auto.Observe
 			wake = auto.Wake
+		}
+		observedEmit := emit
+		emit = func(state peersession.State) {
+			diagnosticObservation.observe(f.config[0].Device.DeviceID, state)
+			observedEmit(state)
 		}
 		manager := recoveryRemoteObserved(t, ctx, f, runtimeURL, &available, &calls, &resumes, emit, wake)
 		if auto != nil {
@@ -184,7 +191,7 @@ func TestWorkbenchRecoveryCrossHost(t *testing.T) {
 			size := runtime.Stack(stack, true)
 			t.Logf("cross-host-diagnostic service=%s pair=%s attempt=%s generation=%d capturedAt=%s truncated=%t", scope.ServiceID, scope.PairID, scope.AttemptID, scope.Generation, time.Now().UTC().Format(time.RFC3339Nano), size == len(stack))
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(recoveryCrossDiagnostic{Scope: scope, Stack: string(stack[:size]), Truncated: size == len(stack)})
+			_ = json.NewEncoder(w).Encode(recoveryCrossDiagnostic{Scope: scope, MacLastObserved: diagnosticObservation.snapshot(f.config[0].Device.DeviceID, scope), Stack: string(stack[:size]), Truncated: size == len(stack)})
 			return
 		}
 		if r.URL.Path != "/drop" && r.URL.Path != "/resume" && r.URL.Path != "/finish" && r.URL.Path != "/deny-workbench" && r.URL.Path != "/allow-workbench" && r.URL.Path != "/stop-runtime" && r.URL.Path != "/invalidate-runtime" && r.URL.Path != "/reverse-open" && r.URL.Path != "/reverse-readback" && r.URL.Path != "/reverse-await-ready" && r.URL.Path != "/reverse-await-refused" && r.URL.Path != "/reverse-idle-begin" && r.URL.Path != "/reverse-idle-end" && r.URL.Path != "/reverse-idle-progress" && r.URL.Path != "/reverse-network-arm" && r.URL.Path != "/reverse-network-state" && r.URL.Path != "/reverse-network-readback" && r.URL.Path != "/reverse-seal" {
@@ -384,6 +391,21 @@ func TestWorkbenchRecoveryCrossClient(t *testing.T) {
 	var reverseInitial *recoveryReverseStatus
 	var owned recoveryOwnedCore
 	runtimePID := 0
+	trace := recoveryInitialTrace{phase: "initial_core_start"}
+	defer func() {
+		// Fatal from an existing setup helper uses Goexit; only an already
+		// failed test may enter this independent read-only diagnostic owner.
+		if trace.accepted || !t.Failed() {
+			return
+		}
+		scope := recoveryInitialDiagnosticScope(f.authority.ServiceID, pairID, core, owned.Initial)
+		trace.diagnose(t.Failed(), func(failure recoveryInitialFailure) {
+			t.Logf("cross-initial-failure acceptance=false sealed=true %s service=%s pair=%s attempt=%s generation=%d scopeKnown=%t diagnosticBudget=10s", failure.Error(), scope.ServiceID, scope.PairID, scope.AttemptID, scope.Generation, recoveryDiagnosticExact(scope))
+		}, func(diagnostic context.Context) {
+			recoveryCrossCollectStack(t, diagnostic, config, scope)
+			recoveryCoreCurrentDiagnostic(t, diagnostic, core, scope)
+		})
+	}()
 	if config.TestPhase == "forward-stress" {
 		owned = recoveryCoreOwned(t, f, events, func(context.Context, string, json.RawMessage) (any, error) {
 			localCalls.Add(1)
@@ -397,25 +419,36 @@ func TestWorkbenchRecoveryCrossClient(t *testing.T) {
 		core = owned.Peer
 		owner.core.Store(core)
 		owner.allowed.Store(true)
+		trace.phase = "initial_runtime_start"
 		windowsRuntime = recoveryStartWindowsRuntime(t, ctx, core, windowsInputs)
 		if config.TestPhase == "core-crash" {
 			t.Log("core-crash-scenario injectionPerformed=false stage=initial-workbench")
 		}
 	}
+	initial, cancelInitial := context.WithTimeout(ctx, 25*time.Second)
+	defer cancelInitial()
 	var openReverse func() error
 	if windowsRuntime != nil {
 		openReverse = func() error {
-			reverseAnswer := recoveryCrossControlPayload(t, ctx, config, "/reverse-open", map[string]any{"project": windowsRuntime.project})
+			reverseAnswer := recoveryCrossControlPayload(t, initial, config, "/reverse-open", map[string]any{"project": windowsRuntime.project})
 			reverseInitial = recoveryRequireReverse(t, reverseAnswer, "ready", windowsRuntime.binding.Generation)
 			runtimePID = reverseAnswer.RuntimePID
 			t.Logf("reverse-initial-readback phase=%s service=%s pair=%s attempt=%s generation=%d runtimeGeneration=%d workspace=%s session=%s originalWS=%s windowsRuntimePid=%d", config.TestPhase, f.authority.ServiceID, reverseInitial.State.PairID, reverseInitial.State.AttemptID, reverseInitial.State.Generation, reverseInitial.State.RuntimeGeneration, reverseInitial.WorkspaceID, reverseInitial.SessionID, reverseInitial.WSID, windowsRuntime.launch.PID)
 			return nil
 		}
 	}
-	initial, cancelInitial := context.WithTimeout(ctx, 25*time.Second)
-	first, err := recoveryInitializeCross(initial, core, core.Call, f, owned.Initial, config.TestPhase, openReverse)
+	trace.phase = "initial_transport"
+	first, err := recoveryInitializeCross(initial, core, trace.call(core.Call), f, owned.Initial, config.TestPhase, trace.reverse(openReverse))
+	if err == nil {
+		err = initial.Err()
+	}
 	cancelInitial()
-	must(t, err)
+	if err != nil {
+		trace.err = err
+		t.Error(recoveryInitialFailure{Phase: trace.phase, cause: err})
+		return
+	}
+	trace.accepted = true
 	if config.TestPhase == "core-crash" {
 		recoveryCoreCrashCase(t, ctx, config, f, owned, events, owner, windowsRuntime, reverseInitial, recoveryWindowsRuntimeInputs(t), runtimePID)
 		return
@@ -679,31 +712,44 @@ func recoveryCrossCollectStack(t *testing.T, ctx context.Context, config recover
 		return
 	}
 	var answer recoveryCrossDiagnostic
-	if json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&answer) != nil || answer.Scope != scope || answer.Stack == "" {
+	if json.NewDecoder(io.LimitReader(response.Body, 2<<20)).Decode(&answer) != nil || answer.Scope != scope || answer.Stack == "" || !answer.MacLastObserved.admitted(config.Dialer.Device.DeviceID, scope) {
 		t.Log("cross-diagnostic-stack invalid scoped response")
 		return
 	}
-	t.Logf("cross-diagnostic-stack service=%s pair=%s attempt=%s generation=%d truncated=%t\n%s", scope.ServiceID, scope.PairID, scope.AttemptID, scope.Generation, answer.Truncated, answer.Stack)
+	t.Logf("cross-diagnostic-stack service=%s pair=%s attempt=%s generation=%d macLastObserved=%s truncated=%t\n%s", scope.ServiceID, scope.PairID, scope.AttemptID, scope.Generation, recoveryJSON(t, answer.MacLastObserved), answer.Truncated, answer.Stack)
 }
 
 func recoveryCoreCurrentDiagnostic(t *testing.T, ctx context.Context, core *localrpc.Peer, scope recoveryDiagnosticScope) {
 	t.Helper()
+	if core == nil {
+		t.Log("cross-diagnostic-core unavailable scopeKnown=false")
+		return
+	}
+	recoveryCoreReadDiagnostic(t, ctx, core.Call, scope)
+}
+
+func recoveryCoreReadDiagnostic(t *testing.T, ctx context.Context, call recoveryCoreCall, scope recoveryDiagnosticScope) {
+	t.Helper()
 	deadline, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	raw, err := core.Call(deadline, "core.version", struct{}{})
+	raw, err := call(deadline, "core.version", struct{}{})
 	var version struct {
 		Version            int      `json:"version"`
 		MethodTableVersion int      `json:"methodTableVersion"`
 		Methods            []string `json:"methods"`
 	}
 	if err != nil {
-		t.Logf("cross-diagnostic-core-version unavailable code=%v", err)
+		t.Logf("cross-diagnostic-core-version unavailable code=%s", recoveryInitialDiagnosticCode(err))
 	} else if protocol.DecodeExact(raw, &version) != nil {
 		t.Log("cross-diagnostic-core-version invalid response")
 	} else {
 		t.Logf("cross-diagnostic-core-version version=%d methodTableVersion=%d methodCount=%d", version.Version, version.MethodTableVersion, len(version.Methods))
 	}
-	raw, err = core.Call(deadline, "peer.entry", map[string]any{
+	if !recoveryDiagnosticExact(scope) {
+		t.Log("cross-diagnostic-core-entry unavailable scopeKnown=false")
+		return
+	}
+	raw, err = call(deadline, "peer.entry", map[string]any{
 		"serviceId": scope.ServiceID, "data": map[string]any{"pairId": scope.PairID, "generation": scope.Generation},
 	})
 	var entry struct {
@@ -712,12 +758,17 @@ func recoveryCoreCurrentDiagnostic(t *testing.T, ctx context.Context, core *loca
 		URL       string            `json:"url"`
 	}
 	if err != nil {
-		t.Logf("cross-diagnostic-core-entry unavailable pair=%s generation=%d code=%v", scope.PairID, scope.Generation, err)
-	} else if protocol.DecodeExact(raw, &entry) != nil || entry.ServiceID != scope.ServiceID {
+		t.Logf("cross-diagnostic-core-entry unavailable pair=%s generation=%d code=%s", scope.PairID, scope.Generation, recoveryInitialDiagnosticCode(err))
+	} else if protocol.DecodeExact(raw, &entry) != nil || entry.ServiceID != scope.ServiceID || entry.State.PairID != scope.PairID ||
+		entry.State.AttemptID != scope.AttemptID || entry.State.Generation != scope.Generation || !recoveryInitialObservedStage(entry.State.Stage) {
 		t.Log("cross-diagnostic-core-entry invalid response")
 	} else {
 		// The entry URL carries an authentication token and is never logged.
-		t.Logf("cross-diagnostic-core-entry urlPresent=%t state=%s", entry.URL != "", recoveryJSON(t, entry.State))
+		code := "none"
+		if entry.State.Error != "" {
+			code = recoveryInitialDiagnosticCode(errors.New(entry.State.Error))
+		}
+		t.Logf("cross-diagnostic-core-entry urlPresent=%t pair=%s attempt=%s generation=%d stage=%s runtimeGeneration=%d code=%s", entry.URL != "", entry.State.PairID, entry.State.AttemptID, entry.State.Generation, entry.State.Stage, entry.State.RuntimeGeneration, code)
 	}
 }
 

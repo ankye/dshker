@@ -72,6 +72,12 @@ func (manager *Manager) reserveCandidate(pairID string, generation uint64, reque
 		live := connection.predecessor.transport.LiveState()
 		connection.predecessorWindow = live.Window
 		connection.predecessorWasSuspended = live.Suspended || connection.predecessor.remoteReplaced || connectionState(connection.predecessor).Stage == "suspended"
+		// Reconnect is an admitted background recovery request. The primary can
+		// recover after the engine's Stage read but before this reservation; do
+		// not lose that intent merely because both live/projection are ready now.
+		if resume && !requested && !connection.predecessor.remoteReplaced && connectionState(connection.predecessor).RuntimeGeneration > 0 {
+			connection.predecessorWasSuspended = true
+		}
 	}
 	connection.prepare = &protocol.PrepareCandidate{AttemptID: protocol.NewNonce(), UserID: pin.Initiator.UserID, NetworkID: pin.Pair.NetworkID, PairID: target, Generation: generation}
 	manager.candidates[pairID] = connection

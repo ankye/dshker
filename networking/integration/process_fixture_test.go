@@ -33,22 +33,32 @@ func must(t *testing.T, err error) {
 }
 
 type process struct {
-	cmd  *exec.Cmd
-	done chan error
+	cmd      *exec.Cmd
+	done     chan error
+	waitErr  error
+	stopped  bool
+	shutdown *serverStopDiagnostics
 }
 
 func launch(t *testing.T, cmd *exec.Cmd) *process {
 	t.Helper()
 	must(t, cmd.Start())
 	p := &process{cmd: cmd, done: make(chan error, 1)}
-	go func() { p.done <- cmd.Wait(); close(p.done) }()
+	go func() { p.waitErr = cmd.Wait(); p.done <- p.waitErr; close(p.done) }()
 	t.Cleanup(func() { p.stop(t, false) })
 	return p
 }
 func (p *process) stop(t *testing.T, abrupt bool) {
 	t.Helper()
+	if p.stopped {
+		return
+	}
+	p.stopped = true
+	receipt := processStopReceipt{PID: p.cmd.Process.Pid, Abrupt: abrupt, Signal: "not_requested", StdinClose: "not_requested", Kill: "not_requested", Wait: "pending"}
 	select {
 	case <-p.done:
+		receipt.complete(p)
+		t.Logf("process-stop-receipt: %s", receipt.json())
 		return
 	default:
 	}
@@ -57,8 +67,9 @@ func (p *process) stop(t *testing.T, abrupt bool) {
 		// EOF on the control pipe is the cross-platform graceful-stop
 		// contract for children that read commands from stdin.
 		if stdin, piped := p.cmd.Stdin.(io.Closer); piped {
-			_ = stdin.Close()
-			_ = p.cmd.Process.Signal(os.Interrupt)
+			receipt.StdinClose = processStopError(stdin.Close())
+			receipt.SignalRequested = true
+			receipt.Signal = processStopError(p.cmd.Process.Signal(os.Interrupt))
 		} else if runtime.GOOS == "windows" {
 			// os.Interrupt is not deliverable to child processes on Windows
 			// (Process.Signal there supports Kill only). Piped children stop
@@ -66,18 +77,32 @@ func (p *process) stop(t *testing.T, abrupt bool) {
 			// terminate directly instead of waiting out the grace period.
 			graceful = false
 		} else {
-			_ = p.cmd.Process.Signal(os.Interrupt)
+			receipt.SignalRequested = true
+			receipt.Signal = processStopError(p.cmd.Process.Signal(os.Interrupt))
 		}
 	}
 	if !graceful {
-		must(t, p.cmd.Process.Kill())
+		receipt.KillRequested = true
+		receipt.Kill = processStopError(p.cmd.Process.Kill())
 	}
 	select {
 	case <-p.done:
+		receipt.complete(p)
+		t.Logf("process-stop-receipt: %s", receipt.json())
+		if graceful && p.waitErr != nil && p.shutdown != nil {
+			t.Fatalf("process graceful stop failed; receipt=%s", receipt.json())
+		}
 	case <-time.After(5 * time.Second):
-		_ = p.cmd.Process.Kill()
+		receipt.TimedOut = true
+		receipt.KillRequested = true
+		receipt.Kill = processStopError(p.cmd.Process.Kill())
 		<-p.done
-		t.Error("process failed to stop within 5 seconds")
+		receipt.complete(p)
+		var shutdown any
+		if p.shutdown != nil {
+			shutdown = p.shutdown.snapshot()
+		}
+		t.Fatalf("process failed to stop within 5 seconds; receipt=%s; server-shutdown=%s", receipt.json(), stopDiagnosticJSON(shutdown))
 	}
 }
 
@@ -189,6 +214,7 @@ func newFixture(t *testing.T) *fixture {
 }
 func (f *fixture) startServer(t *testing.T) {
 	diagnostics := &serverAdmissionDiagnostics{}
+	shutdown := &serverStopDiagnostics{}
 	// Registered before launch: LIFO joins this exact server/copy worker first,
 	// then publishes bounded fixed-field samples, never generic child stderr.
 	t.Cleanup(func() {
@@ -198,10 +224,12 @@ func (f *fixture) startServer(t *testing.T) {
 			return
 		}
 		t.Logf("server-admission-diagnostics (throttled samples, not all denials): %s", body)
+		t.Logf("server-shutdown-diagnostics: %s", stopDiagnosticJSON(shutdown.snapshot()))
 	})
 	command := exec.CommandContext(f.ctx, f.binary, "serve", "--config", f.configPath)
-	command.Stderr = diagnostics
+	command.Stderr = io.MultiWriter(diagnostics, shutdown)
 	f.server = launch(t, command)
+	f.server.shutdown = shutdown
 	var err error
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
 		var identity controlplane.Identity
