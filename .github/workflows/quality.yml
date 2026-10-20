@@ -165,7 +165,7 @@ jobs:
         if: steps.coordinator.outputs.available == 'true'
         env:
           COORDINATOR_SSH_KEY: ${{ secrets.COORDINATOR_SSH_KEY }}
-          COORDINATOR_REF: a369f8c55b6df01ebd3204cf1987fbd054876797
+          COORDINATOR_REF: 6ab8f581021b81cc059d940845dab4583b0113f7
         run: |
           # The key is written to the runner's own temp dir, read only by this step's
           # git, and removed before the step ends even if the clone fails.
