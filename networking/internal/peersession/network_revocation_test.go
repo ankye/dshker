@@ -19,6 +19,7 @@ func TestNetworkRevocationScopesPinsAndWaitsForReservedSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	connection := newSession(context.Background())
+	connection.PairID = pin.Pair.PairID
 	defer connection.cancel()
 	manager.sessions = map[string]*session{pin.Pair.PairID: connection}
 	completed := make(chan error, 1)

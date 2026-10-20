@@ -44,15 +44,16 @@ func (binding Binding) Endpoint() (*url.URL, error) {
 // Gateway owns one HTTP server and every upgraded socket for one runtime.
 // Closing a gateway does not stop the remote DSH process or other peers.
 type Gateway struct {
-	URL       string
-	server    *http.Server
-	transport *http.Transport
-	cancel    context.CancelFunc
-	mu        sync.Mutex
-	closed    bool
-	sockets   map[net.Conn]struct{}
-	done      chan struct{}
-	once      sync.Once
+	URL        string
+	server     *http.Server
+	transport  *http.Transport
+	cancel     context.CancelFunc
+	mu         sync.Mutex
+	closed     bool
+	sockets    map[net.Conn]*peer.Mux
+	attachment *Endpoint
+	done       chan struct{}
+	once       sync.Once
 }
 
 // OpenBrowserEndpoint opens a browser gateway that survives reconnection.
@@ -110,7 +111,7 @@ func OpenBrowserEndpoint(ctx context.Context, attachment *Endpoint) (*Gateway, e
 		}
 		return current.Endpoint()
 	}
-	gateway := serve(ctx, listener, fixedLocal, destination, transport)
+	gateway := serve(ctx, listener, fixedLocal, destination, transport, attachment)
 	gateway.URL = local.String()
 	// The endpoint owns the address for its whole life, so a reconnect reports the
 	// same URL instead of the peer's loopback address.
@@ -122,7 +123,7 @@ func OpenBrowserEndpoint(ctx context.Context, attachment *Endpoint) (*Gateway, e
 	attachment.onClose = func() { gateway.Close() }
 	// Dropping a dead session's connections is the gateway's job, so the endpoint
 	// does it automatically on every detach and replace.
-	attachment.onDetach = gateway.DropConnections
+	attachment.onDetach = gateway.dropCohort
 	attachment.mu.Unlock()
 	return gateway, nil
 }
@@ -162,7 +163,7 @@ func ServeTargetEndpoint(ctx context.Context, attachment *Endpoint) (*Gateway, e
 		}
 		return current.Endpoint()
 	}
-	return serve(ctx, listener, resolve, resolve, transport), nil
+	return serve(ctx, listener, resolve, resolve, transport, nil), nil
 }
 
 // serve runs the reverse proxy for one gateway. Both addresses are resolved per
@@ -171,9 +172,9 @@ func ServeTargetEndpoint(ctx context.Context, attachment *Endpoint) (*Gateway, e
 // the old ones would keep forwarding to a runtime that no longer exists.
 // resolveDestination returns the peer runtime URL to forward to;
 // resolveIncoming returns the address this gateway is being reached on.
-func serve(parent context.Context, listener net.Listener, resolveIncoming, resolveDestination func() (*url.URL, error), transport *http.Transport) *Gateway {
+func serve(parent context.Context, listener net.Listener, resolveIncoming, resolveDestination func() (*url.URL, error), transport *http.Transport, attachment *Endpoint) *Gateway {
 	ctx, cancel := context.WithCancel(parent)
-	gateway := &Gateway{transport: transport, cancel: cancel, sockets: make(map[net.Conn]struct{}), done: make(chan struct{})}
+	gateway := &Gateway{transport: transport, cancel: cancel, sockets: make(map[net.Conn]*peer.Mux), attachment: attachment, done: make(chan struct{})}
 	proxy := &httputil.ReverseProxy{
 		Transport:     transport,
 		FlushInterval: -1,
@@ -301,11 +302,17 @@ func (gateway *Gateway) Done() <-chan struct{} { return gateway.done }
 // would otherwise be reused for the next request and hang or read a truncated
 // response instead of failing cleanly and being redialled on the new session.
 func (gateway *Gateway) DropConnections() {
+	gateway.dropCohort(nil)
+}
+
+func (gateway *Gateway) dropCohort(expected *peer.Mux) {
 	gateway.transport.CloseIdleConnections()
 	gateway.mu.Lock()
 	sockets := make([]net.Conn, 0, len(gateway.sockets))
-	for socket := range gateway.sockets {
-		sockets = append(sockets, socket)
+	for socket, cohort := range gateway.sockets {
+		if expected == nil || cohort == expected {
+			sockets = append(sockets, socket)
+		}
 	}
 	gateway.mu.Unlock()
 	for _, socket := range sockets {
@@ -330,19 +337,36 @@ func (listener *trackedListener) Accept() (net.Conn, error) {
 			return nil, err
 		}
 		wrapped := &trackedConn{Conn: conn, owner: listener.owner}
+		attachment := listener.owner.attachment
+		if attachment != nil {
+			attachment.mu.RLock()
+		}
 		listener.owner.mu.Lock()
 		if listener.owner.closed {
 			listener.owner.mu.Unlock()
+			if attachment != nil {
+				attachment.mu.RUnlock()
+			}
 			conn.Close()
 			return nil, net.ErrClosed
 		}
 		if len(listener.owner.sockets) >= 64 {
 			listener.owner.mu.Unlock()
+			if attachment != nil {
+				attachment.mu.RUnlock()
+			}
 			conn.Close()
 			continue
 		}
-		listener.owner.sockets[wrapped] = struct{}{}
+		var cohort *peer.Mux
+		if attachment != nil {
+			cohort = attachment.mux
+		}
+		listener.owner.sockets[wrapped] = cohort
 		listener.owner.mu.Unlock()
+		if attachment != nil {
+			attachment.mu.RUnlock()
+		}
 		return wrapped, nil
 	}
 }

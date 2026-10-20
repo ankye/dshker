@@ -79,6 +79,7 @@ var served = map[string]bool{
 // methods with p2p.not_implemented.
 type Peer interface {
 	Handle(ctx context.Context, method string, payload json.RawMessage) (any, error)
+	ForgetService(serviceID string)
 }
 
 // Serve answers the shell over the private channel. A nil store is a legitimate
@@ -93,7 +94,7 @@ type Serve struct {
 	Peer    Peer
 	// Runtime is the DSH Web process authority. A composition without it cannot
 	// run children at all, which is what the daemon-less unit tests are.
-	Runtime *harnessruntime.Supervisor
+	Runtime harnessruntime.Authority
 	// Remote is the SSH route authority: the descriptor transfer, the two port
 	// forwards, and the loopback broker call for each connection.
 	Remote *remoteroute.Route
@@ -219,7 +220,7 @@ type remoteStatusResult struct {
 // runtimeSupervisor reports the process supervisor this composition was given.
 // A core started without one refuses these methods rather than pretending the
 // child is somewhere else.
-func (server Serve) runtimeSupervisor() (*harnessruntime.Supervisor, error) {
+func (server Serve) runtimeSupervisor() (harnessruntime.Authority, error) {
 	if server.Runtime == nil {
 		return nil, errors.New("p2p.not_implemented")
 	}
@@ -448,20 +449,9 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if err != nil {
 			return nil, err
 		}
-		// A fixed port is prepared before anything is spawned: a leftover DSH Web
-		// the core itself started is adopted, and any other holder is refused with
-		// the message the renderer explains.
-		if request.Port.Mode == "fixed" {
-			asserted, err := harnessruntime.AssertPortSetting(request.Port)
-			if err != nil {
-				return nil, err
-			}
-			decision := harnessruntime.PreparePortForLaunch(asserted.Port, supervisor.Platform(), harnessruntime.PortPreparation{})
-			if decision.Kind == harnessruntime.PortForeign {
-				return nil, harnessruntime.ForeignPortFailure(asserted.Port, *decision.Occupant)
-			}
-		}
-		view, err := supervisor.Start(harnessruntime.LaunchRequest{
+		// The runtime owner alone serializes live-child admission and port checks.
+		// A reconnecting core must never terminate a surviving managed runtime.
+		view, err := supervisor.Start(ctx, harnessruntime.LaunchRequest{
 			LaunchID:              request.LaunchID,
 			SubjectID:             request.SubjectID,
 			Directory:             request.Directory,
@@ -518,7 +508,11 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if server.RuntimeBinding == nil {
 			return nil, ErrRuntimeUnavailable
 		}
-		return server.RuntimeBinding.Binding()
+		binding, err := server.RuntimeBinding.BindingContext(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return binding, nil
 	case "runtime.stop":
 		var request struct {
 			SubjectID string `json:"subjectId"`
@@ -530,7 +524,7 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if err != nil {
 			return nil, err
 		}
-		view, err := supervisor.Stop(request.SubjectID)
+		view, err := supervisor.Stop(ctx, request.SubjectID)
 		if err != nil {
 			return nil, err
 		}
@@ -546,7 +540,10 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if err != nil {
 			return nil, err
 		}
-		view, present := supervisor.Status(request.SubjectID)
+		view, present, err := supervisor.Status(ctx, request.SubjectID)
+		if err != nil {
+			return nil, err
+		}
 		if !present {
 			return runtimeStatusResult{}, nil
 		}
@@ -640,17 +637,9 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 			return nil, errors.New("p2p.not_implemented")
 		}
 		holder := server.Brokers
-		supervisor := server.Runtime
 		// The endpoint answers with the session this host already runs: a peer
 		// asks for a runtime, it does not get to start one.
-		runtime := func(ctx context.Context) (string, error) {
-			view, present := supervisor.Status(request.SubjectID)
-			if !present || view.State != harnessruntime.StateRunning || view.URL == "" {
-				return "", errors.New("remote.runtime_unavailable")
-			}
-			return view.URL, nil
-		}
-		descriptor, err := holder.Start(request.DescriptorPath, runtime, "")
+		descriptor, err := holder.Start(request.DescriptorPath, server.runtimeRoute(request.SubjectID), "")
 		if err != nil {
 			return nil, err
 		}
@@ -753,7 +742,10 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		if err != nil {
 			return nil, err
 		}
-		entries, cursor := supervisor.Console().After(request.Cursor)
+		entries, cursor, err := supervisor.Console(ctx, request.Cursor)
+		if err != nil {
+			return nil, err
+		}
 		return runtimeConsoleResult{Entries: entries, Cursor: cursor}, nil
 	case "runtime.port_get":
 		var request struct {
@@ -887,6 +879,9 @@ func (server Serve) Handle(ctx context.Context, method string, payload json.RawM
 		snapshot, err := server.Catalog.RemoveService(request.ServiceID)
 		if err != nil {
 			return nil, err
+		}
+		if server.Peer != nil {
+			server.Peer.ForgetService(request.ServiceID)
 		}
 		return catalogSnapshot(&snapshot), nil
 	}

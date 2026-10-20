@@ -23,12 +23,14 @@ Two real machines, the deployed coordinator, the product's own entry points.
 - **Host side: no substitution.** The host runs the product's headless path
   (`dshkerd serve` + `dsh start`) or the packaged launcher, and the page it
   serves is a DSH web that this run started on that machine.
-- **Peer side:** the product's desktop path (the Electron launcher). An
-  independent peer implementation (`live-drive`) may stand in only when the
-  subject is the host — and the run must say so.
-- `live-drive` is a `-tags live` temporary driver: it must never be the host in
-  L3 or L4, because it bypasses the core and therefore cannot show that the core
-  owns hosting.
+- **Peer side:** the product's desktop path (the Electron launcher).
+  The historical temporary `live-drive` was removed with control v2: it used
+  obsolete pin/bootstrap contracts, an embedded deployment address and a
+  plaintext credential state file. It is not a current test entry point.
+- Current isolated physical diagnostics use `tools/workbench-recovery-live.mjs`
+  and explicitly report their tier: Windows production core/serve and Mac
+  production Engine plus Manager are not packaged desktop-to-desktop or full
+  Mac serve acceptance. They cannot substitute for L3/L4 product-entry proof.
 
 ## L4 — packaged three-way (task 7.5)
 

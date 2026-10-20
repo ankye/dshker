@@ -28,13 +28,15 @@ func TestManagerNetworkRevocationRealDSH(t *testing.T) {
 			}
 			return runtimebridge.Binding{Generation: 1, URL: runtimeURL}, nil
 		}
-		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private}, []controlplane.PairIdentity{config.Pin}, owner, func(peersession.State) {})
+		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private, CoreInstanceID: integrationCoreInstanceID(t)}, []controlplane.PairIdentity{}, owner, func(peersession.State) {})
 		must(t, err)
+		integrationActivateManager(t, ctx, manager, f, i)
 		managers[i] = manager
 		defer manager.Close()
 	}
 	time.Sleep(time.Second)
 	pin := f.config[0].Pin
+	pin.Pair.PairID = f.config[1].Device.DeviceID
 	connected, err := managers[0].Connect(ctx, pin.Pair.PairID, 1, true)
 	must(t, err)
 	must(t, runtimebridge.Probe(ctx, connected.URL))

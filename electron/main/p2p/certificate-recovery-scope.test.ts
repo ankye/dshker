@@ -44,7 +44,11 @@ function fixture() {
     hasSession: vi.fn(() => true),
     sessionToken: vi.fn((): string | undefined => token),
     currentUser: vi.fn(async () => ({ ...user })),
-    refreshDirectory: vi.fn(async () => structuredClone(directory))
+    refreshDirectory: vi.fn(async () => structuredClone(directory)),
+    certificateRecoveryScope: vi.fn(async () => ({
+      user: { ...user },
+      networks: structuredClone(directory.networks)
+    }))
   }
   const owner = new PeerCertificateRecoveryScope({ remembered })
   const assertLifecycle = vi.fn()
@@ -57,14 +61,16 @@ describe('legacy certificate recovery scope admission', () => {
   it('freshly verifies the current user and exact manual network with the original device', async () => {
     const f = fixture()
     const scope = await f.resolve()
-    expect(f.accounts.currentUser).toHaveBeenCalledWith(serviceId, f.controller.signal)
-    expect(f.remembered).toHaveBeenCalledWith(serviceId, user.userId)
-    expect(f.accounts.refreshDirectory).toHaveBeenCalledWith(serviceId, f.controller.signal)
-    expect(f.accounts.currentUser.mock.invocationCallOrder[0]).toBeLessThan(
-      f.remembered.mock.invocationCallOrder[0]
+    expect(f.accounts.certificateRecoveryScope).toHaveBeenCalledExactlyOnceWith(
+      serviceId,
+      deviceId,
+      f.controller.signal
     )
-    expect(f.remembered.mock.invocationCallOrder[0]).toBeLessThan(
-      f.accounts.refreshDirectory.mock.invocationCallOrder[0]
+    expect(f.remembered).toHaveBeenCalledWith(serviceId, user.userId)
+    expect(f.accounts.currentUser).not.toHaveBeenCalled()
+    expect(f.accounts.refreshDirectory).not.toHaveBeenCalled()
+    expect(f.accounts.certificateRecoveryScope.mock.invocationCallOrder[0]).toBeLessThan(
+      f.remembered.mock.invocationCallOrder[0]
     )
     expect(scope.networkId).toBe(networkId)
     // A different original enrollment owner does not revoke this account's network grant.
@@ -79,6 +85,7 @@ describe('legacy certificate recovery scope admission', () => {
     f.remembered.mockResolvedValue(undefined)
     await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.certificate_recovery_required' })
     expect(f.accounts.refreshDirectory).not.toHaveBeenCalled()
+    expect(f.accounts.certificateRecoveryScope).toHaveBeenCalledOnce()
     expect(f.remembered).toHaveBeenCalledWith(serviceId, user.userId)
   })
 
@@ -105,19 +112,21 @@ describe('legacy certificate recovery scope admission', () => {
     }
   )
 
-  it('refuses an unknown fresh directory instead of treating it as an empty network list', async () => {
+  it('refuses an empty fresh network list instead of reusing a cached directory', async () => {
     const f = fixture()
-    f.directory.known = false
-    await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.certificate_sync_failed' })
+    f.directory.networks = []
+    await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.certificate_recovery_forbidden' })
   })
 
   it('keeps malformed and unavailable directory failures explicit', async () => {
     const f = fixture()
-    f.accounts.refreshDirectory.mockRejectedValueOnce(
+    f.accounts.certificateRecoveryScope.mockRejectedValueOnce(
       new PeerHelperError('p2p.invalid_server_response')
     )
     await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.invalid_server_response' })
-    f.accounts.refreshDirectory.mockRejectedValueOnce(new PeerHelperError('p2p.server_unavailable'))
+    f.accounts.certificateRecoveryScope.mockRejectedValueOnce(
+      new PeerHelperError('p2p.server_unavailable')
+    )
     await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.server_unavailable' })
   })
 
@@ -132,13 +141,14 @@ describe('legacy certificate recovery scope admission', () => {
     f.remembered.mockRejectedValueOnce(new Error('test-only selection read failure'))
     await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.certificate_sync_failed' })
     expect(f.accounts.refreshDirectory).not.toHaveBeenCalled()
+    expect(f.accounts.certificateRecoveryScope).toHaveBeenCalledOnce()
   })
 
   it.each(['token', 'logout', 'abort', 'lifecycle', 'selection'] as const)(
-    'cancels scope verification when %s changes during the fresh directory read',
+    'cancels scope verification when %s changes during the named recovery read',
     async (change) => {
       const f = fixture()
-      f.accounts.refreshDirectory.mockImplementationOnce(async () => {
+      f.accounts.certificateRecoveryScope.mockImplementationOnce(async () => {
         if (change === 'token') f.accounts.sessionToken.mockReturnValue('9'.repeat(64))
         if (change === 'logout') f.accounts.hasSession.mockReturnValue(false)
         if (change === 'abort') f.controller.abort()
@@ -147,20 +157,20 @@ describe('legacy certificate recovery scope admission', () => {
             throw new PeerHelperError('p2p.request_cancelled')
           })
         if (change === 'selection') f.owner.selectionChanged(serviceId)
-        return structuredClone(f.directory)
+        return { user: { ...user }, networks: structuredClone(f.directory.networks) }
       })
       await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.request_cancelled' })
     }
   )
 
-  it('cancels a token change during the authenticated current-user read', async () => {
+  it('cancels a token change during manual selection storage read', async () => {
     const f = fixture()
-    f.accounts.currentUser.mockImplementationOnce(async () => {
+    f.remembered.mockImplementationOnce(async () => {
       f.accounts.sessionToken.mockReturnValue('9'.repeat(64))
-      return { ...user }
+      return networkId
     })
     await expect(f.resolve()).rejects.toMatchObject({ code: 'p2p.request_cancelled' })
-    expect(f.remembered).not.toHaveBeenCalled()
+    expect(f.remembered).toHaveBeenCalledOnce()
   })
 
   it('rereads the exact manual selection before admitting the scoped request', async () => {

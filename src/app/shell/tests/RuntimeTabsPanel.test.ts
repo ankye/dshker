@@ -189,7 +189,7 @@ describe('RuntimeTabsPanel rendering controls', () => {
     wrapper.unmount()
   })
 
-  it('renders opened local and remote tabs without add or close controls', async () => {
+  it('renders a permanent local tab and a closable remote tab with an add control', async () => {
     remoteConnectionsState.value = {
       connections: [
         {
@@ -211,7 +211,8 @@ describe('RuntimeTabsPanel rendering controls', () => {
     expect(wrapper.text()).toContain('本地')
     expect(wrapper.text()).toContain('工作室 Mac')
     expect(wrapper.find('[data-testid="runtime-add-tab"]').exists()).toBe(true)
-    expect(wrapper.find('.browser-tab-close').exists()).toBe(false)
+    expect(wrapper.findAll('.browser-tab-close')).toHaveLength(1)
+    expect(wrapper.find('[data-testid="runtime-tab-close-local"]').exists()).toBe(false)
     wrapper.unmount()
   })
 
@@ -407,8 +408,8 @@ describe('RuntimeTabsPanel rendering controls', () => {
     const offlineSshOption = menu.querySelector<HTMLButtonElement>(
       '[data-testid="runtime-add-ssh-22222222-2222-4222-8222-222222222222"]'
     )
-    expect(offlineSshOption?.disabled).toBe(true)
-    expect(menu.textContent).toContain('暂不可用')
+    expect(offlineSshOption?.disabled).toBe(false)
+    expect(offlineSshOption?.dataset.state).toBe('available')
     expect(
       Array.from(
         menu.querySelectorAll<HTMLButtonElement>('[data-testid^="runtime-add-peer-"]')

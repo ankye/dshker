@@ -35,10 +35,100 @@ function fixture(initial: LauncherHarnessLaunchView = { kind: 'stopped' }) {
     invalidate
   )
   owners.push(owner)
-  return { owner, set, start, invalidate }
+  return {
+    owner,
+    set,
+    setSilent: (value: LauncherHarnessLaunchView) => (state = value),
+    start,
+    invalidate
+  }
 }
 
 describe('P2P owned DSH lifecycle', () => {
+  it('resumes only the exact already-running binding without starting DSH', async () => {
+    const f = fixture({ kind: 'running', url })
+    const first = await f.owner.resume(new AbortController().signal)
+    expect(first).toEqual({ generation: 1, url })
+    first.url = 'changed by caller'
+    expect(await f.owner.resume(new AbortController().signal)).toEqual({ generation: 1, url })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it.each<LauncherHarnessLaunchView>([
+    { kind: 'stopped' },
+    { kind: 'failed', message: 'user stopped child' },
+    { kind: 'starting' }
+  ])('never cold-starts or waits on resume from $kind', async (initial) => {
+    const f = fixture(initial)
+    for (let attempt = 0; attempt < 3; attempt++)
+      await expect(f.owner.resume(new AbortController().signal)).rejects.toMatchObject({
+        code: 'p2p.runtime_unavailable'
+      })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('refuses a silently stopped runtime instead of returning its earlier binding', async () => {
+    const f = fixture({ kind: 'running', url })
+    f.setSilent({ kind: 'stopped' })
+    await expect(f.owner.resume(new AbortController().signal)).rejects.toMatchObject({
+      code: 'p2p.runtime_unavailable'
+    })
+    expect(f.invalidate).toHaveBeenCalledExactlyOnceWith(1)
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('reads a silently replaced running binding without starting another child', async () => {
+    const f = fixture({ kind: 'running', url })
+    const next = 'http://127.0.0.1:31992/?token=test-only-replacement'
+    f.setSilent({ kind: 'running', url: next })
+    expect(await f.owner.resume(new AbortController().signal)).toEqual({ generation: 2, url: next })
+    expect(f.invalidate).toHaveBeenCalledExactlyOnceWith(1)
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('rechecks the actual runtime after asynchronous resume authorization', async () => {
+    const f = fixture({ kind: 'running', url })
+    const binding = await f.owner.resume(new AbortController().signal)
+    f.setSilent({ kind: 'stopped' })
+    expect(() => f.owner.assertCurrent(binding)).toThrow('p2p.runtime_invalidated')
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('resumes a newly announced running child after an unavailable refusal', async () => {
+    const f = fixture()
+    await expect(f.owner.resume(new AbortController().signal)).rejects.toMatchObject({
+      code: 'p2p.runtime_unavailable'
+    })
+    f.set({ kind: 'running', url })
+    expect(await f.owner.resume(new AbortController().signal)).toEqual({ generation: 1, url })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('keeps explicit cold start separate from resume while a launch is pending', async () => {
+    const f = fixture()
+    const manual = f.owner.connect(new AbortController().signal)
+    await expect(f.owner.resume(new AbortController().signal)).rejects.toMatchObject({
+      code: 'p2p.runtime_unavailable'
+    })
+    expect(f.start).toHaveBeenCalledTimes(1)
+    f.set({ kind: 'running', url })
+    const binding = await manual
+    expect(await f.owner.resume(new AbortController().signal)).toEqual(binding)
+    expect(f.start).toHaveBeenCalledTimes(1)
+  })
+
+  it('refuses closed or cancelled resume requests before runtime access', async () => {
+    const f = fixture({ kind: 'running', url })
+    await expect(f.owner.resume(AbortSignal.abort())).rejects.toMatchObject({
+      code: 'p2p.request_cancelled'
+    })
+    f.owner.close()
+    await expect(f.owner.resume(new AbortController().signal)).rejects.toMatchObject({
+      code: 'p2p.runtime_owner_closed'
+    })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
   it('rejects a retired binding after an asynchronous admission read', async () => {
     const { owner, set } = fixture({ kind: 'running', url })
     const binding = await owner.connect(new AbortController().signal)

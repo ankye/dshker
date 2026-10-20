@@ -1,0 +1,2769 @@
+{
+  "change": "repair-open-workbench-reconnection",
+  "risk": "interactive",
+  "risk_scopes": ["data_critical_recovery", "interactive_remote_tab_lifecycle"],
+  "production_files": [
+    "networking/internal/helper/selected_session_dispatch.go",
+    "networking/internal/helper/selected_session_scope.go",
+    "networking/internal/helper/account_logout.go",
+    "electron/main/p2p/accounts.ts",
+    "electron/main/p2p/certificate-recovery-projection.ts",
+    "electron/main/p2p/certificate-recovery-scope.ts",
+    "electron/main/p2p/tests/legacy-certificate-fixture.ts",
+    "networking/internal/helper/account_transport.go",
+    "networking/internal/helper/certificate_recovery_scope.go",
+    "networking/internal/helper/user_management.go",
+    "tools/workbench-recovery-pause.mjs",
+    "electron/main/p2p/management-admission.ts",
+    "electron/main/p2p/network-selection.ts",
+    "electron/p2p-management-preload.ts",
+    "networking/internal/catalog/store.go",
+    "networking/internal/helper/network_selection.go",
+    "src/app/domains/remote-connections/index.ts",
+    "src/app/domains/remote-connections/p2pManagement.ts",
+    "src/app/domains/remote-connections/p2pNetworkSelection.ts",
+    "src/app/shell/components/RuntimeNetworkChoiceView.vue",
+    "tests/visual/runtime-network-choice.ts",
+    "networking/internal/helper/bootstrap.go",
+    "networking/internal/peersession/candidate_end.go",
+    "networking/internal/peersession/manager_admission.go",
+    "networking/internal/helper/management.go",
+    "electron/main/p2p/pairing.ts",
+    "networking/internal/controlplane/signals_telemetry.go",
+    "networking/internal/autoconnect/wake.go",
+    "networking/internal/controlplane/candidates.go",
+    "networking/internal/controlplane/client.go",
+    "networking/internal/controlplane/signals.go",
+    "networking/internal/controlplane/signals_control.go",
+    "networking/internal/helper/account_presence.go",
+    "networking/internal/helper/account_session.go",
+    "networking/internal/helper/restore_own.go",
+    "networking/internal/peer/negotiation.go",
+    "networking/internal/peer/transport_lifecycle.go",
+    "networking/internal/peersession/candidate_connect.go",
+    "networking/internal/peersession/candidate_control.go",
+    "networking/internal/peersession/candidate_control_diagnostics.go",
+    "networking/internal/peersession/candidate_inbound_admission.go",
+    "networking/internal/peersession/candidate_decision.go",
+    "networking/internal/peersession/candidate_events.go",
+    "networking/internal/peersession/candidate_lifecycle.go",
+    "networking/internal/peersession/manager_signals.go",
+    "networking/internal/peersession/signaling.go",
+    "networking/internal/protocol/candidate.go",
+    "networking/internal/protocol/control.go",
+    "networking/internal/protocol/frame.go",
+    "networking/internal/protocol/signal.go",
+    "networking/internal/runtimebridge/endpoint.go",
+    "networking/internal/runtimebridge/proxy.go",
+    "src/app/shell/components/P2PPairingPanel.vue",
+    "electron/main/core/supervisor.ts",
+    "electron/main/core/version-contract.ts",
+    "electron/main/core/fixtures/fake-core.mjs",
+    "electron/main/p2p/device-session.ts",
+    "src/app/domains/remote-connections/p2pConnections.ts",
+    "src/app/shared/i18n/i18n.p2p.ts",
+    "src/app/shell/components/RuntimePeerEmptyState.vue",
+    "electron/main/core/harness-runtime.ts",
+    "electron/main/ipc.ts",
+    "electron/main/managed/ipc-error-codes.ts",
+    "electron/main/managed/runtime-errors.ts",
+    "src/shared/contracts.ts",
+    "src/app/shared/i18n/i18n.errors.ts",
+    "src/app/shell/AppShell.vue",
+    "electron/main/p2p/connections.ts",
+    "electron/main/p2p/helper-state.ts",
+    "electron/main/p2p/management-ipc.ts",
+    "electron/main/p2p/management.ts",
+    "electron/main/p2p/rpc.ts",
+    "electron/main/p2p/runtime-host.ts",
+    "electron/main/p2p/runtime-owner.ts",
+    "electron/main/p2p/workbench-entry.ts",
+    "networking/cmd/dshkerd/cli.go",
+    "networking/cmd/dshkerd/main.go",
+    "networking/cmd/dshkerd/runtime_owner.go",
+    "networking/internal/autoconnect/engine.go",
+    "networking/internal/core/server.go",
+    "networking/internal/core/runtimebinding.go",
+    "networking/internal/core/runtime_route.go",
+    "networking/internal/harnessruntime/authority.go",
+    "networking/internal/helper/autoconnect.go",
+    "networking/internal/helper/certificates.go",
+    "networking/internal/helper/credentials.go",
+    "networking/internal/helper/directory.go",
+    "networking/internal/helper/entry.go",
+    "networking/internal/helper/host.go",
+    "networking/internal/helper/members.go",
+    "networking/internal/helper/runtime_binding.go",
+    "networking/internal/helper/service_lifecycle.go",
+    "networking/internal/localrpc/methods.go",
+    "networking/internal/localrpc/serve.go",
+    "networking/internal/peer/streams.go",
+    "networking/internal/peer/transport.go",
+    "networking/internal/peer/transport_diagnostics.go",
+    "networking/internal/peer/transport_diagnostics_stats.go",
+    "networking/internal/peersession/entry.go",
+    "networking/internal/peersession/manager.go",
+    "networking/internal/peersession/manager_attachment.go",
+    "networking/internal/peersession/manager_connect.go",
+    "networking/internal/peersession/manager_lifecycle.go",
+    "networking/internal/peersession/network_revocation.go",
+    "networking/internal/peersession/session_diagnostics.go",
+    "networking/internal/peersession/workbench_intent.go",
+    "networking/internal/protocol/json.go",
+    "networking/internal/runtimebridge/attachment.go",
+    "networking/internal/runtimebridge/handshake.go",
+    "networking/internal/runtimebridge/workbench.go",
+    "networking/internal/runtimeowner/client.go",
+    "networking/internal/runtimeowner/identity.go",
+    "networking/internal/runtimeowner/local.go",
+    "networking/internal/runtimeowner/platform_darwin.go",
+    "networking/internal/runtimeowner/platform_linux.go",
+    "networking/internal/runtimeowner/platform_unix.go",
+    "networking/internal/runtimeowner/platform_windows.go",
+    "networking/internal/runtimeowner/record.go",
+    "networking/internal/runtimeowner/server.go",
+    "networking/internal/runtimeowner/wire.go",
+    "src/shared/p2p-management.ts",
+    "src/app/shared/i18n/i18n.refusals.ts",
+    "src/app/shell/runtimeBrowserState.ts",
+    "src/app/shell/components/RuntimeTabsPanel.vue",
+    "src/app/shell/components/RuntimeTabStrip.vue",
+    "src/app/shell/components/RuntimeTabAddMenu.vue",
+    "tools/visual-smoke.mjs",
+    "tools/workbench-recovery-live.mjs",
+    "tools/workbench-recovery-identity.mjs"
+  ],
+  "test_files": [
+    "networking/internal/helper/selected_session_scope_test.go",
+    "networking/internal/helper/selected_session_authority_test.go",
+    "networking/internal/helper/directory_authority_test.go",
+    "networking/internal/helper/certificate_recovery_authority_test.go",
+    "networking/internal/peersession/account_logout_test.go",
+    "networking/internal/helper/account_logout_test.go",
+    "networking/internal/helper/account_auth_expiry_test.go",
+    "networking/internal/helper/account_auth_transport_test.go",
+    "networking/integration/process_fixture_test.go",
+    "networking/integration/server_admission_diagnostics_test.go",
+    "networking/internal/helper/account_auth_recovery_test.go",
+    "networking/internal/peersession/account_recovery_test.go",
+    "electron/main/p2p/accounts-certificate-recovery.test.ts",
+    "electron/main/p2p/certificate-recovery-scope.test.ts",
+    "electron/main/p2p/device-session-recovery-transport.test.ts",
+    "electron/main/p2p/management-legacy-certificate.test.ts",
+    "networking/internal/helper/account_transport_test.go",
+    "networking/internal/helper/account_transport_recovery_test.go",
+    "networking/internal/helper/certificate_recovery_scope_test.go",
+    "networking/integration/online_candidate_test.go",
+    "networking/integration/online_candidate_control_test.go",
+    "networking/integration/online_candidate_fixture_test.go",
+    "networking/integration/online_candidate_pure_test.go",
+    "networking/integration/workbench_recovery_pause_rights_windows_test.go",
+    "networking/integration/workbench_recovery_pause_owner_test.go",
+    "electron/preload-surface.test.ts",
+    "tools/p2p-docs-coverage.test.mjs",
+    "networking/internal/autoconnect/reauthorize_test.go",
+    "networking/internal/helper/network_reauthorization_test.go",
+    "networking/internal/peersession/candidate_order_test.go",
+    "tools/workbench-recovery-pause.node_test.mjs",
+    "networking/integration/workbench_recovery_program_test.go",
+    "networking/integration/workbench_recovery_pause_controller_test.go",
+    "networking/integration/workbench_recovery_pause_guard_test.go",
+    "networking/integration/workbench_recovery_pause_platform_windows_test.go",
+    "networking/integration/workbench_recovery_pause_platform_nonwindows_test.go",
+    "networking/integration/workbench_recovery_pause_pure_test.go",
+    "networking/integration/workbench_recovery_pause_watchdog_windows_test.go",
+    "electron/main/p2p/network-selection.test.ts",
+    "src/app/domains/remote-connections/p2pNetworkSelection.test.ts",
+    "src/app/shell/tests/runtimeNetworkChoice.test.ts",
+    "src/app/domains/managed-workspaces/tests/ManagedWorkspacesPanel.test.ts",
+    "networking/internal/helper/network_selection_test.go",
+    "networking/internal/helper/retired_state_test.go",
+    "networking/internal/peersession/candidate_turn_test.go",
+    "networking/internal/peersession/retiring_test.go",
+    "networking/internal/catalog/transitions_test.go",
+    "networking/internal/catalog/transition_publish_unix_test.go",
+    "networking/internal/catalog/transition_publish_windows_test.go",
+    "networking/integration/host_cold_bootstrap_test.go",
+    "networking/integration/host_cold_bootstrap_pure_test.go",
+    "networking/integration/workbench_recovery_cookie_pure_test.go",
+    "networking/integration/workbench_recovery_diagnostic_pure_test.go",
+    "networking/internal/helper/bootstrap_test.go",
+    "networking/internal/helper/certificate_adoption_test.go",
+    "networking/internal/helper/certificate_fixture_test.go",
+    "networking/internal/peersession/candidate_recovery_test.go",
+    "networking/internal/peersession/candidate_handoff_test.go",
+    "networking/internal/peersession/candidate_handoff_recovery_test.go",
+    "networking/internal/peersession/candidate_observer_handoff_test.go",
+    "networking/integration/workbench_recovery_duplex_auto_test.go",
+    "networking/integration/workbench_recovery_initial_session_test.go",
+    "networking/internal/controlplane/candidates_test.go",
+    "networking/integration/runtime_session_test.go",
+    "networking/integration/runtime_readiness_diagnostic_test.go",
+    "networking/integration/frequent_recovery_test.go",
+    "networking/integration/reconnect_stability_test.go",
+    "networking/integration/network_revocation_test.go",
+    "networking/integration/certificate_lifecycle_test.go",
+    "networking/integration/core_connection_test.go",
+    "networking/integration/headless_credential_test.go",
+    "networking/internal/peersession/manager_admission_test.go",
+    "networking/internal/helper/account_bootstrap_test.go",
+    "networking/integration/manager_account_scope_test.go",
+    "networking/internal/autoconnect/wake_test.go",
+    "networking/internal/controlplane/signals_telemetry_test.go",
+    "networking/internal/peer/candidate_lease_test.go",
+    "electron/main/p2p/pairing.test.ts",
+    "src/app/shell/tests/P2PMemberRow.test.ts",
+    "networking/integration/control_ownership_test.go",
+    "networking/internal/helper/account_session_test.go",
+    "networking/internal/controlplane/signals_control_test.go",
+    "networking/internal/peer/transport_lifecycle_test.go",
+    "networking/internal/peersession/candidate_test.go",
+    "networking/internal/peersession/candidate_inbound_retirement_test.go",
+    "networking/internal/peersession/candidate_inbound_admission_test.go",
+    "networking/internal/peersession/candidate_inbound_wake_test.go",
+    "networking/internal/peersession/candidate_inbound_publication_test.go",
+    "networking/internal/peersession/candidate_inbound_committed_startup_test.go",
+    "networking/internal/peersession/candidate_control_diagnostics_test.go",
+    "networking/internal/peersession/direction_test.go",
+    "networking/internal/peersession/lifecycle_test.go",
+    "networking/internal/peersession/manager_test.go",
+    "networking/internal/protocol/candidate_test.go",
+    "networking/internal/runtimebridge/cohort_test.go",
+    "electron/main/core/supervisor.test.ts",
+    "electron/main/core/version-contract.test.ts",
+    "electron/main/p2p/helper-state-suspension.test.ts",
+    "electron/main/p2p/device-session.test.ts",
+    "electron/main/p2p/device-session-legacy.test.ts",
+    "src/app/shared/i18n/i18n.suspension.test.ts",
+    "electron/main/core/harness-runtime.test.ts",
+    "electron/main/runtime-owner-ipc.test.ts",
+    "src/app/shared/i18n/i18n.runtime-owner.test.ts",
+    "electron/main/p2p/connections.test.ts",
+    "electron/main/p2p/management-ipc.test.ts",
+    "electron/main/p2p/management-workbench-entry.test.ts",
+    "electron/main/p2p/management.test.ts",
+    "electron/main/p2p/rpc.test.ts",
+    "electron/main/p2p/runtime-host.test.ts",
+    "electron/main/p2p/runtime-owner.test.ts",
+    "electron/main/p2p/workbench-entry.test.ts",
+    "networking/cmd/dshkerd/resume_test.go",
+    "networking/cmd/dshkerd/runtime_owner_test.go",
+    "networking/integration/dshkerd_process_test.go",
+    "networking/integration/workbench_recovery_core_test.go",
+    "networking/integration/workbench_recovery_bootstrap_test.go",
+    "networking/integration/workbench_recovery_core_crash_test.go",
+    "networking/integration/workbench_recovery_process_windows_test.go",
+    "networking/integration/workbench_recovery_process_nonwindows_test.go",
+    "networking/integration/workbench_recovery_cross_test.go",
+    "networking/integration/workbench_recovery_firewall_test.go",
+    "networking/integration/workbench_recovery_firewall_pure_test.go",
+    "networking/integration/workbench_recovery_firewall_watchdog_windows_test.go",
+    "networking/integration/testdata/workbench-network-fault.ps1",
+    "networking/integration/workbench_recovery_mac_auto_test.go",
+    "networking/integration/workbench_recovery_mac_auto_pure_test.go",
+    "networking/integration/workbench_recovery_network_fault_test.go",
+    "networking/integration/workbench_recovery_network_host_test.go",
+    "networking/integration/workbench_recovery_owner_test.go",
+    "networking/integration/workbench_recovery_http_test.go",
+    "networking/integration/workbench_recovery_ws_seal_pure_test.go",
+    "networking/integration/workbench_recovery_live_test.go",
+    "networking/integration/workbench_recovery_reverse_runtime_test.go",
+    "networking/integration/workbench_recovery_reverse_host_test.go",
+    "networking/integration/workbench_recovery_reverse_client_test.go",
+    "networking/internal/autoconnect/claim_test.go",
+    "networking/internal/autoconnect/engine_test.go",
+    "networking/internal/autoconnect/workbench_refusal_test.go",
+    "networking/internal/core/server_entry_test.go",
+    "networking/internal/core/server_peer_test.go",
+    "networking/internal/core/server_runtime_test.go",
+    "networking/internal/core/server_test.go",
+    "networking/internal/core/runtimebinding_test.go",
+    "networking/internal/core/server_runtime_authority_test.go",
+    "networking/internal/localrpc/methods_test.go",
+    "networking/internal/localrpc/serve_auth_context_test.go",
+    "networking/internal/helper/entry_test.go",
+    "networking/internal/helper/runtime_binding_test.go",
+    "networking/internal/helper/service_lifecycle_test.go",
+    "networking/internal/peer/grace_test.go",
+    "networking/internal/peer/streams_diagnostics_test.go",
+    "networking/internal/peer/transport_diagnostics_test.go",
+    "networking/internal/peer/transport_diagnostics_stats_test.go",
+    "networking/internal/peer/transport_diagnostics_lifecycle_test.go",
+    "networking/internal/peersession/entry_test.go",
+    "networking/internal/peersession/session_diagnostics_test.go",
+    "networking/internal/peersession/workbench_admission_test.go",
+    "networking/internal/peersession/workbench_intent_test.go",
+    "networking/internal/protocol/workbench_capabilities_test.go",
+    "networking/internal/runtimebridge/workbench_test.go",
+    "networking/internal/runtimeowner/owner_test.go",
+    "networking/internal/runtimeowner/record_test.go",
+    "networking/internal/runtimeowner/shutdown_test.go",
+    "networking/internal/runtimeowner/existing_test.go",
+    "networking/internal/runtimeowner/concurrent_test.go",
+    "networking/internal/runtimeowner/hello_test.go",
+    "networking/internal/runtimeowner/record_windows_test.go",
+    "src/shared/p2p-management.test.ts",
+    "src/app/shared/i18n/i18n.refusals.test.ts",
+    "src/app/domains/remote-connections/p2pConnections.test.ts",
+    "src/app/shell/tests/peerRuntimeTabs.test.ts",
+    "src/app/shell/runtimeBrowserState.test.ts",
+    "src/app/shell/tests/RuntimeTabsPanel.test.ts",
+    "src/app/shell/tests/runtimeTabClosing.test.ts",
+    "tools/visual-smoke.test.mjs",
+    "tools/workbench-recovery-identity.node_test.mjs",
+    "tools/workbench-recovery-core-crash.node_test.mjs"
+  ],
+  "live_test_files": [
+    "networking/integration/online_candidate_control_test.go",
+    "networking/integration/workbench_recovery_cookie_pure_test.go",
+    "networking/integration/workbench_recovery_diagnostic_pure_test.go",
+    "networking/integration/workbench_recovery_duplex_auto_test.go",
+    "networking/integration/workbench_recovery_initial_session_test.go",
+    "networking/integration/workbench_recovery_live_test.go",
+    "networking/integration/workbench_recovery_http_test.go",
+    "networking/integration/workbench_recovery_core_test.go",
+    "networking/integration/workbench_recovery_core_crash_test.go",
+    "networking/integration/workbench_recovery_process_windows_test.go",
+    "networking/integration/workbench_recovery_process_nonwindows_test.go",
+    "networking/integration/workbench_recovery_cross_test.go",
+    "networking/integration/workbench_recovery_firewall_test.go",
+    "networking/integration/workbench_recovery_firewall_watchdog_windows_test.go",
+    "networking/integration/workbench_recovery_mac_auto_test.go",
+    "networking/integration/workbench_recovery_network_fault_test.go",
+    "networking/integration/workbench_recovery_network_host_test.go",
+    "networking/integration/workbench_recovery_owner_test.go",
+    "networking/integration/workbench_recovery_reverse_runtime_test.go",
+    "networking/integration/workbench_recovery_reverse_host_test.go",
+    "networking/integration/workbench_recovery_reverse_client_test.go"
+  ],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestWorkbenchRecoveryCrossClient"
+    },
+    {
+      "state": "no_op",
+      "test": "TestUnadmittedRequestDoesNotCreateWorkbenchIntent"
+    },
+    {
+      "state": "partial",
+      "test": "TestWorkbenchRecoveryCrossClient"
+    },
+    {
+      "state": "recovery",
+      "test": "TestWorkbenchRecoveryCrossClient"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestStaleOrInvalidTargetCannotRestoreClearedIntent"
+    },
+    {
+      "state": "reset",
+      "test": "TestExplicitDisconnectClearsWorkbenchIntentAfterFailure"
+    },
+    {
+      "state": "superseded",
+      "test": "TestDisconnectWaitingForOldSessionCannotDetachNewAttachment"
+    },
+    {
+      "state": "rejected",
+      "test": "TestWorkbenchRecoveryCrossClient"
+    },
+    {
+      "state": "success",
+      "test": "unmounts a closed SSH guest, keeps its record and runtime, and reopens it from plus"
+    },
+    {
+      "state": "no_op",
+      "test": "refuses the local tab and unknown remote identities without changing state"
+    },
+    {
+      "state": "recovery",
+      "test": "replaces a closed peer entry when its connection generation changes"
+    },
+    {
+      "state": "superseded",
+      "test": "does not recreate an SSH tab when its connect answer arrives, then reopens the ready guest"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
+      "field": "read-phase join transfers exact cleanup without joining a generic Host callback",
+      "source": "D25 held real End response, completed connection resource cleanup and blocked Wake callback",
+      "test": "TestInboundAdmissionCloseDoesNotJoinExternalWakeAfterCleanup",
+      "assertion": "Wake",
+      "state": "reset",
+      "identity_keys": ["pairId", "attemptId", "generation", "admission owner", "cleanup owner"],
+      "missing_semantics": "Close cannot report resources joined before End completes, or deadlock waiting for a generic callback after exact connection cleanup."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_lifecycle.go",
+      "field": "terminal reservation retirement is independent of exact resource cleanup",
+      "source": "D25 signed terminal receipt with the old End first reply blocked",
+      "test": "TestInboundTerminalDecisionRetiresBeforeOrderedPreparedAndOffer",
+      "assertion": "terminal owner swallowed successor Prepared/offer or lost join responsibility",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "ticket", "subscription"],
+      "missing_semantics": "An ended local carrier is not remote terminal proof; old finish cannot remove a replacement reservation."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
+      "field": "one bounded handshake survives historical Prepared and late terminal readback",
+      "source": "D25 actual receiver, TLS exact-ticket State and signed Pion offer",
+      "test": "TestInboundHistoricalPreparedRetainsSuccessorUntilTerminalStateReadback",
+      "assertion": "successor bypassed the still-unanswered authoritative State boundary",
+      "state": "partial",
+      "identity_keys": [
+        "serviceId",
+        "pairId",
+        "old attemptId",
+        "queued attemptId",
+        "generation",
+        "fence"
+      ],
+      "missing_semantics": "Unknown old authority cannot start a transport; the original queued ticket and bounded offer are retained without resend."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
+      "field": "pending, throttled or unverified old authority cannot authorize retirement",
+      "source": "D25 real TLS pending, rate-limited, wrong-ticket and bad-signature responses",
+      "test": "TestInboundAdmissionRejectsUnprovenRetirement",
+      "assertion": "unproven State retired old authority or started the queued transport",
+      "state": "failure",
+      "identity_keys": [
+        "serviceId",
+        "networkId",
+        "pairId",
+        "old ticket",
+        "queued ticket",
+        "registration fence"
+      ],
+      "missing_semantics": "Read errors remain typed refusals, not absence, permission, cached authority or an automatic retry."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_lifecycle.go",
+      "field": "scope changes cancel and join queued admission before late publication",
+      "source": "D25 real lifecycle operations while the server holds a late State body",
+      "test": "TestInboundAdmissionScopeChangesCancelLatePublicationAndJoin",
+      "assertion": "late terminal body published under changed scope",
+      "state": "superseded",
+      "identity_keys": [
+        "account",
+        "pin revision",
+        "networkId",
+        "subscription",
+        "old owner",
+        "queued owner"
+      ],
+      "missing_semantics": "No changed account, network, pin, subscription or closed lifetime can borrow an old read's authority."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
+      "field": "one immutable pending admission cannot be overwritten by duplicate or conflicting events",
+      "source": "D25 repeated actual Prepared events around a held exact State read",
+      "test": "TestInboundAdmissionDuplicateAndConflictKeepExactOwner",
+      "assertion": "duplicate created work or conflicting ticket overwrote the queued exact owner",
+      "state": "no_op",
+      "identity_keys": ["pairId", "attemptId", "generation", "ticket", "admission owner"],
+      "missing_semantics": "A different queued ticket is an explicit conflict, never a replacement mailbox or inferred newer authority."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_control.go",
+      "field": "bounded queued signal overflow cancels only its own admission",
+      "source": "D25 actual receiveControl with the original one-entry signal inbox full",
+      "test": "TestInboundAdmissionSignalOverflowStopsOnlyQueuedOwner",
+      "assertion": "overflow was hidden or cancelled another owner",
+      "state": "reset",
+      "identity_keys": ["pairId", "attemptId", "generation", "old owner", "queued owner"],
+      "missing_semantics": "Overflow cannot grow a signal queue, drop silently, terminate the predecessor or cancel the Manager."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
+      "field": "current committed authority retains the existing live/dead promotion barrier",
+      "source": "D25 signed current committed State with actual live and closed Pion muxes",
+      "test": "TestInboundAdmissionCurrentCommittedUsesPromotionBarrier",
+      "assertion": "current committed authority was misclassified as cancellation",
+      "state": "success",
+      "identity_keys": [
+        "pairId",
+        "attemptId",
+        "generation",
+        "currentActiveAttemptId",
+        "old ticket",
+        "queued ticket"
+      ],
+      "missing_semantics": "Higher generation or a historical Prepared is not terminal proof and cannot turn a dead carrier into Ready."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_control_diagnostics.go",
+      "field": "handshake diagnostics retain immutable classified identity without credentials",
+      "source": "D25 snapshot copied at the actual ownership barrier and closed-schema encoding",
+      "test": "TestCandidateControlDiagnosticSnapshotKeepsExactOwnerAndRedacts",
+      "assertion": "diagnostic",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "owner attemptId",
+        "registration fence"
+      ],
+      "missing_semantics": "Missing identity is explicit; malformed fields or unknown raw error text cannot expose SDP, signatures, tokens or URLs."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_inbound_admission.go",
+      "field": "exact terminal retirement survives old cleanup before successor promotion",
+      "source": "D25 actual held-TURN/End cleanup finishes and erases the old retiring entry before the same queued admission resumes",
+      "test": "TestInboundAdmissionCurrentCommittedRetirementSurvivesOldFinishFirst",
+      "assertion": "old cleanup erased exact terminal authority or caused the retained successor to fail",
+      "state": "recovery",
+      "identity_keys": [
+        "pairId",
+        "previous attemptId",
+        "queued attemptId",
+        "generation",
+        "admission job"
+      ],
+      "missing_semantics": "The caller-owned typed retirement receipt remains limited to the exact old owner and queued job; arbitrary not_connected is not treated as terminal proof."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "all physical phase routes share the actual setup barrier",
+      "source": "D24 actual cross pipeline waits for completed transport and catalog before any reverse open",
+      "test": "TestRecoveryBootstrapCrossPhaseRoutesThroughSharedBarrier",
+      "assertion": "phase changed explicit-open/entry/reverse cardinality or order",
+      "state": "partial",
+      "identity_keys": ["phase", "serviceId", "pairId", "attemptId", "generation"],
+      "missing_semantics": "An unfinished owner cannot reach reverse-open; forward stress has no reverse and core crash has no Windows business open."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "core crash setup retains surviving-client-only business authority",
+      "source": "D24 exact shared preparation refuses invalid catalog, cancellation and replaced ownership before reverse-open",
+      "test": "TestRecoveryBootstrapCoreCrashRefusesInvalidBarrierBeforeReverse",
+      "assertion": "core-crash dispatched a Windows business open or entry",
+      "state": "reset",
+      "identity_keys": ["phase", "serviceId", "pairId", "attemptId", "captured core"],
+      "missing_semantics": "Missing or stale setup does not create a killed core's outbound workbench intent as fallback."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "physical initialization has one catalog enable owner",
+      "source": "D24 reads the initializer's actual catalog instead of enabling or rewriting it again",
+      "test": "TestRecoveryBootstrapCatalogReadbackNeverEnablesOrCommits",
+      "assertion": "readback repeated Enable/Commit or changed the production catalog",
+      "state": "no_op",
+      "identity_keys": ["serviceId", "selected account", "device", "network", "catalog revision"],
+      "missing_semantics": "Missing, foreign or incomplete authority refuses; the driver cannot create a matching catalog as fallback."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "initial workbench follows the completed production transport owner",
+      "source": "D24 waits for the actual serve owner before the sole newer-generation business open and exact entry readback",
+      "test": "TestRecoveryBootstrapServeOpensExactlyOnceAfterCompletedTransport",
+      "assertion": "initial handoff repeated/skipped an open or missed exact entry readback",
+      "state": "success",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "captured core"],
+      "missing_semantics": "Do not infer generation one or invent another fixture mode; later fault recovery remains production-only."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "initial setup refuses unfinished or overflowing generations",
+      "source": "D24 validates the observed complete nonzero owner before deriving its legal newer generation",
+      "test": "TestRecoveryBootstrapGenerationRejectsUnfinishedAndOverflow",
+      "assertion": "unfinished/foreign/overflow owner gained a generation",
+      "state": "stale_timeout",
+      "identity_keys": ["pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Zero, malformed, unfinished or overflowing ownership is a refusal, not a guessed generation or retry."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "initial workbench does not retry a replaced or refused owner",
+      "source": "D24 preserves exact captured ownership across setup readback and the single business request",
+      "test": "TestRecoveryBootstrapRefusesLateReplacedAndCancelledOwners",
+      "assertion": "refused owner dispatched or retried a business open",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "captured core"],
+      "missing_semantics": "Late, replaced and cancelled owners cannot select another core or retry explicit Connect."
+    },
+    {
+      "production_file": "networking/internal/helper/account_presence.go",
+      "field": "post-auth pending provenance publishes under the captured revocation owner",
+      "source": "D23 native original-record readback and prepared pending/source assignment after actual logout admission",
+      "test": "TestSelectedSessionAuthorityPendingPublicationRejectsActualLogout",
+      "assertion": "revoked authority published new pending provenance before logout cleanup",
+      "state": "partial",
+      "identity_keys": [
+        "serviceId",
+        "session owner",
+        "original credential",
+        "pending source",
+        "job generation"
+      ],
+      "missing_semantics": "A denied auth response alone is insufficient: pending fields also cannot be reassigned by a late revoked request; Manager fencing stays outside the publication lock."
+    },
+    {
+      "production_file": "networking/internal/helper/members.go",
+      "field": "catalog background owner survives dispatch without selecting a replacement session",
+      "source": "D23 maintenance and AfterWrite use the captured exact selected-session owner through catalog publication",
+      "test": "TestSelectedSessionAuthorityCatalogBackgroundKeepsCapturedOwner",
+      "assertion": "background store publication escaped or lost its exact owner",
+      "state": "recovery",
+      "identity_keys": [
+        "serviceId",
+        "session owner",
+        "catalog revision",
+        "registration fence",
+        "job generation"
+      ],
+      "missing_semantics": "A normal unrelated generation is not a logout; revoked or replaced scope still refuses publication without replacing existing registration."
+    },
+    {
+      "production_file": "networking/internal/helper/selected_session_scope.go",
+      "field": "account lifetime and removal remain authority fences before synchronous commit",
+      "source": "D23 captured original account, context cancellation and Host-protected removal/close state",
+      "test": "TestSelectedSessionScopeLifecycleRejectsBeforePublication",
+      "assertion": "lifecycle loss admitted selected authority publication",
+      "state": "reset",
+      "identity_keys": ["serviceId", "session owner", "account lifetime", "removal tombstone"],
+      "missing_semantics": "Cancelled, closed or removed owners cannot publish; this does not claim a new global Forget/Close transaction."
+    },
+    {
+      "production_file": "networking/internal/helper/directory.go",
+      "field": "unlocked read-to-publication tail retains the exact directory owner",
+      "source": "D23 scoped read result and synchronous view/token/revision publication after actual logout clears state",
+      "test": "TestDirectoryAuthorityReadToPublishTailCannotRestoreLoggedOutView",
+      "assertion": "unlocked late result restored a logged-out directory or announced it",
+      "state": "partial",
+      "identity_keys": ["serviceId", "session owner", "directory revision", "directory token"],
+      "missing_semantics": "A successful earlier read cannot repopulate the directory after sign-out, even if credentials remain durable."
+    },
+    {
+      "production_file": "networking/internal/helper/directory.go",
+      "field": "AfterWrite derives before dispatch without selecting a replacement session",
+      "source": "D23 same-owner background scope independent of unrelated worker generations",
+      "test": "TestDirectoryAuthorityAfterWriteKeepsCapturedOwner",
+      "assertion": "AfterWrite minted a replacement selected owner",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "session owner", "job generation", "directory revision"],
+      "missing_semantics": "Revoked or replaced selected sessions refuse; ordinary authorized background refresh remains valid across an unrelated generation change."
+    },
+    {
+      "production_file": "networking/internal/helper/certificate_recovery_scope.go",
+      "field": "retained native credentials cannot restore locally revoked recovery authority",
+      "source": "D23 actual failed remote logout and failed native deletion followed by named recovery admission",
+      "test": "TestCertificateRecoveryAuthorityRetainedRevocationRefusesBeforeHTTP",
+      "assertion": "retained revoked session dispatched recovery HTTP or returned local authority",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "deviceId", "session owner", "original credential"],
+      "missing_semantics": "A durable token is not new authentication; refusal occurs before any recovery HTTP read."
+    },
+    {
+      "production_file": "networking/internal/helper/certificate_recovery_scope.go",
+      "field": "genuine newly authenticated session has an independent revocation owner",
+      "source": "D23 actual TLS Login and native readback after retained old-session revocation",
+      "test": "TestCertificateRecoveryAuthorityGenuineNewLoginHasIndependentOwner",
+      "assertion": "new recovery projection reset old revocation or reused its owner",
+      "state": "reset",
+      "identity_keys": ["serviceId", "selectedUserId", "old session owner", "new session owner"],
+      "missing_semantics": "New authentication neither inherits nor clears the old session's revocation."
+    },
+    {
+      "production_file": "networking/internal/helper/certificate_recovery_scope.go",
+      "field": "directory and recovery reads reject replacement, cancellation, removal and close",
+      "source": "D23 captured exact session and original account lifetime across every actual TLS read stage",
+      "test": "TestDirectoryAndRecoveryAuthorityRejectChangedScopeAtEveryRead",
+      "assertion": "stale/cancelled consumer published selected authority",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "session owner", "account lifetime", "removal tombstone"],
+      "missing_semantics": "No changed owner or ended lifetime can publish a late authority result."
+    },
+    {
+      "production_file": "networking/internal/helper/selected_session_scope.go",
+      "field": "explicit signed-out restore requires real durable absence",
+      "source": "D23 separately named signed-out scope and exact presence-direction readback",
+      "test": "TestSelectedSessionScopeSignedOutPresenceBoundary",
+      "assertion": "scope accepted a session-presence direction change",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "session presence", "selectedUserId", "session owner"],
+      "missing_semantics": "Expiry or invalid authority is not absence; a captured empty account cannot accept a new session or grant nonempty account authority."
+    },
+    {
+      "production_file": "networking/internal/helper/selected_session_dispatch.go",
+      "field": "newly confirmed authentication retains its selected session through activation",
+      "source": "D23 actual new login durable readback before reportAccount/catalog/candidate activation",
+      "test": "TestSelectedSessionAuthorityLoginTailRejectsActualLogout",
+      "assertion": "successful new authentication lost its selected owner during activation tail",
+      "state": "superseded",
+      "identity_keys": [
+        "serviceId",
+        "selectedUserId",
+        "new session owner",
+        "enrollment owner",
+        "job generation"
+      ],
+      "missing_semantics": "Fresh remote authentication cannot erase an already admitted local sign-out of that same new session; a stale activation cannot rewrite enrollment identity."
+    },
+    {
+      "production_file": "networking/internal/helper/restore_own.go",
+      "field": "active headless restore uses canonical operation-owned adoption",
+      "source": "D23 exact original credential and selected owner through the same canonical query/CAS as cold restore",
+      "test": "TestSelectedSessionAuthorityActiveHeadlessRejectsLateCanonical",
+      "assertion": "active headless maintenance bypassed canonical adoption scope",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "session owner", "original credential", "deviceId"],
+      "missing_semantics": "An existing Manager cannot bypass operation-owned revocation or overwrite an independently replaced original credential."
+    },
+    {
+      "production_file": "networking/internal/helper/network_selection.go",
+      "field": "network choice and durable pin publication retain captured local selected authority",
+      "source": "D23 exact session across fresh CurrentUser/Networks/Pairs/ScopedIdentity reads and catalog commit",
+      "test": "TestSelectedSessionAuthorityNetworkChoiceRejectsActualLogout",
+      "assertion": "late selection changed durable catalog before logout cleanup",
+      "state": "superseded",
+      "identity_keys": [
+        "serviceId",
+        "selectedUserId",
+        "session owner",
+        "networkId",
+        "pairId",
+        "catalog revision"
+      ],
+      "missing_semantics": "A locally revoked session cannot commit pins or selection while its failed remote logout still leaves the Bearer valid."
+    },
+    {
+      "production_file": "networking/internal/helper/selected_session_scope.go",
+      "field": "denial-only selected owner and separate exact worker publication fences",
+      "source": "D23 captured native session identity, local revocation owner and optional immutable generation/job fence",
+      "test": "TestSelectedSessionScopePublicationRechecksTypedFences",
+      "assertion": "scope commit did not retain independent session/job axes",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "session owner", "job generation", "exact job"],
+      "missing_semantics": "A prior guard passing outside the lock cannot authorize a later generation or job; unrelated worker generations do not invalidate normal background scope."
+    },
+    {
+      "production_file": "networking/internal/helper/selected_session_scope.go",
+      "field": "immutable scope composition preserves later canonical adoption constraints",
+      "source": "D23 same-scope Context identity and current non-reentrant guard outside the revocation lock",
+      "test": "TestSelectedSessionScopeContextDoesNotSelfChain",
+      "assertion": "Publish bypassed a later canonical guard",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "session owner", "original credential", "canonical guard"],
+      "missing_semantics": "Reinstalling a scope cannot erase a stricter guard or turn missing guard metadata into an unguarded commit."
+    },
+    {
+      "production_file": "networking/internal/helper/directory.go",
+      "field": "same selected-session owner through every fresh read and late view publication",
+      "source": "D23 exact durable session and denial-only scope across explicit and lifetime-background directory reads",
+      "test": "TestDirectoryAuthorityLogoutWinsAfterEveryRealTLSRead",
+      "assertion": "directory view/revision/announcement escaped before logout cleanup",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "selectedUserId", "session owner", "directory revision"],
+      "missing_semantics": "Local revocation refuses late results even if remote logout and native deletion both fail; fresh remote authorization never replaces the captured local owner."
+    },
+    {
+      "production_file": "networking/internal/helper/certificate_recovery_scope.go",
+      "field": "named certificate-recovery projection retains the original selected-session authority",
+      "source": "D23 exact original credential/token/expiry/removal plus captured local revocation scope through all fresh TLS reads",
+      "test": "TestCertificateRecoveryAuthorityLogoutWinsAfterEveryRealTLSRead",
+      "assertion": "late named recovery owner returned a revoked issuance projection",
+      "state": "superseded",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "selectedUserId",
+        "session owner",
+        "original credential"
+      ],
+      "missing_semantics": "An unconfirmed remote logout cannot authorize a locally revoked issuance projection, mutate ordinary directory state or issue certificates."
+    },
+    {
+      "production_file": "networking/internal/helper/bootstrap.go",
+      "field": "same-session revocation survives worker-generation changes",
+      "source": "D21 separate session hash/expiry/revoked identity from exact job/logout generation fences",
+      "test": "TestCanonicalRestoreAdoptionRevokedSessionBlocksOtherReadmissionOwners",
+      "assertion": "readmission reset revoked session ownership, scheduled a job or re-authorized old scope",
+      "state": "reset",
+      "identity_keys": [
+        "serviceId",
+        "session owner",
+        "job generation",
+        "exact job",
+        "logout owner"
+      ],
+      "missing_semantics": "No generation reset creates new authentication; a genuine new successfully published session remains independent."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "revocation wins over delayed current-user authentication readback",
+      "source": "D21 exact local session owner before dispatch and after real CurrentUser HTTP",
+      "test": "TestCanonicalRestoreAdoptionLogoutWinsDuringCurrentUserHTTP",
+      "assertion": "late user response revived activation, added fresh catalog reads or abandoned logout cleanup",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "selectedUserId", "session owner", "job generation"],
+      "missing_semantics": "Current-user readback is not new login authority and cannot overwrite an explicit local revocation."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_lifecycle.go",
+      "field": "early observer to decision phase ownership handoff",
+      "source": "D22 exact session observer context and joined completion before Ready/resolve/cancel",
+      "test": "TestCandidateHandoffRunCandidateJoinsObserverOnEveryExit",
+      "assertion": "candidate exit did not join its early observer",
+      "state": "partial",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "candidate ticket"],
+      "missing_semantics": "Unknown dispatched cancellation remains owned; stopping an observer is not authoritative candidate cancellation."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_control.go",
+      "field": "same-call validated pending Ready receipt",
+      "source": "D22 current candidate scope and freshly verified Ready HTTP decision",
+      "test": "TestCandidateHandoffReadyReceiptUsesOneReadyOneCommitZeroState",
+      "assertion": "after joined handoff Ready=%d Commit=%d State=%d promoted=%t",
+      "state": "success",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "registration fence"],
+      "missing_semantics": "Committed/terminal, unverified or stale receipts retain authoritative fresh State resolution rather than granting cached active authority."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_decision.go",
+      "field": "one-use pending receipt and unknown-action durable resolution",
+      "source": "D22 original ticket, immutable deadline and current exact decision owner",
+      "test": "TestCandidateHandoffUnknownReadyAndCommitRequireFreshState",
+      "assertion": "unknown dispatch skipped durable readback or changed candidate",
+      "state": "recovery",
+      "identity_keys": [
+        "serviceId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registration fence",
+        "candidate ticket"
+      ],
+      "missing_semantics": "A consumed receipt, historical committed decision or stopped observer never substitutes for current active attempt/generation, bothReady and lease admission."
+    },
+    {
+      "production_file": "networking/internal/helper/credentials.go",
+      "field": "atomic restore credential compare and own-write publication",
+      "source": "D21 credentialMu shared with all original-record writers",
+      "test": "TestCanonicalRestoreAdoptionRecordComparisonAndWriteShareCredentialLock",
+      "assertion": "canonical check/write/readback did not retain the credential lock or issuance readback",
+      "state": "superseded",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "original record",
+        "session owner",
+        "bootstrap generation"
+      ],
+      "missing_semantics": "Read, compare, write and readback remain in one credential-owner transaction; unknown publication cannot grant new authority."
+    },
+    {
+      "production_file": "networking/internal/helper/certificates.go",
+      "field": "single-operation canonical certificate adoption",
+      "source": "D21 exact original persisted service/device/key and fresh canonical certificate response",
+      "test": "TestCanonicalRestoreAdoptionOneQueryKeepsBothFreshUsersAndOwner",
+      "assertion": "one restore performed %d canonical queries, want exactly one",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "selectedUserId",
+        "session owner",
+        "bootstrap generation"
+      ],
+      "missing_semantics": "Missing or superseded original proof refuses; independent operations and post-issuance readback cannot reuse completed proof."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "restore proof publication ownership",
+      "source": "D21 captured exact account, original record, durable session, caller and generation",
+      "test": "TestCanonicalRestoreAdoptionLateProofCannotPublish",
+      "assertion": "superseded proof published authority or issued a certificate",
+      "state": "superseded",
+      "identity_keys": [
+        "serviceId",
+        "deviceId",
+        "account owner",
+        "session owner",
+        "bootstrap generation"
+      ],
+      "missing_semantics": "Old proof never selects another owner or public transport; cleanup belongs only to newly created unpublished resources."
+    },
+    {
+      "production_file": "networking/internal/helper/bootstrap.go",
+      "field": "session-scoped logout revokes captured and unscheduled old bootstrap without canceling a replacement owner",
+      "source": "D20 exact token-hash/expiry session owner plus independent job/logout generation fences, with no raw-token history or new persisted schema",
+      "test": "TestAccountLogoutDeleteFailureRejectsCapturedAndFreshBootstrap",
+      "assertion": "bootstrap",
+      "state": "superseded",
+      "identity_keys": [
+        "captured bootstrap owner",
+        "selected session",
+        "replacement generation",
+        "local logout revocation"
+      ],
+      "missing_semantics": "Failed durable deletion cannot reactivate the retired old account, and malformed or stale input cannot cancel a new account's activation."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_signals.go",
+      "field": "logout's empty-target local fence closes the real gateway and retains an exact worker completion across cancellation/close",
+      "source": "D20 local old-authority revocation without dialing or creating recovery pending",
+      "test": "TestAccountLogoutFenceClosesRealGatewayAndRetainsJoin",
+      "assertion": "gateway",
+      "state": "reset",
+      "identity_keys": ["original Manager", "old gateway", "account scope", "exact worker join"],
+      "missing_semantics": "A closed or canceled owner is never reopened or considered joined merely from a closed flag."
+    },
+    {
+      "production_file": "networking/internal/helper/account_logout.go",
+      "field": "an admitted explicit logout always revokes only its captured old owner despite caller or credential loss",
+      "source": "D20 local-only logout ownership, exact session binding and fixed primary-error priority",
+      "test": "TestAccountLogoutRealTLSInterruptedResponseStillFencesCapturedOwner",
+      "assertion": "CandidatesActive",
+      "state": "rejected",
+      "identity_keys": [
+        "captured Manager",
+        "selected account",
+        "exact durable token",
+        "old workbench intent"
+      ],
+      "missing_semantics": "Cancellation or missing credentials cannot leave old authority active; malformed or stale-token requests cannot clear a new owner. Local cleanup cannot prove remote revocation or establish recovery provenance."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "post-auth pending activation uses fresh original identity and actual expiry, not a pre-request boolean",
+      "source": "D20 independent auth transport and device activation admission",
+      "test": "TestAccountAuthHostResponseCrossesRealCertificateExpiry",
+      "assertion": "activationPending",
+      "state": "stale_timeout",
+      "identity_keys": [
+        "original device",
+        "selected Bearer account",
+        "same Manager",
+        "real NotAfter"
+      ],
+      "missing_semantics": "An auth refusal remains its exact error; expired activation cannot overwrite a real confirmed response or invent ready."
+    },
+    {
+      "production_file": "networking/internal/helper/account_transport.go",
+      "field": "named authentication preselects exact valid-device mTLS before one fresh request",
+      "source": "D20 explicit setup/validated-expired auth owner and independent pending activation provenance",
+      "test": "TestAccountAuthTransportRealTLSValidDeviceUsesOneFreshRequest",
+      "assertion": "verified",
+      "state": "success",
+      "identity_keys": ["original device", "selected Bearer account", "request count"],
+      "missing_semantics": "Missing client, original credential or identity refuses before HTTP; a failed request never chooses another transport."
+    },
+    {
+      "production_file": "networking/internal/helper/account_session.go",
+      "field": "fresh selected-account and login confirmation share named auth preselection without cached authority",
+      "source": "D20 selected session remains independent of certificate enrollment owner",
+      "test": "TestAccountAuthTransportRepeatedSelectionDoesNotCacheFreshAuthorization",
+      "assertion": "CurrentUser",
+      "state": "recovery",
+      "identity_keys": ["selected session", "original device", "fresh HTTP count"],
+      "missing_semantics": "A prior completed authorization read cannot substitute for the current request."
+    },
+    {
+      "production_file": "networking/internal/helper/account_presence.go",
+      "field": "confirmed authentication is distinct from exact expired-device activation pending",
+      "source": "D20 named public authentication plus original-device provenance",
+      "test": "TestAccountAuthExpiredHostLoginThenCurrentPublishesRealSession",
+      "assertion": "main's mandatory post-login current-user confirmation could not publish B",
+      "state": "recovery",
+      "identity_keys": [
+        "original device A",
+        "fresh user B",
+        "durable token",
+        "activation provenance"
+      ],
+      "missing_semantics": "No arbitrary valid-device network error can become authentication success or ready state."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "recovery teardown joins only after releasing the account lock",
+      "source": "D20 scoped auth completion cannot deadlock an old receive/emit callback",
+      "test": "TestAccountRecoveryDetachesUnderAccountLockAndJoinsOnlyAfterUnlock",
+      "assertion": "completion returned before old receive stopped",
+      "state": "recovery",
+      "identity_keys": ["account owner", "original signaling owner", "closing lifetime"],
+      "missing_semantics": "Cancellation or close cannot abandon detached worker ownership or self-join a callback."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_signals.go",
+      "field": "same-account local recovery fence preserves original workbench and gateway",
+      "source": "D20 expired-device auth fence is not account revocation or a replacement runtime",
+      "test": "TestAccountRecoverySameUserPreservesIntentGatewayRuntimeAndOwnedCleanup",
+      "assertion": "same-user recovery lost intent/gateway/device/core/cleanup or dialed",
+      "state": "recovery",
+      "identity_keys": [
+        "selected user",
+        "workbench intent",
+        "gateway",
+        "runtime generation",
+        "cleanup ticket"
+      ],
+      "missing_semantics": "Only an actual account change/logout can clear the former scope; pending cannot admit new candidates."
+    },
+    {
+      "production_file": "networking/internal/peersession/signaling.go",
+      "field": "closing barrier fences worker start versus dedicated external join",
+      "source": "D20 signal teardown retains exact workers without changing normal self-close semantics",
+      "test": "TestRecoverySignalingClosingBarrierPreventsLateWorkerStarts",
+      "assertion": "worker started after recovery closing/Wait barrier",
+      "state": "reset",
+      "identity_keys": ["signal owner", "closed barrier", "worker lifetime"],
+      "missing_semantics": "Wait cannot race a newly added worker, and ordinary callbacks never wait on themselves."
+    },
+    {
+      "production_file": "electron/main/p2p/accounts.ts",
+      "field": "named recovery read captures exact current session without ordinary device authentication",
+      "source": "D20 narrow public recovery authorization owner with per-await account fence",
+      "test": "makes one exact named read without ordinary directory fields or cached authority",
+      "assertion": "expect(f.call).toHaveBeenCalledExactlyOnceWith(",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "deviceId", "session identity", "selected user"],
+      "missing_semantics": "No generic public transport or retry after ordinary device failure is exposed."
+    },
+    {
+      "production_file": "electron/main/p2p/certificate-recovery-projection.ts",
+      "field": "dedicated fresh recovery projection carries real owned networks without fake ordinary revision",
+      "source": "D20 strict main-only authorization projection",
+      "test": "makes one exact named read without ordinary directory fields or cached authority",
+      "assertion": "expect(result).not.toHaveProperty('revision')",
+      "state": "recovery",
+      "identity_keys": ["fresh user", "networkId", "device membership"],
+      "missing_semantics": "Unknown fields and duplicate identities refuse rather than invent ordinary directory state."
+    },
+    {
+      "production_file": "electron/main/p2p/certificate-recovery-scope.ts",
+      "field": "explicit remembered network is checked after the dedicated public recovery read",
+      "source": "D20 original-key legacy recovery without an expired mTLS dependency cycle",
+      "test": "uses one named authorization projection before issuing only the manually selected scope",
+      "assertion": "expect(f.remembered).toHaveBeenCalledWith(legacyCredential.serviceId, recoveryUser.userId)",
+      "state": "recovery",
+      "identity_keys": [
+        "original device",
+        "fresh selected user",
+        "manual network",
+        "selection lifetime"
+      ],
+      "missing_semantics": "A sole network is never inferred and late completion cannot issue or persist."
+    },
+    {
+      "production_file": "electron/main/p2p/tests/legacy-certificate-fixture.ts",
+      "field": "test-only legacy owner fixture uses the exact named scope protocol",
+      "source": "D20 main owner regression support; never a packaged production provider",
+      "test": "uses one named authorization projection before issuing only the manually selected scope",
+      "assertion": "expect(f.replace).toHaveBeenCalledOnce()",
+      "state": "recovery",
+      "identity_keys": ["test original credential", "explicit selected network"],
+      "missing_semantics": "Fixture behavior cannot substitute for actual TLS or physical acceptance."
+    },
+    {
+      "production_file": "networking/internal/helper/account_transport.go",
+      "field": "ordinary Bearer operations use explicitly published device transport",
+      "source": "D20 phase-owned transport without failure-selected public retry",
+      "test": "TestAccountTransportRealTLSOrdinaryBearerManagementUsesDevice",
+      "assertion": "ordinary management did not use exact device TLS plus selected Bearer",
+      "state": "success",
+      "identity_keys": ["HTTP phase", "original device A", "selected Bearer B"],
+      "missing_semantics": "Missing or expired ordinary device authority refuses; named public authentication is separate."
+    },
+    {
+      "production_file": "networking/internal/helper/user_management.go",
+      "field": "ordinary management binds selected Bearer to the original TLS device resource",
+      "source": "D20 selected account and device ownership remain separate",
+      "test": "TestAccountTransportRealTLSOrdinaryBearerManagementUsesDevice",
+      "assertion": "ordinary management did not use exact device TLS plus selected Bearer",
+      "state": "success",
+      "identity_keys": ["device key", "selected account", "method"],
+      "missing_semantics": "Resource fairness never substitutes the enrollment owner for the authenticated account."
+    },
+    {
+      "production_file": "networking/internal/helper/certificate_recovery_scope.go",
+      "field": "named read-only public owner proves fresh recovery authorization for the exact original credential",
+      "source": "D20 strict private table-2 legacy certificate recovery",
+      "test": "TestCertificateRecoveryScopeRealTLSPublicOwnerKeepsSelectedBAndOriginalA",
+      "assertion": "read-only recovery scope published an ordinary directory cache",
+      "state": "recovery",
+      "identity_keys": [
+        "service",
+        "original device/key",
+        "durable session",
+        "fresh user",
+        "removal lifetime"
+      ],
+      "missing_semantics": "Every HTTP read rechecks authority; it issues no certificate, chooses no network and returns no secret."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_decision.go",
+      "field": "expired historical commit retires dead resources without granting live forwarding",
+      "source": "D13 exact historical receipt authority and current-fresh grant separation",
+      "test": "TestExpiredCommittedDeadTargetReleasesOneCandidateSlotWithoutEndingSuccessor",
+      "assertion": "dead committed target claimed ready or retained candidate admission",
+      "state": "recovery",
+      "identity_keys": [
+        "signed exact committed ticket",
+        "current active pointer",
+        "subscription fence",
+        "exact predecessor"
+      ],
+      "missing_semantics": "Expired historical snapshots cannot leave a dead candidate consuming the sole successor slot, but live promotion still needs a valid lease."
+    },
+    {
+      "production_file": "networking/internal/autoconnect/engine.go",
+      "field": "exact durably reauthorized intent clears old terminal with epoch fencing",
+      "source": "D18 fresh authorized network selection, not a global retry reset",
+      "test": "TestReauthorizeFencesOldInflightRefusalAndKeepsOneConnectOwner",
+      "assertion": "late old-scope refusal poisoned the new epoch or broke single-flight",
+      "state": "superseded",
+      "identity_keys": ["exact service:pair intent", "reauthorization epoch", "one connect owner"],
+      "missing_semantics": "Ordinary Wake preserves terminal refusals and old in-flight errors cannot poison the new durable scope."
+    },
+    {
+      "production_file": "tools/workbench-recovery-pause.mjs",
+      "field": "native program pause evidence is distinct from UDP loss",
+      "source": "Approved D19 original identity, bounded native cleanup and real hold/recovery clock",
+      "test": "proof rejects malformed JSON, every missing field, identity drift and nanos-short holds",
+      "assertion": "workbenchProgramPauseEvidence",
+      "state": "rejected",
+      "identity_keys": [
+        "exact process creation SHA",
+        "pause nonce",
+        "original session",
+        "release start"
+      ],
+      "missing_semantics": "Absent, duplicate, late or terminated proof cannot become a passing process recovery profile."
+    },
+    {
+      "production_file": "electron/main/p2p/management-admission.ts",
+      "field": "strict named network choice IPC admission",
+      "source": "D18 exact account/revision/network inputs through named operations only",
+      "test": "admits only exact account and catalog revision for an explicit network choice",
+      "assertion": "parseManagementRequest('selectNetwork'",
+      "state": "rejected",
+      "identity_keys": ["userId", "pairId", "networkId", "expectedRevision"],
+      "missing_semantics": "Arbitrary credential or shell input cannot cross the new operation boundary."
+    },
+    {
+      "production_file": "electron/p2p-management-preload.ts",
+      "field": "named network choice capability without generic dispatch",
+      "source": "Frozen renderer capability surface and D18 typed named operations",
+      "test": "routes every management operation to its named owner with precise primitive arguments",
+      "assertion": "selectNetwork",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId", "pairId", "networkId", "expectedRevision"],
+      "missing_semantics": "Only the admitted named operation receives this scoped mutation."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/index.ts",
+      "field": "public domain singleton for explicit network choice",
+      "source": "Domain public entry owns workflow, presentation consumes that entry",
+      "test": "shows one computer, no implicit choice, keyboard focus and one authoritative tab after Enter",
+      "assertion": "selectNetwork).toHaveBeenCalledTimes(1)",
+      "state": "success",
+      "identity_keys": ["serviceId", "pairId", "selected network", "one tab"],
+      "missing_semantics": "Opening the menu never picks a network or duplicates the selected computer."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pManagement.ts",
+      "field": "independent readback scope during an old actor mutation",
+      "source": "D18 actor switch invalidates stale selection while fresh choices remain readable",
+      "test": "blocks repeated submissions while pending and refuses late results superseded by a fresh account read",
+      "assertion": "view?.userId).toBe('1'.repeat(12))",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "actor", "read scope", "write scope"],
+      "missing_semantics": "A fresh account read is not blocked behind an old selection and old results cannot replace it."
+    },
+    {
+      "production_file": "tests/visual/runtime-network-choice.ts",
+      "field": "test-only fixture composes the real explicit-choice menu",
+      "source": "D18 real component behavior; browser fixture is isolated evidence, not a production entry",
+      "test": "shows one computer, no implicit choice, keyboard focus and one authoritative tab after Enter",
+      "assertion": "selectNetwork).not.toHaveBeenCalled()",
+      "state": "success",
+      "identity_keys": ["fixture computer", "explicit network", "one menu"],
+      "missing_semantics": "The visual fixture cannot be used to infer native core, credential or physical acceptance."
+    },
+    {
+      "production_file": "networking/internal/catalog/store.go",
+      "field": "atomic validated network identity transition sequence",
+      "source": "Approved D18: unchanged strict identity guards, one final durable publication under one CAS",
+      "test": "TestCommitTransitionsInvalidMiddleAndThirdStepLeaveOriginalBytes",
+      "assertion": "failed later step left a durable intermediate drop",
+      "state": "recovery",
+      "identity_keys": [
+        "original catalog revision",
+        "exact old network lineage",
+        "explicit selected network"
+      ],
+      "missing_semantics": "A failure cannot erase the remembered choice, and no renderer receives arbitrary transition records."
+    },
+    {
+      "production_file": "networking/internal/helper/network_selection.go",
+      "field": "one computer with explicit ambiguous network selection",
+      "source": "User-approved D18 retained-network and explicit-first-choice behavior",
+      "test": "TestNetworkChoicesDoNotInferFirstNetworkOrBlockOtherComputers",
+      "assertion": "ambiguous choice was inferred or service admission blocked",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "fresh registration fence",
+        "catalog revision",
+        "exact network"
+      ],
+      "missing_semantics": "Fresh ambiguous devices receive no live pin or active catalog intent, while other authorized devices remain usable."
+    },
+    {
+      "production_file": "electron/main/p2p/network-selection.ts",
+      "field": "named exact current account and network decision admission",
+      "source": "Approved D18 named choices/select operations; renderer never supplies keys or pins",
+      "test": "rejects extra credentials, duplicated choices, missing scope and impossible selected states",
+      "assertion": "parseNetworkChoices(value)",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "userId", "pairId", "networkId", "catalogRevision"],
+      "missing_semantics": "Missing or contradictory choices fail explicitly; no cached or first network substitutes for authority."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pNetworkSelection.ts",
+      "field": "unknown selection results are resolved without write replay",
+      "source": "Approved D18 selection lifecycle and readback-only uncertain outcome",
+      "test": "retains unknown outcomes until readback and never replays a write as retry",
+      "assertion": "toHaveBeenCalledTimes(1)",
+      "state": "recovery",
+      "identity_keys": ["service scope", "selected actor", "request epoch", "exact choice"],
+      "missing_semantics": "Unknown replies block another mutation until fresh readback; late replies cannot publish old account choices."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimeNetworkChoiceView.vue",
+      "field": "same floating dialog with keyboard, back and pending ownership",
+      "source": "Approved D18 existing add-tab floating layer; no nested modal or implicit selection",
+      "test": "does not late-open after Back and re-entering the same computer while its choice is pending",
+      "assertion": "p2pConnections.connect).not.toHaveBeenCalled()",
+      "state": "superseded",
+      "identity_keys": ["open epoch", "actor", "computer", "network"],
+      "missing_semantics": "A committed choice may persist, but its old navigation lifecycle cannot open a late guest."
+    },
+    {
+      "production_file": "networking/internal/helper/bootstrap.go",
+      "field": "single bootstrap owner retries only the original durable account and service scope",
+      "source": "Approved D17: transient cold bootstrap retry without login, enrollment, cached pins or DSH startup",
+      "test": "TestBootstrapRetriesOriginalSessionBeforeManagerAndAfterReadOnlyFailure",
+      "assertion": "retry changed the durable session/enrollment owner",
+      "state": "recovery",
+      "identity_keys": [
+        "serviceId",
+        "durable session fingerprint",
+        "original device authority",
+        "catalog generation"
+      ],
+      "missing_semantics": "No manager or read-only manager is a retryable phase only for explicit transient causes. Changed or removed records and closed owners stop the old job."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_end.go",
+      "field": "exact-ticket End cleanup survives local session completion and joins on owner shutdown",
+      "source": "Approved D17: retain unknown server cleanup ownership rather than discard or replace the ticket",
+      "test": "TestEndRateLimitKeepsLightweightOwnerAfterSessionFinish",
+      "assertion": "same-ticket cleanup did not recover after transient 429",
+      "state": "recovery",
+      "identity_keys": [
+        "registration fence",
+        "candidate ticket",
+        "terminal reason",
+        "manager lifetime"
+      ],
+      "missing_semantics": "A local done event does not prove the server ended its slot. Only authoritative resolution or explicit lifetime termination releases cleanup responsibility."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_admission.go",
+      "field": "two-phase fresh account-scoped identity and activation barrier",
+      "source": "Approved D16: read-only registration, fresh scoped pin, then candidate activation",
+      "test": "TestReadOnlyBootstrapPinsSelectedAccountBeforeCandidateActivation",
+      "assertion": "account change bypassed read-only bootstrap",
+      "state": "recovery",
+      "identity_keys": ["selected account", "current fence", "pair record ID", "target device ID"],
+      "missing_semantics": "A cache or late reply cannot authorize current pins. Empty capabilities are explicit read-only bootstrap, not a fallback."
+    },
+    {
+      "production_file": "networking/internal/helper/management.go",
+      "field": "cached restore data cannot activate device or live pins",
+      "source": "Approved D16: fresh scoped core catalog is the only live pin authority",
+      "test": "TestCachedPairPinIsNotAPublishedAuthority",
+      "assertion": "pairs.pin",
+      "state": "rejected",
+      "identity_keys": ["selected account", "device credential", "initial pins"],
+      "missing_semantics": "Raw caller-supplied pairs.pin is removed from the private contract. No registration is admitted from cached/null bootstrap pins."
+    },
+    {
+      "production_file": "networking/internal/autoconnect/wake.go",
+      "field": "exact pair event-driven retry",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestWakeRetriesOnlySuspendedPairWithoutPolling",
+      "assertion": "one lifecycle wake reset an unrelated pair's backoff",
+      "state": "recovery",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/controlplane/client.go",
+      "field": "explicit selected account in registration",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestControlRegistrationRequiresCurrentAccountCoreAndCandidateSupport",
+      "assertion": "client registration changed explicit scope",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/controlplane/signals_control.go",
+      "field": "current account, core, subscription fence admission",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestControlRegistrationRequiresCurrentAccountCoreAndCandidateSupport",
+      "assertion": "registration fence did not round trip",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/controlplane/signals.go",
+      "field": "legacy attempt is not a v2 candidate",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestControlRejectsLegacyAttemptInsteadOfDowngrading",
+      "assertion": "v2 admitted a legacy destructive attempt",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/controlplane/signals_telemetry.go",
+      "field": "joined telemetry cannot stand in for WSS health",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestControlTelemetryIsJoinedAndCannotDetermineWSSHealth",
+      "assertion": "telemetry refusal closed the WSS owner",
+      "state": "partial",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/helper/account_session.go",
+      "field": "durable selected session, not enrollment ownership",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestSelectedSessionRestoresActualAccountWithoutDeviceOwnerSubstitution",
+      "assertion": "selected account =",
+      "state": "recovery",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/helper/restore_own.go",
+      "field": "missing selected session means signed out",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestMissingSelectedSessionIsSignedOutAndNeverQueriesDeviceOwner",
+      "assertion": "missing login session must not query as the device owner",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/helper/account_presence.go",
+      "field": "confirmed session precedes authority projection",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestRejectedCurrentTokenCannotPublishDirectoryAuthority",
+      "assertion": "rejected current-user call changed the directory token/snapshot or queried authority",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peer/transport_lifecycle.go",
+      "field": "reversible suspension without carrier teardown",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestLiveLifecyclePublishesSuspensionWithoutEndingTransport",
+      "assertion": "a stale expiry ended the recovered primary",
+      "state": "superseded",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peer/negotiation.go",
+      "field": "signed 128 bit candidate lease authority is isolated from v1",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestCandidateTicketAuthenticityTimeAndStrictAttemptIsolation",
+      "assertion": "legacy lease admitted 128-bit attempt without candidate authorization",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_connect.go",
+      "field": "unknown dispatch result retains one exact attempt",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestMalformedPrepareReplyResolvesExactAttemptWithoutDiscardingSlot",
+      "assertion": "unknown prepare outcome lost or changed the reserved id",
+      "state": "partial",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_control.go",
+      "field": "cancellation resolves dispatched prepare before slot release",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestDisconnectResolvesDispatchedPrepareBeforeReleasingCandidateSlot",
+      "assertion": "HTTP cancellation discarded an admitted unknown prepare",
+      "state": "partial",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_decision.go",
+      "field": "authenticated promotion preserves exact gateway and runtime",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestManagerRealDSH",
+      "assertion": "connected.State.RuntimeGeneration != 2",
+      "state": "recovery",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/controlplane/candidates.go",
+      "field": "real typed v2 prepare ready commit renew end calls",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestManagerRealDSH",
+      "assertion": "connected.State.RuntimeGeneration != 2",
+      "state": "recovery",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_events.go",
+      "field": "peer replacement suspends exact primary without candidate projection",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestPeerCoreReplacementSuspendsExactPrimaryWithoutCandidateProjection",
+      "assertion": "candidate progress overwrote the suspended primary",
+      "state": "superseded",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_lifecycle.go",
+      "field": "terminal owner state precedes event projection",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestPromotedMuxTerminationPublishesDisconnectedAndWakes",
+      "assertion": "disconnected",
+      "state": "recovery",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_signals.go",
+      "field": "stale receiver and wrong account cannot admit resources",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestStaleSubscriptionAndWrongAccountCannotAdmitCandidate",
+      "assertion": "old subscription admitted a staged candidate",
+      "state": "superseded",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/peersession/signaling.go",
+      "field": "old subscription cannot own new candidate admission",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestStaleSubscriptionAndWrongAccountCannotAdmitCandidate",
+      "assertion": "a server-signed ticket for another account reached runtime admission",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/protocol/candidate.go",
+      "field": "shared golden signed candidate wire",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestCandidateWireGolden",
+      "assertion": "candidate signing bytes drifted from shared wire fixture",
+      "state": "success",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/protocol/control.go",
+      "field": "strict nested registration and candidate control fields",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestCandidateControlStrictNestedFields",
+      "assertion": "nested candidate field admission accepted malformed input",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/protocol/frame.go",
+      "field": "control strict decode remains separate from data version",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestCandidateControlStrictNestedFields",
+      "assertion": "nested candidate field admission accepted malformed input",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/protocol/signal.go",
+      "field": "candidate wrapper grants lease scope without admitting legacy lease",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestCandidateTicketAuthenticityTimeAndStrictAttemptIsolation",
+      "assertion": "ticket-authorized 128-bit attempt lease rejected",
+      "state": "rejected",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/endpoint.go",
+      "field": "atomic exact old ingress cohort retirement",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestPromotionRetiresOnlyOldIngressCohort",
+      "assertion": "new ingress inherited the retired cohort",
+      "state": "superseded",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/proxy.go",
+      "field": "new TCP ingress survives old cohort cleanup",
+      "source": "Approved D13-D16 joint control-v2 authority and exact lifetime contract; source tests are not physical acceptance",
+      "test": "TestPromotionRetiresOnlyOldIngressCohort",
+      "assertion": "promotion closed new ingress",
+      "state": "superseded",
+      "identity_keys": [
+        "selected account",
+        "registration fence",
+        "directed pair",
+        "attempt and generation"
+      ],
+      "missing_semantics": "Invalid, missing, stale or ambiguous authority is an explicit refusal or exact-id resolving state, never cached ready or legacy substitution."
+    },
+    {
+      "production_file": "electron/main/p2p/pairing.ts",
+      "field": "approval cannot install caller-supplied live pins",
+      "source": "D16 fresh scoped core catalog is the only live pin authority",
+      "test": "leaves live pin authority to the fresh scoped core catalog after approval",
+      "assertion": "expect(f.call.mock.calls.map((call) => call[0])).not.toContain('pairs.pin')",
+      "state": "rejected",
+      "identity_keys": ["pair record ID", "device keys", "confirmed fingerprint"],
+      "missing_semantics": "Approval readback remains explicit but is not authorization to populate live pins."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PPairingPanel.vue",
+      "field": "suspended stage copy and action admission",
+      "source": "Approved primary/candidate recovery: suspended is not ready and cannot start another connection",
+      "test": "shows suspended recovery without promising a direct path or dispatching another connect",
+      "assertion": "expect(connect).not.toHaveBeenCalled()",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "runtimeGeneration"],
+      "missing_semantics": "Last known UDP path is not current readiness. Component proof is not a native guest or physical recovery result."
+    },
+    {
+      "production_file": "electron/main/core/supervisor.ts",
+      "field": "version 2 required on real core bootstrap",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "boots a real child, proves core.version, and exits with the shell",
+      "assertion": "expect(version).toMatchObject({ version: 1, methodTableVersion: 2 })",
+      "state": "rejected",
+      "identity_keys": ["frame version", "method table version"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "electron/main/core/version-contract.ts",
+      "field": "strict matched method/state contract",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "refuses incompatible or malformed core contract %o",
+      "assertion": "assertCoreVersion(version)",
+      "state": "rejected",
+      "identity_keys": ["frame version", "method table version", "exact fields"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "electron/main/core/fixtures/fake-core.mjs",
+      "field": "test-only child returns matched state contract",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "boots a real child, proves core.version, and exits with the shell",
+      "assertion": "expect(version).toMatchObject({ version: 1, methodTableVersion: 2 })",
+      "state": "success",
+      "identity_keys": ["test subprocess", "version"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "electron/main/p2p/device-session.ts",
+      "field": "immutable device owner separate from selected account",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "changes only the certificate, reads it back and restores the original device with separate presence",
+      "assertion": "accountUserId: 'f'.repeat(12)",
+      "state": "success",
+      "identity_keys": ["device id", "certificate", "accountUserId"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "electron/main/p2p/runtime-host.ts",
+      "field": "state admission retains every transition in arrival order",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "cannot skip queued terminal %s to revive cached ready",
+      "assertion": "expect(f.host.snapshot().peers[0].state.stage).toBe(terminal)",
+      "state": "superseded",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "arrival order"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "electron/main/p2p/helper-state.ts",
+      "field": "same-attempt suspension preserves runtime authority",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "allows repeated ready/suspended cycles within one exact runtime authority",
+      "assertion": "assertStateProgress(ready, suspended)",
+      "state": "recovery",
+      "identity_keys": ["attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pConnections.ts",
+      "field": "suspended is busy but not live ready or direct",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "reports a suspended primary as recovering, not ready or a live direct path",
+      "assertion": "expect(connections.isReady(serviceId, pairId)).toBe(false)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "stage"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.p2p.ts",
+      "field": "recovery copy never promises readiness",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "describes recovery without claiming ready or a terminal failure in both languages",
+      "assertion": "p2p.connection.stageSuspended",
+      "state": "partial",
+      "identity_keys": ["locale", "stage"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimePeerEmptyState.vue",
+      "field": "suspended reopen remains unmounted without ready authority",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "does not authorize a new guest by reopening a suspended primary entry",
+      "assertion": "expect(wrapper.find(selector).exists()).toBe(false)",
+      "state": "rejected",
+      "identity_keys": ["open lifecycle", "attempt", "guest"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "src/app/shell/runtimeBrowserState.ts",
+      "field": "suspended deep navigation and existing guest survive without a new grant",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "preserves the original guest and navigated src through repeated primary suspension",
+      "assertion": "expect(wrapper.get(selector).element).toBe(originalGuest)",
+      "state": "recovery",
+      "identity_keys": ["catalog binding", "attempt", "runtime", "open lifecycle"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimeTabsPanel.vue",
+      "field": "same native guest DOM and status banner across suspension",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "preserves the original guest and navigated src through repeated primary suspension",
+      "assertion": "expect(wrapper.get(selector).attributes('src')).toBe(deepUrl)",
+      "state": "recovery",
+      "identity_keys": ["guest DOM", "deep URL", "attempt"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimeTabStrip.vue",
+      "field": "recovery status remains distinct from ready",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "preserves the original guest and navigated src through repeated primary suspension",
+      "assertion": "getAttribute('data-state')",
+      "state": "partial",
+      "identity_keys": ["tab id", "stage"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.refusals.ts",
+      "field": "new control refusals have exact bilingual categories",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "explains every new candidate refusal without calling it an unreachable server",
+      "assertion": "expect(key).toBe(`p2p.refusal.${category}`)",
+      "state": "rejected",
+      "identity_keys": ["refusal code", "locale", "category"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "electron/main/p2p/management.ts",
+      "field": "unlinked selected account cannot substitute enrollment owner",
+      "source": "Approved control-v2 selected-account and primary/candidate contract; real ownership projection",
+      "test": "refuses an unlinked selected account without substituting the enrollment owner",
+      "assertion": "expect(deviceRestoreUser(f)).toBeUndefined()",
+      "state": "rejected",
+      "identity_keys": ["selected account", "enrollment owner", "device binding"],
+      "missing_semantics": "Missing authority, incompatible version or failed read remains explicit. Source/component evidence does not substitute for native guest or physical transport acceptance."
+    },
+    {
+      "production_file": "electron/main/core/harness-runtime.ts",
+      "field": "known owner errors remain typed and scrub private details",
+      "source": "known owner refusal through actual registered IPC and typed locale dictionaries",
+      "test": "typed and non-secret through %s instead of absent/stopped",
+      "assertion": "await expect(answer).rejects.toMatchObject({ code, details: {} })",
+      "state": "rejected",
+      "identity_keys": ["runtime owner code", "renderer code", "admitted operation", "locale"],
+      "missing_semantics": "No arbitrary error object, raw private message, success data or stopped-state substitution. No automatic restart or alternate runtime is introduced."
+    },
+    {
+      "production_file": "electron/main/ipc.ts",
+      "field": "launch stop and status return admitted typed owner refusals",
+      "source": "known owner refusal through actual registered IPC and typed locale dictionaries",
+      "test": "remains typed through $channel",
+      "assertion": "expect(answer).not.toHaveProperty('data')",
+      "state": "rejected",
+      "identity_keys": ["runtime owner code", "renderer code", "admitted operation", "locale"],
+      "missing_semantics": "No arbitrary error object, raw private message, success data or stopped-state substitution. No automatic restart or alternate runtime is introduced."
+    },
+    {
+      "production_file": "electron/main/managed/ipc-error-codes.ts",
+      "field": "owner failures map one-to-one into renderer result codes",
+      "source": "known owner refusal through actual registered IPC and typed locale dictionaries",
+      "test": "remains typed through $channel",
+      "assertion": "expect(answer).toMatchObject({ ok: false, code: rendererCode, message: expect.any(String) })",
+      "state": "rejected",
+      "identity_keys": ["runtime owner code", "renderer code", "admitted operation", "locale"],
+      "missing_semantics": "No arbitrary error object, raw private message, success data or stopped-state substitution. No automatic restart or alternate runtime is introduced."
+    },
+    {
+      "production_file": "electron/main/managed/runtime-errors.ts",
+      "field": "only known real typed errors cross the safe owner boundary",
+      "source": "known owner refusal through actual registered IPC and typed locale dictionaries",
+      "test": "admits owner codes only from typed failures, never arbitrary objects or unknown codes",
+      "assertion": "runtimeOwnerError(new Error('runtime.owner_unavailable'))",
+      "state": "rejected",
+      "identity_keys": ["runtime owner code", "renderer code", "admitted operation", "locale"],
+      "missing_semantics": "No arbitrary error object, raw private message, success data or stopped-state substitution. No automatic restart or alternate runtime is introduced."
+    },
+    {
+      "production_file": "src/shared/contracts.ts",
+      "field": "six explicit owner result codes keep the frozen IPC typed",
+      "source": "known owner refusal through actual registered IPC and typed locale dictionaries",
+      "test": "remains typed through $channel",
+      "assertion": "expect(answer).not.toHaveProperty('data')",
+      "state": "rejected",
+      "identity_keys": ["runtime owner code", "renderer code", "admitted operation", "locale"],
+      "missing_semantics": "No arbitrary error object, raw private message, success data or stopped-state substitution. No automatic restart or alternate runtime is introduced."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.errors.ts",
+      "field": "local ownership failure guidance is localized without restart advice",
+      "source": "known owner refusal through actual registered IPC and typed locale dictionaries",
+      "test": "explains %s distinctly in both languages",
+      "assertion": "expect(createTranslator('zh-CN')(title)).toBe(chinese)",
+      "state": "rejected",
+      "identity_keys": ["runtime owner code", "renderer code", "admitted operation", "locale"],
+      "missing_semantics": "No arbitrary error object, raw private message, success data or stopped-state substitution. No automatic restart or alternate runtime is introduced."
+    },
+    {
+      "production_file": "src/app/shell/AppShell.vue",
+      "field": "local owner refusal toast selects its explicit title and detail",
+      "source": "known owner refusal through actual registered IPC and typed locale dictionaries",
+      "test": "does not claim a stopped process when owner reachability or shutdown is unknown",
+      "assertion": "expect(createTranslator('zh-CN')(detail)).toContain('DSH 可能仍在运行')",
+      "state": "rejected",
+      "identity_keys": ["runtime owner code", "renderer code", "admitted operation", "locale"],
+      "missing_semantics": "No arbitrary error object, raw private message, success data or stopped-state substitution. No automatic restart or alternate runtime is introduced."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/client.go",
+      "field": "authenticated reconnection retains exact owner and child",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerReconnectKeepsRealChildBindingAndOutput",
+      "assertion": "core reconnect replaced the existing authenticated owner",
+      "state": "recovery",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/identity.go",
+      "field": "existing-only metadata admission never creates an owner",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerReconnectKeepsRealChildBindingAndOutput",
+      "assertion": "core reconnect replaced the existing authenticated owner",
+      "state": "recovery",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/local.go",
+      "field": "live-subject and precise loopback port admission precede spawn",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestLocalStartRefusesLiveSubjectBeforePortAction",
+      "assertion": "duplicate start killed the current owned child",
+      "state": "rejected",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/platform_darwin.go",
+      "field": "Darwin owner birth identity remains authenticated across clients",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerReconnectKeepsRealChildBindingAndOutput",
+      "assertion": "core reconnect replaced the existing authenticated owner",
+      "state": "recovery",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/platform_linux.go",
+      "field": "Linux owner birth identity remains authenticated across clients",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerReconnectKeepsRealChildBindingAndOutput",
+      "assertion": "core reconnect replaced the existing authenticated owner",
+      "state": "recovery",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/platform_unix.go",
+      "field": "private short Unix endpoint binds to the registered owner",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerSocketDoesNotDependOnLongStateRoot",
+      "assertion": "socket",
+      "state": "success",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/platform_windows.go",
+      "field": "same-user named pipe and OS birth identity bind the Windows owner",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerReconnectKeepsRealChildBindingAndOutput",
+      "assertion": "core reconnect replaced the existing authenticated owner",
+      "state": "recovery",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/record.go",
+      "field": "strict configuration and private record identity",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerRecordsRefuseCorruptionProtocolAndCrossRoot",
+      "assertion": "record",
+      "state": "rejected",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/platform_windows.go",
+      "field": "atomic record replacement while a validated reader remains open",
+      "source": "real Windows file handles and protected same-user record ACL",
+      "test": "TestWindowsRecordReaderAllowsAtomicPublication",
+      "assertion": "new reader did not observe the complete atomically published owner identity",
+      "state": "recovery",
+      "identity_keys": ["owner instance", "pending identity", "published OS process birth"],
+      "missing_semantics": "Unsupported atomic publication fails explicitly; no retry, weaker ACL, alternate owner or legacy publication fallback. A held reader retains its complete old record while a new reader sees the complete replacement."
+    },
+    {
+      "production_file": "networking/internal/peer/transport_diagnostics_stats.go",
+      "field": "selected ICE diagnostics wait for atomic initialization publication",
+      "source": "current Pion ICE transport state and exact selected-pair report identity",
+      "test": "TestTransportDiagnosticsWaitsForICEStartPublication",
+      "assertion": "unpublished or closed ICE read the unsafe selected getter or invented current statistics",
+      "state": "stale_timeout",
+      "identity_keys": [
+        "ICE state",
+        "selected pair ID",
+        "local candidate ID",
+        "remote candidate ID"
+      ],
+      "missing_semantics": "Unpublished or closed ICE is unknown, never synthetic zero counters. Once published, selected-before/full-report/selected-after checks still retain exact counters and tuple."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/server.go",
+      "field": "shutdown success and disconnected requester form a symmetric join",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestShutdownEOFAndSuccessfulJoinAreSymmetric",
+      "assertion": "shutdown",
+      "state": "reset",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/internal/runtimeowner/wire.go",
+      "field": "exact private operation payload admission",
+      "source": "authenticated private runtime authority and explicit registered configuration",
+      "test": "TestOwnerPrivateRequestsRejectUnknownAndMalformedFields",
+      "assertion": "owner",
+      "state": "rejected",
+      "identity_keys": ["owner instance", "OS process birth", "registered roots", "launch subject"],
+      "missing_semantics": "Never substitute a PID, cached URL, another configuration or a local supervisor. Native platform execution is required separately from cross-compilation."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/main.go",
+      "field": "parent-driven core composes only the independent runtime authority",
+      "source": "explicit configured roots and authenticated private runtime owner",
+      "test": "TestCoreDaemonServesThePrivateChannel",
+      "assertion": "dshkerd outlived its parent channel",
+      "state": "success",
+      "identity_keys": ["owner instance", "explicit state root", "private core channel"],
+      "missing_semantics": "No account provider is opened without an explicit data root; private owner dispatch precedes every provider. Core-to-owner EOF is not a stop request."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/runtime_owner.go",
+      "field": "failed boot versus explicit normal runtime shutdown",
+      "source": "service readiness and whether this boot created a fresh empty authority",
+      "test": "TestRuntimeOwnerExitKeepsRecoveredRuntimeOnFailedBoot",
+      "assertion": "wrong exit ownership",
+      "state": "partial",
+      "identity_keys": ["Created", "readiness", "bounded shutdown"],
+      "missing_semantics": "Failed recovery only closes its connection. Fresh failed boot and ready normal exit explicitly join the owner; both close/shutdown errors remain observable."
+    },
+    {
+      "production_file": "networking/internal/core/runtimebinding.go",
+      "field": "binding generation belongs to the surviving runtime authority",
+      "source": "context-bound authoritative Binding result",
+      "test": "TestRuntimeLocalAuthoritySurvivesCoreFacadeReplacementAndStop",
+      "assertion": "new core facade reset the owner's generation or binding",
+      "state": "recovery",
+      "identity_keys": ["launch ID", "binding generation", "subject", "runtime URL"],
+      "missing_semantics": "No core-local URL or generation is invented after restart; Stop makes bind-only resume refuse."
+    },
+    {
+      "production_file": "networking/internal/core/runtime_route.go",
+      "field": "SSH broker obtains only an actual running authority URL",
+      "source": "context-bound runtime Status with original typed errors",
+      "test": "TestRuntimeBrokerRoutePropagatesAuthorityRefusalWithoutStart",
+      "assertion": "broker route replaced the owner failure with stale runtime state",
+      "state": "rejected",
+      "identity_keys": ["subject", "caller context", "owner refusal"],
+      "missing_semantics": "An unreachable authority is not an absent child and cannot cause a new runtime start."
+    },
+    {
+      "production_file": "networking/internal/harnessruntime/authority.go",
+      "field": "single context-bound runtime capability interface",
+      "source": "production core authority dependency",
+      "test": "TestRuntimeAuthorityDisconnectPreservesErrorsAndContext",
+      "assertion": "owner disconnect was hidden as an empty runtime or success",
+      "state": "rejected",
+      "identity_keys": ["subject", "context", "typed error"],
+      "missing_semantics": "No proxy-to-local-supervisor substitution; each operation preserves the authority refusal."
+    },
+    {
+      "production_file": "networking/internal/localrpc/serve.go",
+      "field": "authentication acknowledgement follows startup cancellation",
+      "source": "caller context bound to the complete authentication exchange",
+      "test": "TestConnectAuthenticationCancellationClosesUnresponsivePeer",
+      "assertion": "authentication",
+      "state": "stale_timeout",
+      "identity_keys": ["connection", "startup deadline", "authentication acknowledgement"],
+      "missing_semantics": "Silent and partial acknowledgements cannot hang boot; after successful authentication the continuing connection no longer belongs to startup cancellation."
+    },
+    {
+      "production_file": "src/shared/p2p-management.ts",
+      "field": "runtime owner failures remain distinguishable across IPC",
+      "source": "named runtime owner error vocabulary",
+      "test": "names every distinguishable failure the core reports",
+      "assertion": "expect(P2P_MANAGEMENT_ERROR_CODES).toContain(code)",
+      "state": "rejected",
+      "identity_keys": ["typed refusal code"],
+      "missing_semantics": "Ownership failure is not collapsed to an internal-error or used to replace a runtime."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.refusals.ts",
+      "field": "ownership failure copy does not claim DSH is stopped",
+      "source": "typed owner refusal before generic runtime classification",
+      "test": "does not describe lost runtime authority as a stopped workbench",
+      "assertion": "expect(unavailable).toBe('p2p.refusal.runtimeOwnerUnavailable')",
+      "state": "rejected",
+      "identity_keys": ["typed refusal code", "locale"],
+      "missing_semantics": "Both locale dictionaries preserve the no-restart/no-adoption boundary and direct diagnosis to the owning computer."
+    },
+    {
+      "production_file": "tools/workbench-recovery-identity.mjs",
+      "field": "embedded fault-controller source identity",
+      "source": "sorted unique tracked and untracked nonignored source paths and original bytes, including PowerShell scripts",
+      "test": "tracked and untracked PowerShell bytes both change the actual runner identity",
+      "assertion": "assert.notEqual(workbenchSourceDigest(root), added)",
+      "state": "superseded",
+      "identity_keys": ["sourceDigest", "PowerShell source path", "raw source bytes"],
+      "missing_semantics": "Changing the embedded script or adding an untracked script changes identity. Ignored evidence cannot replace or conceal a source mutation."
+    },
+    {
+      "production_file": "networking/internal/peer/transport.go",
+      "field": "disconnection grace callback generation",
+      "source": "current disconnect window guarded by the grace lock",
+      "test": "TestGraceStartedExpiryCannotCancelRecoveredTransport",
+      "assertion": "an already-started stale grace callback canceled the recovered transport",
+      "state": "superseded",
+      "identity_keys": ["grace window epoch", "ICE/PC state"],
+      "missing_semantics": "An expired older window cannot cancel a recovered transport or a later disconnect window; the 20-second grace is unchanged."
+    },
+    {
+      "production_file": "networking/internal/peer/transport_diagnostics.go",
+      "field": "immutable first transport failure and selected receive sample",
+      "source": "first failure before transport teardown, with atomically sampled selected path",
+      "test": "TestTransportDiagnosticsSelectedPathFrozenWithReceiveSample",
+      "assertion": "later selected-path sampling changed the first failure's atomically paired tuple and receive facts",
+      "state": "recovery",
+      "identity_keys": ["failure.at", "receive.sampledAt", "selectedPath"],
+      "missing_semantics": "Unavailable statistics are unknown rather than zero observed receives; subsequent cleanup cannot replace the first failure."
+    },
+    {
+      "production_file": "networking/internal/peer/transport_diagnostics_stats.go",
+      "field": "selected candidate scope and complete STUN receive facts",
+      "source": "complete Pion report joined to unchanged selected candidate IDs before and after collection",
+      "test": "TestTransportDiagnosticsSelectedPathScopeAndClearing",
+      "assertion": "a valid scoped IPv6 selected tuple was dropped or lost its interface zone",
+      "state": "partial",
+      "identity_keys": ["selected pair ID", "local candidate ID", "remote candidate ID"],
+      "missing_semantics": "A changed, missing or incomplete selected path clears old scope. Raw candidates, URLs, SDP and credential-bearing error strings never enter JSON."
+    },
+    {
+      "production_file": "networking/internal/peer/streams.go",
+      "field": "non-consuming first mux failure",
+      "source": "existing mux failure protected by its mutex",
+      "test": "TestMuxErrReadsFirstFailureWithoutTerminating",
+      "assertion": "mux cleanup replaced the first protocol failure",
+      "state": "stale_timeout",
+      "identity_keys": ["mux lifetime", "first error"],
+      "missing_semantics": "Diagnostic reads neither consume the error channel nor close the connection."
+    },
+    {
+      "production_file": "networking/internal/peersession/session_diagnostics.go",
+      "field": "causal owner boundary, transport first cause and lease renewal facts",
+      "source": "session-owned first-writer stop record and read-only transport diagnostics",
+      "test": "TestSessionDiagnosticPreservesEarlierTransportCauseAcrossCleanup",
+      "assertion": "actual session boundary or first-failure transport state lost",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "direction"],
+      "missing_semantics": "Teardown does not overwrite an earlier transport cause; secret-bearing details remain redacted and the observer exits with its owner."
+    },
+    {
+      "production_file": "networking/internal/peersession/session_diagnostics.go",
+      "field": "sampled selected-path changes without application traffic",
+      "source": "one-second local samples and bounded one-minute healthy summaries",
+      "test": "TestSessionDiagnosticObservationPreservesSampledPathChanges",
+      "assertion": "loss of an observed selected path was hidden",
+      "state": "partial",
+      "identity_keys": ["receive.sampledAt", "selectedPath", "attemptId"],
+      "missing_semantics": "A path observation describes the latest completed sample, not a synchronous probe or proof that the path was healthy at termination."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "genuine eight-hour idle lifetime and resource admission",
+      "source": "explicit idle duration, actual resource expiry, original HTTP cookie/session and open WebSocket",
+      "test": "TestWorkbenchRecoveryLongProfileOwnerBudget",
+      "assertion": "outer owner budget phase=%s idle=%d got=%s want=%s",
+      "state": "stale_timeout",
+      "identity_keys": ["sourceDigest", "runId", "attempt", "generation", "originalWS", "session"],
+      "missing_semantics": "Only the outer test owner budget extends; recovery deadlines are unchanged. Insufficient real resource lifetime refuses the run and early failures cannot be overwritten."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "failed crash test retains enough outer process lifetime to join its exact owners",
+      "source": "actual Windows orchestration command and unchanged strict recovery verifier",
+      "test": "outer crash process lifetime reserves exact-owner cleanup without changing recovery acceptance",
+      "assertion": "processTimeout({ phase: 'core-crash' })",
+      "state": "reset",
+      "identity_keys": ["scenario lifetime", "cleanup lifetime", "recoveryMilliseconds"],
+      "missing_semantics": "The 340-second outer process limit contains failed-test cleanup only. A recovery of 25000 milliseconds still fails, and owner shutdown has an independent bounded context after a stop timeout."
+    },
+    {
+      "production_file": "src/app/shell/runtimeBrowserState.ts",
+      "field": "opened tab membership, adjacent active identity and closed navigation",
+      "source": "current tabs and explicit closeRemoteTab action",
+      "test": "selects the right neighbor, then the left neighbor, then local when active tabs close",
+      "assertion": "expect(runtimeBrowser.closeRemoteTab(secondSshTab)).toBe(true)",
+      "state": "success",
+      "identity_keys": ["tab.id", "activeTabId", "connectionId"],
+      "missing_semantics": "Local and unknown tab IDs refuse closure; connection records and current-generation peer entries are not removed."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimeTabStrip.vue",
+      "field": "separate accessible close control and selected-tab focus",
+      "source": "runtimeBrowser.tabs and activeTabId after DOM update",
+      "test": "uses separate close buttons and focuses the selected neighbor after active and background closes",
+      "assertion": "expect(close.element.closest('[role=\"tab\"]')).toBeNull()",
+      "state": "success",
+      "identity_keys": ["tab.id", "activeTabId", "document.activeElement"],
+      "missing_semantics": "No close action for Local; an absent/unknown remote tab causes no mutation."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimeTabsPanel.vue",
+      "field": "guest mount lifetime follows open-tab membership",
+      "source": "runtimeBrowser.tabs and the existing RuntimeTabStrip composition",
+      "test": "unmounts a closed SSH guest, keeps its record and runtime, and reopens it from plus",
+      "assertion": "expect(guest.isConnected).toBe(false)",
+      "state": "recovery",
+      "identity_keys": ["tab.id", "webview element", "connectionId"],
+      "missing_semantics": "Closing destroys only the browser guest; it never calls runtime Stop, Disconnect or Remove."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimeTabAddMenu.vue",
+      "field": "closed SSH record reconnects without late completion reopening a dismissed tab",
+      "source": "remoteConnectionsState, pendingActions and explicit add-menu selection",
+      "test": "does not recreate an SSH tab when its connect answer arrives, then reopens the ready guest",
+      "assertion": "expect(api.remote.connect).toHaveBeenCalledTimes(1)",
+      "state": "superseded",
+      "identity_keys": ["connectionId", "tab.id", "pendingActions"],
+      "missing_semantics": "Connecting/pending operations remain disabled; a ready connection opens without a duplicate connect."
+    },
+    {
+      "production_file": "tools/visual-smoke.mjs",
+      "field": "source smoke reads the extracted strip rather than stale panel CSS",
+      "source": "RuntimeTabsPanel and RuntimeTabStrip authored composition",
+      "test": "records the source visual contract and real renderer capture command",
+      "assertion": "'runtime.remote-tabs-closable'",
+      "state": "success",
+      "identity_keys": ["runtime.remote-tabs-closable", "remote.connection-test-status"],
+      "missing_semantics": "Missing source files fail; source smoke is not relabeled as live visual proof."
+    },
+    {
+      "production_file": "electron/main/p2p/connections.ts",
+      "field": "entry read cancellation revision",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "rejects the old answer when disconnect settles before its stage callback",
+      "assertion": "expect(f.lookup).rejects.toMatchObject({ code: 'p2p.stale_generation' })",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "electron/main/p2p/helper-state.ts",
+      "field": "connected typed refusal without false readiness",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "retains a typed workbench refusal on connected transport until ready succeeds",
+      "assertion": "expect(f.host.snapshot().peers[0]?.state).toMatchObject({",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "electron/main/p2p/management-ipc.ts",
+      "field": "renderer cancellation reaches current read-only operation",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "forwards cancellation to the existing read-only entry operation",
+      "assertion": "expect(active.aborted).toBe(true)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "electron/main/p2p/management.ts",
+      "field": "catalog and current session ownership",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "reads the recovered ready generation from the core without connecting or starting DSH",
+      "assertion": "expect(f.inspect).toHaveBeenCalledTimes(2)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "electron/main/p2p/rpc.ts",
+      "field": "named private runtime.resume callback",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "admits named runtime.resume without substituting runtime.connect",
+      "assertion": "expect(handler).toHaveBeenCalledExactlyOnceWith(",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "electron/main/p2p/runtime-host.ts",
+      "field": "authorized bind-only resume",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "refuses repeated automatic resume after the target user stops DSH",
+      "assertion": "expect(f.start).not.toHaveBeenCalled()",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "electron/main/p2p/runtime-owner.ts",
+      "field": "actual running DSH binding without cold start",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "resumes only the exact already-running binding without starting DSH",
+      "assertion": "expect(await f.owner.resume(new AbortController().signal)).toEqual({ generation: 1, url })",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/cli.go",
+      "field": "headless automatic resume reads actual binding without start",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestHeadlessResumeOnlyReadsRunningBinding",
+      "assertion": "read-only resume changed runtime state",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/autoconnect/engine.go",
+      "field": "terminal authorization refusal retained, temporary refusal uses backoff",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestConnectedWorkbenchRefusalKeepsItsRetryClassification",
+      "assertion": "terminal connected refusal was replaced or retried",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/core/server.go",
+      "field": "named core entry routing",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestPeerEntryIsPublishedAndRoutedToItsOwner",
+      "assertion": "entry read did not reach its peer owner",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/helper/autoconnect.go",
+      "field": "production periodic scheduler restores retained workbench intent",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "removed account admission cannot recreate a service",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestLateConfigurationCannotRecreateRemovedService",
+      "assertion": "late configure revived removed service",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/localrpc/methods.go",
+      "field": "main-only peer.entry admission",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestPeerEntryIsPublishedAndRoutedToItsOwner",
+      "assertion": "peer.entry is not published as a main-to-core read",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager.go",
+      "field": "service/pair-scoped automatic workbench recovery",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peersession/network_revocation.go",
+      "field": "service/pair-scoped automatic workbench recovery",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/protocol/json.go",
+      "field": "resume capability does not grant explicit-start authority",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestResumeCapabilitiesNeverGrantColdStart",
+      "assertion": "resume capabilities grant cold start or omit resume support",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/handshake.go",
+      "field": "service/pair-scoped automatic workbench recovery",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "src/app/shell/runtimeBrowserState.ts",
+      "field": "current entry replaces stale navigation in stable partition",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "replaces old navigation with the recovered generation entry in the same partition",
+      "assertion": "expect(peerTab()?.partition).toBe(partition)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "electron/main/p2p/workbench-entry.ts",
+      "field": "service/pair/generation/attempt/runtime readback",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "reads the recovered ready generation from the core without connecting or starting DSH",
+      "assertion": "expect(f.inspect).toHaveBeenCalledTimes(2)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/helper/entry.go",
+      "field": "service/pair-scoped automatic workbench recovery",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/helper/runtime_binding.go",
+      "field": "resume parent dispatch exact service/pair scope without explicit start",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestRuntimeResumeBindingDispatchKeepsExactScopeAndNeverConnect",
+      "assertion": "resume callback substituted another operation",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/helper/service_lifecycle.go",
+      "field": "closed account rejects captured late operations",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestRemovedAccountRefusesLateManagementAndRestore",
+      "assertion": "late %s on a removed owner",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peersession/entry.go",
+      "field": "read-only current ready gateway",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestEntryReadsOnlyCurrentReadyAttachment",
+      "assertion": "readback invoked the runtime owner",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_attachment.go",
+      "field": "attachment installation and stale cleanup fence",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestStaleEstablishmentAndCleanupCannotDetachCurrentEntry",
+      "assertion": "stale attempt affected replacement",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_connect.go",
+      "field": "explicit vs resume request admission",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestReconnectOnlyResumesRetainedIntent",
+      "assertion": "automatic recovery did not retain bind-only intent",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_lifecycle.go",
+      "field": "current mux ownership on disconnect",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestDisconnectWaitingForOldSessionCannotDetachNewAttachment",
+      "assertion": "late disconnect detached replacement or changed gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peersession/workbench_intent.go",
+      "field": "retained outbound workbench intent",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestExplicitWorkbenchIntentSurvivesFailedAttempt",
+      "assertion": "want explicit intent retained by automatic recovery",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/attachment.go",
+      "field": "service/pair-scoped automatic workbench recovery",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/runtimebridge/workbench.go",
+      "field": "only typed owner refusal reaches connected state",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRefusalAdmitsOnlyOwningTypedCodes",
+      "assertion": "workbench refusal = %q, want admitted code %q",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "tools/workbench-recovery-live.mjs",
+      "field": "physical core/HTTP/WS/source provenance",
+      "source": "current production core state, authorized pair and runtime owner; read back after transport replacement",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "Missing or superseded scope is an explicit typed refusal; never infer an entry, change identity, or downgrade resume to start."
+    },
+    {
+      "production_file": "networking/internal/peer/streams.go",
+      "field": "data-channel stream ownership during concurrent recovery and close",
+      "source": "actual recovered production mux and WebSocket traffic",
+      "test": "TestWorkbenchRecoveryCrossClient",
+      "assertion": "cross-machine recovery reused a stale identity or moved the original gateway",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "attemptId", "generation", "runtimeGeneration"],
+      "missing_semantics": "A closed or detached stream cannot stand in for the current mux."
+    },
+    {
+      "production_file": "networking/internal/helper/certificates.go",
+      "field": "certificate maintenance ends with account lifetime",
+      "source": "closed account and original service identity",
+      "test": "TestForgetServiceCancelsAndRemovesItsOwner",
+      "assertion": "service removal retained its account lifetime or owner",
+      "state": "reset",
+      "identity_keys": ["serviceId", "pairId", "account lifetime"],
+      "missing_semantics": "Removed owners refuse further work."
+    },
+    {
+      "production_file": "networking/internal/helper/directory.go",
+      "field": "directory maintenance ends with account lifetime",
+      "source": "closed account and original service identity",
+      "test": "TestForgetServiceCancelsAndRemovesItsOwner",
+      "assertion": "service removal retained its account lifetime or owner",
+      "state": "reset",
+      "identity_keys": ["serviceId", "pairId", "account lifetime"],
+      "missing_semantics": "Removed owners refuse further work."
+    },
+    {
+      "production_file": "networking/internal/helper/members.go",
+      "field": "removed catalog member cannot reconnect",
+      "source": "closed account and original service identity",
+      "test": "TestForgetServiceCancelsAndRemovesItsOwner",
+      "assertion": "forgotten service remained reconnectable",
+      "state": "reset",
+      "identity_keys": ["serviceId", "pairId", "account lifetime"],
+      "missing_semantics": "Removed owners refuse further work."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "cd networking && go test -json -race -count=1 ./integration -run '^TestRealDSHReadinessDiagnostic'",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go test -race -tags live ./integration -run '^(TestOnlineCandidate(Inputs|Password|Identity|Ready|Workers)|TestServerAdmissionDiagnostics)' -count=1",
+      "no_mock": true
+    },
+    {
+      "command": "node --test tools/workbench-recovery-identity.node_test.mjs tools/workbench-recovery-core-crash.node_test.mjs tools/workbench-recovery-pause.node_test.mjs && cd networking && go test -race -tags live ./integration -run '^(TestWorkbenchRecovery(CoreRestartCommand|CoreRestoreWitness|Owner|Firewall|NetworkPlans|Program|Pause(Rejects|Observer|Helpers|Requires|Version|DebuggerResults|GuardOwns))|TestRecovery(MacAuto|WSSeal|Cookie|Bootstrap))' -count=1",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go test -tags live -race -run '^TestWorkbenchRecovery(LongProfileOwnerBudget|RuntimeDiagnosticRedaction|RuntimeDiagnosticTailRedaction|DiagnosticAcceptsOnlyCandidateAttemptScope)$|^TestRecoveryInitialSession' -count=1 ./integration",
+      "no_mock": true
+    },
+    {
+      "command": "npm test -- --run --reporter=json --outputFile=.run/open-workbench-recovery/vitest.json",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go test -json -race ./internal/... ./cmd/dshkerd -count=1 > ../.run/open-workbench-recovery/go-race.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && test -f \"${DSHKER_SERVER_BINARY:?explicit verified coordinator required}\" && test -f \"${DSHKER_TEST_HARNESS_ROOT:?explicit built Harness required}/apps/cli/lib/bin.js\" && go test -json -race -count=1 -timeout=8m ./integration -run '^TestTwoPeerProcess(ConnectsInBothDirectionsAtOnce|ReconnectKeepsTheReverseDirection)$|^TestManagersAlternateOfflineAndRecover$|^TestManagerRepeatedReconnectKeepsOneAddress$|^TestManagerNetworkRevocationRealDSH$|^TestManagersSelectedAccount|^TestManagerRealDSH$|^TestHostsRealDSHSameNAT' > ../.run/open-workbench-recovery/manager-integration.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "npm run environment:check && npm run architecture:check && npm run type-check && npm run service:smoke && npm run visual:smoke && npm run build && npm run build:electron > .run/open-workbench-recovery/source-build.log",
+      "no_mock": true
+    },
+    {
+      "command": "node tools/workbench-recovery-live.mjs --server-binary \"${DSHKER_SERVER_BINARY:?explicit verified coordinator required}\" --harness-root \"${DSHKER_TEST_HARNESS_ROOT:?explicit built Harness required}\" --ssh-target \"${DSHKER_TEST_WINDOWS_SSH:?explicit Windows SSH target required}\" --bind-ip \"${DSHKER_TEST_CROSS_BIND_IP:?explicit reachable Mac IPv4 required}\" --output-dir \"${DSHKER_TEST_RECOVERY_OUTPUT:?new evidence directory required}\" --cycles 10 --idle-seconds 28800 --phase all --windows-node \"${DSHKER_TEST_WINDOWS_NODE:?explicit Windows Node required}\" --windows-harness-root \"${DSHKER_TEST_WINDOWS_HARNESS_ROOT:?explicit Windows built Harness required}\"",
+      "no_mock": true
+    },
+    {
+      "command": "node tools/workbench-recovery-live.mjs --server-binary \"${DSHKER_SERVER_BINARY:?explicit verified coordinator required}\" --harness-root \"${DSHKER_TEST_HARNESS_ROOT:?explicit built Harness required}\" --ssh-target \"${DSHKER_TEST_WINDOWS_SSH:?explicit Windows SSH target required}\" --bind-ip \"${DSHKER_TEST_CROSS_BIND_IP:?explicit reachable Mac IPv4 required}\" --output-dir \"${DSHKER_TEST_PROGRAM_PAUSE_OUTPUT:?new program-pause evidence directory required}\" --cycles 3 --idle-seconds 60 --phase program-pause --windows-node \"${DSHKER_TEST_WINDOWS_NODE:?explicit Windows Node required}\" --windows-harness-root \"${DSHKER_TEST_WINDOWS_HARNESS_ROOT:?explicit Windows built Harness required}\"",
+      "no_mock": true
+    },
+    {
+      "command": "node tools/workbench-recovery-live.mjs --server-binary \"${DSHKER_SERVER_BINARY:?explicit verified coordinator required}\" --harness-root \"${DSHKER_TEST_HARNESS_ROOT:?explicit built Harness required}\" --ssh-target \"${DSHKER_TEST_WINDOWS_SSH:?explicit Windows SSH target required}\" --bind-ip \"${DSHKER_TEST_CROSS_BIND_IP:?explicit reachable Mac IPv4 required}\" --output-dir \"${DSHKER_TEST_CORE_CRASH_OUTPUT:?new crash evidence directory required}\" --cycles 3 --idle-seconds 60 --phase core-crash --windows-node \"${DSHKER_TEST_WINDOWS_NODE:?explicit Windows Node required}\" --windows-harness-root \"${DSHKER_TEST_WINDOWS_HARNESS_ROOT:?explicit Windows built Harness required}\"",
+      "no_mock": true
+    }
+  ],
+  "interaction_gate": {
+    "contract": "test-gates/remote-tab-closing-interaction.json",
+    "ledger": ".run/remote-tab-closing/interaction.jsonl"
+  },
+  "acceptance_status": "Final local Go validation passed all 20 packages with 1,586 named tests under the race detector and go vet, with exact test-only Keychain keys absent before and after. The full desktop source operator passed all 1,868 TS tests and environment, formatting, architecture, type, service, visual-smoke, renderer/Electron build, dependency and parent-workspace gates at one unchanged source digest. D25's 93 focused candidate-admission tests and the independent review's finish-first cleanup-race fix are also preserved. Historical D24 35-second physical pause and earlier first-cause duplex/forward-stress runs remain failed and unchanged. Fresh D25 program-pause, isolated core-crash, 28,800 seconds of original bidirectional Cookie/WS/session/runtime idle plus ten automatic recovery rounds, same-SHA GitHub CI packages and installed-app/native UI validation remain distinct pending tiers. The user has no separate Mac desktop environment; native UI must be verified by the user's installation. No 8-hour or installed-app acceptance is claimed from local source gates.",
+  "runtime_evidence": [
+    {
+      "artifact": ".run/open-workbench-recovery/d25-inbound-wake-green-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-inbound-retirement-red-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-inbound-retirement-green-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-inbound-retirement-green-20261020/finalization-receipt.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-inbound-admission-boundary-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-inbound-committed-startup-red-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-inbound-racefix-green-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-client-gates-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-client-gates-final-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-client-gates-final2-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-client-gates-final4-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-source-gates-final-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-source-gates-final2-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-source-gates-final3-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-source-gates-final3-20261020/native-keychain-admission.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-source-gates-final4-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d25-source-gates-final4-20261020/native-keychain-admission.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d24-bootstrap-all-phases-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d24-source-gates-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d24-bootstrap-comment-only-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d24-program-pause-20261020/physical-verification.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d24-bootstrap-focused-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d24-bootstrap-focused-fixed-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d23-program-pause-fixture-20261020/physical-verification.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d23-joint-focused-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/final-client-go-d21-d22-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/manager-cold-d21-d22-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/online-candidate-d23-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/d23-program-pause-20261020/physical-verification.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/candidate-d22a-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/manager-cold-d20-auth-epoch-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/online-candidate-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/manager-integration-d20-explicit-inputs-summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/final-client-go-d20-20261020/summary.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/joint-control-v2-d20-ts.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/watchdog-physical-preflight-atomic-fixed.log"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/network-fault-20261019-guarded/physical-verification.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/core-crash-20261019/physical-verification.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/vitest.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/go-race.jsonl"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/source-build.log"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/physical-idle/physical-verification.json"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/physical-idle/forward-stress/physical-mac-host.jsonl"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/physical-idle/forward-stress/physical-windows-client.log"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/physical-idle/duplex/physical-mac-host.jsonl"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/physical-idle/duplex/physical-windows-client.log"
+    },
+    {
+      "artifact": ".run/open-workbench-recovery/manager-integration.jsonl"
+    }
+  ]
+}

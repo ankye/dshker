@@ -38,6 +38,7 @@ function fixture() {
   const accounts = {
     hasSession: vi.fn(() => true),
     sessionToken: vi.fn((): string | undefined => 'e'.repeat(64)),
+    certificateRecoveryScope: vi.fn(),
     currentUser: vi.fn(),
     refreshDirectory: vi.fn()
   }
@@ -98,10 +99,11 @@ describe('device certificate synchronization', () => {
       data: {
         device: {
           deviceId: credential.deviceId,
-          userId: 'f'.repeat(12),
+          userId: credential.userId,
           publicKey: credential.publicKey,
           certificate: newerCertificate
         },
+        accountUserId: 'f'.repeat(12),
         privateKey: credential.privateKey,
         pins: []
       }

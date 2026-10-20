@@ -10,6 +10,7 @@ import (
 
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/controlplane"
+	"github.com/ankye/dshker/networking/internal/protocol"
 )
 
 // encodeKey writes a device key the way the wire and the catalog both carry it:
@@ -28,6 +29,7 @@ func encodeKey(key []byte) string { return base64.StdEncoding.EncodeToString(key
 type CatalogStore interface {
 	Inspect() (*catalog.Snapshot, error)
 	Commit(expectedRevision string, next catalog.Record) (catalog.Snapshot, error)
+	CommitTransitions(expectedRevision string, steps []catalog.Record) (catalog.Snapshot, error)
 }
 
 // catalogStore is the field's type: the same interface, under a name that does not
@@ -180,10 +182,8 @@ func planMembers(saved catalog.Snapshot, serviceID string, local localMember, me
 
 // refreshCatalog re-reads the account's pairs, pins them and records them.
 //
-// The returned revision is the catalog's after the write, which is what a caller
-// compares to decide whether the shell has to be told. A pair the coordinator will
-// not detail is skipped rather than failing the pass: one unreadable row is not a
-// reason to leave every other computer unrecorded, and the next interval retries.
+// The returned revision is the catalog's after the write. Any active scoped read
+// failure is typed and prevents partial bootstrap from granting live admission.
 func (account *account) refreshCatalog(ctx context.Context) (string, error) {
 	account.mu.Lock()
 	defer account.mu.Unlock()
@@ -195,63 +195,56 @@ func (account *account) refreshCatalog(ctx context.Context) (string, error) {
 // leave the pins in place before it answers, because the shell treats the answer as
 // "this machine is online" and starts connecting.
 func (account *account) refreshCatalogLocked(ctx context.Context) (string, error) {
-	store, client, local, serviceID := account.catalogInputsLocked()
-	if store == nil {
-		return "", errors.New("p2p.catalog_unavailable")
+	if err := checkBootstrapContext(ctx); err != nil {
+		return "", err
 	}
-	if client == nil {
-		return "", errors.New("p2p.device_unregistered")
+	if account.closed {
+		return "", errors.New("p2p.service_unconfigured")
 	}
-	pairs, err := client.Pairs(ctx)
+	fresh, err := account.readNetworkSelection(ctx)
 	if err != nil {
 		return "", err
 	}
-	members := make([]controlplane.PairIdentity, 0, len(pairs))
-	for _, pair := range pairs {
-		identity, err := client.PairIdentity(ctx, pair.PairID)
-		if err != nil {
-			continue
-		}
-		members = append(members, identity)
-		if pair.State != "active" {
-			continue
-		}
-		remote, _, ok := remoteSide(identity, account.device.DeviceID)
-		if !ok {
-			continue
-		}
-		// The peer session keys its pin map by the value a connection attempt names,
-		// which is the remote device id — not the pairs-table row id the coordinator
-		// reports. The shell rewrote the id for exactly this reason; pinning the row
-		// id instead pinned nothing any attempt could look up, and every connection
-		// was refused as p2p.pair_unauthorized.
-		if err := account.pinLocked(pinnedIdentity(identity, remote.DeviceID)); err != nil {
-			log.Printf("[p2p] pair pin failed: %v", err)
-		}
-	}
-	saved, err := store.Inspect()
+	return account.commitNetworkSelection(ctx, fresh, "")
+}
+
+func (account *account) selectedNetworkNames(ctx context.Context, userID string) (map[string]string, error) {
+	session, exists, err := account.host.readAccountSession(account.identity.ServiceID)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	if saved == nil {
-		return "", errors.New("p2p.not_enabled")
+	if !exists {
+		return nil, errors.New("p2p.user_login_required")
 	}
-	// A service the catalog does not carry yet is not an error worth reporting as a
-	// malformed record: the computers of a service are only readable through its
-	// entry, so the pass waits for the shell to register it and tries again next
-	// interval.
-	registered := false
-	for _, service := range saved.Record.Services {
-		if service.ServiceID == serviceID {
-			registered = true
-			break
+	client, err := account.bearerClientLocked()
+	if err != nil {
+		return nil, err
+	}
+	user, err := client.CurrentUser(ctx, session.Token)
+	if fence := checkBootstrapContext(ctx); fence != nil {
+		return nil, fence
+	}
+	if err != nil {
+		return nil, err
+	}
+	if user.UserID != userID || session.ExpiresAt <= time.Now().Unix() {
+		return nil, errors.New("p2p.user_scope_mismatch")
+	}
+	networks, err := client.Networks(ctx, session.Token)
+	if fence := checkBootstrapContext(ctx); fence != nil {
+		return nil, fence
+	}
+	if err != nil {
+		return nil, err
+	}
+	allowed := make(map[string]string, len(networks))
+	for _, network := range networks {
+		if !protocol.ValidID(network.NetworkID) || network.UserID != userID {
+			return nil, errors.New("p2p.network_unauthorized")
 		}
+		allowed[network.NetworkID] = network.Name
 	}
-	if !registered {
-		return "", errors.New("p2p.service_unregistered")
-	}
-	plan := planMembers(*saved, serviceID, local, members)
-	return recordPlan(store, *saved, plan)
+	return allowed, nil
 }
 
 // recordPlan writes a plan: the retirement step first when it is needed, then the
@@ -299,22 +292,6 @@ func (account *account) catalogInputsLocked() (CatalogStore, *controlplane.Clien
 	}, account.identity.ServiceID
 }
 
-// pin hands one authorized pair to the session, which admits connections by it.
-func (account *account) pin(identity controlplane.PairIdentity) error {
-	account.mu.Lock()
-	defer account.mu.Unlock()
-	return account.pinLocked(identity)
-}
-
-// pinLocked is that handover for a caller that already holds the lock.
-func (account *account) pinLocked(identity controlplane.PairIdentity) error {
-	manager := account.manager
-	if manager == nil {
-		return errors.New("p2p.device_unregistered")
-	}
-	return manager.Pin(identity)
-}
-
 // withoutComputers is the record with the named rows dropped, by connection id
 // and service: the intermediate step a re-authorized connection needs.
 func withoutComputers(record catalog.Record, drop []catalog.Computer) catalog.Record {
@@ -350,8 +327,16 @@ func (account *account) maintainCatalog(ctx context.Context) {
 				continue
 			}
 			readCtx, cancel := context.WithTimeout(ctx, directoryRefreshTimeout)
+			account.mu.Lock()
+			scope, scopeErr := account.selectedSessionScopeLocked(readCtx)
+			account.mu.Unlock()
+			if scopeErr != nil {
+				cancel()
+				log.Printf("[p2p] catalog refresh refused: %s", scopeErr.Error())
+				continue
+			}
+			readCtx = scope.Context(readCtx)
 			revision, err := account.refreshCatalog(readCtx)
-			cancel()
 			// A failed pass keeps whatever the catalog already holds: the
 			// coordinator being briefly unreachable is not evidence that the pairs
 			// went away, and rewriting the record from a failed read is what would
@@ -359,48 +344,65 @@ func (account *account) maintainCatalog(ctx context.Context) {
 			// because the failure it hides is "this machine cannot accept a
 			// connection", which no user surface would otherwise explain.
 			if err != nil {
+				cancel()
 				log.Printf("[p2p] catalog refresh failed: %v", err)
 				continue
 			}
-			account.announceCatalog(revision)
+			err = account.announceScopedCatalog(readCtx, scope, revision)
+			cancel()
+			if err != nil {
+				log.Printf("[p2p] catalog publication refused: %s", err.Error())
+			}
 		}
 	}
 }
 
-// pinnedIdentity is the coordinator's pair as the peer session stores it and as the
-// catalog records it: keyed by the remote device id.
-//
-// A connection attempt names that id, and the peer session looks the pin up by it,
-// so the id in the pin map, in the catalog row and in the request are one value.
-// They drifted once — the coordinator's own pair id went into the pin map while
-// every attempt asked for the device id — and every connect was refused as
-// p2p.pair_unauthorized, with nothing on screen to say why.
-func pinnedIdentity(identity controlplane.PairIdentity, remoteDeviceID string) controlplane.PairIdentity {
-	pinned := identity
-	pinned.Pair.PairID = remoteDeviceID
-	return pinned
-}
-
-// refreshCatalogAfterWrite re-reads the pairs once an operation that can change
-// them has succeeded.
-//
-// It runs on its own goroutine because the caller still holds the account lock;
-// the read waits for that lock, so the response the user is waiting for is not
-// delayed by a bookkeeping read.
-func (account *account) refreshCatalogAfterWrite() {
+// refreshCatalogAfterWrite re-reads the pairs once a successful operation may
+// have changed them. Failures remain explicit in this background maintenance log.
+func (account *account) refreshCatalogAfterWrite(ctx context.Context) error {
+	scope, err := account.selectedSessionScopeLocked(ctx)
+	if err != nil {
+		return err
+	}
+	background, err := scope.Background(scope.Context(ctx))
+	if err != nil {
+		return err
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(account.maintenanceLifetime(), directoryRefreshTimeout)
+		ctx, cancel := context.WithTimeout(background.Context(account.maintenanceLifetime()), directoryRefreshTimeout)
 		defer cancel()
 		revision, err := account.refreshCatalog(ctx)
 		if err != nil {
-			// The write the shell is waiting for has already been answered; this is
+			// The write already completed; this is
 			// the bookkeeping behind it, and a failure here means the pins and the
 			// recorded computers are stale rather than wrong.
 			log.Printf("[p2p] catalog refresh after a write failed: %v", err)
 			return
 		}
-		account.announceCatalog(revision)
+		if err := account.announceScopedCatalog(ctx, background, revision); err != nil {
+			log.Printf("[p2p] catalog after-write publication refused: %s", err.Error())
+		}
 	}()
+	return nil
+}
+
+func (account *account) announceScopedCatalog(ctx context.Context, scope *selectedSessionScope, revision string) error {
+	var changed bool
+	account.mu.Lock()
+	err := scope.Publish(ctx, func() error {
+		changed = account.catalogRevision != revision
+		account.catalogRevision = revision
+		return nil
+	})
+	account.mu.Unlock()
+	if err != nil || !changed {
+		return err
+	}
+	if err := checkBootstrapContext(ctx); err != nil {
+		return err
+	}
+	account.host.announceCatalog(scope.serviceID, revision)
+	return checkBootstrapContext(ctx)
 }
 
 // announceCatalog tells the shell that the computers it renders have moved. A

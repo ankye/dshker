@@ -53,7 +53,7 @@ func (host *Host) RestoreOwnCredentials(ctx context.Context) (restored int) {
 		if ctx.Err() != nil {
 			return restored
 		}
-		credential, err := host.LoadCredential(serviceID)
+		origin, err := host.captureBootstrap(serviceID)
 		if err != nil {
 			// The index names it but the record is gone or unreadable. That is worth
 			// naming: it is the difference between "nothing to restore" and "the
@@ -65,15 +65,23 @@ func (host *Host) RestoreOwnCredentials(ctx context.Context) (restored int) {
 			}
 			continue
 		}
-		if err := host.restoreStoredCredential(ctx, credential); err != nil {
+		origin.ctx = ctx
+		attemptCtx := host.bootstrapSourceContext(ctx, origin, false)
+		if err := host.restoreStoredCredential(attemptCtx, origin.credential); err != nil {
 			// One unreachable coordinator must not stop the next service from coming
 			// back, and the reconnection pass retries on its own schedule.
 			log.Printf("[p2p] stored credential could not be restored for service %s: %v", serviceID, err)
+			if bootstrapTransient(err) && ctx.Err() == nil {
+				host.scheduleCapturedBootstrap(origin)
+			} else {
+				clear(origin.credential.PrivateKey)
+			}
 			continue
 		}
 		restored++
 		log.Printf("[p2p] restored device %s for service %s from the core's own credential",
-			credential.DeviceID, serviceID)
+			origin.credential.DeviceID, serviceID)
+		clear(origin.credential.PrivateKey)
 	}
 	return restored
 }
@@ -82,6 +90,9 @@ func (host *Host) RestoreOwnCredentials(ctx context.Context) (restored int) {
 // same internal operations the desktop drives, so a headless restore and a desktop
 // restore produce the same account rather than two similar ones.
 func (host *Host) restoreStoredCredential(ctx context.Context, credential storedCredential) error {
+	if err := checkBootstrapContext(ctx); err != nil {
+		return err
+	}
 	configuration, err := json.Marshal(struct {
 		Endpoints controlplane.Endpoints `json:"endpoints"`
 		PinnedKey []byte                 `json:"pinnedKey"`
@@ -105,27 +116,68 @@ func (host *Host) restoreStoredCredential(ctx context.Context, credential stored
 	if account == nil {
 		return errors.New("p2p.service_unconfigured")
 	}
+	account.mu.Lock()
+	defer func() {
+		completions := account.authRecoveryJoins
+		account.authRecoveryJoins = nil
+		account.mu.Unlock()
+		// A failed fresh read-only Manager still owns its detached signaling
+		// workers. Headless restore, like Handle, joins only after unlocking.
+		for _, completion := range completions {
+			completion.Wait()
+		}
+	}()
+	if err := checkBootstrapContext(ctx); err != nil {
+		return err
+	}
+	if account.closed {
+		return errors.New("p2p.service_unconfigured")
+	}
+	session, exists, err := host.readAccountSession(credential.ServiceID)
+	if err != nil {
+		return err
+	}
+	var scope *selectedSessionScope
+	if exists {
+		scope, err = account.captureSelectedSessionScopeLocked(ctx, session)
+	} else {
+		scope, err = account.captureSignedOutRestoreScopeLocked(ctx, deviceRestoreRequest{Pins: []controlplane.PairIdentity{}})
+	}
+	if err != nil {
+		return err
+	}
+	ctx = scope.Context(ctx)
+	selected, err := account.selectedAccount(ctx)
+	if err != nil {
+		return err
+	}
 	payload, err := json.Marshal(struct {
-		Device     controlplane.Device         `json:"device"`
-		PrivateKey []byte                      `json:"privateKey"`
-		Pins       []controlplane.PairIdentity `json:"pins"`
+		Device        controlplane.Device         `json:"device"`
+		PrivateKey    []byte                      `json:"privateKey"`
+		Pins          []controlplane.PairIdentity `json:"pins"`
+		AccountUserID string                      `json:"accountUserId"`
 	}{
 		Device:     credential.device(),
 		PrivateKey: credential.PrivateKey,
 		// Pins are the core's own: the catalog pass inside restore re-pins every
 		// active pair, so a restore hands over none.
-		Pins: []controlplane.PairIdentity{},
+		Pins:          []controlplane.PairIdentity{},
+		AccountUserID: selected,
 	})
 	if err != nil {
 		return errors.New("p2p.invalid_device_state")
 	}
-	account.mu.Lock()
-	defer account.mu.Unlock()
-	if account.manager != nil {
-		// Maintenance must not change a signed-in user's heartbeat presence back
-		// to the certificate's original device owner.
-		_, err := host.prepareCertificate(ctx, account, credential.device(), credential.PrivateKey, "", "")
+	if err := checkBootstrapContext(ctx); err != nil {
 		return err
+	}
+	if account.manager != nil && account.manager.CandidatesActive() && account.client != nil && account.client.Account() == selected {
+		// Only the already active selected scope may take the maintenance path.
+		// A changed or absent durable login must repeat the fresh-pin barrier.
+		guarded, _, err := host.prepareRestoreCertificate(ctx, account, credential.device(), credential.PrivateKey)
+		if err != nil {
+			return err
+		}
+		return certificateContext(guarded)
 	}
 	// restore is idempotent for this identity and maintains its certificate while
 	// preserving any manager a desktop already activated.

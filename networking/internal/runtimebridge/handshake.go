@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"os"
 	"time"
 
 	"github.com/ankye/dshker/networking/internal/peer"
@@ -33,6 +31,9 @@ type hello struct {
 // caller-provided address or an HTTP endpoint on the coordination server.
 type RuntimeOwner func(context.Context, string) (Binding, error)
 
+// AttachmentInstaller commits negotiation only while its attempt is current.
+type AttachmentInstaller func(*peer.Mux, Binding) (*Gateway, *Endpoint, error)
+
 // Establish negotiates the runtime binding over the transport and attaches
 // the resulting mux to attachment.
 //
@@ -47,161 +48,24 @@ type RuntimeOwner func(context.Context, string) (Binding, error)
 // the long-lived context that owns the listener — the manager's lifetime, not
 // the session's. Attaching the gateway to sessionCtx would close its port the
 // moment the session ended, which is exactly what a stable URL must not do.
-func Establish(sessionCtx context.Context, gatewayCtx context.Context, transport *peer.Transport, lease protocol.Lease, initiator bool, requestWorkbench bool, owner RuntimeOwner, attachment *Endpoint) (*Gateway, *Endpoint, *peer.Mux, Binding, error) {
+func Establish(sessionCtx context.Context, transport *peer.Transport, lease protocol.Lease, initiator, requestWorkbench, resumeWorkbench bool, owners WorkbenchOwners, install AttachmentInstaller) (*Gateway, *Endpoint, *peer.Mux, Binding, string, error) {
 	budget, cancel := context.WithTimeout(sessionCtx, 70*time.Second)
 	defer cancel()
-	request := hello{Version: 1, Type: "runtime.connect", AttemptID: lease.AttemptID, Generation: lease.Generation, Capabilities: protocol.PeerCapabilitiesFor(requestWorkbench)}
-	var binding Binding
-	// Whether the peer's build keeps a link alive with no workbench on it. Assumed
-	// true for the initiator path, where the answer arrives with the reply instead.
-	peerKeepsWorkbenchlessLinks := true
-	if initiator {
-		if err := sendHello(transport, request); err != nil {
-			return nil, nil, nil, binding, err
-		}
-		response, err := readHello(budget, transport, request)
-		if err != nil {
-			return nil, nil, nil, binding, err
-		}
-		if response.Type != "runtime.result" {
-			return nil, nil, nil, binding, errors.New("p2p.protocol_mismatch")
-		}
-		if response.Error != "" {
-			// The peer has no workbench to offer. That is a fact about the far
-			// machine, not a failure of this connection, so the reason is recorded
-			// and the link is still established: the two computers remain connected
-			// and whatever else the connection carries keeps working. Only a code
-			// the protocol admits is reported; anything else collapses to the
-			// generic one so a library sentence cannot masquerade as a refusal.
-			code := "p2p.runtime_unavailable"
-			if named, ok := protocol.Refusal(errors.New(response.Error)); ok {
-				code = named
-			}
-			fmt.Fprintf(os.Stderr, "runtime.connect peer has no workbench: %s (connection kept)\n", code)
-			binding = Binding{}
-		} else {
-			binding = Binding{Generation: response.RuntimeGeneration, URL: response.URL}
-		}
-	} else {
-		incoming, err := readHello(budget, transport, request)
-		if err != nil {
-			return nil, nil, nil, binding, err
-		}
-		if incoming.Type != "runtime.connect" || incoming.RuntimeGeneration != 0 || incoming.URL != "" || incoming.Error != "" {
-			return nil, nil, nil, binding, errors.New("p2p.protocol_mismatch")
-		}
-		if !protocol.ValidCapabilities(incoming.Capabilities) {
-			return nil, nil, nil, binding, errors.New("p2p.protocol_mismatch")
-		}
-		// A peer that cannot keep a connection without a workbench will drop this one
-		// the moment we answer that we have none, whatever we do here. Recording it
-		// makes that outcome readable from this side instead of appearing as two logs
-		// disagreeing about whether the connection succeeded.
-		peerKeepsWorkbenchlessLinks = protocol.HasCapability(incoming.Capabilities, protocol.CapabilityOptionalWorkbench)
-		request.Type = "runtime.result"
-		if !protocol.HasCapability(incoming.Capabilities, protocol.CapabilityWorkbenchRequest) {
-			// Reconnection is a transport concern. A peer that is merely restoring
-			// its authorized link is not asking this machine to start DSH, so answer
-			// without invoking the runtime owner at all.
-			request.Error, binding = "p2p.runtime_unavailable", Binding{}
-			fmt.Fprintf(os.Stderr, "runtime.connect transport-only request peer=%s (connection kept, no workbench)\n", peerDeviceID(lease, initiator))
-		} else if owner == nil {
-			return nil, nil, nil, binding, errors.New("p2p.runtime_unavailable")
-		} else {
-			// The runtime owner keys its catalog, its pin map and its state projection
-			// by the *far* device id — never by the coordinator's attempt key. The
-			// lease carries the id the initiator supplied, which is the target's own
-			// device id, so on this side lease.PairID names this device and every
-			// lookup by it is a miss. Ask about the initiator instead.
-			binding, err = owner(budget, peerDeviceID(lease, initiator))
-		}
-		if err != nil {
-			// A workbench that will not start is not a broken connection.
-			//
-			// This used to end the session: the pair was told the named refusal and
-			// the transport was torn down, so a local problem on one machine — an
-			// unresolved pnpm, a dependency tree the platform could not traverse —
-			// destroyed a link that had already been negotiated successfully, and
-			// the reconnect that followed destroyed the next one too. Connection
-			// maintenance belongs to this daemon; a workbench is one optional thing
-			// carried over a connection, not the reason it exists. The reason is
-			// still reported and still reaches the peer, but the link survives it.
-			code := "p2p.runtime_unavailable"
-			if named, ok := protocol.Refusal(err); ok {
-				code = named
-			}
-			kept := "connection kept, no workbench"
-			if !peerKeepsWorkbenchlessLinks {
-				// Naming this is the whole point of advertising capabilities. The link is
-				// kept on this side, the peer's older build will close it anyway, and
-				// without this line the two machines' logs simply disagree about whether
-				// the connection succeeded — which is exactly how a mixed-build pair
-				// used to look while neither side could say why.
-				kept = "connection kept here, but this peer's build closes links without a workbench — upgrade it"
-			}
-			fmt.Fprintf(os.Stderr, "runtime.connect owner refused peer=%s: %v (%s)\n", peerDeviceID(lease, initiator), err, kept)
-			request.Error = code
-			binding, err = Binding{}, nil
-		} else if request.Error == "" {
-			_, invalid := binding.Endpoint()
-			if invalid == nil {
-				request.RuntimeGeneration, request.URL = binding.Generation, binding.URL
-			} else {
-				// An owner that answers with something unusable is the same case: report
-				// it and carry on without a tunnel rather than dropping the link.
-				fmt.Fprintf(os.Stderr, "runtime.connect owner answered an unusable binding peer=%s: %v (connection kept, no workbench)\n", peerDeviceID(lease, initiator), invalid)
-				request.Error, binding = "p2p.runtime_invalid", Binding{}
-			}
-		}
-		if err = sendHello(transport, request); err != nil {
-			return nil, nil, nil, binding, err
-		}
+	binding, refusal, err := negotiateWorkbench(budget, transport, lease, initiator, requestWorkbench, resumeWorkbench, owners)
+	if err != nil {
+		return nil, nil, nil, binding, refusal, err
 	}
 	mux, err := peer.NewMux(transport, peer.StreamScope{AttemptID: lease.AttemptID, Generation: lease.Generation, RuntimeGeneration: binding.Generation, Initiator: initiator})
 	if err != nil {
-		return nil, nil, nil, binding, err
+		return nil, nil, nil, binding, refusal, err
 	}
-	// Without a workbench there is nothing to proxy, so no endpoint and no gateway
-	// are built — but the transport and its mux are established and returned, and
-	// that is what being connected means. Attaching a workbench later is the job of
-	// the next Establish for this pair, which replaces the session in place.
-	if _, usable := binding.Endpoint(); usable != nil {
-		// A pair that had a workbench before keeps its attachment, and with it the
-		// stable address a tab may already be showing. That attachment must not be
-		// left pointing at the session it held previously: this reconnect replaces
-		// it, and the old mux is about to die with the old session. Detaching drops
-		// the dead session's pooled connections and tells the listening side the
-		// address currently serves nothing, instead of leaving an address that
-		// answers every request with a failure while the UI reports ready.
-		if attachment != nil {
-			attachment.Detach(attachment.CurrentMux())
-		}
-		return nil, attachment, mux, binding, nil
-	}
-	var gateway *Gateway
-	if attachment == nil {
-		attachment, err = NewEndpoint(mux, binding)
-		if err != nil {
-			mux.Close()
-			return nil, nil, nil, binding, err
-		}
-		if initiator {
-			gateway, err = OpenBrowserEndpoint(gatewayCtx, attachment)
-		} else {
-			gateway, err = ServeTargetEndpoint(gatewayCtx, attachment)
-		}
-		if err != nil {
-			attachment.Close()
-			mux.Close()
-			return nil, nil, nil, binding, err
-		}
-	} else if err = attachment.Replace(mux, binding); err != nil {
+	gateway, attachment, err := install(mux, binding)
+	if err != nil {
 		mux.Close()
-		return nil, nil, nil, binding, err
+		return nil, nil, nil, binding, refusal, err
 	}
-	return gateway, attachment, mux, binding, nil
+	return gateway, attachment, mux, binding, refusal, nil
 }
-
 func peerDeviceID(lease protocol.Lease, initiator bool) string {
 	if initiator {
 		return lease.ToDeviceID

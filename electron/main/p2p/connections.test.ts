@@ -101,7 +101,6 @@ describe('main-owned P2P connections', () => {
     f.accept('')
     const accepted = await f.connections.connect(serviceId, pairId, signal())
     expect(accepted.pairId).toBe(pairId)
-    expect(f.connections.entry(serviceId, pairId, accepted.generation)).toBe('')
   })
 
   it('refuses a reply whose entry point is not a string at all', async () => {
@@ -112,50 +111,33 @@ describe('main-owned P2P connections', () => {
     })
   })
 
-  it('hands the entry point only for the matching generation', async () => {
-    const f = fixture()
-    f.accept()
-    const accepted = await f.connections.connect(serviceId, pairId, signal())
-    expect(f.connections.entry(serviceId, pairId, accepted.generation)).toBe(url)
-    // A superseded attempt must not resurrect an old entry point.
-    expect(() => f.connections.entry(serviceId, pairId, accepted.generation + 1)).toThrow(
-      expect.objectContaining({ code: 'p2p.stale_generation' })
-    )
-  })
+  it.each([{ state: state(99) }, { state: state(99), url, cached: true }])(
+    'refuses a connect reply with missing or unexpected fields',
+    async (reply) => {
+      const f = fixture()
+      f.call.mockResolvedValueOnce(reply)
+      await expect(f.connections.connect(serviceId, pairId, signal())).rejects.toMatchObject({
+        code: 'p2p.protocol_mismatch'
+      })
+    }
+  )
 
-  it('drops the entry point on disconnect so the old URL cannot be reused', async () => {
+  it('invalidates read ownership even when helper teardown fails', async () => {
     const f = fixture()
-    f.accept()
-    const accepted = await f.connections.connect(serviceId, pairId, signal())
-    f.call.mockResolvedValueOnce({})
-    await f.connections.disconnect(serviceId, pairId, signal())
-    expect(() => f.connections.entry(serviceId, pairId, accepted.generation)).toThrow(
-      expect.objectContaining({ code: 'p2p.connection_not_found' })
-    )
-  })
-
-  it('drops the entry point even when helper teardown fails', async () => {
-    const f = fixture()
-    f.accept()
-    const accepted = await f.connections.connect(serviceId, pairId, signal())
+    const guard = f.connections.guardEntry(serviceId, pairId)
     f.call.mockRejectedValueOnce(new Error('teardown failed'))
     await expect(f.connections.disconnect(serviceId, pairId, signal())).rejects.toThrow()
-    // A failed teardown must not leave a usable local entry point behind.
-    expect(() => f.connections.entry(serviceId, pairId, accepted.generation)).toThrow(
-      expect.objectContaining({ code: 'p2p.connection_not_found' })
-    )
+    expect(guard).toThrow(expect.objectContaining({ code: 'p2p.stale_generation' }))
   })
 
-  it('invalidates every entry point of one service without touching others', async () => {
+  it('invalidates read ownership of one service without touching others', () => {
     const f = fixture()
     const otherService = 'b'.repeat(12)
-    f.accept()
-    const first = await f.connections.connect(serviceId, pairId, signal())
-    f.accept(`${url}other`)
-    const second = await f.connections.connect(otherService, pairId, signal())
+    const first = f.connections.guardEntry(serviceId, pairId)
+    const second = f.connections.guardEntry(otherService, pairId)
     f.connections.invalidate(serviceId)
-    expect(() => f.connections.entry(serviceId, pairId, first.generation)).toThrow()
-    expect(f.connections.entry(otherService, pairId, second.generation)).toBe(`${url}other`)
+    expect(first).toThrow(expect.objectContaining({ code: 'p2p.stale_generation' }))
+    expect(second).not.toThrow()
   })
 
   it('refuses a concurrent operation on the same pair', async () => {
@@ -176,13 +158,39 @@ describe('main-owned P2P connections', () => {
     await first
   })
 
-  it('clears every entry point once closed', async () => {
+  it('invalidates every read once closed and refuses new guards', () => {
     const f = fixture()
-    f.accept()
-    const accepted = await f.connections.connect(serviceId, pairId, signal())
+    const guard = f.connections.guardEntry(serviceId, pairId)
     f.connections.close()
-    expect(() => f.connections.entry(serviceId, pairId, accepted.generation)).toThrow(
-      expect.objectContaining({ code: 'p2p.connection_not_found' })
+    expect(guard).toThrow(expect.objectContaining({ code: 'p2p.helper_closed' }))
+    expect(() => f.connections.guardEntry(serviceId, pairId)).toThrow(
+      expect.objectContaining({ code: 'p2p.helper_closed' })
     )
+  })
+
+  it('fences an entry lookup immediately when disconnect starts before a stage arrives', async () => {
+    const f = fixture()
+    const guard = f.connections.guardEntry(serviceId, pairId)
+    let finish!: () => void
+    f.call.mockImplementationOnce(() => new Promise((resolve) => (finish = () => resolve({}))))
+    const pending = f.connections.disconnect(serviceId, pairId, signal())
+    expect(guard).toThrow(expect.objectContaining({ code: 'p2p.stale_generation' }))
+    expect(() => f.connections.guardEntry(serviceId, pairId)).toThrow(
+      expect.objectContaining({ code: 'p2p.connection_busy' })
+    )
+    finish()
+    await pending
+    expect(guard).toThrow(expect.objectContaining({ code: 'p2p.stale_generation' }))
+  })
+
+  it('invalidates read ownership only for the named pair or service', () => {
+    const f = fixture()
+    const affected = f.connections.guardEntry(serviceId, pairId)
+    const unaffected = f.connections.guardEntry(serviceId, otherPair)
+    f.connections.invalidate(serviceId, pairId)
+    expect(affected).toThrow(expect.objectContaining({ code: 'p2p.stale_generation' }))
+    expect(unaffected).not.toThrow()
+    f.connections.invalidate(serviceId)
+    expect(unaffected).toThrow(expect.objectContaining({ code: 'p2p.stale_generation' }))
   })
 })

@@ -66,6 +66,14 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   submitEnrollment: { serviceId, revision },
   recoverEnrollment: { serviceId, revision },
   pairs: { serviceId },
+  networkChoices: { serviceId },
+  selectNetwork: {
+    serviceId,
+    pairId,
+    networkId,
+    userId: 'd'.repeat(12),
+    expectedRevision: revision
+  },
   pairIdentity: { serviceId, pairId },
   createInvite: { serviceId, networkId },
   acceptInvite: { serviceId, networkId, code: 'ABCDEFGHIJKLMNOP' },
@@ -184,6 +192,16 @@ function fixture() {
     runtimeGeneration: 2
   }
   const owner = {
+    networkChoices: vi.fn(async () => ({
+      userId: user.userId,
+      catalogRevision: revision,
+      devices: []
+    })),
+    selectNetwork: vi.fn(async () => ({
+      userId: user.userId,
+      catalogRevision: revision,
+      devices: []
+    })),
     enable: vi.fn(async () => snapshot),
     catalog: vi.fn(async () => snapshot),
     resetCatalog: vi.fn(async () => snapshot),
@@ -462,6 +480,29 @@ describe('P2P named management admission', () => {
     expect(admitted).not.toHaveProperty('privateKey')
   })
 
+  it('admits only exact account and catalog revision for an explicit network choice', () => {
+    const input = request('selectNetwork')
+    expect(parseManagementRequest('selectNetwork', input)).toEqual(input)
+    for (const [field, value] of [
+      ['pairId', ''],
+      ['networkId', ''],
+      ['userId', ''],
+      ['expectedRevision', ''],
+      ['expectedRevision', 'a'.repeat(63)],
+      ['expectedRevision', 'A'.repeat(64)],
+      ['certificate', 'forbidden'],
+      ['pinnedKey', 'forbidden']
+    ] as const) {
+      expect(() => parseManagementRequest('selectNetwork', { ...input, [field]: value })).toThrow()
+    }
+    expect(() =>
+      parseManagementRequest('networkChoices', {
+        ...request('networkChoices'),
+        networkId: 'a'.repeat(12)
+      })
+    ).toThrow()
+  })
+
   it('dispatches register and returns the signed-in user without leaking the password', async () => {
     const { owner, invoke, user } = fixture()
     const result = await invoke('register', page().event, request('register'))
@@ -554,5 +595,31 @@ describe('P2P named management admission', () => {
       data: null
     })
     expect(owner.enable).not.toHaveBeenCalled()
+  })
+
+  it('forwards cancellation to the existing read-only entry operation', async () => {
+    const { owner, invoke } = fixture()
+    let finish!: () => void
+    let active!: AbortSignal
+    Object.assign(owner, {
+      entry: vi.fn((_service: string, _pair: string, _generation: number, signal: AbortSignal) => {
+        active = signal
+        return new Promise((resolve) => {
+          finish = () => resolve({ url: 'http://127.0.0.1:9/', partition: 'test-only-partition' })
+        })
+      })
+    })
+    const renderer = page()
+    const lookup = invoke('entry', renderer.event, request('entry'))
+    expect(owner.entry).toHaveBeenCalledWith(serviceId, pairId, 1, expect.any(AbortSignal))
+    expect(active.aborted).toBe(false)
+    await invoke('cancel', renderer.event, request('cancel', 2))
+    expect(active.aborted).toBe(true)
+    finish()
+    expect(await lookup).toEqual({
+      ok: false,
+      code: 'p2p.request_cancelled',
+      message: 'p2p.request_cancelled'
+    })
   })
 })

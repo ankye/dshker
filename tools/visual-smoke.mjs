@@ -52,6 +52,7 @@ async function readSources(root) {
     'src/app/shell/components/ShellSidebar.vue',
     'src/app/shell/components/ShellStatusbar.vue',
     'src/app/shell/components/RuntimeTabsPanel.vue',
+    'src/app/shell/components/RuntimeTabStrip.vue',
     'src/app/shell/components/RemoteConnectionsPanel.vue',
     'src/app/shell/components/RemoteSSHManagementPanel.vue',
     'src/app/shell/runtimeBrowserState.ts',
@@ -84,6 +85,7 @@ function evaluateSources(sources) {
   const sidebar = sourceByPath.get('src/app/shell/components/ShellSidebar.vue')
   const statusbar = sourceByPath.get('src/app/shell/components/ShellStatusbar.vue')
   const runtimePanel = sourceByPath.get('src/app/shell/components/RuntimeTabsPanel.vue')
+  const runtimeTabStrip = sourceByPath.get('src/app/shell/components/RuntimeTabStrip.vue')
   const runtimeState = sourceByPath.get('src/app/shell/runtimeBrowserState.ts')
   const remotePanel = sourceByPath.get('src/app/shell/components/RemoteSSHManagementPanel.vue')
   const electronWindow = sourceByPath.get('electron/main/window.ts')
@@ -95,7 +97,7 @@ function evaluateSources(sources) {
   const locales = sourceByPath.get('src/app/shared/i18n/i18n.ts')
 
   const flatStyles = styles.replace(/\s+/gu, ' ')
-  const flatRuntimePanel = runtimePanel.replace(/\s+/gu, ' ')
+  const flatRuntimePanel = `${runtimePanel}\n${runtimeTabStrip}`.replace(/\s+/gu, ' ')
   // Declarations are compared as literal text rather than by regular expression.
   // A whitespace-class pattern after a CSS property name would put a letter, a
   // colon, and a backslash next to each other, which the workspace path-hygiene
@@ -181,6 +183,15 @@ function evaluateSources(sources) {
         runtimeBlock(".browser-tab[data-state='disconnected'] .browser-tab-status").includes(
           'background: var(--color-danger)'
         )
+    ),
+    finding(
+      'runtime.remote-tabs-closable',
+      runtimePanel.includes('<RuntimeTabStrip') &&
+        runtimeTabStrip.includes('class="browser-tab-close"') &&
+        runtimeTabStrip.includes("t('runtime.closeTab')") &&
+        runtimeTabStrip.includes('@keydown.delete.prevent="closeTab(tab.id)"') &&
+        runtimeTabStrip.includes('v-if="tab.source !== \'local\'"') &&
+        runtimeState.includes('function closeRemoteTab(')
     ),
 
     // Themed controls replace native select popups that cannot be palette-styled.

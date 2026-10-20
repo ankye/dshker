@@ -32,6 +32,7 @@ describe('visual smoke', () => {
     for (const name of [
       'runtime.zoom-controls',
       'runtime.full-bleed-guest',
+      'runtime.remote-tabs-closable',
       'runtime.no-raster-css-effects',
       'runtime.no-forced-device-scale-factor'
     ]) {

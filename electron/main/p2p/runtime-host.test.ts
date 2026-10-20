@@ -113,11 +113,14 @@ function fixture() {
       launch = value
       for (const listener of listeners) listener(value)
     },
+    setSilent: (value: LauncherHarnessLaunchView) => (launch = value),
     emit: (value: unknown) => handler!('peer.state', { serviceId, state: value }, signal()),
     directoryChanged: (payload: unknown) => handler!('directory.changed', payload, signal()),
     catalogChanged: (payload: unknown) => handler!('catalog.changed', payload, signal()),
     connect: (payload: unknown = { serviceId, pairId }, requestSignal = signal()) =>
       handler!('runtime.connect', payload, requestSignal),
+    resume: (payload: unknown = { serviceId, pairId }, requestSignal = signal()) =>
+      handler!('runtime.resume', payload, requestSignal),
     unavailable: (error: PeerHelperError) => {
       for (const observer of [...observers]) observer(error)
     }
@@ -125,6 +128,80 @@ function fixture() {
 }
 
 describe('formal main P2P runtime ownership', () => {
+  it('admits bind-only resume for the actual running runtime without starting DSH', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    expect(await f.resume()).toEqual({ generation: 1, url })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('refuses repeated automatic resume after the target user stops DSH', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    f.set({ kind: 'stopped' })
+    for (let attempt = 0; attempt < 3; attempt++)
+      await expect(f.resume()).rejects.toMatchObject({ code: 'p2p.runtime_unavailable' })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('refuses malformed, unauthorized and cancelled resume before runtime access', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    for (const payload of [
+      { serviceId },
+      { serviceId, pairId, url },
+      { serviceId, pairId, start: true }
+    ])
+      await expect(f.resume(payload)).rejects.toMatchObject({ code: 'p2p.protocol_mismatch' })
+    await expect(f.resume({ serviceId, pairId: 'f'.repeat(12) })).rejects.toMatchObject({
+      code: 'p2p.pair_unauthorized'
+    })
+    await expect(f.resume({ serviceId, pairId }, AbortSignal.abort())).rejects.toMatchObject({
+      code: 'p2p.request_cancelled'
+    })
+    f.record.forgottenServiceIds.push(serviceId)
+    await expect(f.resume()).rejects.toMatchObject({ code: 'p2p.trust_restore_rejected' })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('rechecks authorization and the actual running child after resume awaits', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    const saved = await f.inspect()
+    f.inspect.mockResolvedValueOnce(saved).mockImplementationOnce(async () => {
+      f.setSilent({ kind: 'stopped' })
+      return saved
+    })
+    await expect(f.resume()).rejects.toMatchObject({ code: 'p2p.runtime_invalidated' })
+    f.set({ kind: 'running', url })
+    f.inspect.mockResolvedValueOnce(saved).mockImplementationOnce(async () => {
+      f.record.computers[0].pairState = 'revoked'
+      return saved
+    })
+    await expect(f.resume()).rejects.toMatchObject({ code: 'p2p.pair_unauthorized' })
+    expect(f.start).not.toHaveBeenCalled()
+  })
+
+  it('retains a typed workbench refusal on connected transport until ready succeeds', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    await f.emit({ ...state('connected'), error: 'p2p.runtime_unavailable' })
+    expect(f.host.snapshot().peers[0]?.state).toMatchObject({
+      stage: 'connected',
+      error: 'p2p.runtime_unavailable',
+      runtimeGeneration: 0
+    })
+    await expect(
+      f.emit({ ...state('ready'), error: 'p2p.runtime_unavailable' })
+    ).rejects.toMatchObject({ code: 'p2p.invalid_peer_state' })
+    await f.emit(state('ready'))
+    expect(f.host.snapshot().peers[0]?.state).toMatchObject({
+      stage: 'ready',
+      error: '',
+      runtimeGeneration: 1
+    })
+    expect(f.start).not.toHaveBeenCalled()
+  })
   it('attaches to nothing and starts no DSH on construction or idle shutdown', async () => {
     const f = fixture()
     expect(f.host.snapshot()).toEqual({ error: '', peers: [] })
@@ -318,12 +395,82 @@ describe('formal main P2P runtime ownership', () => {
     expect(f.host.snapshot().peers[0].state.path.protocol).toBe('udp')
   })
 
+  it('admits exact v2 primary suspension without granting or cold-starting a runtime', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    const ready = { ...state('ready'), attemptId: 'd'.repeat(32) }
+    await f.emit(ready)
+    await f.emit({ ...ready, stage: 'suspended' })
+    expect(f.host.snapshot().peers[0].state).toMatchObject({ ...ready, stage: 'suspended' })
+    await f.emit(ready)
+    expect(f.host.snapshot().peers[0].state).toEqual(ready)
+    expect(f.start).not.toHaveBeenCalled()
+    await f.emit({ ...ready, stage: 'disconnected' })
+    await expect(f.emit({ ...ready, stage: 'suspended' })).rejects.toMatchObject({
+      code: 'p2p.stale_generation'
+    })
+  })
+
+  it('does not let older ready authorization completion overwrite a newer suspension', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    await f.emit(state('ready'))
+    const saved = await f.inspect()
+    let finishOlder!: (value: typeof saved) => void
+    f.inspect.mockImplementationOnce(() => new Promise((resolve) => (finishOlder = resolve)))
+    const older = f.emit(state('ready'))
+    const suspended = f.emit({ ...state('ready'), stage: 'suspended' })
+    finishOlder(saved)
+    await Promise.all([older, suspended])
+    expect(f.host.snapshot().peers[0].state.stage).toBe('suspended')
+    await f.emit(state('ready'))
+    expect(f.host.snapshot().peers[0].state.stage).toBe('ready')
+  })
+
+  it('keeps intermediate ready before suspended when authorization completes asynchronously', async () => {
+    const f = fixture()
+    await f.host.start(signal())
+    await f.emit(state('starting-runtime'))
+    const saved = await f.inspect()
+    let finishReady!: (value: typeof saved) => void
+    f.inspect.mockImplementationOnce(() => new Promise((resolve) => (finishReady = resolve)))
+    const ready = f.emit(state('ready'))
+    const suspended = f.emit({ ...state('ready'), stage: 'suspended' })
+    finishReady(saved)
+    await Promise.all([ready, suspended])
+    expect(f.host.snapshot().peers[0].state.stage).toBe('suspended')
+  })
+
+  it.each(['failed', 'disconnected'] as const)(
+    'cannot skip queued terminal %s to revive cached ready',
+    async (terminal) => {
+      const f = fixture()
+      await f.host.start(signal())
+      await f.emit(state('ready'))
+      const saved = await f.inspect()
+      let finishTerminal!: (value: typeof saved) => void
+      f.inspect.mockImplementationOnce(() => new Promise((resolve) => (finishTerminal = resolve)))
+      const end = f.emit({
+        ...state(terminal),
+        error: terminal === 'failed' ? 'p2p.direct_closed' : ''
+      })
+      const late = f.emit(state('ready'))
+      const rejected = expect(late).rejects.toMatchObject({ code: 'p2p.stale_generation' })
+      finishTerminal(saved)
+      await end
+      await rejected
+      expect(f.host.snapshot().peers[0].state.stage).toBe(terminal)
+    }
+  )
+
   it.each([
     { ...state('ready'), url },
     { ...state('ready'), runtimeGeneration: 0 },
     { ...state('ready'), path: { localType: 'relay', remoteType: 'host', protocol: 'udp' } },
     { ...state('ready'), generation: Number.MAX_SAFE_INTEGER + 1 },
-    { ...state('failed'), error: '' }
+    { ...state('failed'), error: '' },
+    { ...state('connected'), error: 'runtime is stopped' },
+    { ...state('connected'), runtimeGeneration: 1 }
   ])('rejects malformed or non-direct state without projection changes', async (value) => {
     const f = fixture()
     await f.host.start(signal())

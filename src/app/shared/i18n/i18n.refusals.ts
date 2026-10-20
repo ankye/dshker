@@ -7,11 +7,21 @@
  * that is still true.
  */
 export const zhCNRefusals = {
+  'p2p.refusal.networkChoice': '这台电脑有多个可用网络，请明确选择连接网络。',
+  'p2p.refusal.networkChoiceStale': '原网络授权已变化，请刷新后重新选择；不会自动换网。',
+  'p2p.refusal.networkChoiceConflict': '这台电脑已有有效的连接网络，已保留原选择。请刷新查看。',
   'p2p.refusal.input': '输入的内容不符合要求，请修改后重试。',
   'p2p.refusal.signedOut': '需要先登录才能继续。',
   'p2p.refusal.absent': '服务器上还没有这项记录。',
   'p2p.refusal.retry': '暂时无法完成，请稍后重试。',
   'p2p.refusal.fault': '操作未成功。已保留你的输入，可重试或稍后再试。',
+  'p2p.refusal.recoveryUnsupported': '两端客户端与协调服务器需支持安全连接恢复，请更新后重试。',
+  'p2p.refusal.recoveryChanged': '账号或连接身份已变化，请核对两端登录账号并读取当前连接状态。',
+  'p2p.refusal.recoveryPending': '连接验证尚未完成，请等待当前恢复结果，不要重复连接。',
+  'p2p.refusal.recoveryRefused': '连接恢复状态未通过验证，请读取当前连接状态后再操作。',
+  'p2p.refusal.recoveryEnded': '本次连接恢复已结束，请读取当前连接状态。',
+  'p2p.refusal.coordinatorRestarted':
+    '协调服务器已重启，本次尚未提交的恢复已取消。请读取当前连接状态。',
   'p2p.account.invalidInput': '输入的内容不符合要求，请检查邮箱与密码后重试。',
   // Connection refusals. A user looking at a failed tab needs to know which side
   // is the problem — the other computer, the network between them, or the
@@ -20,12 +30,20 @@ export const zhCNRefusals = {
   'p2p.refusal.notConnected': '这条连接在本机已经不存在或已经失效，可能刚刚断开。重新连接即可。',
   'p2p.refusal.localNotReady':
     '这台电脑还没准备好加入连接：P2P 没有启用、这台设备还没加入该账号，或者本地核心没有运行。请先到网络页检查。',
+  'p2p.refusal.accountNotBound':
+    '这台电脑尚未绑定到当前账号。请在网络与账户中核对设备绑定；不会改用其他账号连接。',
   'p2p.refusal.coordinatorUnavailable':
     '连不上协调服务器，两台电脑因此无法找到对方。请检查本机网络与服务器状态。',
   'p2p.refusal.noDirectPath':
     '两台电脑之间没能建立直连。请确认双方在同一网络、且没有防火墙拦截 UDP。',
   'p2p.refusal.runtimeUnavailable':
     '网络已连上，但对方的工作台没有启动起来。请在对方电脑上查看运行页。',
+  'p2p.refusal.runtimeOwnerUnavailable':
+    '无法联系 DSH 运行时管理进程。为保护仍在运行的任务，未尝试重新启动或接管 DSH；请在对方电脑查看控制台日志。',
+  'p2p.refusal.runtimeOwnerInvalid':
+    'DSH 运行时记录或版本身份未通过验证，已拒绝接管。原任务未被停止，请在对方电脑查看控制台日志。',
+  'p2p.refusal.runtimeOwnerShutdown':
+    '无法确认 DSH 运行时已完全退出，未清除运行时记录。请在对方电脑查看控制台日志，勿重复启动。',
   'p2p.refusal.pairUnauthorized': '这台电脑的配对授权已失效，需要在远程连接页重新配对。',
   'p2p.refusal.certificateRecoveryRequired':
     '这台电脑的设备证书已到期。请在本机登录原网络所有者账号，使用已记录的网络恢复证书；原设备和配对会保留。若未记录原网络，请联系管理员核对。',
@@ -43,11 +61,27 @@ export const zhCNRefusals = {
 } as const
 
 export const enUSRefusals: Record<keyof typeof zhCNRefusals, string> = {
+  'p2p.refusal.networkChoice': 'Choose which authorized network to use for this computer.',
+  'p2p.refusal.networkChoiceStale':
+    'The original network authority changed. Refresh and explicitly choose again; no other network was substituted.',
+  'p2p.refusal.networkChoiceConflict':
+    'This computer already has a valid network selection. The original choice was kept; refresh to view it.',
   'p2p.refusal.input': 'That input was refused. Adjust it and try again.',
   'p2p.refusal.signedOut': 'Signing in is required to continue.',
   'p2p.refusal.absent': 'The server has no record of this yet.',
   'p2p.refusal.retry': 'That could not complete right now. Try again shortly.',
   'p2p.refusal.fault': 'That did not succeed. Your input is kept; retry or try again later.',
+  'p2p.refusal.recoveryUnsupported':
+    'Both clients and the coordinator must support safe connection recovery. Update them, then retry.',
+  'p2p.refusal.recoveryChanged':
+    'The account or connection identity changed. Check both selected accounts and read the current connection state.',
+  'p2p.refusal.recoveryPending':
+    'Connection verification is still in progress. Wait for its result rather than connecting again.',
+  'p2p.refusal.recoveryRefused':
+    'The recovery state failed verification. Read the current connection state before another operation.',
+  'p2p.refusal.recoveryEnded': 'This recovery attempt ended. Read the current connection state.',
+  'p2p.refusal.coordinatorRestarted':
+    'The coordinator restarted and cancelled this uncommitted recovery. Read the current connection state.',
   'p2p.account.invalidInput':
     'That input was refused. Check the email and password, then try again.',
   'p2p.refusal.peerOffline': 'That computer is offline: it is not signed in, or just went away.',
@@ -55,12 +89,20 @@ export const enUSRefusals: Record<keyof typeof zhCNRefusals, string> = {
     'This computer no longer holds that connection, or it has lapsed. Connect again.',
   'p2p.refusal.localNotReady':
     'This computer is not ready to join a connection: P2P is not enabled, this device is not in that account yet, or the local core is not running. Check the Networks page first.',
+  'p2p.refusal.accountNotBound':
+    'This computer is not bound to the selected account. Check its device binding in Networks and Account; another account will not be substituted.',
   'p2p.refusal.coordinatorUnavailable':
     'The coordination server could not be reached, so the two computers cannot find each other. Check this computer’s network and the server.',
   'p2p.refusal.noDirectPath':
     'The two computers could not reach each other directly. Check that both are on the same network and that nothing blocks UDP.',
   'p2p.refusal.runtimeUnavailable':
     'The network connected, but the workbench on the other computer did not come up. Check its Run page.',
+  'p2p.refusal.runtimeOwnerUnavailable':
+    'The DSH runtime manager could not be reached. DSH was not restarted or adopted, to protect running tasks. Check the console on the other computer.',
+  'p2p.refusal.runtimeOwnerInvalid':
+    'The DSH runtime record or version identity failed verification, so adoption was refused. Existing tasks were not stopped. Check the console on the other computer.',
+  'p2p.refusal.runtimeOwnerShutdown':
+    'DSH runtime shutdown could not be confirmed. Its ownership record was retained. Check the console on the other computer before starting it again.',
   'p2p.refusal.pairUnauthorized':
     'This computer’s pairing authorization is gone. Pair it again from Remote Connections.',
   'p2p.refusal.certificateRecoveryRequired':
@@ -102,10 +144,49 @@ const WORKBENCH_CODE_PREFIXES = ['p2p.runtime_', 'runtime.', 'managed.harness_']
  * is never silent.
  */
 export function refusalKeyForCode(code: string): keyof typeof zhCNRefusals {
+  if (code === 'runtime.owner_unavailable') return 'p2p.refusal.runtimeOwnerUnavailable'
+  if (
+    code === 'runtime.owner_identity_mismatch' ||
+    code === 'runtime.owner_record_invalid' ||
+    code === 'runtime.owner_protocol_unsupported' ||
+    code === 'runtime.owner_configuration_invalid'
+  ) {
+    return 'p2p.refusal.runtimeOwnerInvalid'
+  }
+  if (code === 'runtime.owner_shutdown_failed') return 'p2p.refusal.runtimeOwnerShutdown'
   if (WORKBENCH_CODE_PREFIXES.some((prefix) => code.startsWith(prefix))) {
     return 'p2p.refusal.runtimeUnavailable'
   }
   switch (code) {
+    case 'p2p.network_selection_required':
+      return 'p2p.refusal.networkChoice'
+    case 'p2p.network_selection_stale':
+      return 'p2p.refusal.networkChoiceStale'
+    case 'p2p.network_selection_conflict':
+      return 'p2p.refusal.networkChoiceConflict'
+    case 'p2p.binding_unauthorized':
+      return 'p2p.refusal.accountNotBound'
+    case 'p2p.candidate_unsupported':
+      return 'p2p.refusal.recoveryUnsupported'
+    case 'p2p.registration_stale':
+    case 'p2p.active_changed':
+    case 'p2p.core_replaced':
+    case 'p2p.account_changed':
+      return 'p2p.refusal.recoveryChanged'
+    case 'p2p.candidate_not_ready':
+      return 'p2p.refusal.recoveryPending'
+    case 'p2p.candidate_scope_mismatch':
+    case 'p2p.candidate_conflict':
+    case 'p2p.candidate_state_conflict':
+    case 'p2p.source_required':
+      return 'p2p.refusal.recoveryRefused'
+    case 'p2p.candidate_expired':
+    case 'p2p.candidate_cancelled':
+    case 'p2p.attempt_not_active':
+    case 'p2p.connection_ended':
+      return 'p2p.refusal.recoveryEnded'
+    case 'p2p.coordinator_restarted':
+      return 'p2p.refusal.coordinatorRestarted'
     case 'p2p.certificate_recovery_required':
       return 'p2p.refusal.certificateRecoveryRequired'
     case 'p2p.certificate_recovery_forbidden':

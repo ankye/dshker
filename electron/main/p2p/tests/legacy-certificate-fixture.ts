@@ -64,7 +64,11 @@ export function legacyCertificateFixture(original: PeerCredential = legacyCreden
     hasSession: vi.fn(() => true),
     sessionToken: vi.fn((): string | undefined => recoveryToken),
     currentUser: vi.fn(async () => ({ ...recoveryUser })),
-    refreshDirectory: vi.fn(async () => structuredClone(directory))
+    refreshDirectory: vi.fn(async () => structuredClone(directory)),
+    certificateRecoveryScope: vi.fn(async () => ({
+      user: { ...recoveryUser },
+      networks: structuredClone(directory.networks)
+    }))
   }
   const call = vi.fn(
     async (method: string, payload: unknown, _signal: AbortSignal): Promise<unknown> => {

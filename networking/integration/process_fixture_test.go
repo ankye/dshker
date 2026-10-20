@@ -188,7 +188,20 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 func (f *fixture) startServer(t *testing.T) {
-	f.server = launch(t, exec.CommandContext(f.ctx, f.binary, "serve", "--config", f.configPath))
+	diagnostics := &serverAdmissionDiagnostics{}
+	// Registered before launch: LIFO joins this exact server/copy worker first,
+	// then publishes bounded fixed-field samples, never generic child stderr.
+	t.Cleanup(func() {
+		body, err := json.Marshal(diagnostics.finish())
+		if err != nil {
+			t.Error("server admission diagnostic receipt could not be encoded")
+			return
+		}
+		t.Logf("server-admission-diagnostics (throttled samples, not all denials): %s", body)
+	})
+	command := exec.CommandContext(f.ctx, f.binary, "serve", "--config", f.configPath)
+	command.Stderr = diagnostics
+	f.server = launch(t, command)
 	var err error
 	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); {
 		var identity controlplane.Identity

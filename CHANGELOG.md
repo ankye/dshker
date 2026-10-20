@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.1.91 — 2026-10-20
+
+### 简体中文 (zh-CN)
+
+- **连接恢复不再被旧握手的清理占住。** 已确认结束的旧握手保留自身清理责任，但不再吞掉下一次握手；旧状态尚未确认时，先核实服务器的原票据结果再交接。日志补充握手请求、拒绝、收发和槽位交接原因，不记录令牌、签名或网页内容，不延长恢复时限。
+- **证书到期时保留真实登录结果，退出账号清理旧连接。** 登录确认期间证书刚好过期，不再因后续设备激活失败而丢失已确认的账号结果。退出账号会撤销本机旧账号的远程通道和后台重连任务，迟到的设备列表或证书恢复结果不会重新激活旧会话；请求中断或服务器撤销未确认仍明确报错，不会冒充成功、影响新账号或停止远端 DSH。
+- **同一网络下的电脑分别使用设备请求配额。** 已恢复设备的账户、网络和目录请求携带原设备证书，同时保留真实登录账号的授权检查；不再与另一台电脑挤占公共 IP 配额。匿名登录和证书恢复仍走各自明确的认证流程，不提高服务器限额，也不在失败后切换认证方式。
+- **同一电脑的网络选择不再靠猜。** 保留仍获授权的原连接网络；首次连接存在多个网络时，在添加页签浮层内明确选择，仍只创建一个电脑页签。原网络已失效时需重新选择，失败或返回电脑列表不会意外打开页面。
+- **准确显示连接恢复状态。** 短暂中断显示“正在恢复”，不会误报工作台可用，也不会卸载同一连接里已打开的网页；关闭后重新打开必须等待真实就绪。SSH 列表刷新不再重置 P2P 页面的当前地址。
+- **网络核心重启不丢失正在运行的 DSH。** 独立运行时管理进程保留真实子进程、日志管道与运行代次；核心只重新认证连接，不靠旧地址或 PID 猜测接管，不重复启动 DSH。主动停止与正常退出仍会回收运行时；记录损坏、身份不符或管理进程不可达时明确拒绝，不影响原设备、网络和配对。
+- **保留远程断连的首因。** 核心日志记录同一次连接的 ICE/DataChannel 状态、选中路径与最近接收采样、租约续期和终止来源，不记录令牌或业务内容；清理错误不会覆盖首错。修复已开始执行的旧断连计时器误关已恢复通道的竞态，不延长超时、不依赖重开页签。
+- **远程浏览器页签支持关闭和重新打开。** SSH/P2P 页签增加独立关闭按钮和键盘 Delete 操作，关闭后从“+”重新选择电脑即可打开；已断开的 SSH 可在这里重连。关闭不会停止远端 DSH、删除电脑或中断其他页签，迟到的连接结果也不会把页面重新弹回来；本地页签保留常驻。
+- **修复远程工作台挂机后“显示已连接，网页却打不开”。** 临时断线后，自动恢复已经明确打开的工作台及原端口上的 HTTP/WebSocket 转发，而不只恢复设备通道；普通后台配对仍不会启动未打开的 DSH。
+- **恢复页签读取当前连接入口。** 新连接就绪后从核心重新验证设备、配对与连接代次，不复用过期地址；主动断开、撤权和迟到的旧连接不会恢复不应打开的内容。
+- **自动恢复尊重主动停止。** 只重新附着目标电脑上仍在运行的 DSH，不会自动启动已停止的 DSH；旧客户端不支持安全恢复时明确拒绝，不改用启动请求。
+
+### English (en-US)
+
+- **Keep old handshake cleanup from swallowing a replacement connection.** A confirmed ended handshake retains its cleanup owner without blocking its successor. Unknown old authority is checked against the server's exact ticket before handoff. Bounded diagnostics record admission, rejection, signalling and ownership transitions without tokens, signatures or page content; recovery deadlines are unchanged.
+- **Keep confirmed sign-in results across certificate expiry and retire old connections on sign-out.** Expiry during authentication no longer lets later device activation replace a confirmed account result. Signing out retires that account's local gateways and reconnect jobs; delayed directory or certificate-recovery results cannot reactivate the old session. Interrupted or unconfirmed server revocation remains an explicit failure; it cannot claim success, affect a replacement account or stop remote DSH.
+- **Keep authenticated computers on separate request budgets.** Restored devices carry their original certificate for ordinary account, network and directory requests while retaining the real signed-in account's authorization checks. They no longer compete in the public IP bucket. Public login and certificate recovery keep their explicit authentication owners; limits are unchanged and failures never select another authentication path.
+- **Choose a computer's network explicitly.** Keep an existing, freshly authorized network selection. If a first connection has several networks, choose inside the add-tab popover without creating duplicate computer tabs. A stale selection requires an explicit replacement; failed or dismissed selections cannot open a page later.
+- **Show recovery without claiming readiness.** A briefly interrupted primary keeps its already open page while showing “recovering.” Reopening waits for live readiness, and refreshing SSH records no longer resets a P2P page's current address.
+- **Keep running DSH under an independent runtime authority.** A network-core restart reconnects to the authenticated owner retaining the real child, output pipes and binding generation. It does not guess from a cached URL/PID or start DSH again. Explicit Stop and normal shutdown still join the runtime; corrupt, incompatible or unreachable ownership is refused without replacing devices, networks or pairs.
+- **Keep the first cause of a remote disconnect.** Core logs correlate ICE/DataChannel state, selected-path receive samples, lease renewal and termination ownership without tokens or application payloads. Cleanup cannot replace the first failure. A stale, already-running disconnect timer can no longer close a recovered transport; deadlines are unchanged and tab reopening is not required by this repair.
+- **Close and reopen remote browser tabs.** SSH/P2P tabs now have a separate close button and keyboard Delete action. Choose the computer again from **+** to reopen it or reconnect a disconnected SSH computer. Closing does not stop remote DSH, delete the computer or interrupt other tabs; late connection results cannot reopen a dismissed page. Local stays available.
+- **Fix remote workbenches staying unavailable after an idle disconnect.** Automatic recovery restores an explicitly opened workbench and its original HTTP/WebSocket gateway, not just the device transport. Background pairings still do not activate unopened DSH workbenches.
+- **Read current entries when tabs recover.** The shell verifies the current core-owned peer, pairing and attempt instead of reusing a stale address. Explicit disconnects, revocations and late older attempts cannot restore unauthorized content.
+- **Respect a deliberately stopped DSH.** Recovery only reattaches a running target runtime. It never substitutes a start request when safe resume is unavailable on an older peer.
+
 ## 0.1.90 — 2026-10-17
 
 ### 简体中文 (zh-CN)

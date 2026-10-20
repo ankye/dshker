@@ -34,20 +34,6 @@ interface Options {
   rootsProvider?(): Promise<{ rootId: string; name: string; path: string }[]>
   onUnavailable?(): void
   /**
-   * Reports every connection stage the helper announces.
-   *
-   * A drop is the moment a reconnect has to start: waiting for the next
-   * periodic sweep would leave a tab dead for up to a minute for what is often
-   * a one second network change.
-   */
-  /**
-   * One announced connection stage.
-   *
-   * The generation names the attempt the stage belongs to, which the listener needs
-   * to tell a fresh attempt from a late announcement of an old one.
-   */
-  onPeerStage?(serviceId: string, pairId: string, stage: string, generation: number): void
-  /**
    * Reports a new revision of the core's directory snapshot for one service.
    *
    * The core owns the snapshot and announces its changes, so this is the only
@@ -71,6 +57,8 @@ export class PeerRuntimeHost {
   readonly #lifetime = new AbortController()
   readonly #runtimeServices = new Set<string>()
   readonly #states = new Map<string, { serviceId: string; state: PeerHelperState }>()
+  /** Preserve every state transition in arrival order across async authorization. */
+  readonly #stateAdmissions = new Map<string, Promise<void>>()
   /**
    * Attempt ids this host has already recorded per pair, most recent last.
    *
@@ -216,16 +204,43 @@ export class PeerRuntimeHost {
     }
     const fields = exactPeerObject(
       payload,
-      method === 'runtime.connect' ? ['serviceId', 'pairId'] : ['serviceId', 'state']
+      method === 'peer.state' ? ['serviceId', 'state'] : ['serviceId', 'pairId']
     )
     assertAccountId(fields.serviceId, 12)
     const state = method === 'peer.state' ? parseHelperState(fields.state) : undefined
     const pairId = state ? state.pairId : fields.pairId
     assertAccountId(pairId)
+    if (state) return this.#recordState(fields.serviceId, state, signal)
     await this.#authorize(fields.serviceId, pairId)
     this.#admit(signal)
-    const key = `${fields.serviceId}:${pairId}`
-    if (state) {
+    // The stage a runtime request used to require is gone with the inbound
+    // session's announcements: the core owns one slot per direction now and
+    // asks for a runtime only while an answered attempt is at starting-runtime,
+    // so the authorization below — the pair must still be recorded and active —
+    // is the whole gate. Requiring a stage this document was never told made
+    // every answered attempt die as p2p.runtime_request_unscoped.
+    if (method !== 'runtime.connect' && method !== 'runtime.resume')
+      throw new PeerHelperError('p2p.invalid_operation')
+    this.#runtimeServices.add(fields.serviceId)
+    const binding = await (method === 'runtime.connect'
+      ? this.#runtime.connect(signal)
+      : this.#runtime.resume(signal))
+    await this.#authorize(fields.serviceId, pairId)
+    this.#admit(signal)
+    this.#runtime.assertCurrent(binding)
+    return binding
+  }
+
+  async #recordState(
+    serviceId: string,
+    state: PeerHelperState,
+    signal: AbortSignal
+  ): Promise<Record<string, never>> {
+    const key = `${serviceId}:${state.pairId}`
+    const admit = async () => {
+      this.#admit(signal)
+      await this.#authorize(serviceId, state.pairId)
+      this.#admit(signal)
       const previous = this.#states.get(key)
       if (previous) {
         if (state.attemptId !== previous.state.attemptId && this.#sawAttempt(key, state.attemptId))
@@ -233,22 +248,19 @@ export class PeerRuntimeHost {
         assertStateProgress(previous.state, state)
       }
       this.#rememberAttempt(key, state.attemptId)
-      this.#states.set(key, { serviceId: fields.serviceId, state })
-      this.options.onPeerStage?.(fields.serviceId, pairId, state.stage, state.generation)
-      return {}
+      this.#states.set(key, { serviceId, state })
     }
-    // The stage a runtime request used to require is gone with the inbound
-    // session's announcements: the core owns one slot per direction now and
-    // asks for a runtime only while an answered attempt is at starting-runtime,
-    // so the authorization below — the pair must still be recorded and active —
-    // is the whole gate. Requiring a stage this document was never told made
-    // every answered attempt die as p2p.runtime_request_unscoped.
-    this.#runtimeServices.add(fields.serviceId)
-    const binding = await this.#runtime.connect(signal)
-    await this.#authorize(fields.serviceId, pairId)
-    this.#admit(signal)
-    this.#runtime.assertCurrent(binding)
-    return binding
+    const prior = this.#stateAdmissions.get(key)
+    // A refused callback retains its own rejection; it does not poison later
+    // independent callbacks or let them skip an earlier terminal transition.
+    const pending = prior ? prior.then(admit, admit) : admit()
+    this.#stateAdmissions.set(key, pending)
+    const release = () => {
+      if (this.#stateAdmissions.get(key) === pending) this.#stateAdmissions.delete(key)
+    }
+    void pending.then(release, release)
+    await pending
+    return {}
   }
 
   /** True when this pair has already recorded states from that attempt id. */
@@ -320,6 +332,7 @@ export class PeerRuntimeHost {
     this.#detach = undefined
     this.#runtimeServices.clear()
     this.#states.clear()
+    this.#stateAdmissions.clear()
   }
 
   #admit(signal: AbortSignal): void {

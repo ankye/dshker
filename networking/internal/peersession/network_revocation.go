@@ -30,6 +30,7 @@ func (manager *Manager) RevokeNetwork(networkID string) error {
 			continue
 		}
 		delete(manager.pins, pairID)
+		delete(manager.workbenches, pairID)
 		manager.revokedPairs[pairID] = networkID
 		// A deleted network revokes the pair, so its gateway must stop being a
 		// reachable address at once — the same rule the coordinator's revocation
@@ -47,19 +48,14 @@ func (manager *Manager) RevokeNetwork(networkID string) error {
 	}
 	// Concurrent repeated revocations must also wait for sessions whose pins
 	// were removed by the first call, including reservations before Begin.
-	for pairID, connection := range manager.sessions {
-		if manager.revokedPairs[pairID] == networkID {
-			pending = append(pending, connection)
-		}
-	}
-	for pairID, connection := range manager.inbound {
-		if manager.revokedPairs[pairID] == networkID {
+	for _, connection := range manager.allSessionsLocked() {
+		if manager.revokedPairs[connection.PairID] == networkID {
 			pending = append(pending, connection)
 		}
 	}
 	manager.mu.Unlock()
 	for _, connection := range pending {
-		connection.cancel()
+		connection.stop("network_revoked", errors.New("p2p.network_revoked"))
 	}
 	for _, connection := range pending {
 		<-connection.done

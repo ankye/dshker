@@ -10,7 +10,6 @@ package helper
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"time"
 
@@ -74,16 +73,27 @@ func (host *Host) authorizedPairs() ([]autoconnect.Intent, error) {
 // session for it. An unknown stage is treated as "not connected", which is the
 // conservative answer: attempting a pair that is already up is refused by the
 // session manager, while skipping one that is down would strand it.
-func (host *Host) pairStage(serviceID string, pairID string) string {
+func (host *Host) pairStage(serviceID string, pairID string) autoconnect.ConnectionState {
 	host.mu.Lock()
 	account := host.accounts[serviceID]
 	host.mu.Unlock()
 	if account == nil {
-		return ""
+		return autoconnect.ConnectionState{}
 	}
 	account.mu.Lock()
 	defer account.mu.Unlock()
-	return account.stages[pairID]
+	state := autoconnect.ConnectionState{Stage: account.stages[pairID], Error: account.refusals[pairID]}
+	if account.manager != nil {
+		state.WorkbenchRequested = account.manager.WorkbenchRequested(pairID)
+		if current, err := account.manager.CurrentState(pairID); err == nil {
+			state.Stage, state.Error = current.Stage, current.Error
+		} else if err.Error() == "p2p.connection_not_found" {
+			// A retired owner is no longer current. The cached projection cannot
+			// turn it back into ready while its joined cleanup is still finishing.
+			state.Stage, state.Error = "", ""
+		}
+	}
+	return state
 }
 
 // connectPair opens one session through exactly the path a caller uses, so the
@@ -105,16 +115,22 @@ func (host *Host) connectPair(ctx context.Context, serviceID string, pairID stri
 	// new attempt does not own. Monotonic per host, and started from the wall clock so
 	// it keeps rising across restarts rather than colliding with the numbers a
 	// previous run already handed out.
-	payload, err := json.Marshal(struct {
-		PairID           string `json:"pairId"`
-		Generation       uint64 `json:"generation"`
-		RequestWorkbench bool   `json:"requestWorkbench"`
-	}{pairID, host.nextGeneration(), false})
-	if err != nil {
-		return errors.New("p2p.invalid_request")
+	generation := host.nextGeneration()
+	account.mu.Lock()
+	if account.closed {
+		account.mu.Unlock()
+		return errors.New("p2p.service_unconfigured")
 	}
-	_, callErr := account.connection(ctx, "peer.connect", payload)
-	return callErr
+	manager := account.manager
+	account.mu.Unlock()
+	if manager == nil {
+		return errors.New("p2p.device_unregistered")
+	}
+	if err := manager.ReconnectSignals(ctx); err != nil {
+		return err
+	}
+	_, err := manager.Reconnect(ctx, pairID, generation)
+	return err
 }
 
 // AutoConnectEngine returns this host's reconnection engine, creating it on first
@@ -128,6 +144,9 @@ func (host *Host) AutoConnectEngine() *autoconnect.Engine {
 	defer host.mu.Unlock()
 	if host.reconnect == nil {
 		host.reconnect = host.newAutoConnect()
+		if host.closed {
+			host.reconnect.Close()
+		}
 	}
 	return host.reconnect
 }

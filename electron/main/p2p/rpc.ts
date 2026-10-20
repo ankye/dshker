@@ -9,6 +9,7 @@ import {
 
 export type PeerMainMethod =
   | 'runtime.connect'
+  | 'runtime.resume'
   | 'runtime.roots'
   | 'peer.state'
   | 'directory.changed'
@@ -131,6 +132,7 @@ export class PeerRpc {
     this.#lastIncoming = frame.id
     if (
       frame.method !== 'runtime.connect' &&
+      frame.method !== 'runtime.resume' &&
       frame.method !== 'runtime.roots' &&
       frame.method !== 'peer.state' &&
       frame.method !== 'directory.changed' &&

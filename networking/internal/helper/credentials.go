@@ -110,6 +110,12 @@ func credentialKey(serviceID string) string { return credentialPrefix + serviceI
 func (host *Host) SaveCredential(serviceID string, device controlplane.Device, private ed25519.PrivateKey) error {
 	host.credentialMu.Lock()
 	defer host.credentialMu.Unlock()
+	return host.saveCredentialLocked(serviceID, device, private)
+}
+
+// Caller owns credentialMu. Restore's private compare/write/readback transaction
+// uses the same lock as every other public SaveCredential writer.
+func (host *Host) saveCredentialLocked(serviceID string, device controlplane.Device, private ed25519.PrivateKey) error {
 	host.mu.Lock()
 	store := host.deviceKeys
 	account := host.accounts[serviceID]

@@ -45,10 +45,10 @@ func newHarness() *harness {
 func (test *harness) engine(intents []Intent) *Engine {
 	return New(Options{
 		Intents: func(context.Context) ([]Intent, error) { return intents, nil },
-		Stage: func(serviceID string, pairID string) string {
+		Stage: func(serviceID string, pairID string) ConnectionState {
 			test.mu.Lock()
 			defer test.mu.Unlock()
-			return test.stages[serviceID+":"+pairID]
+			return ConnectionState{Stage: test.stages[serviceID+":"+pairID]}
 		},
 		Connect: func(_ context.Context, serviceID string, pairID string) error {
 			test.mu.Lock()
@@ -272,7 +272,7 @@ func TestLosingAuthorizationForgetsThePair(t *testing.T) {
 	authorized := []Intent{{"svc-1", "pair-a"}}
 	engine := New(Options{
 		Intents: func(context.Context) ([]Intent, error) { return authorized, nil },
-		Stage:   func(string, string) string { return "" },
+		Stage:   func(string, string) ConnectionState { return ConnectionState{} },
 		Connect: func(_ context.Context, serviceID string, pairID string) error {
 			test.mu.Lock()
 			test.attempts = append(test.attempts, Intent{ServiceID: serviceID, PairID: pairID})
@@ -308,7 +308,7 @@ func TestUnreadableCatalogIsNotAnIntentChange(t *testing.T) {
 		Intents: func(context.Context) ([]Intent, error) {
 			return nil, errors.New("p2p.catalog_unavailable")
 		},
-		Stage: func(string, string) string { return "" },
+		Stage: func(string, string) ConnectionState { return ConnectionState{} },
 		Connect: func(_ context.Context, serviceID string, pairID string) error {
 			test.mu.Lock()
 			test.attempts = append(test.attempts, Intent{ServiceID: serviceID, PairID: pairID})
@@ -400,7 +400,7 @@ func TestReconcileSkipsAPairAlreadyInFlight(t *testing.T) {
 		Intents: func(context.Context) ([]Intent, error) {
 			return []Intent{{"svc-1", "pair-a"}}, nil
 		},
-		Stage: func(string, string) string { return "" },
+		Stage: func(string, string) ConnectionState { return ConnectionState{} },
 		Connect: func(_ context.Context, serviceID string, pairID string) error {
 			test.mu.Lock()
 			test.attempts = append(test.attempts, Intent{ServiceID: serviceID, PairID: pairID})

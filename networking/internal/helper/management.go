@@ -14,6 +14,8 @@ import (
 
 func (account *account) management(ctx context.Context, method string, data json.RawMessage) (any, error) {
 	switch method {
+	case "pairs.network_choices", "pairs.select_network":
+		return account.networkSelectionOperation(ctx, method, data)
 	case "user.current", "user.logout", "devices.list", "networks.rename", "networks.limit", "networks.delete", "networks.devices", "networks.pairs", "network.leave", "devices.bind", "devices.unbind", "networks.deletePair":
 		return account.userManagement(ctx, method, data)
 	case "user.login":
@@ -67,7 +69,11 @@ func (account *account) management(ctx context.Context, method string, data json
 		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
-		return account.base.Networks(ctx, request.Token)
+		client, err := account.bearerClientLocked()
+		if err != nil {
+			return nil, err
+		}
+		return client.Networks(ctx, request.Token)
 	case "networks.create":
 		var request struct {
 			Token string `json:"token"`
@@ -76,7 +82,11 @@ func (account *account) management(ctx context.Context, method string, data json
 		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
-		return account.base.CreateNetwork(ctx, request.Token, request.Name)
+		client, err := account.bearerClientLocked()
+		if err != nil {
+			return nil, err
+		}
+		return client.CreateNetwork(ctx, request.Token, request.Name)
 	case "device.enrollmentToken":
 		var request struct {
 			Token     string `json:"token"`
@@ -85,7 +95,11 @@ func (account *account) management(ctx context.Context, method string, data json
 		if protocol.DecodeExact(data, &request) != nil {
 			return nil, errors.New("p2p.invalid_request")
 		}
-		return account.base.EnrollmentToken(ctx, request.Token, request.NetworkID)
+		client, err := account.bearerClientLocked()
+		if err != nil {
+			return nil, err
+		}
+		return client.EnrollmentToken(ctx, request.Token, request.NetworkID)
 	case "device.enroll":
 		var request controlplane.Enrollment
 		if protocol.DecodeExact(data, &request) != nil {
@@ -186,12 +200,6 @@ func (account *account) management(ctx context.Context, method string, data json
 			return nil, errors.New("p2p.invalid_request")
 		}
 		return account.client.PairAction(ctx, request.PairID, request.Action, request.Fingerprint)
-	case "pairs.pin":
-		var pin controlplane.PairIdentity
-		if protocol.DecodeExact(data, &pin) != nil {
-			return nil, errors.New("p2p.invalid_request")
-		}
-		return struct{}{}, account.manager.Pin(pin)
 	}
 	return nil, errors.New("p2p.invalid_operation")
 }

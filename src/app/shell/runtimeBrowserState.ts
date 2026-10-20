@@ -6,6 +6,7 @@ import {
   remoteConnectionsState
 } from '@/app/domains/remote-connections'
 import type { RemoteConnectionStatus } from '@/shared/contracts'
+import type { P2PComputerView, P2PConnectionView } from '@/shared/p2p-management'
 
 export type RuntimeTabId = 'local' | `remote:${string}` | `peer:${string}`
 export type RuntimeRemoteTabId = Exclude<RuntimeTabId, 'local'>
@@ -23,6 +24,7 @@ export type RuntimeRemoteTabId = Exclude<RuntimeTabId, 'local'>
 export type RuntimeTabStatus =
   | { readonly kind: 'disconnected' }
   | { readonly kind: 'connecting' }
+  | { readonly kind: 'suspended' }
   | { readonly kind: 'ready' }
   | { readonly kind: 'failed'; readonly code: string }
 
@@ -88,6 +90,8 @@ function peerTabStatus(
       return { kind: 'connecting' }
     case 'ready':
       return { kind: 'ready' }
+    case 'suspended':
+      return { kind: 'suspended' }
     case 'failed':
       return { kind: 'failed', code: peer.error }
     default:
@@ -100,6 +104,8 @@ const remoteSourceUrls = new Map<string, string>()
 const remoteDisplayNames = new Map<string, string>()
 /** Remote workspaces are deliberately lazy: a large fleet must not mount 20 guests at startup. */
 const openedRemoteTabIds = reactive(new Set<RuntimeRemoteTabId>())
+/** Entry authority for this exact open lifecycle, not a reusable suspended grant. */
+const peerGuestAdmissions = reactive<Record<string, string | undefined>>({})
 const activeTabId = ref<RuntimeTabId>('local')
 
 /** Exact address announced by the locally supervised DSH child. */
@@ -158,6 +164,12 @@ function peerTabs(): RuntimeTab[] {
   return computers.map((computer): RuntimeTab => {
     const id = `peer:${computer.connectionId}` as const
     const status = peerTabStatus(computer.serviceId, computer.pairId, computer.pairState)
+    const view = p2pConnections.find(computer.serviceId, computer.pairId)
+    const entry = peerEntries[id]
+    const ownsEntry =
+      view !== undefined &&
+      entry?.identity === peerEntryIdentity(computer, view) &&
+      (view.stage === 'ready' || peerGuestAdmissions[id] === entry.identity)
     const current = navigation[id]
     return {
       id,
@@ -166,9 +178,15 @@ function peerTabs(): RuntimeTab[] {
       // The address main handed over for this attempt is what lets the guest mount
       // at all: the catalog never carries it, and without it a ready peer rendered
       // the empty state forever.
-      url: status?.kind === 'ready' ? (current?.url ?? peerEntries[id]?.url) : undefined,
+      url:
+        (status?.kind === 'ready' || status?.kind === 'suspended') && ownsEntry
+          ? (current?.url ?? entry.url)
+          : undefined,
       // The guest for a peer is isolated by main's own partition for this pair.
-      partition: status?.kind === 'ready' ? peerEntries[id]?.partition : undefined,
+      partition:
+        (status?.kind === 'ready' || status?.kind === 'suspended') && ownsEntry
+          ? entry.partition
+          : undefined,
       title: current?.title ?? '',
       label: computer.displayName,
       status
@@ -185,9 +203,28 @@ function peerTabs(): RuntimeTab[] {
  * the renderer because only a real http URL can be mounted; what keeps one peer's
  * session away from another is the guest partition, not the address.
  */
-const peerEntries = reactive<
-  Record<string, { generation: number; url: string; partition: string }>
->({})
+const peerEntries = reactive<Record<string, { identity: string; url: string; partition: string }>>(
+  {}
+)
+
+/** A catalog binding and runtime attempt jointly own one browser entry. */
+function peerEntryIdentity(computer: P2PComputerView, view: P2PConnectionView): string {
+  return JSON.stringify([
+    computer.connectionId,
+    computer.serviceId,
+    computer.pairId,
+    computer.pairRevision,
+    computer.networkId,
+    computer.userId,
+    computer.localDeviceId,
+    computer.remoteDeviceId,
+    computer.localPublicKey,
+    computer.remotePublicKey,
+    view.generation,
+    view.attemptId,
+    view.runtimeGeneration
+  ])
+}
 
 /** The fetch in flight per tab, so one attempt is asked about once. */
 const peerEntryFetches = new Map<string, Promise<void>>()
@@ -209,12 +246,30 @@ async function loadPeerEntries(): Promise<void> {
   for (const computer of p2pManagement.catalog.value?.computers ?? []) {
     const id = `peer:${computer.connectionId}`
     const view = p2pConnections.find(computer.serviceId, computer.pairId)
+    // Keep only a previously admitted guest owned by this exact suspended
+    // primary. Suspension cannot fetch a new address or adopt a cached lineage.
+    if (
+      computer.pairState === 'active' &&
+      view?.stage === 'suspended' &&
+      peerEntries[id]?.identity === peerEntryIdentity(computer, view) &&
+      peerGuestAdmissions[id] === peerEntries[id]?.identity
+    )
+      continue
     if (computer.pairState !== 'active' || view?.stage !== 'ready') {
       delete peerEntries[id]
+      delete peerGuestAdmissions[id]
+      delete navigation[id]
       continue
     }
+    const identity = peerEntryIdentity(computer, view)
     // Already holding the address of the attempt the tab is showing.
-    if (peerEntries[id]?.generation === view.generation) continue
+    if (peerEntries[id]?.identity === identity) {
+      if (openedRemoteTabIds.has(id as RuntimeRemoteTabId)) peerGuestAdmissions[id] = identity
+      continue
+    }
+    delete peerEntries[id]
+    delete peerGuestAdmissions[id]
+    delete navigation[id]
     // One question per attempt: a second stage change while main is answering
     // must not open a second request, or answers could arrive out of order.
     if (peerEntryFetches.has(id)) continue
@@ -229,12 +284,23 @@ async function loadPeerEntries(): Promise<void> {
         // that is already showing the next one, so drop it — and ask about the
         // attempt that is actually current, since the change that replaced it
         // found this fetch in flight and left it alone.
-        if (p2pConnections.find(serviceId, pairId)?.generation !== generation) {
+        const currentComputer = p2pManagement.catalog.value?.computers.find(
+          (value) => `peer:${value.connectionId}` === id
+        )
+        const currentView = p2pConnections.find(serviceId, pairId)
+        if (
+          currentComputer?.pairState !== 'active' ||
+          currentView?.stage !== 'ready' ||
+          peerEntryIdentity(currentComputer, currentView) !== identity
+        ) {
           void loadPeerEntries()
           return
         }
         if (entry === undefined) delete peerEntries[id]
-        else peerEntries[id] = { generation, ...entry }
+        else {
+          peerEntries[id] = { identity, ...entry }
+          if (openedRemoteTabIds.has(id as RuntimeRemoteTabId)) peerGuestAdmissions[id] = identity
+        }
       })
       .catch(() => {
         // A refused question must not wedge the asking: without this, the
@@ -269,13 +335,38 @@ function openRemoteTab(id: RuntimeRemoteTabId): boolean {
       ) === true
   if (!exists) return false
   openedRemoteTabIds.add(id)
+  const entry = peerEntries[id]
+  const computer = p2pManagement.catalog.value?.computers.find(
+    (value) => `peer:${value.connectionId}` === id
+  )
+  if (computer?.pairState === 'active' && entry !== undefined) {
+    const view = p2pConnections.find(computer.serviceId, computer.pairId)
+    if (view?.stage === 'ready' && peerEntryIdentity(computer, view) === entry.identity)
+      peerGuestAdmissions[id] = entry.identity
+  }
   activeTabId.value = id
   return true
 }
 
-/** Test-only reset; production has no close-tab operation for managed workspaces. */
+/** Closes only the browser guest; connection and remote runtime ownership stay intact. */
+function closeRemoteTab(id: RuntimeTabId): boolean {
+  if (id === 'local') return false
+  const current = tabs.value
+  const index = current.findIndex((tab) => tab.id === id)
+  if (index === -1 || !openedRemoteTabIds.delete(id)) return false
+  delete navigation[id]
+  delete peerGuestAdmissions[id]
+  if (activeTabId.value === id) {
+    // Local is permanent, so a remote tab always has a surviving left neighbor.
+    activeTabId.value = (current[index + 1] ?? current[index - 1]).id
+  }
+  return true
+}
+
+/** Resets the lazy browser selection between isolated tests. */
 export function resetRuntimeBrowserForTests(): void {
   openedRemoteTabIds.clear()
+  for (const id of Object.keys(peerGuestAdmissions)) delete peerGuestAdmissions[id]
   activeTabId.value = 'local'
 }
 
@@ -336,7 +427,7 @@ watch(
       }
     }
     for (const id of Object.keys(navigation)) {
-      if (!retained.has(id)) {
+      if (id.startsWith('remote:') && !retained.has(id)) {
         delete navigation[id]
         remoteSourceUrls.delete(id)
         remoteDisplayNames.delete(id)
@@ -360,15 +451,24 @@ watch(
     for (const computer of computers ?? []) {
       const id = `peer:${computer.connectionId}`
       available.add(id)
+      const view = p2pConnections.find(computer.serviceId, computer.pairId)
+      const retainsSuspendedGuest =
+        view?.stage === 'suspended' &&
+        peerEntries[id]?.identity === peerEntryIdentity(computer, view) &&
+        peerGuestAdmissions[id] === peerEntries[id]?.identity
       const usable =
         computer.pairState === 'active' &&
-        p2pConnections.isReady(computer.serviceId, computer.pairId)
+        (p2pConnections.isReady(computer.serviceId, computer.pairId) || retainsSuspendedGuest)
       // A revoked or disconnected peer must not keep a loadable address.
       if (!usable) delete navigation[id]
       else retained.add(id)
     }
     for (const id of [...openedRemoteTabIds])
-      if (id.startsWith('peer:') && !available.has(id)) openedRemoteTabIds.delete(id)
+      if (id.startsWith('peer:') && !available.has(id)) {
+        openedRemoteTabIds.delete(id)
+        delete peerGuestAdmissions[id]
+        delete peerEntries[id]
+      }
     for (const id of Object.keys(navigation)) {
       if (id.startsWith('peer:') && !retained.has(id)) delete navigation[id]
     }
@@ -384,5 +484,6 @@ export const runtimeBrowser = {
   activeTab,
   runtimeUrl,
   updateTab,
-  openRemoteTab
+  openRemoteTab,
+  closeRemoteTab
 }

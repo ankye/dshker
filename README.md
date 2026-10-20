@@ -30,18 +30,29 @@ The otter logo and workbench artwork above are the assets used by the current so
 
 ## Remote connections
 
+Once device credentials are restored, ordinary account and directory requests
+carry that device's certificate as well as the actual signed-in account session.
+Same-NAT computers receive separate unchanged device request budgets; this does
+not replace account authorization. Public login and expired-certificate recovery
+remain explicit operations, not alternate transports tried after a failure.
+
 Keep your DSH machines together without exposing DSH Web to the network. The current desktop connection path uses **SSH tunnels**, forwarding HTTP and WebSocket traffic to the remote DSH's actual loopback address and port.
 
 - **Computer management:** the SSH page keeps a focused computer list and one **Add computer** entry point. The form opens in a labelled dialog with an explicit close action; add a display name, host, SSH port, user, and optional local SSH key path. Edit saved connections or remove computers you no longer need. Disconnect before changing the SSH destination or key path; changing either clears the previous test result, so test the new settings again.
 - **Test before connecting:** verify SSH authentication, the remote DSHKer handshake and DSH access. A successful test is separate from an active connection.
 - **Visible status:** green indicates readiness or a passed test; red indicates failure, with text describing the state. Paired computers connect and reconnect on their own; an explicit disconnect is available when you want one.
-- **Reconnect without launching DSH:** automatic pairing recovery restores the authenticated network transport only. It does not start a local DSH Web process; DSH is requested explicitly when you open a remote workbench tab.
+- **Recover the workbench you opened:** background pairing restores transport only and does not activate unused DSH workbenches. Once you explicitly open a remote workbench, transient disconnect recovery also restores its HTTP/WebSocket gateway at the same local port during that core session. Recovery reattaches an already-running DSH; it never restarts one the target user stopped. Explicit disconnect clears this intent; no device, network, or pairing needs to be recreated. Both peers must support safe workbench resume; missing support is reported rather than downgraded to a start request.
+- **Keep brief interruptions visible:** a suspended primary shows “recovering,” not ready, and keeps only its already open page. Closing that page revokes its open-session admission; reopening waits for live readiness. Refreshing SSH records does not reset a P2P page's navigation.
+- **Separate runtime and network ownership:** DSH's process, output pipes and binding generation belong to an independent authenticated local owner, so a restarted network core can reconnect without starting DSH again. Explicit Stop and normal shutdown still stop the owned runtime. A missing or incompatible owner is an explicit error, never PID/URL adoption. The killed core's own browser gateway and in-memory tab intent are not persisted, and this does not claim to resolve every underlying ICE interruption.
 - **Verify the signal socket itself:** HTTPS presence does not prove signalling is healthy. WebSocket Ping/Pong detects unresponsive subscriptions for the existing reconnect process; it cannot make an unreachable coordinator available.
+- **Diagnose the first disconnect:** bounded core diagnostics retain the first transport failure, selected-path receive sample and lease/owner timeline. Cleanup errors cannot overwrite the first cause; credentials and application content are excluded. A sampled path is not proof of instantaneous network health.
 - **Keep the same device through certificate expiry:** the core renews device certificates before expiry. An already expired certificate requires an authorized account session and the explicitly selected network to recover with the original device key; device identity and pairings are retained. Self-hosted servers must support authenticated `/v1/certificate-query` readback. Missing authorization, unsupported servers and failed credential writes are explicit errors, not silent re-enrollment.
 - **Recover older installations without starting over:** if an older credential did not record its network, sign in and explicitly select the existing network. The Launcher freshly verifies that account's ownership and the original device's membership before recovering its certificate. It never guesses a network, changes an established recovery scope, or deletes existing devices and pairings.
-- **On-demand tabs:** one Local tab is always available; click **+** in Run, then choose a computer from the floating **LAN computers** or **SSH connections** list to create its non-closable tab. Ready workspaces are listed first; unavailable ones remain visible but disabled at the bottom. Disconnecting does not remove an opened computer tab.
+- **On-demand tabs:** one Local tab is always available; click **+** in Run, then choose a computer from the floating **LAN computers** or **SSH connections** list. SSH/P2P tabs can be closed with **×** or keyboard Delete, then reopened from **+**. Closing only removes the browser guest, not the saved computer, connection or remote DSH. Disconnected SSH computers reconnect through that menu; an operation already in progress remains disabled. Disconnecting does not remove an opened computer tab.
+- **An explicit network per computer:** keep an existing selection while it remains authorized. When a first connection has several networks, choose one inside the same add-tab popover; no network is preselected and the computer still has one tab. If the original network loses authorization, select a replacement explicitly. Closing or returning to the list cancels page opening, even if a pending selection finishes later.
 - **No manual DSH token copying:** the authenticated connection obtains the DSH Web credential. SSH authentication is still required; the app never asks for SSH passwords or transfers private-key contents, and an explicit key path is passed directly to OpenSSH.
 - **Stay signed in after upgrades:** the account session lives in the system credential store. On startup or after installing a new version, the UI shows restoration progress and refreshes automatically; sign-in is requested only after the server explicitly rejects the session.
+- **Sign out without leaving old connections behind:** the admitted account's local remote gateways and reconnect jobs are retired even if the request is interrupted. Unconfirmed server revocation or failed credential cleanup remains an explicit error, and delayed background results cannot reactivate that session. Signing out does not stop remote DSH or delete devices, networks or pairings; stale requests cannot sign out a replacement account.
 
 To connect:
 
@@ -109,13 +120,21 @@ own identity and can enrol again — while **revoke** ends a single pairing and 
 the device in place. The network you selected is remembered for the account that chose
 it, and a machine that is no longer a member says so instead of going missing.
 
-**Two-machine acceptance has completed.** A real session between two
+**Earlier two-machine checks are not long-duration acceptance of this candidate.** A real session between two
 machines — a Mac driving the DSH Web runtime on a Windows host through the
 P2P stack, over the live coordination server — has been verified end to end:
 the connection reported its selected path, opened the local gateway URL, and
 loaded the remote DSH Web page through the tunnel. Repeated reconnects have been
 stress-tested in both directions (each machine as the initiator and as the
 runtime host) with the address proven stable across every cycle.
+The current recovery change still requires a fresh bidirectional eight-hour idle
+run, ten automatic recovery rounds, program pause/resume and crash/restart
+verification. Its interrupted and failed scenarios remain failures, not passes.
+Handshake diagnostics also distinguish a rejected or still-pending admission
+from ICE checks: they record exact attempt/owner and registration identities,
+never SDP, signatures, tokens or page content. Unknown old authority must be
+verified before its slot can be handed to a replacement connection; cleanup
+alone is not evidence that the old server decision ended.
 
 Paired computers are connected **without being asked**. Connecting happens at
 startup for every active pair, a dropped connection is retried on its own —

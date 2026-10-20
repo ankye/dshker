@@ -61,10 +61,18 @@ func (client *Client) SetTelemetry(telemetry Telemetry) {
 // SetAccount records the account this machine is signed in to, which is what the
 // heartbeat reports presence for. The launcher calls it when the signed-in user
 // changes, and clears it on sign-out.
-func (client *Client) SetAccount(userID string) {
+func (client *Client) SetAccount(userID string) bool {
 	client.mu.Lock()
 	defer client.mu.Unlock()
+	changed := client.account != userID
 	client.account = userID
+	return changed
+}
+
+func (client *Client) Account() string {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+	return client.account
 }
 
 // heartbeat is the body sent on every heartbeat: what this build reports about
@@ -163,17 +171,25 @@ func (client *Client) Identity(ctx context.Context, pinnedKey ed25519.PublicKey)
 }
 
 func (client *Client) call(ctx context.Context, method, path, token string, body, target any) error {
+	data, err := client.response(ctx, method, path, token, body)
+	if err != nil {
+		return err
+	}
+	return decodeResponse(data, target)
+}
+
+func (client *Client) response(ctx context.Context, method, path, token string, body any) ([]byte, error) {
 	var payload io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
 		if err != nil || len(data) > protocol.MaxControlBytes {
-			return errors.New("p2p.protocol_limit")
+			return nil, errors.New("p2p.protocol_limit")
 		}
 		payload = bytes.NewReader(data)
 	}
 	request, err := http.NewRequestWithContext(ctx, method, client.endpoints.HTTPSOrigin+path, payload)
 	if err != nil {
-		return errors.New("p2p.invalid_request")
+		return nil, errors.New("p2p.invalid_request")
 	}
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
@@ -183,23 +199,23 @@ func (client *Client) call(ctx context.Context, method, path, token string, body
 	}
 	response, err := client.http.Do(request)
 	if err != nil {
-		return errors.New("p2p.server_unavailable")
+		return nil, errors.New("p2p.server_unavailable")
 	}
 	defer response.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(response.Body, protocol.MaxControlBytes+1))
 	if err != nil || len(data) > protocol.MaxControlBytes {
-		return errors.New("p2p.protocol_limit")
+		return nil, errors.New("p2p.protocol_limit")
 	}
 	if response.StatusCode != http.StatusOK {
 		var failure struct {
 			Code string `json:"code"`
 		}
 		if protocol.DecodeExact(data, &failure) != nil || !strings.HasPrefix(failure.Code, "p2p.") || strings.ContainsAny(failure.Code, " \r\n\t") {
-			return errors.New("p2p.invalid_server_response")
+			return nil, errors.New("p2p.invalid_server_response")
 		}
-		return errors.New(failure.Code)
+		return nil, errors.New(failure.Code)
 	}
-	return decodeResponse(data, target)
+	return data, nil
 }
 
 func decodeResponse(data []byte, target any) error {

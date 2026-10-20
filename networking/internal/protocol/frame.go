@@ -25,7 +25,7 @@ type Frame struct {
 // the two machines could not exchange anything at all unless one of them had a
 // running workbench, which is the opposite of what a connection is for.
 func (frame Frame) Validate(attempt string, generation, runtime uint64) error {
-	if frame.Version != Version || !ValidID(frame.AttemptID) || frame.AttemptID != attempt ||
+	if frame.Version != Version || !ValidAttemptID(frame.AttemptID) || frame.AttemptID != attempt ||
 		generation == 0 || frame.Generation != generation || frame.RuntimeGeneration != runtime || frame.StreamID == 0 {
 		return errors.New("p2p.frame_scope_mismatch")
 	}

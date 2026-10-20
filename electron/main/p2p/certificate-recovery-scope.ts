@@ -4,7 +4,7 @@ import { PeerHelperError } from './wire'
 
 export type CertificateRecoveryAccounts = Pick<
   PeerAccounts,
-  'hasSession' | 'sessionToken' | 'currentUser' | 'refreshDirectory'
+  'hasSession' | 'sessionToken' | 'certificateRecoveryScope'
 >
 
 export interface VerifiedCertificateRecoveryScope {
@@ -43,26 +43,21 @@ export class PeerCertificateRecoveryScope {
         throw new PeerHelperError('p2p.request_cancelled')
     }
     assertCurrent()
-    const user = await accounts.currentUser(serviceId, signal)
+    const { user, networks } = await accounts.certificateRecoveryScope(serviceId, deviceId, signal)
     assertCurrent()
     const networkId = await this.#remembered(serviceId, user.userId)
     assertCurrent()
     if (networkId === undefined) throw new PeerHelperError('p2p.certificate_recovery_required')
-    const directory = await accounts.refreshDirectory(serviceId, signal)
-    assertCurrent()
-    if (directory.known === false) throw new PeerHelperError('p2p.certificate_sync_failed')
-    if (directory.known !== true || !Array.isArray(directory.networks))
-      throw new PeerHelperError('p2p.invalid_server_response')
-    const selected = directory.networks.filter((network) => network.networkId === networkId)
+    const selected = networks.filter((network) => network.networkId === networkId)
     if (selected.length === 0) throw new PeerHelperError('p2p.certificate_recovery_forbidden')
     if (selected.length !== 1) throw new PeerHelperError('p2p.invalid_server_response')
     const network = selected[0]
     if (!Array.isArray(network.devices)) throw new PeerHelperError('p2p.invalid_server_response')
-    if (
-      network.userId !== user.userId ||
-      !network.devices.some((device) => device.deviceId === deviceId)
-    )
+    if (network.userId !== user.userId)
       throw new PeerHelperError('p2p.certificate_recovery_forbidden')
+    const members = network.devices.filter((device) => device.deviceId === deviceId)
+    if (members.length === 0) throw new PeerHelperError('p2p.certificate_recovery_forbidden')
+    if (members.length !== 1) throw new PeerHelperError('p2p.invalid_server_response')
     return {
       networkId,
       assertCurrent,

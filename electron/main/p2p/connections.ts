@@ -10,15 +10,12 @@ const GENERATION_EPOCH_MILLISECONDS = 1_767_225_600_000
 /**
  * Main-only connection operations for paired computers.
  *
- * Two things stay strictly inside main. The local DSH entry URL returned by the
- * helper is never projected to an ordinary renderer; it is retained here and
- * handed only to the restricted Run guest. And each attempt gets a
- * monotonically increasing generation so a late callback from a previous
- * attempt can be recognised and discarded rather than mistaken for progress.
+ * Each attempt gets a monotonically increasing generation, while operation
+ * revisions fence entry readbacks against disconnect and authorization changes.
+ * Workbench addresses are read separately from the current core owner.
  */
 export class PeerConnections {
-  /** Local entry URLs by `serviceId:pairId`. Main-only, never projected. */
-  readonly #entries = new Map<string, { generation: number; url: string }>()
+  readonly #entryRevisions = new Map<string, number>()
   readonly #busy = new Set<string>()
   #generation = 0
   #closed = false
@@ -44,7 +41,6 @@ export class PeerConnections {
 
   close(): void {
     this.#closed = true
-    this.#entries.clear()
   }
 
   /**
@@ -58,6 +54,7 @@ export class PeerConnections {
     assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     return this.#operation(serviceId, pairId, async () => {
+      this.invalidate(serviceId, pairId)
       const generation = this.#nextGeneration()
       const reply = await this.rpc.call(
         'peer.connect',
@@ -76,19 +73,18 @@ export class PeerConnections {
       // resolved, or one that simply is not running DSH. The two computers were
       // connected and the shell threw the connection away, so everything else the
       // link carries was lost for a reason that has nothing to do with it.
-      // The URL stops here either way. Only the Run guest receives it, through main.
-      this.#entries.set(this.#key(serviceId, pairId), { generation, url: record.url })
+      // Discard the dispatch URL: only peer.entry proves the current ready gateway.
       return state
     })
   }
 
-  /** Tears down a connection and drops its local entry point. */
+  /** Tears down a connection and invalidates pending entry reads. */
   async disconnect(serviceId: string, pairId: string, signal: AbortSignal): Promise<void> {
     assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     await this.#operation(serviceId, pairId, async () => {
-      // Drop the entry first: a failed teardown must not leave a usable URL.
-      this.#entries.delete(this.#key(serviceId, pairId))
+      // Fence reads first, even if teardown fails before a stage callback arrives.
+      this.invalidate(serviceId, pairId)
       exactPeerObject(
         await this.rpc.call('peer.disconnect', { serviceId, data: { pairId } }, signal),
         []
@@ -97,46 +93,28 @@ export class PeerConnections {
     })
   }
 
-  /**
-   * Resolves the main-only entry URL for a connected peer.
-   *
-   * The generation must match the caller's expectation, so an entry point from
-   * a superseded attempt is refused instead of silently reused.
-   */
-  entry(serviceId: string, pairId: string, generation: number): string {
-    const found = this.#entries.get(this.#key(serviceId, pairId))
-    if (!found) throw new PeerHelperError('p2p.connection_not_found')
-    if (found.generation !== generation) throw new PeerHelperError('p2p.stale_generation')
-    return found.url
-  }
-
-  /**
-   * Drops a cached address that a newer attempt has superseded.
-   *
-   * Reconnection belongs to the core, so an attempt can be replaced without this
-   * process calling `connect` — and the address left behind points at a gateway the
-   * new attempt does not own. Retiring it keeps `entry` honest: the renderer re-asks
-   * whenever the generation moves, so a tab lands on the live address by itself,
-   * with no user action.
-   *
-   * Only a strictly newer generation retires the entry: a late announcement from the
-   * attempt being held, or from one already replaced, must not delete the address a
-   * tab is currently using.
-   */
-  retire(serviceId: string, pairId: string, generation: number): void {
-    const key = this.#key(serviceId, pairId)
-    const found = this.#entries.get(key)
-    if (found !== undefined && generation > found.generation) this.#entries.delete(key)
-  }
-
-  /** Invalidates entry points for one pair, or for every pair of a service. */
+  /** Invalidates pending entry reads for one pair or every pair of a service. */
   invalidate(serviceId: string, pairId?: string): void {
-    if (pairId) {
-      this.#entries.delete(this.#key(serviceId, pairId))
-      return
+    const revisionKey = pairId ? this.#key(serviceId, pairId) : serviceId
+    this.#entryRevisions.set(revisionKey, (this.#entryRevisions.get(revisionKey) ?? 0) + 1)
+  }
+
+  /** Fences a read against main operations before their stage callback arrives. */
+  guardEntry(serviceId: string, pairId: string): () => void {
+    const key = this.#key(serviceId, pairId)
+    const serviceRevision = this.#entryRevisions.get(serviceId)
+    const pairRevision = this.#entryRevisions.get(key)
+    const assertCurrent = () => {
+      this.#admit()
+      if (
+        this.#entryRevisions.get(serviceId) !== serviceRevision ||
+        this.#entryRevisions.get(key) !== pairRevision
+      )
+        throw new PeerHelperError('p2p.stale_generation')
+      if (this.#busy.has(key)) throw new PeerHelperError('p2p.connection_busy')
     }
-    for (const key of [...this.#entries.keys()])
-      if (key.startsWith(`${serviceId}:`)) this.#entries.delete(key)
+    assertCurrent()
+    return assertCurrent
   }
 
   #key(serviceId: string, pairId: string): string {

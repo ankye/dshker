@@ -70,6 +70,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks()
   p2pPairing.state(serviceId).pairs = undefined
+  p2pConnections.state.peers = undefined
   p2pManagement.catalog.value = null
   resetRuntimeBrowserForTests()
 })
@@ -103,6 +104,34 @@ describe('P2P member row', () => {
 })
 
 describe('P2P connect feedback', () => {
+  it('shows suspended recovery without promising a direct path or dispatching another connect', async () => {
+    vi.mocked(p2pConnections.find).mockRestore()
+    vi.mocked(p2pConnections.isConnecting).mockRestore()
+    p2pConnections.state.peers = [
+      {
+        serviceId,
+        pairId: windowsMember.pairId,
+        generation: 7,
+        attemptId: '8'.repeat(32),
+        stage: 'suspended',
+        runtimeGeneration: 3,
+        error: '',
+        path: { protocol: 'udp', localType: 'host', remoteType: 'host' }
+      }
+    ]
+    const connect = vi.spyOn(p2pConnections, 'connect')
+    const wrapper = mount(P2PPairingPanel, { props: { serviceId, networkId } })
+    expect(wrapper.get('[data-testid="p2p-connection-stage"]').text()).toContain('恢复')
+    expect(
+      wrapper.get('[data-testid="p2p-connection-connect"]').attributes('disabled')
+    ).toBeDefined()
+    expect(wrapper.find('[data-testid="p2p-work-note-started"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('仅使用直连')
+    await wrapper.get('[data-testid="p2p-connection-connect"]').trigger('click')
+    expect(connect).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('shows no connect hint when the last operation ended cleanly', () => {
     const state = p2pPairing.state(serviceId)
     state.pairs = [windowsMember]

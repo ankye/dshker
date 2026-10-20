@@ -50,6 +50,54 @@ func TestGracePeriodDoesNotRestartOnRepeatedEvents(t *testing.T) {
 	}
 }
 
+// The callback has begun but cannot commit while recovery owns the same lock.
+// Invoking the real expiry commit seam avoids waiting for, or racing, 20 seconds.
+func TestGraceStartedExpiryCannotCancelRecoveredTransport(t *testing.T) {
+	transport := newGraceTestTransport()
+	defer transport.cancel()
+	transport.beginGrace()
+	transport.mu.Lock()
+	window := transport.graceWindow
+	started, finished := make(chan struct{}), make(chan struct{})
+	go func() {
+		close(started)
+		transport.expireGrace(window)
+		close(finished)
+	}()
+	<-started
+	transport.endGraceLocked()
+	transport.mu.Unlock()
+	<-finished
+	select {
+	case <-transport.ctx.Done():
+		t.Fatal("an already-started stale grace callback canceled the recovered transport")
+	default:
+	}
+}
+
+func TestGraceOldExpiryCannotCancelNewWindow(t *testing.T) {
+	transport := newGraceTestTransport()
+	defer transport.cancel()
+	defer transport.endGrace()
+	transport.beginGrace()
+	old := transport.graceWindow
+	transport.endGrace()
+	transport.beginGrace()
+	current := transport.graceWindow
+	transport.expireGrace(old)
+	select {
+	case <-transport.ctx.Done():
+		t.Fatal("the previous grace callback canceled a later disconnect window")
+	default:
+	}
+	transport.expireGrace(current)
+	select {
+	case <-transport.ctx.Done():
+	default:
+		t.Fatal("a still-owned grace window did not terminate the unrecovered transport")
+	}
+}
+
 // A connection that never comes back has to end, so the window's expiry is
 // what declares the direct path lost.
 func TestGracePeriodExpiryFailsTransport(t *testing.T) {

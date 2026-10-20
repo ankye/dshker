@@ -49,6 +49,10 @@ func NewNonce() string {
 
 func ValidNonce(value string) bool { return nonceShape.MatchString(value) }
 
+// Data streams may belong to a v1 attempt or a ticket-authorized v2 attempt.
+// Device, user, pair and network identities retain their twelve-hex admission.
+func ValidAttemptID(value string) bool { return ValidID(value) || ValidNonce(value) }
+
 // KeyID derives the stable twelve-character id of a public key.
 func KeyID(public ed25519.PublicKey) string {
 	digest := sha256.Sum256(public)
@@ -122,11 +126,15 @@ type SignalScope struct {
 }
 
 func (signal Signal) Verify(key ed25519.PublicKey, scope SignalScope, now time.Time) error {
+	return signal.verify(key, scope, now, ValidID(signal.AttemptID))
+}
+
+func (signal Signal) verify(key ed25519.PublicKey, scope SignalScope, now time.Time, validAttempt bool) error {
 	if signal.Version != Version || signal.Generation == 0 || signal.Generation > 1<<53-1 ||
 		signal.Sequence == 0 || signal.Sequence > 1<<53-1 || !ValidID(signal.MessageID) {
 		return errors.New("p2p.protocol_mismatch")
 	}
-	if !ValidID(signal.AttemptID) || !ValidID(signal.FromDeviceID) || !ValidID(signal.ToDeviceID) ||
+	if !validAttempt || !ValidID(signal.FromDeviceID) || !ValidID(signal.ToDeviceID) ||
 		!ValidID(signal.PairID) || signal.FromDeviceID == signal.ToDeviceID ||
 		signal.AttemptID != scope.AttemptID || signal.FromDeviceID != scope.FromDeviceID ||
 		signal.ToDeviceID != scope.ToDeviceID || signal.PairID != scope.PairID ||

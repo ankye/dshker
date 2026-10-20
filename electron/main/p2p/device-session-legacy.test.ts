@@ -57,7 +57,9 @@ describe('legacy certificate session recovery', () => {
     expect(second).toBe(first)
     await Promise.all([first, second])
     expect(certificateCalls(f)).toHaveLength(2)
-    expect(f.accounts.refreshDirectory).toHaveBeenCalledOnce()
+    expect(f.accounts.certificateRecoveryScope).toHaveBeenCalledOnce()
+    expect(f.accounts.currentUser).not.toHaveBeenCalled()
+    expect(f.accounts.refreshDirectory).not.toHaveBeenCalled()
     expect(f.replace).toHaveBeenCalledOnce()
   })
 
@@ -70,6 +72,7 @@ describe('legacy certificate session recovery', () => {
     expect(f.remembered).not.toHaveBeenCalled()
     expect(f.accounts.currentUser).not.toHaveBeenCalled()
     expect(f.accounts.refreshDirectory).not.toHaveBeenCalled()
+    expect(f.accounts.certificateRecoveryScope).not.toHaveBeenCalled()
     expect(f.replace).not.toHaveBeenCalled()
     expect(f.stored().credential).toEqual(legacyCredential)
   })
@@ -123,6 +126,7 @@ describe('legacy certificate session recovery', () => {
     expect(f.stored().credential).toEqual(legacyCredential)
     expect(f.accounts.hasSession()).toBe(true)
     expect(f.accounts.refreshDirectory).not.toHaveBeenCalled()
+    expect(f.accounts.certificateRecoveryScope).toHaveBeenCalledOnce()
     expect(certificateCalls(f)).toHaveLength(1)
     expect(f.call.mock.calls.map(([method]) => method)).not.toContain('device.enroll')
   })
@@ -202,11 +206,11 @@ describe('legacy certificate session recovery', () => {
       const f = legacyCertificateFixture()
       const controller = new AbortController()
       let release!: () => void
-      f.accounts.refreshDirectory.mockImplementationOnce(async () => {
+      f.accounts.certificateRecoveryScope.mockImplementationOnce(async () => {
         await new Promise<void>((resolve) => {
           release = resolve
         })
-        return structuredClone(f.directory)
+        return { user: { ...recoveryUser }, networks: structuredClone(f.directory.networks) }
       })
       const pending = f.ready(controller.signal)
       await vi.waitFor(() => expect(release).toBeTypeOf('function'))

@@ -154,6 +154,58 @@ func (store *Store) Commit(expectedRevision string, next Record) (Snapshot, erro
 	return store.read()
 }
 
+// CommitTransitions validates a bounded sequence under one CAS lock, then
+// publishes only its final record. It is internal workflow authority, not a raw
+// renderer operation; every intermediate strict record and transition must pass.
+func (store *Store) CommitTransitions(expectedRevision string, steps []Record) (Snapshot, error) {
+	if len(steps) == 0 || len(steps) > 8 {
+		return Snapshot{}, ErrInvalid
+	}
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	original, err := store.read()
+	if err != nil {
+		return Snapshot{}, err
+	}
+	if original.Revision != expectedRevision {
+		return Snapshot{}, ErrConflict
+	}
+	previous := original.Record
+	var canonical []byte
+	for _, step := range steps {
+		encoded, err := json.Marshal(step)
+		if err != nil {
+			return Snapshot{}, ErrInvalid
+		}
+		validated, err := Parse(encoded)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		if validated.CatalogID != original.Record.CatalogID {
+			return Snapshot{}, ErrConflict
+		}
+		if err := AssertTransition(previous, validated); err != nil {
+			return Snapshot{}, err
+		}
+		canonical, err = json.Marshal(validated)
+		if err != nil {
+			return Snapshot{}, ErrWriteFailed
+		}
+		previous = validated
+	}
+	current, err := json.Marshal(original.Record)
+	if err != nil {
+		return Snapshot{}, ErrWriteFailed
+	}
+	if string(current) == string(canonical) {
+		return original, nil
+	}
+	if err := publish(store.path(recordFile), canonical, true); err != nil {
+		return Snapshot{}, err
+	}
+	return store.read()
+}
+
 // RemoveService forgets one service locally. It reads tolerantly so a record
 // that no longer passes strict validation (an expired certificate, say)
 // cannot block deleting the coordinator, but the file it writes is always

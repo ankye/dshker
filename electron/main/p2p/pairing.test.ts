@@ -110,21 +110,20 @@ describe('main-owned P2P pairing', () => {
     expect(f.call.mock.calls.map((call) => call[0])).not.toContain('pairs.pin')
   })
 
-  it('pins the confirmed identity only once the server reports the pair active', async () => {
+  it('leaves live pin authority to the fresh scoped core catalog after approval', async () => {
     const f = fixture()
     f.call
       .mockResolvedValueOnce(identity('approved'))
       .mockResolvedValueOnce({})
       .mockResolvedValueOnce(identity('active'))
-      .mockResolvedValueOnce({})
     const pair = await f.pairing.approve(serviceId, pairId, remoteFingerprint, signal())
     expect(pair.state).toBe('active')
     expect(f.call.mock.calls.map((call) => call[0])).toEqual([
       'pairs.identity',
       'pairs.action',
-      'pairs.identity',
-      'pairs.pin'
+      'pairs.identity'
     ])
+    expect(f.call.mock.calls.map((call) => call[0])).not.toContain('pairs.pin')
   })
 
   it('does not pin when approval leaves the pair still pending', async () => {

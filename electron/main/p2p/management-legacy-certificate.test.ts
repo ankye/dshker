@@ -36,6 +36,11 @@ function enrolledLegacy() {
   f.call.mockImplementation(async (method, payload, signal) => {
     if (method === 'device.certificate' || method === 'device.restore')
       return legacy.call(method, payload, signal)
+    if (method === 'device.certificate_recovery_scope')
+      return {
+        user,
+        networks: legacy.directory.networks.map((network) => ({ ...network, userId: user.userId }))
+      }
     if (method === 'directory.refresh')
       return {
         serviceId,
@@ -108,9 +113,9 @@ describe('manual legacy certificate recovery maintenance', () => {
     await f.remember(serviceId, user.userId, recoveryNetworkId)
     const original = f.call.getMockImplementation()!
     let release!: () => void
-    let directoryReads = 0
+    let scopeReads = 0
     f.call.mockImplementation(async (method, payload, signal) => {
-      if (method === 'directory.refresh' && ++directoryReads === 1)
+      if (method === 'device.certificate_recovery_scope' && ++scopeReads === 1)
         await new Promise<void>((resolve) => {
           release = resolve
         })

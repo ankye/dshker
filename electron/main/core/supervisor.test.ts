@@ -97,7 +97,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       const supervisor = await started
       supervisors.push(supervisor)
       const version = await supervisor.rpc.call('core.version', {}, AbortSignal.timeout(5_000))
-      expect(version).toMatchObject({ version: 1, methodTableVersion: 1 })
+      expect(version).toMatchObject({ version: 1, methodTableVersion: 2 })
       // A deliberate close surfaces unavailable through the same channel: the
       // core no longer serves. The call that matters is that close settles and
       // the pid is gone (covered by the --data test).

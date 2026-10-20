@@ -5,7 +5,7 @@ import "strings"
 // MethodTableVersion is the published version of Methods. Adding a method is
 // additive within a version; changing a payload shape or a refusal code for an
 // existing method needs a new version and a shell and core released together.
-const MethodTableVersion = 1
+const MethodTableVersion = 2
 
 // MaxMethodBytes is the frame reader's limit on the method field.
 const MaxMethodBytes = 80
@@ -26,7 +26,7 @@ type Method struct {
 	Role MethodRole
 }
 
-// Methods is the version 1 method table of the shell/core channel. It is the
+// Methods is the version 2 method table of the shell/core channel. It is the
 // contract frozen by networking/docs/shell-core-protocol.md and is verified
 // against the shipped dispatch by methods_test.go.
 var Methods = []Method{
@@ -72,6 +72,7 @@ var Methods = []Method{
 	{"device.createCSR", RoleShell},
 	{"device.createKey", RoleShell},
 	{"device.certificate", RoleShell},
+	{"device.certificate_recovery_scope", RoleShell},
 	{"device.enroll", RoleShell},
 	{"device.enrollmentResult", RoleShell},
 	{"device.enrollmentToken", RoleShell},
@@ -107,7 +108,8 @@ var Methods = []Method{
 	{"pairs.identity", RoleShell},
 	{"pairs.invite", RoleShell},
 	{"pairs.list", RoleShell},
-	{"pairs.pin", RoleShell},
+	{"pairs.network_choices", RoleShell},
+	{"pairs.select_network", RoleShell},
 	{"pairs.share", RoleShell},
 	// Reconnection moved into the core, so the shell drives the core's engine
 	// instead of keeping a second copy of the schedule. Additive within version 1.
@@ -115,6 +117,7 @@ var Methods = []Method{
 	{"peer.autoconnect_retry_now", RoleShell},
 	{"peer.autoconnect_clear_refusals", RoleShell},
 	{"peer.connect", RoleShell},
+	{"peer.entry", RoleShell},
 	{"peer.disconnect", RoleShell},
 	// The SSH route moved into the core in 5.1. Additive within version 1, with
 	// the shell's own remote.* refusal codes.
@@ -147,6 +150,7 @@ var Methods = []Method{
 	{"user.register", RoleShell},
 	{"peer.state", RoleParent},
 	{"runtime.connect", RoleParent},
+	{"runtime.resume", RoleParent},
 	{"runtime.roots", RoleParent},
 	// Sent when the core's directory snapshot for a service changes, so a shell
 	// mirrors one maintained list instead of polling every list it renders.

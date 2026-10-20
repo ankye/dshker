@@ -1,23 +1,57 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import {
   p2pConnections,
+  p2pAccounts,
   p2pManagement,
+  p2pNetworkSelection,
   p2pPairing,
-  remoteConnectionsState
+  remoteConnectionsState,
+  useRemoteConnections
 } from '@/app/domains/remote-connections'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
 import type { P2PComputerView, P2PConnectionView } from '@/shared/p2p-management'
 import { runtimeBrowser, type RuntimeRemoteTabId } from '../runtimeBrowserState'
+import RuntimeNetworkChoiceView from './RuntimeNetworkChoiceView.vue'
 
 const t = useTranslator()
 const browser = runtimeBrowser
+const ssh = useRemoteConnections()
 const emit = defineEmits<{ navigate: [route: 'remote'] }>()
 const open = ref(false)
 const trigger = ref<HTMLButtonElement>()
 const menu = ref<HTMLElement>()
 const menuStyle = ref<Record<string, string>>()
+const choosingPair = ref('')
+const selectionError = ref('')
+let openEpoch = 0
+const choiceServiceId = computed(() => p2pManagement.selectedServiceId.value)
+const networkSelection = computed(() =>
+  choiceServiceId.value ? p2pNetworkSelection.state(choiceServiceId.value) : undefined
+)
+const selectionDevice = computed(() =>
+  networkSelection.value?.view?.devices.find((device) => device.pairId === choosingPair.value)
+)
+watch(
+  () => [
+    choiceServiceId.value,
+    choiceServiceId.value ? p2pAccounts.state(choiceServiceId.value).user?.userId : undefined
+  ],
+  (current, previous) => {
+    for (const serviceId of new Set([current[0], previous?.[0]])) {
+      if (serviceId) p2pNetworkSelection.invalidate(serviceId)
+    }
+    openEpoch++
+    choosingPair.value = ''
+    selectionError.value = ''
+    if (open.value) {
+      void refreshPeers()
+      void focusMenu()
+    }
+  },
+  { flush: 'sync' }
+)
 
 type AddTabOptionState =
   | 'available'
@@ -33,6 +67,7 @@ interface AddTabOption {
   readonly statusLabel: string
   readonly statusState: AddTabOptionState
   readonly available: boolean
+  readonly networkChoice?: boolean
 }
 
 const peerStageLabels: Record<P2PConnectionView['stage'], MessageKey> = {
@@ -40,6 +75,7 @@ const peerStageLabels: Record<P2PConnectionView['stage'], MessageKey> = {
   'starting-runtime': 'p2p.connection.stageStarting',
   connected: 'p2p.connection.stageConnected',
   ready: 'p2p.connection.stageReady',
+  suspended: 'p2p.connection.stageSuspended',
   failed: 'p2p.connection.stageFailed',
   disconnected: 'p2p.connection.stageDisconnected'
 }
@@ -74,6 +110,7 @@ function peerStatusState(computer: P2PComputerView): AddTabOptionState {
   switch (connection.stage) {
     case 'punching':
     case 'starting-runtime':
+    case 'suspended':
       return 'connecting'
     case 'ready':
       return 'ready'
@@ -90,8 +127,8 @@ function sortAvailableFirst(left: AddTabOption, right: AddTabOption): number {
   return Number(right.available) - Number(left.available)
 }
 
-const peerOptions = computed<readonly AddTabOption[]>(() =>
-  (p2pManagement.catalog.value?.computers ?? [])
+const peerOptions = computed<readonly AddTabOption[]>(() => {
+  const options: AddTabOption[] = (p2pManagement.catalog.value?.computers ?? [])
     .filter(
       (computer) => !browser.tabs.value.some((tab) => tab.id === `peer:${computer.connectionId}`)
     )
@@ -107,8 +144,27 @@ const peerOptions = computed<readonly AddTabOption[]>(() =>
       // somewhere else.
       available: computer.pairState === 'active'
     }))
-    .sort(sortAvailableFirst)
-)
+  for (const device of networkSelection.value?.view?.devices ?? []) {
+    if (device.state === 'selected') continue
+    const id = `peer:${device.pairId}` as const
+    if (browser.tabs.value.some((tab) => tab.id === id)) continue
+    const index = options.findIndex((option) => option.id === id)
+    const option: AddTabOption = {
+      id,
+      title: device.name,
+      detail: '',
+      statusLabel: t(
+        device.state === 'stale' ? 'p2p.networkChoice.stale' : 'p2p.networkChoice.required'
+      ),
+      statusState: 'available',
+      available: device.choices.length > 0,
+      networkChoice: true
+    }
+    if (index === -1) options.push(option)
+    else options[index] = option
+  }
+  return options.sort(sortAvailableFirst)
+})
 
 const remoteOptions = computed<readonly AddTabOption[]>(() =>
   remoteConnectionsState.value.connections
@@ -116,14 +172,22 @@ const remoteOptions = computed<readonly AddTabOption[]>(() =>
       (connection) =>
         !browser.tabs.value.some((tab) => tab.id === `remote:${connection.connectionId}`)
     )
-    .map((connection) => ({
-      id: `remote:${connection.connectionId}` as const,
-      title: connection.displayName,
-      detail: `${connection.user}@${connection.host}:${connection.port}`,
-      statusLabel: remoteStatusLabel(connection.status.kind),
-      statusState: connection.status.kind,
-      available: connection.status.kind === 'ready'
-    }))
+    .map(
+      (connection): AddTabOption => ({
+        id: `remote:${connection.connectionId}` as const,
+        title: connection.displayName,
+        detail: `${connection.user}@${connection.host}:${connection.port}`,
+        statusLabel:
+          connection.status.kind === 'disconnected'
+            ? t('remote.connect')
+            : remoteStatusLabel(connection.status.kind),
+        statusState:
+          connection.status.kind === 'disconnected' ? 'available' : connection.status.kind,
+        available:
+          connection.status.kind !== 'connecting' &&
+          ssh.pendingActions.value[connection.connectionId] === undefined
+      })
+    )
     .sort(sortAvailableFirst)
 )
 
@@ -134,7 +198,7 @@ const remoteAvailableCount = computed(
   () => remoteOptions.value.filter((option) => option.available).length
 )
 const hasAddableWorkspaces = computed(
-  () => peerOptions.value.length > 0 || remoteOptions.value.length > 0
+  () => peerAvailableCount.value > 0 || remoteAvailableCount.value > 0
 )
 
 const menuClose = ref<HTMLButtonElement>()
@@ -204,6 +268,9 @@ function removeGlobalListeners(): void {
 }
 
 function close(): void {
+  openEpoch++
+  choosingPair.value = ''
+  selectionError.value = ''
   open.value = false
   removeGlobalListeners()
   trigger.value?.focus()
@@ -272,6 +339,7 @@ async function refreshPeers(): Promise<void> {
   // computer appear while this menu stays open.
   p2pPairing.subscribe(serviceId)
   await p2pPairing.read(serviceId)
+  await p2pNetworkSelection.read(serviceId)
 }
 
 onMounted(() => {
@@ -281,6 +349,7 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  close()
   // The pairing domain outlives this component, so its subscription to the core's
   // announcements is released with the component that asked for it.
   p2pPairing.stop()
@@ -288,6 +357,17 @@ onUnmounted(() => {
 })
 
 function select(id: RuntimeRemoteTabId): void {
+  const option = [...peerOptions.value, ...remoteOptions.value].find((value) => value.id === id)
+  if (option?.networkChoice) {
+    openEpoch++
+    choosingPair.value = id.slice('peer:'.length)
+    selectionError.value = ''
+    void nextTick(() =>
+      menu.value?.querySelector<HTMLButtonElement>('[data-testid="runtime-network-back"]')?.focus()
+    )
+    return
+  }
+  if (option?.available !== true || !browser.openRemoteTab(id)) return
   if (id.startsWith('peer:')) {
     const connectionId = id.slice('peer:'.length)
     const computer = (p2pManagement.catalog.value?.computers ?? []).find(
@@ -301,8 +381,60 @@ function select(id: RuntimeRemoteTabId): void {
       // surfaces that show it; it must never block opening the tab.
       void p2pConnections.connect(computer.serviceId, computer.pairId).catch(() => undefined)
     }
+  } else {
+    const connectionId = id.slice('remote:'.length)
+    const connection = remoteConnectionsState.value.connections.find(
+      (value) => value.connectionId === connectionId
+    )
+    if (connection !== undefined && connection.status.kind !== 'ready') {
+      // The domain publishes its result; completion must not reopen a closed guest.
+      void ssh.connect(connectionId)
+    }
   }
-  if (!browser.openRemoteTab(id)) return
+  close()
+}
+
+function backToComputers(): void {
+  openEpoch++
+  const pair = choosingPair.value
+  choosingPair.value = ''
+  selectionError.value = ''
+  void nextTick(() =>
+    menu.value
+      ?.querySelector<HTMLButtonElement>(`[data-testid="runtime-add-peer-${pair}"]`)
+      ?.focus()
+  )
+}
+
+async function selectNetwork(networkId: string): Promise<void> {
+  const serviceId = choiceServiceId.value
+  const pairId = choosingPair.value
+  if (!serviceId || !pairId) return
+  const epoch = openEpoch
+  selectionError.value = ''
+  const selected = await p2pNetworkSelection.select(serviceId, pairId, networkId)
+  if (
+    !selected ||
+    !open.value ||
+    epoch !== openEpoch ||
+    choiceServiceId.value !== serviceId ||
+    choosingPair.value !== pairId
+  )
+    return
+  const computer = p2pManagement.catalog.value?.computers.find(
+    (row) =>
+      row.serviceId === serviceId &&
+      row.pairId === pairId &&
+      row.networkId === networkId &&
+      row.pairState === 'active'
+  )
+  if (!computer) {
+    selectionError.value = 'p2p.catalog_conflict'
+    return
+  }
+  const id = `peer:${computer.connectionId}` as const
+  if (browser.openRemoteTab(id))
+    void p2pConnections.connect(serviceId, pairId).catch(() => undefined)
   close()
 }
 
@@ -353,7 +485,9 @@ function onEscape(event: KeyboardEvent): void {
       >
         <header>
           <div>
-            <h3 id="runtime-add-tab-title">{{ t('runtime.addTab.title') }}</h3>
+            <h3 id="runtime-add-tab-title">
+              {{ t(selectionDevice ? 'p2p.networkChoice.title' : 'runtime.addTab.title') }}
+            </h3>
             <p id="runtime-add-tab-description">{{ t('runtime.addTab.description') }}</p>
           </div>
           <button
@@ -370,89 +504,116 @@ function onEscape(event: KeyboardEvent): void {
             </svg>
           </button>
         </header>
-        <div v-if="peerOptions.length > 0" class="runtime-add-tab-group">
-          <div class="runtime-add-tab-group-heading">
-            <h4>{{ t('runtime.addTab.lan') }}</h4>
-            <span class="runtime-add-tab-count" :aria-label="t('runtime.addTab.count')"
-              >{{ peerAvailableCount }}/{{ peerOptions.length }}</span
-            >
-          </div>
-          <template v-for="(option, index) in peerOptions" :key="option.id">
-            <p
-              v-if="index === peerAvailableCount && peerAvailableCount < peerOptions.length"
-              class="runtime-add-tab-unavailable-label"
-            >
-              {{ t('runtime.addTab.unavailable') }}
-            </p>
-            <button
-              class="runtime-add-tab-option"
-              :class="{ 'runtime-add-tab-option--disabled': !option.available }"
-              type="button"
-              :disabled="!option.available"
-              :aria-label="`${option.title} · ${option.statusLabel}`"
-              :data-testid="`runtime-add-peer-${option.id.slice('peer:'.length)}`"
-              :data-state="option.statusState"
-              @click="select(option.id)"
-            >
-              <span
-                class="browser-tab-status"
-                :data-state="option.statusState"
-                aria-hidden="true"
-              />
-              <span class="runtime-add-tab-option-copy">
-                <strong>{{ option.title }}</strong>
-                <small>{{ option.statusLabel }}</small>
-              </span>
-            </button>
-          </template>
-        </div>
-        <div v-if="remoteOptions.length > 0" class="runtime-add-tab-group">
-          <div class="runtime-add-tab-group-heading">
-            <h4>{{ t('runtime.addTab.ssh') }}</h4>
-            <span class="runtime-add-tab-count" :aria-label="t('runtime.addTab.count')"
-              >{{ remoteAvailableCount }}/{{ remoteOptions.length }}</span
-            >
-          </div>
-          <template v-for="(option, index) in remoteOptions" :key="option.id">
-            <p
-              v-if="index === remoteAvailableCount && remoteAvailableCount < remoteOptions.length"
-              class="runtime-add-tab-unavailable-label"
-            >
-              {{ t('runtime.addTab.unavailable') }}
-            </p>
-            <button
-              class="runtime-add-tab-option"
-              :class="{ 'runtime-add-tab-option--disabled': !option.available }"
-              type="button"
-              :disabled="!option.available"
-              :aria-label="`${option.title} · ${option.statusLabel}`"
-              :data-testid="`runtime-add-ssh-${option.id.slice('remote:'.length)}`"
-              :data-state="option.statusState"
-              @click="select(option.id)"
-            >
-              <span
-                class="browser-tab-status"
-                :data-state="option.statusState"
-                aria-hidden="true"
-              />
-              <span class="runtime-add-tab-option-copy">
-                <strong>{{ option.title }}</strong>
-                <small>{{ option.statusLabel }} · {{ option.detail }}</small>
-              </span>
-            </button>
-          </template>
-        </div>
-        <div v-if="!hasAddableWorkspaces" class="runtime-add-tab-empty">
-          <p>{{ t('runtime.addTab.empty') }}</p>
+        <RuntimeNetworkChoiceView
+          v-if="selectionDevice && networkSelection"
+          :device="selectionDevice"
+          :pending="networkSelection.pending !== ''"
+          :loading="networkSelection.loading"
+          :read-failed="networkSelection.readFailed"
+          :unconfirmed="networkSelection.unconfirmed"
+          :error="selectionError || networkSelection.error"
+          @choose="selectNetwork"
+          @back="backToComputers"
+          @refresh="choiceServiceId && p2pNetworkSelection.read(choiceServiceId)"
+        />
+        <template v-else>
+          <p v-if="networkSelection?.loading" role="status">{{ t('p2p.networkChoice.loading') }}</p>
+          <p v-if="networkSelection?.readFailed" role="alert">
+            {{ t('p2p.networkChoice.readFailed') }}
+          </p>
           <button
-            class="prototype-button"
+            v-if="networkSelection?.readFailed"
             type="button"
-            data-testid="runtime-add-tab-manage"
-            @click="manage"
+            class="prototype-button"
+            :disabled="networkSelection.loading"
+            @click="choiceServiceId && p2pNetworkSelection.read(choiceServiceId)"
           >
-            {{ t('runtime.addTab.manage') }}
+            {{ t('p2p.networkChoice.refresh') }}
           </button>
-        </div>
+          <div v-if="peerOptions.length > 0" class="runtime-add-tab-group">
+            <div class="runtime-add-tab-group-heading">
+              <h4>{{ t('runtime.addTab.lan') }}</h4>
+              <span class="runtime-add-tab-count" :aria-label="t('runtime.addTab.count')"
+                >{{ peerAvailableCount }}/{{ peerOptions.length }}</span
+              >
+            </div>
+            <template v-for="(option, index) in peerOptions" :key="option.id">
+              <p
+                v-if="index === peerAvailableCount && peerAvailableCount < peerOptions.length"
+                class="runtime-add-tab-unavailable-label"
+              >
+                {{ t('runtime.addTab.unavailable') }}
+              </p>
+              <button
+                class="runtime-add-tab-option"
+                :class="{ 'runtime-add-tab-option--disabled': !option.available }"
+                type="button"
+                :disabled="!option.available"
+                :aria-label="`${option.title} · ${option.statusLabel}`"
+                :data-testid="`runtime-add-peer-${option.id.slice('peer:'.length)}`"
+                :data-state="option.statusState"
+                @click="select(option.id)"
+              >
+                <span
+                  class="browser-tab-status"
+                  :data-state="option.statusState"
+                  aria-hidden="true"
+                />
+                <span class="runtime-add-tab-option-copy">
+                  <strong>{{ option.title }}</strong>
+                  <small>{{ option.statusLabel }}</small>
+                </span>
+              </button>
+            </template>
+          </div>
+          <div v-if="remoteOptions.length > 0" class="runtime-add-tab-group">
+            <div class="runtime-add-tab-group-heading">
+              <h4>{{ t('runtime.addTab.ssh') }}</h4>
+              <span class="runtime-add-tab-count" :aria-label="t('runtime.addTab.count')"
+                >{{ remoteAvailableCount }}/{{ remoteOptions.length }}</span
+              >
+            </div>
+            <template v-for="(option, index) in remoteOptions" :key="option.id">
+              <p
+                v-if="index === remoteAvailableCount && remoteAvailableCount < remoteOptions.length"
+                class="runtime-add-tab-unavailable-label"
+              >
+                {{ t('runtime.addTab.unavailable') }}
+              </p>
+              <button
+                class="runtime-add-tab-option"
+                :class="{ 'runtime-add-tab-option--disabled': !option.available }"
+                type="button"
+                :disabled="!option.available"
+                :aria-label="`${option.title} · ${option.statusLabel}`"
+                :data-testid="`runtime-add-ssh-${option.id.slice('remote:'.length)}`"
+                :data-state="option.statusState"
+                @click="select(option.id)"
+              >
+                <span
+                  class="browser-tab-status"
+                  :data-state="option.statusState"
+                  aria-hidden="true"
+                />
+                <span class="runtime-add-tab-option-copy">
+                  <strong>{{ option.title }}</strong>
+                  <small>{{ option.statusLabel }} · {{ option.detail }}</small>
+                </span>
+              </button>
+            </template>
+          </div>
+          <div v-if="!hasAddableWorkspaces" class="runtime-add-tab-empty">
+            <p>{{ t('runtime.addTab.empty') }}</p>
+            <button
+              class="prototype-button"
+              type="button"
+              data-testid="runtime-add-tab-manage"
+              @click="manage"
+            >
+              {{ t('runtime.addTab.manage') }}
+            </button>
+          </div>
+        </template>
       </section>
     </Teleport>
   </div>

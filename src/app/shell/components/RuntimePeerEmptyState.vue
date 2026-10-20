@@ -28,9 +28,11 @@ const failureCode = computed(() =>
   props.status?.kind === 'failed' ? props.status.code : undefined
 )
 const title = computed(() =>
-  failureCode.value === undefined
-    ? t('runtime.peerUnavailable')
-    : t('runtime.peerUnavailable.failed')
+  props.status?.kind === 'suspended'
+    ? t('p2p.connection.stageSuspended')
+    : failureCode.value === undefined
+      ? t('runtime.peerUnavailable')
+      : t('runtime.peerUnavailable.failed')
 )
 const description = computed(() =>
   failureCode.value === undefined

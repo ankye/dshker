@@ -44,11 +44,37 @@ function setup(peers: P2PConnectionView[] = []) {
 }
 
 describe('renderer P2P connections domain', () => {
+  it('retains a typed resume refusal without marking transport-only as workbench ready', async () => {
+    const refused = peer('connected', {
+      error: 'p2p.runtime_unavailable',
+      path: { localType: 'host', remoteType: 'srflx', protocol: 'udp' }
+    })
+    const { connections } = setup([refused])
+    await connections.read()
+    expect(connections.find(serviceId, pairId)).toEqual(refused)
+    expect(connections.isReady(serviceId, pairId)).toBe(false)
+    expect(connections.isDirect(serviceId, pairId)).toBe(true)
+  })
   it('never exposes a DSH URL, cookie or token', async () => {
     const { connections } = setup([peer('ready')])
     await connections.read()
     const serialized = JSON.stringify(connections.state)
     expect(serialized).not.toMatch(/127\.0\.0\.1|http:|cookie|token/i)
+  })
+
+  it('reports a suspended primary as recovering, not ready or a live direct path', async () => {
+    const { api, connections } = setup([
+      peer('suspended', {
+        path: { localType: 'host', remoteType: 'srflx', protocol: 'udp' },
+        runtimeGeneration: 2
+      })
+    ])
+    await connections.read()
+    expect(connections.isReady(serviceId, pairId)).toBe(false)
+    expect(connections.isDirect(serviceId, pairId)).toBe(false)
+    expect(connections.isConnecting(serviceId, pairId)).toBe(true)
+    await connections.connect(serviceId, pairId)
+    expect(api.connect).not.toHaveBeenCalled()
   })
 
   it('reports ready only for a fully established workbench', async () => {

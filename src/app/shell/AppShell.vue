@@ -11,6 +11,10 @@ import {
 } from '../domains/remote-connections'
 import { APPLICATION_ROUTES } from '../shared/navigation/routes'
 import { LAUNCHER_UPDATE_ERROR_MESSAGE_KEYS } from '../shared/i18n/i18n.updates'
+import {
+  RUNTIME_OWNER_ERROR_MESSAGE_KEYS,
+  RUNTIME_OWNER_ERROR_DETAIL_KEYS
+} from '../shared/i18n/i18n.errors'
 import ConsoleDrawer from './components/ConsoleDrawer.vue'
 import ControllerPanel from './components/ControllerPanel.vue'
 import ControllerPrimaryAction from './components/ControllerPrimaryAction.vue'
@@ -117,6 +121,7 @@ const statusbarOperationLabel = computed(() => {
 })
 
 const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.t>[0]>> = {
+  ...RUNTIME_OWNER_ERROR_MESSAGE_KEYS,
   bridge: 'toast.error.bridge',
   'managed.harness_launch_failed': 'toast.error.harnessLaunchFailed',
   'managed.harness_launch_in_progress': 'toast.error.harnessLaunchInProgress',
@@ -133,6 +138,7 @@ const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.
 
 /** Consequence and next step per code; the raw code stays available separately. */
 const TOAST_ERROR_DETAIL_KEYS: Readonly<Record<string, Parameters<typeof shell.t>[0]>> = {
+  ...RUNTIME_OWNER_ERROR_DETAIL_KEYS,
   bridge: 'toast.error.detail.bridge',
   'managed.harness_launch_failed': 'toast.error.detail.harnessLaunchFailed',
   'managed.harness_launch_in_progress': 'toast.error.detail.harnessLaunchInProgress',

@@ -13,7 +13,8 @@ func pinFixture() (*Manager, controlplane.PairIdentity) {
 	local := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("a", 12), UserID: strings.Repeat("b", 12), PublicKey: bytes.Repeat([]byte{1}, 32)}
 	remote := controlplane.PairDeviceIdentity{DeviceID: strings.Repeat("c", 12), UserID: local.UserID, PublicKey: bytes.Repeat([]byte{2}, 32)}
 	pin := controlplane.PairIdentity{Pair: controlplane.Pair{PairID: strings.Repeat("d", 12), NetworkID: strings.Repeat("e", 12), Initiator: local.DeviceID, Target: remote.DeviceID, State: "active", Revision: 2}, Initiator: local, Target: remote}
-	manager := &Manager{config: Config{Device: controlplane.Device{DeviceID: local.DeviceID, UserID: local.UserID, PublicKey: append([]byte(nil), local.PublicKey...)}}, pins: make(map[string]controlplane.PairIdentity), endpoints: make(map[string]*runtimebridge.Endpoint)}
+	// This unit fixture represents the post-bootstrap candidate-admitted owner.
+	manager := &Manager{config: Config{Device: controlplane.Device{DeviceID: local.DeviceID, UserID: local.UserID, PublicKey: append([]byte(nil), local.PublicKey...)}}, accountUserID: local.UserID, candidatesActive: true, pins: make(map[string]controlplane.PairIdentity), endpoints: make(map[string]*runtimebridge.Endpoint)}
 	return manager, pin
 }
 

@@ -15,6 +15,7 @@ package autoconnect
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 )
@@ -67,6 +68,14 @@ type Intent struct {
 	PairID    string
 }
 
+// ConnectionState distinguishes a maintained transport from an explicitly
+// requested workbench that is still awaiting a usable runtime binding.
+type ConnectionState struct {
+	Stage              string
+	Error              string
+	WorkbenchRequested bool
+}
+
 // key identifies one pair across services.
 func (intent Intent) key() string { return intent.ServiceID + ":" + intent.PairID }
 
@@ -76,7 +85,7 @@ type Options struct {
 	// Intents reports the pairs the catalog currently authorizes.
 	Intents func(context.Context) ([]Intent, error)
 	// Stage reports the live connection stage for one pair, or "" when unknown.
-	Stage func(serviceID string, pairID string) string
+	Stage func(serviceID string, pairID string) ConnectionState
 	// Connect starts one attempt and returns the refusal code on failure.
 	Connect func(ctx context.Context, serviceID string, pairID string) error
 	// CodeOf maps one error to its public refusal code.
@@ -96,11 +105,14 @@ type Engine struct {
 	// reset its counter: a pair already waiting out the final 60 second interval
 	// would otherwise keep waiting, which is the opposite of retrying now.
 	pending  map[string]chan struct{}
-	inFlight map[string]bool
+	inFlight map[string]uint64
+	epochs   map[string]uint64
 	closed   bool
 	cancel   context.CancelFunc
 	ctx      context.Context
 	wait     sync.WaitGroup
+	wake     chan struct{}
+	wakes    map[string]Intent
 }
 
 // New returns an engine that is not running yet.
@@ -109,15 +121,21 @@ func New(options Options) *Engine {
 		options.After = time.After
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	return &Engine{
+	engine := &Engine{
 		options:  options,
 		attempts: make(map[string]int),
 		terminal: make(map[string]string),
 		pending:  make(map[string]chan struct{}),
-		inFlight: make(map[string]bool),
+		inFlight: make(map[string]uint64),
+		epochs:   make(map[string]uint64),
 		ctx:      ctx,
 		cancel:   cancel,
+		wake:     make(chan struct{}, 1),
+		wakes:    make(map[string]Intent),
 	}
+	engine.wait.Add(1)
+	go engine.runWakes()
+	return engine
 }
 
 // Refusal reports why a pair stopped being retried, for a surface to show.
@@ -195,6 +213,28 @@ func (engine *Engine) ClearRefusals() {
 	engine.mu.Unlock()
 }
 
+// Reauthorize is called only after this exact intent's fresh authorization was
+// durably published. Results from its former scope cannot restore an old
+// refusal or backoff after this boundary. An in-flight owner remains joined and
+// single-flight until it returns, then wakes the replacement epoch.
+func (engine *Engine) Reauthorize(intent Intent) {
+	identifier := intent.key()
+	engine.mu.Lock()
+	if engine.closed {
+		engine.mu.Unlock()
+		return
+	}
+	engine.epochs[identifier]++
+	delete(engine.terminal, identifier)
+	delete(engine.attempts, identifier)
+	if cancel, pending := engine.pending[identifier]; pending {
+		close(cancel)
+		delete(engine.pending, identifier)
+	}
+	engine.mu.Unlock()
+	engine.Wake(intent)
+}
+
 // Close stops every scheduled retry and waits for in-flight attempts to settle.
 func (engine *Engine) Close() {
 	engine.mu.Lock()
@@ -213,7 +253,8 @@ func (engine *Engine) ensure(intent Intent) {
 	identifier := intent.key()
 	engine.mu.Lock()
 	_, waiting := engine.pending[identifier]
-	if engine.closed || engine.inFlight[identifier] || waiting {
+	_, connecting := engine.inFlight[identifier]
+	if engine.closed || connecting || waiting {
 		engine.mu.Unlock()
 		return
 	}
@@ -221,39 +262,65 @@ func (engine *Engine) ensure(intent Intent) {
 		engine.mu.Unlock()
 		return
 	}
+	epoch := engine.epochs[identifier]
+	engine.inFlight[identifier] = epoch
 	engine.mu.Unlock()
 
 	if engine.options.Stage != nil {
-		stage := engine.options.Stage(intent.ServiceID, intent.PairID)
-		if liveStages[stage] {
+		state := engine.options.Stage(intent.ServiceID, intent.PairID)
+		if liveStages[state.Stage] && (state.Stage != "connected" || !state.WorkbenchRequested) {
 			// Connected or connecting: the attempt counter resets so the next drop
 			// retries immediately instead of inheriting an old delay.
 			engine.mu.Lock()
 			delete(engine.attempts, identifier)
+			delete(engine.inFlight, identifier)
+			changed := engine.epochs[identifier] != epoch
 			engine.mu.Unlock()
+			if changed {
+				engine.Wake(intent)
+			}
 			return
 		}
 	}
-	engine.attempt(intent)
+	engine.attempt(intent, epoch)
 }
 
 // attempt runs one connection and records what it means.
-func (engine *Engine) attempt(intent Intent) {
+func (engine *Engine) attempt(intent Intent, epoch uint64) {
 	identifier := intent.key()
 	engine.mu.Lock()
-	if engine.closed {
+	if engine.closed || engine.epochs[identifier] != epoch {
+		delete(engine.inFlight, identifier)
+		changed := !engine.closed
 		engine.mu.Unlock()
+		if changed {
+			engine.Wake(intent)
+		}
 		return
 	}
-	engine.inFlight[identifier] = true
 	engine.mu.Unlock()
 
 	err := engine.options.Connect(engine.ctx, intent.ServiceID, intent.PairID)
+	if err == nil && engine.options.Stage != nil {
+		state := engine.options.Stage(intent.ServiceID, intent.PairID)
+		if state.WorkbenchRequested && state.Stage != "ready" {
+			code := state.Error
+			if code == "" {
+				code = "p2p.runtime_unavailable"
+			}
+			err = errors.New(code)
+		}
+	}
 
 	engine.mu.Lock()
 	delete(engine.inFlight, identifier)
 	if engine.closed {
 		engine.mu.Unlock()
+		return
+	}
+	if engine.epochs[identifier] != epoch {
+		engine.mu.Unlock()
+		engine.Wake(intent)
 		return
 	}
 	if err == nil {
@@ -276,14 +343,14 @@ func (engine *Engine) attempt(intent Intent) {
 	// Everything else is transient by assumption: a busy helper, an unreachable
 	// peer, a coordinator hiccup. None of them is the user's problem to solve with
 	// a button.
-	engine.schedule(intent)
+	engine.schedule(intent, epoch)
 }
 
 // schedule waits out this pair's delay and then tries again.
-func (engine *Engine) schedule(intent Intent) {
+func (engine *Engine) schedule(intent Intent, epoch uint64) {
 	identifier := intent.key()
 	engine.mu.Lock()
-	if _, waiting := engine.pending[identifier]; engine.closed || waiting {
+	if _, waiting := engine.pending[identifier]; engine.closed || waiting || engine.epochs[identifier] != epoch {
 		engine.mu.Unlock()
 		return
 	}
@@ -295,9 +362,8 @@ func (engine *Engine) schedule(intent Intent) {
 	engine.attempts[identifier] = attempt + 1
 	cancel := make(chan struct{})
 	engine.pending[identifier] = cancel
-	engine.mu.Unlock()
-
 	engine.wait.Add(1)
+	engine.mu.Unlock()
 	go func() {
 		defer engine.wait.Done()
 		select {

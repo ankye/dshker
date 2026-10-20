@@ -324,7 +324,7 @@ func TestPlanMembersKeepsOtherServicesAndOneRowPerPeer(t *testing.T) {
 // value: the remote device id. They drifted once — the coordinator's own pair id was
 // pinned while every attempt asked for the device id — and every connect was refused
 // as p2p.pair_unauthorized, with nothing on screen to explain it.
-func TestPinnedIdentityUsesTheIDTheCatalogRecords(t *testing.T) {
+func TestCatalogPairIDUsesRemoteDeviceRatherThanSQLRow(t *testing.T) {
 	key := newKey(t)
 	local := localMember{deviceID: protocol.NewID(), publicKey: key}
 	serviceID := protocol.NewID()
@@ -333,19 +333,12 @@ func TestPinnedIdentityUsesTheIDTheCatalogRecords(t *testing.T) {
 		t.Fatal("the fixture must report a coordinator pair id of its own")
 	}
 
-	pinned := pinnedIdentity(identity, remote.DeviceID)
-	if pinned.Pair.PairID != remote.DeviceID {
-		t.Fatalf("pinned id = %q, want the remote device id %q", pinned.Pair.PairID, remote.DeviceID)
-	}
-	if pinned.Pair.Initiator != identity.Pair.Initiator || pinned.Pair.Target != identity.Pair.Target || pinned.Pair.Revision != identity.Pair.Revision {
-		t.Fatalf("pinned pair = %+v, want everything but the id unchanged", pinned.Pair)
-	}
 	planned := planMembers(catalog.Snapshot{Record: catalog.Record{
 		Format: "dshker.catalog", Version: 1, CatalogID: protocol.NewID(),
 		Services: []catalog.Service{}, Computers: []catalog.Computer{}, ForgottenServiceIDs: []string{},
 	}}, serviceID, local, []controlplane.PairIdentity{identity})
-	if len(planned.final) != 1 || planned.final[0].PairID != pinned.Pair.PairID {
-		t.Fatalf("catalog row = %+v, want the pair id every attempt names (%q)", planned.final, pinned.Pair.PairID)
+	if len(planned.final) != 1 || planned.final[0].PairID != remote.DeviceID || planned.final[0].PairRevision != int64(identity.Pair.Revision) || planned.final[0].LocalDeviceID != identity.Initiator.DeviceID || planned.final[0].RemoteDeviceID != identity.Target.DeviceID {
+		t.Fatalf("catalog row changed participants/revision or used SQL row id: %+v", planned.final)
 	}
 }
 

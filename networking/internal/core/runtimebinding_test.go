@@ -1,76 +1,72 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
-	"github.com/ankye/dshker/networking/internal/harnessruntime"
+	"github.com/ankye/dshker/networking/internal/runtimebridge"
 )
 
-// statusSource is the child authority a binding reads, standing in for the
-// supervisor so the generation rule can be driven exactly.
-type statusSource struct {
-	view    harnessruntime.LaunchView
-	present bool
+type bindingSource func(context.Context, string) (runtimebridge.Binding, error)
+
+func (source bindingSource) Binding(ctx context.Context, subject string) (runtimebridge.Binding, error) {
+	return source(ctx, subject)
 }
 
-func (source statusSource) Status(string) (harnessruntime.LaunchView, bool) {
-	return source.view, source.present
-}
-
-func running(launchID, url string) harnessruntime.LaunchView {
-	return harnessruntime.LaunchView{LaunchID: launchID, State: harnessruntime.StateRunning, URL: url}
-}
-
-// TestRuntimeBindingNamesOneGenerationPerChild pins the rule a peer depends on:
-// one running child is one generation, a replaced child is the next one, and no
-// child is a refusal rather than a stale address.
+// The authority owns generation. Recreating a core facade cannot reset it, and
+// reading an existing child cannot manufacture another runtime generation.
 func TestRuntimeBindingNamesOneGenerationPerChild(t *testing.T) {
-	binding := &RuntimeBinding{Subject: "subject_main"}
-	if _, err := binding.Binding(); !errors.Is(err, ErrRuntimeUnavailable) {
+	var absent *RuntimeBinding
+	if _, err := absent.Binding(); !errors.Is(err, ErrRuntimeUnavailable) {
+		t.Fatalf("nil binding = %v", err)
+	}
+	if _, err := (&RuntimeBinding{Subject: "subject_main"}).Binding(); !errors.Is(err, ErrRuntimeUnavailable) {
 		t.Fatalf("no authority = %v", err)
 	}
-
-	source := statusSource{present: false}
-	binding.Runtime = source
-	if _, err := binding.Binding(); !errors.Is(err, ErrRuntimeUnavailable) {
-		t.Fatalf("no child = %v", err)
+	current := runtimebridge.Binding{Generation: 41, URL: "http://127.0.0.1:3099/?token=sentinel"}
+	source := bindingSource(func(ctx context.Context, subject string) (runtimebridge.Binding, error) {
+		if subject != "subject_main" {
+			t.Fatal("binding changed its exact subject")
+		}
+		if deadline, ok := ctx.Deadline(); !ok || time.Until(deadline) <= 0 || time.Until(deadline) > 5*time.Second {
+			t.Fatal("headless binding read has no bounded authority context")
+		}
+		return current, nil
+	})
+	firstCore := &RuntimeBinding{Runtime: source, Subject: "subject_main"}
+	first, err := firstCore.Binding()
+	if err != nil || first != current {
+		t.Fatal("core did not return the authority's exact binding")
 	}
-
-	source = statusSource{present: true, view: running("launch_1", "http://127.0.0.1:3099/?token=one")}
-	binding.Runtime = source
-	first, err := binding.Binding()
-	if err != nil || first.Generation != 1 || first.URL != source.view.URL {
-		t.Fatalf("first = %+v (%v)", first, err)
-	}
-	// Asking twice about the same child is the same generation: a peer that
-	// reconnects must not be told its proxy target changed when it did not.
-	again, err := binding.Binding()
+	secondCore := &RuntimeBinding{Runtime: source, Subject: "subject_main"}
+	again, err := secondCore.Binding()
 	if err != nil || again != first {
-		t.Fatalf("again = %+v (%v)", again, err)
+		t.Fatal("core restart reset the surviving authority generation")
 	}
-
-	// A child that is starting, stopped or failed has no address to bind.
-	for _, state := range []string{harnessruntime.StateStarting, harnessruntime.StateStopped, harnessruntime.StateFailed} {
-		source.view.State = state
-		binding.Runtime = source
-		if _, err := binding.Binding(); !errors.Is(err, ErrRuntimeUnavailable) {
-			t.Fatalf("%s = %v", state, err)
+	current = runtimebridge.Binding{Generation: 57, URL: "http://127.0.0.1:3098/?token=other-sentinel"}
+	for _, binding := range []*RuntimeBinding{firstCore, secondCore} {
+		got, err := binding.Binding()
+		if err != nil || got != current {
+			t.Fatal("core replaced the current authority generation or address")
 		}
 	}
+}
 
-	// The same child announcing a different address, and a different child, are
-	// both a new generation.
-	source.view = running("launch_1", "http://127.0.0.1:3098/?token=two")
-	binding.Runtime = source
-	second, err := binding.Binding()
-	if err != nil || second.Generation != 2 || second.URL != source.view.URL {
-		t.Fatalf("relaunched on a new address = %+v (%v)", second, err)
-	}
-	source.view = running("launch_2", "http://127.0.0.1:3099/?token=one")
-	binding.Runtime = source
-	third, err := binding.Binding()
-	if err != nil || third.Generation != 3 {
-		t.Fatalf("replaced child = %+v (%v)", third, err)
+func TestRuntimeBindingPreservesAuthorityFailureAndCallerContext(t *testing.T) {
+	want := errors.New("authority failure sentinel")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	called := 0
+	binding := &RuntimeBinding{Subject: "subject_main", Runtime: bindingSource(func(actual context.Context, subject string) (runtimebridge.Binding, error) {
+		called++
+		if actual != ctx || actual.Err() != context.Canceled || subject != "subject_main" {
+			t.Fatal("binding replaced caller cancellation or subject")
+		}
+		return runtimebridge.Binding{}, want
+	})}
+	if result, err := binding.BindingContext(ctx); !errors.Is(err, want) || result != (runtimebridge.Binding{}) || called != 1 {
+		t.Fatal("authority unavailability was hidden as an empty or stale runtime")
 	}
 }

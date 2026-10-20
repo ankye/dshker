@@ -9,9 +9,26 @@ import (
 )
 
 func TestCertificateMethodIsMainOnly(t *testing.T) {
-	method, exists := Lookup("device.certificate")
-	if !exists || method.Role != RoleShell {
-		t.Fatal("device certificate operation is not admitted only as a shell request", method)
+	for _, name := range []string{"device.certificate", "device.certificate_recovery_scope"} {
+		method, exists := Lookup(name)
+		if !exists || method.Role != RoleShell || MethodTableVersion != 2 {
+			t.Fatal("device certificate operation is not admitted only as a table-2 shell request", name, method)
+		}
+	}
+}
+
+func TestCachedPairPinIsNotAPublishedAuthority(t *testing.T) {
+	if _, exists := Lookup("pairs.pin"); exists {
+		t.Fatal("caller-provided pair identities still grant live pin authority")
+	}
+}
+
+func TestNetworkSelectionMethodsArePublishedOnlyForShellRequests(t *testing.T) {
+	for _, name := range []string{"pairs.network_choices", "pairs.select_network"} {
+		method, exists := Lookup(name)
+		if !exists || method.Role != RoleShell || MethodTableVersion != 2 {
+			t.Fatal("explicit network selection is not part of the private table-2 contract", name, method)
+		}
 	}
 }
 
@@ -32,7 +49,7 @@ func TestMethodTableIsWellFormed(t *testing.T) {
 			t.Fatalf("method %q has unknown role %q", method.Name, method.Role)
 		}
 	}
-	for _, name := range []string{"runtime.connect", "peer.state"} {
+	for _, name := range []string{"runtime.connect", "runtime.resume", "peer.state"} {
 		method, ok := Lookup(name)
 		if !ok || method.Role != RoleParent {
 			t.Fatalf("callback %q is not published as a parent-role method", name)

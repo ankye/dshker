@@ -15,7 +15,6 @@ import (
 
 	"github.com/ankye/dshker/networking/internal/catalog"
 	"github.com/ankye/dshker/networking/internal/core"
-	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/helper"
 	"github.com/ankye/dshker/networking/internal/localrpc"
 	"github.com/ankye/dshker/networking/internal/peerbroker"
@@ -37,6 +36,15 @@ import (
 // shell stop launching a second child; until it does, a core with no configured
 // service simply holds an idle host.
 func main() {
+	// The runtime authority never opens account stores or constructs a peer host.
+	// Dispatch it before either public core composition can touch credentials.
+	if len(os.Args) > 1 && os.Args[1] == "--runtime-owner" {
+		if err := runRuntimeOwner(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
 	if len(os.Args) == 2 && os.Args[1] == "--version" {
 		fmt.Println("dshkerd/1")
 		return
@@ -150,7 +158,7 @@ func secretStoreFor(open func(string) (secret.Store, error), dataRoot string) (s
 	return store, nil
 }
 
-func run(parsed options) error {
+func run(parsed options) (runErr error) {
 	if parsed.stateRoot == "" {
 		return errors.New("p2p.invalid_arguments")
 	}
@@ -237,13 +245,15 @@ func run(parsed options) error {
 		}
 		host.SetRoots(roots)
 	}
-	// The DSH Web child belongs to the core now. The supervisor is created once
-	// per process so a launch survives a renderer reload, and the deferred
-	// shutdown means no child outlives the channel that started it: a crashed
-	// shell closes this connection, which ends the daemon and stops the tree.
-	runtimeSupervisor := harnessruntime.NewSupervisor()
-	defer runtimeSupervisor.Shutdown()
-	server.Runtime = runtimeSupervisor
+	runtimeOwner, err := openRuntimeOwner(ctx, parsed)
+	if err != nil {
+		return err
+	}
+	runtimeReady := false
+	defer func() {
+		runErr = errors.Join(runErr, finishRuntimeOwner(runtimeOwner, runtimeReady))
+	}()
+	server.Runtime = runtimeOwner
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute
@@ -271,6 +281,7 @@ func run(parsed options) error {
 		}
 	})
 	host.BindMain(rpc)
+	runtimeReady = true
 	close(bound)
 	<-rpc.Done()
 	cancel()

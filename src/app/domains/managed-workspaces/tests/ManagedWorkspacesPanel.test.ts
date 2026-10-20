@@ -223,6 +223,8 @@ function installDesktopApi(managed: DesktopApi['managed']): void {
   window.dshLauncher = {
     apiVersion: 1,
     p2pManagement: {
+      networkChoices: unusedP2P,
+      selectNetwork: unusedP2P,
       enable: unusedP2P,
       accountSelection: unusedP2P,
       rememberAccountSelection: unusedP2P,

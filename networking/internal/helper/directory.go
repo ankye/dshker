@@ -51,10 +51,8 @@ type DirectoryView struct {
 
 // directory is the per-account snapshot and the session it belongs to.
 //
-// The token is not this store's property: the shell owns signing in and hands the
-// token to whichever call needs it. Keeping the last one seen is what lets the
-// core maintain the directory on its own — at startup the first token-bearing
-// read is already enough to bring the list up to date and announce it.
+// The token is the already-confirmed durable selected login. Merely observing a
+// token on another operation never grants directory or selected-account authority.
 type directory struct {
 	mu    sync.Mutex
 	token string
@@ -127,23 +125,66 @@ func entriesOrEmpty(entries []controlplane.DeviceEntry) []controlplane.DeviceEnt
 	return append([]controlplane.DeviceEntry(nil), entries...)
 }
 
-// readDirectory reads the whole directory with the session this account holds.
-//
-// The account lock is taken for the duration: the coordinator client is the same
-// one the shell's calls use, and serialising them keeps one account's requests in
-// a single order instead of interleaving a background read with a user action.
+type directoryRead struct {
+	scope *selectedSessionScope
+	token string
+	view  DirectoryView
+}
+
+// readDirectory reads the whole directory with the exact selected session. The
+// scoped reader owns account.mu across its fresh requests; returning its view is
+// a guarded projection, not permission to update the maintained cache later.
 func (account *account) readDirectory(ctx context.Context) (DirectoryView, error) {
+	read, err := account.readDirectoryScoped(ctx)
+	if err != nil {
+		return DirectoryView{}, err
+	}
+	var view DirectoryView
+	if err := read.scope.Publish(read.scope.Context(ctx), func() error { view = read.view; return nil }); err != nil {
+		return DirectoryView{}, err
+	}
+	return view, nil
+}
+
+// Keep the exact selected owner with the prepared value after account.mu is
+// released. A later publisher cannot reselect a different native session.
+func (account *account) readDirectoryScoped(ctx context.Context) (directoryRead, error) {
 	account.mu.Lock()
 	defer account.mu.Unlock()
+	if account.closed {
+		return directoryRead{}, errors.New("p2p.service_unconfigured")
+	}
 	account.directory.mu.Lock()
 	token := account.directory.token
 	account.directory.mu.Unlock()
 	if token == "" {
-		return DirectoryView{}, errors.New("p2p.user_login_required")
+		return directoryRead{}, errors.New("p2p.user_login_required")
 	}
-	networks, err := account.base.Networks(ctx, token)
+	session, exists, err := account.host.readAccountSession(account.identity.ServiceID)
 	if err != nil {
-		return DirectoryView{}, err
+		return directoryRead{}, err
+	}
+	if !exists || session.Token != token {
+		return directoryRead{}, errors.New("p2p.user_scope_mismatch")
+	}
+	scope, err := account.captureSelectedSessionScopeLocked(ctx, session)
+	if err != nil {
+		return directoryRead{}, err
+	}
+	ctx = scope.Context(ctx)
+	client, err := account.bearerClientLocked()
+	if err != nil {
+		return directoryRead{}, err
+	}
+	if err := checkBootstrapContext(ctx); err != nil {
+		return directoryRead{}, err
+	}
+	networks, err := client.Networks(ctx, token)
+	if fence := checkBootstrapContext(ctx); fence != nil {
+		return directoryRead{}, fence
+	}
+	if err != nil {
+		return directoryRead{}, err
 	}
 	view := DirectoryView{
 		Known:     true,
@@ -152,9 +193,15 @@ func (account *account) readDirectory(ctx context.Context) (DirectoryView, error
 		Devices:   []controlplane.DeviceEntry{},
 	}
 	for _, network := range networks {
-		devices, err := account.base.NetworkDevices(ctx, token, network.NetworkID)
+		if err := checkBootstrapContext(ctx); err != nil {
+			return directoryRead{}, err
+		}
+		devices, err := client.NetworkDevices(ctx, token, network.NetworkID)
+		if fence := checkBootstrapContext(ctx); fence != nil {
+			return directoryRead{}, fence
+		}
 		if err != nil {
-			return DirectoryView{}, err
+			return directoryRead{}, err
 		}
 		view.Networks = append(view.Networks, DirectoryNetwork{
 			NetworkID:  network.NetworkID,
@@ -164,12 +211,18 @@ func (account *account) readDirectory(ctx context.Context) (DirectoryView, error
 			Devices:    entriesOrEmpty(devices),
 		})
 	}
-	devices, err := account.base.UserDevices(ctx, token)
+	if err := checkBootstrapContext(ctx); err != nil {
+		return directoryRead{}, err
+	}
+	devices, err := client.UserDevices(ctx, token)
+	if fence := checkBootstrapContext(ctx); fence != nil {
+		return directoryRead{}, fence
+	}
 	if err != nil {
-		return DirectoryView{}, err
+		return directoryRead{}, err
 	}
 	view.Devices = entriesOrEmpty(devices)
-	return view, nil
+	return directoryRead{scope: scope, token: token, view: view}, nil
 }
 
 // refreshDirectory reads the directory and publishes the result.
@@ -178,23 +231,41 @@ func (account *account) readDirectory(ctx context.Context) (DirectoryView, error
 // shell that the list it mirrors is now wrong; a heartbeat that says "still the
 // same devices" must not make the renderer re-render every list it has.
 func (account *account) refreshDirectory(ctx context.Context) (DirectoryView, error) {
-	view, err := account.readDirectory(ctx)
+	read, err := account.readDirectoryScoped(ctx)
 	if err != nil {
 		return account.snapshot(""), err
 	}
-	account.directory.mu.Lock()
-	changed := !sameDirectoryContent(account.directory.view, view)
-	// The revision is the stored one either way: a read that found the same
-	// devices must answer with the revision the shell already mirrors, not with
-	// the zero value of a freshly decoded reply.
-	view.Revision = account.directory.view.Revision
-	if changed {
-		view.Revision++
+	return account.publishDirectory(ctx, read)
+}
+
+func (account *account) publishDirectory(ctx context.Context, read directoryRead) (DirectoryView, error) {
+	ctx = read.scope.Context(ctx)
+	view, changed := read.view, false
+	err := read.scope.Publish(ctx, func() error {
+		account.directory.mu.Lock()
+		defer account.directory.mu.Unlock()
+		if account.directory.token != read.token {
+			return errors.New("p2p.user_scope_mismatch")
+		}
+		changed = !sameDirectoryContent(account.directory.view, view)
+		view.Revision = account.directory.view.Revision
+		if changed {
+			view.Revision++
+		}
+		account.directory.view = view
+		return nil
+	})
+	if err != nil {
+		return account.snapshot(""), err
 	}
-	account.directory.view = view
-	account.directory.mu.Unlock()
+	if err := checkBootstrapContext(ctx); err != nil {
+		return account.snapshot(""), err
+	}
 	if changed {
 		account.announce(view.Revision)
+	}
+	if err := checkBootstrapContext(ctx); err != nil {
+		return account.snapshot(""), err
 	}
 	return copyDirectoryView(view, account.identity.ServiceID), nil
 }
@@ -211,6 +282,9 @@ func (account *account) announce(revision uint64) {
 // maintenanceLifetime is the context background work follows: the host's own, or
 // a detached one for an account that has no host to outlive.
 func (account *account) maintenanceLifetime() context.Context {
+	if account.lifetime != nil {
+		return account.lifetime
+	}
 	if account.host != nil {
 		return account.host.ctx
 	}
@@ -285,10 +359,21 @@ func (host *Host) announceDirectory(serviceID string, revision uint64) {
 // It runs on its own goroutine because the caller still holds the account lock;
 // the read waits for that lock, so the response the user is waiting for is not
 // delayed by a bookkeeping read.
-func (account *account) refreshAfterWrite() {
+// The caller owns account.mu. Derive before dispatch while the completed write's
+// exact selected owner and caller fence are still checkable.
+func (account *account) refreshAfterWrite(ctx context.Context) error {
+	scope, err := account.selectedSessionScopeLocked(ctx)
+	if err != nil {
+		return err
+	}
+	background, err := scope.Background(scope.Context(ctx))
+	if err != nil {
+		return err
+	}
 	go func() {
-		ctx, cancel := context.WithTimeout(account.maintenanceLifetime(), directoryRefreshTimeout)
+		ctx, cancel := context.WithTimeout(background.Context(account.maintenanceLifetime()), directoryRefreshTimeout)
 		defer cancel()
 		_, _ = account.refreshDirectory(ctx)
 	}()
+	return nil
 }

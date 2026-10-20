@@ -202,7 +202,7 @@ func TestCertificateLostRecoveryReplySurvivesRestartWithoutAnotherGrant(t *testi
 }
 
 func (f *certificateFixture) restore(device controlplane.Device) error {
-	data, _ := json.Marshal(map[string]any{"serviceId": f.account.identity.ServiceID, "data": map[string]any{"device": device, "privateKey": f.private, "pins": []controlplane.PairIdentity{}}})
+	data, _ := json.Marshal(map[string]any{"serviceId": f.account.identity.ServiceID, "data": map[string]any{"device": device, "privateKey": f.private, "pins": []controlplane.PairIdentity{}, "accountUserId": ""}})
 	_, err := f.host.Handle(context.Background(), "device.restore", data)
 	return err
 }
@@ -245,6 +245,7 @@ func TestOnlineExpiredClientUsesUnauthenticatedTLSForReadbackAndRecovery(t *test
 		t.Fatal(err)
 	}
 	f.account.client = client
+	f.account.httpPhase = accountHTTPDevice
 	f.account.device = f.original
 	leaf, err := f.account.base.ValidateDevice(f.original, f.private, f.account.identity, false)
 	if err != nil {

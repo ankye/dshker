@@ -29,6 +29,28 @@ async function channel(handler: PeerMainHandler = async () => ({})) {
 }
 
 describe('private helper RPC lifecycle', () => {
+  it('admits named runtime.resume without substituting runtime.connect', async () => {
+    const binding = { generation: 3, url: 'http://127.0.0.1:31501/' }
+    const handler = vi.fn(async () => binding)
+    const { remote } = await channel(handler)
+    const answer = once(remote, 'data')
+    const payload = { serviceId: 'a'.repeat(12), pairId: 'b'.repeat(12) }
+    remote.write(
+      JSON.stringify({ version: 1, id: 1, method: 'runtime.resume', payload, error: '' }) + '\n'
+    )
+    const [data] = await answer
+    expect(decodePeerFrame(data.toString().trim())).toMatchObject({
+      id: 1,
+      method: '',
+      payload: binding,
+      error: ''
+    })
+    expect(handler).toHaveBeenCalledExactlyOnceWith(
+      'runtime.resume',
+      payload,
+      expect.any(AbortSignal)
+    )
+  })
   it('routes out-of-order responses by request identity', async () => {
     const { rpc, remote } = await channel()
     const first = rpc.call('device.createKey', {}, AbortSignal.timeout(1000))

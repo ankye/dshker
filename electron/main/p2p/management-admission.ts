@@ -31,6 +31,8 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   submitEnrollment: ['serviceId', 'revision'],
   recoverEnrollment: ['serviceId', 'revision'],
   pairs: ['serviceId'],
+  networkChoices: ['serviceId'],
+  selectNetwork: ['serviceId', 'pairId', 'networkId', 'userId', 'expectedRevision'],
   pairIdentity: ['serviceId', 'pairId'],
   createInvite: ['serviceId', 'networkId'],
   acceptInvite: ['serviceId', 'networkId', 'code'],
@@ -83,7 +85,8 @@ function validateField(field: string, value: unknown): void {
   // A service id is a key id like a device id (twelve characters); a revision is
   // the store's own SHA-256 revision and stays sixty-four.
   if (field === 'serviceId') return assertAccountId(value)
-  if (field === 'revision') return assertAccountId(value, 64)
+  if (field === 'revision' || field === 'expectedRevision') return assertAccountId(value, 64)
+  if (field === 'userId') return assertAccountId(value)
   if (field === 'networkId' || field === 'pairId' || field === 'deviceId')
     return assertAccountId(value)
   if (field === 'name' || field === 'displayName') return assertAccountText(value)

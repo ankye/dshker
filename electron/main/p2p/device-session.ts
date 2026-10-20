@@ -116,7 +116,8 @@ export class PeerDeviceSession {
         {
           serviceId,
           data: {
-            device: { ...publicDevice(credential), userId },
+            device: publicDevice(credential),
+            accountUserId: userId,
             privateKey: credential.privateKey,
             pins: []
           }

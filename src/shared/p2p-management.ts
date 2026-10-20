@@ -28,6 +28,8 @@ export const P2P_MANAGEMENT_CHANNELS = {
   submitEnrollment: 'dsh-launcher:p2p:submit-enrollment',
   recoverEnrollment: 'dsh-launcher:p2p:recover-enrollment',
   pairs: 'dsh-launcher:p2p:pairs',
+  networkChoices: 'dsh-launcher:p2p:network-choices',
+  selectNetwork: 'dsh-launcher:p2p:select-network',
   pairIdentity: 'dsh-launcher:p2p:pair-identity',
   createInvite: 'dsh-launcher:p2p:create-invite',
   acceptInvite: 'dsh-launcher:p2p:accept-invite',
@@ -127,6 +129,20 @@ export interface P2PNetworkView {
   userId: string
   name: string
   maxDevices: number
+}
+
+/** Fresh current-account choices; no keys or pair-table identifiers cross IPC. */
+export interface P2PComputerNetworkChoices {
+  pairId: string
+  name: string
+  selectedNetworkId: string
+  state: 'selected' | 'required' | 'stale'
+  choices: readonly { networkId: string; name: string }[]
+}
+export interface P2PNetworkChoicesView {
+  userId: string
+  catalogRevision: string
+  devices: readonly P2PComputerNetworkChoices[]
 }
 
 /**
@@ -316,8 +332,15 @@ export interface P2PConnectionView {
   pairId: string
   attemptId: string
   generation: number
-  /** `connected` is transport-only; `ready` means a remote workbench is available. */
-  stage: 'punching' | 'starting-runtime' | 'connected' | 'ready' | 'failed' | 'disconnected'
+  /** Suspended retains the exact primary identity, but is not live readiness. */
+  stage:
+    | 'punching'
+    | 'starting-runtime'
+    | 'connected'
+    | 'ready'
+    | 'suspended'
+    | 'failed'
+    | 'disconnected'
   /** Error code only, empty unless the stage is `failed`. */
   error: string
   /** ICE candidate kinds, proving the path is direct rather than relayed. */
@@ -379,6 +402,13 @@ export interface P2PManagementInputs {
   submitEnrollment: RevisionRequest
   recoverEnrollment: RevisionRequest
   pairs: ServiceRequest
+  networkChoices: ServiceRequest
+  selectNetwork: ServiceRequest & {
+    pairId: string
+    networkId: string
+    userId: string
+    expectedRevision: string
+  }
   pairIdentity: ServiceRequest & { pairId: string }
   createInvite: NetworkRequest
   acceptInvite: NetworkRequest & { code: string }
@@ -467,6 +497,8 @@ export interface P2PManagementResults {
   submitEnrollment: P2PRegistrationView
   recoverEnrollment: P2PRegistrationView
   pairs: P2PPairView[]
+  networkChoices: P2PNetworkChoicesView
+  selectNetwork: P2PNetworkChoicesView
   pairIdentity: P2PPairView
   createInvite: P2PInviteView
   acceptInvite: P2PPairView
@@ -566,6 +598,9 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.internal_error',
   'p2p.authorization_cleanup_failed',
   'p2p.catalog_conflict',
+  'p2p.network_selection_required',
+  'p2p.network_selection_stale',
+  'p2p.network_selection_conflict',
   'p2p.catalog_exists',
   'p2p.catalog_incomplete',
   'p2p.catalog_intact',
@@ -778,6 +813,12 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'runtime.node_invalid',
   'runtime.not_found',
   'runtime.operation_in_progress',
+  'runtime.owner_unavailable',
+  'runtime.owner_identity_mismatch',
+  'runtime.owner_record_invalid',
+  'runtime.owner_protocol_unsupported',
+  'runtime.owner_configuration_invalid',
+  'runtime.owner_shutdown_failed',
   'runtime.plugin_operation_failed',
   'runtime.plugin_incompatible',
   'runtime.port_in_use',

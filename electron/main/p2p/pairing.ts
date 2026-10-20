@@ -105,8 +105,8 @@ export class PeerPairing {
    * `confirmed` is the exact value shown in the UI. It is compared against the
    * locally derived fingerprint of the real remote key before any approval is
    * sent, so confirming a substituted identity fails instead of authorizing it.
-   * The pinned identity is stored in the helper only after the server reports
-   * the pair active.
+   * Live pin authority belongs to the core's fresh, current-account catalog
+   * read. This approval readback cannot install renderer-supplied identities.
    */
   approve(
     serviceId: string,
@@ -143,7 +143,6 @@ export class PeerPairing {
         (after.localIsInitiator ? after.target : after.initiator).fingerprint !== confirmed
       )
         throw new PeerHelperError('p2p.identity_mismatch')
-      if (after.state === 'active') await this.#pin(serviceId, pairId, signal)
       return after
     })
   }
@@ -198,11 +197,6 @@ export class PeerPairing {
     )
     if (pair.pairId !== pairId) throw new PeerHelperError('p2p.identity_mismatch')
     return pair
-  }
-
-  /** Pins the confirmed remote identity so a later key substitution is refused. */
-  async #pin(serviceId: string, pairId: string, signal: AbortSignal): Promise<void> {
-    await this.#call(serviceId, 'pairs.pin', { pairId }, signal)
   }
 
   #pairId(value: unknown): string {

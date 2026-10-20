@@ -58,13 +58,19 @@ type signaling struct {
 	// receive is started for every subscription the supervisor installs.
 	receive func(subscription)
 
-	mu     sync.Mutex
-	active subscription
-	down   bool
-	closed bool
+	mu        sync.Mutex
+	active    subscription
+	down      bool
+	closed    bool
+	workers   sync.WaitGroup
+	closeDone chan struct{}
 }
 
 func newSignaling(ctx context.Context, dial subscribeFunc, deviceID string, receive func(subscription)) (*signaling, error) {
+	return newSignalingInstalled(ctx, dial, deviceID, receive, nil)
+}
+
+func newSignalingInstalled(ctx context.Context, dial subscribeFunc, deviceID string, receive func(subscription), install func(*signaling) error) (*signaling, error) {
 	child, cancel := context.WithCancel(ctx)
 	owner := &signaling{ctx: child, cancel: cancel, dial: dial, device: deviceID, receive: receive}
 	first, err := dial(child, deviceID)
@@ -80,8 +86,15 @@ func newSignaling(ctx context.Context, dial subscribeFunc, deviceID string, rece
 	owner.mu.Lock()
 	owner.active = first
 	owner.mu.Unlock()
-	go owner.receive(first)
-	go owner.supervise()
+	if install != nil {
+		if err := install(owner); err != nil {
+			first.Close()
+			cancel()
+			return nil, err
+		}
+	}
+	owner.startWorker(func() { owner.receive(first) })
+	owner.startWorker(owner.supervise)
 	return owner, nil
 }
 
@@ -119,13 +132,41 @@ func (owner *signaling) close() {
 		return
 	}
 	owner.closed = true
+	owner.closeDone = make(chan struct{})
+	closed := owner.closeDone
 	active := owner.active
 	owner.active = nil
 	owner.mu.Unlock()
+	defer close(closed)
 	owner.cancel()
 	if active != nil {
 		active.Close()
 	}
+}
+
+// Add and the closing barrier share mu: once close returns, no worker can be
+// added concurrently with the recovery owner's Wait. Ordinary close remains
+// non-joining because it can be invoked from a worker-owned callback.
+func (owner *signaling) startWorker(work func()) {
+	owner.mu.Lock()
+	if owner.closed || owner.ctx.Err() != nil {
+		owner.mu.Unlock()
+		return
+	}
+	owner.workers.Add(1)
+	owner.mu.Unlock()
+	go func() { defer owner.workers.Done(); work() }()
+}
+
+func (owner *signaling) closeAndWait() {
+	owner.close()
+	owner.mu.Lock()
+	closed := owner.closeDone
+	owner.mu.Unlock()
+	if closed != nil {
+		<-closed
+	}
+	owner.workers.Wait()
 }
 
 // supervise replaces a lost subscription with backoff until the manager ends.
@@ -203,7 +244,7 @@ func (owner *signaling) replace() bool {
 		owner.active = next
 		owner.down = false
 		owner.mu.Unlock()
-		go owner.receive(next)
+		owner.startWorker(func() { owner.receive(next) })
 		return true
 	}
 }

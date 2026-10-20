@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -17,6 +20,7 @@ import (
 
 	"github.com/ankye/dshker/networking/internal/controlplane"
 	"github.com/ankye/dshker/networking/internal/peersession"
+	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/ankye/dshker/networking/internal/runtimebridge"
 )
 
@@ -46,12 +50,13 @@ func TestManagerRealDSH(t *testing.T) {
 			defer bindingMu.Unlock()
 			return binding, nil
 		}
-		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private}, []controlplane.PairIdentity{config.Pin}, owner, func(state peersession.State) { states[i] <- state })
+		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private, CoreInstanceID: integrationCoreInstanceID(t)}, []controlplane.PairIdentity{}, owner, func(state peersession.State) { states[i] <- state })
 		must(t, err)
+		integrationActivateManager(t, ctx, manager, f, i)
 		managers[i] = manager
 		defer manager.Close()
 	}
-	pairID := f.config[0].Pin.Pair.PairID
+	pairID := f.config[1].Device.DeviceID
 	previousAttempt := ""
 	for generation := uint64(1); generation <= 5; generation++ {
 		// This is the normal reconnect scenario, paced below the coordinator's
@@ -247,11 +252,47 @@ func startRealDSH(t *testing.T) (string, *process) {
 			case <-time.After(100 * time.Millisecond):
 			}
 		}
-		t.Fatalf("real DSH announced %s but did not become ready: %v", value, probeErr)
+		t.Fatal(realDSHReadinessDiagnostic(value, probeErr))
 	case <-process.done:
 		t.Fatal("real DSH exited before runtime announcement")
 	case <-time.After(70 * time.Second):
 		t.Fatal("real DSH startup timeout")
 	}
 	return "", nil
+}
+
+func realDSHReadinessDiagnostic(value string, err error) string {
+	// Only the numeric port can identify this temporary runtime in a log. Never
+	// print the announced URL or an error's detail: either can carry its token.
+	port := "invalid"
+	if endpoint, parseErr := url.Parse(value); parseErr == nil && endpoint.Scheme == "http" && endpoint.Hostname() == "127.0.0.1" && endpoint.User == nil {
+		if number, portErr := strconv.Atoi(endpoint.Port()); portErr == nil && number > 0 && number <= 65535 {
+			port = strconv.Itoa(number)
+		}
+	}
+	code, cause := "test.dsh_readiness_untyped_failure", "untyped"
+	switch {
+	case err == nil:
+		code, cause = "test.dsh_readiness_error_missing", "missing"
+	case errors.Is(err, context.DeadlineExceeded):
+		code, cause = "test.dsh_readiness_deadline", "deadline"
+	case errors.Is(err, context.Canceled):
+		code, cause = "test.dsh_readiness_cancelled", "cancelled"
+	default:
+		// Probe owns these exact classes. An arbitrary code-shaped library
+		// sentence is not authority to emit its contents in this diagnostic.
+		if refusal, ok := protocol.Refusal(err); ok {
+			switch refusal {
+			case "p2p.runtime_invalid":
+				code, cause = refusal, "endpoint"
+			case "p2p.runtime_http_failed":
+				code, cause = refusal, "http"
+			case "p2p.runtime_websocket_failed":
+				code, cause = refusal, "websocket"
+			case "p2p.redirect_rejected":
+				code, cause = refusal, "redirect"
+			}
+		}
+	}
+	return fmt.Sprintf("real DSH did not become ready port=%s code=%s cause=%s", port, code, cause)
 }

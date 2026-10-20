@@ -40,6 +40,8 @@ func (fake *directoryCoordinator) handler(t *testing.T) http.Handler {
 		fake.mu.Unlock()
 		writer.Header().Set("Content-Type", "application/json")
 		switch {
+		case request.URL.Path == "/v1/user":
+			_ = json.NewEncoder(writer).Encode(controlplane.User{UserID: "aaaaaaaaaaaa", Username: "selected@example.test"})
 		case request.URL.Path == "/v1/logout":
 			_, _ = writer.Write([]byte(`{"loggedOut":true}`))
 		case request.URL.Path == "/v1/networks":
@@ -130,12 +132,14 @@ func newDirectoryClient(t *testing.T, handler http.Handler) *controlplane.Client
 func directoryAccount(t *testing.T, fake *directoryCoordinator) (*Host, *account, *announceRecorder) {
 	t.Helper()
 	host := New(context.Background())
+	host.SetDeviceKeys(newMemoryStore())
 	recorder := newAnnounceRecorder()
 	host.BindMain(recorder)
 	account := &account{
-		base:     newDirectoryClient(t, fake.handler(t)),
-		identity: controlplane.Identity{ServiceID: protocol.NewID()},
-		host:     host,
+		base:      newDirectoryClient(t, fake.handler(t)),
+		httpPhase: accountHTTPSetup,
+		identity:  controlplane.Identity{ServiceID: protocol.NewID()},
+		host:      host,
 	}
 	host.accounts[account.identity.ServiceID] = account
 	return host, account, recorder
@@ -149,9 +153,12 @@ func TestDirectorySnapshotIsReadAndOnlyMovesWhenItsContentDoes(t *testing.T) {
 		devices:  map[string][]controlplane.DeviceEntry{},
 		account:  []controlplane.DeviceEntry{{DeviceID: protocol.NewID(), Name: "this machine"}},
 	}
-	_, account, recorder := directoryAccount(t, fake)
+	host, account, recorder := directoryAccount(t, fake)
 	fake.member(fake.networks[0].NetworkID, controlplane.DeviceEntry{DeviceID: protocol.NewID(), Name: "Mac", Presence: "online", LastSeen: 1_789_445_714, Version: "0.1.42", Platform: "darwin", Architecture: "arm64"})
 	account.rememberToken(strings.Repeat("a", 64))
+	if err := host.saveAccountSession(account.identity.ServiceID, persistedAccountSession{Token: strings.Repeat("a", 64), ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+		t.Fatal(err)
+	}
 
 	view, err := account.refreshDirectory(context.Background())
 	if err != nil {
@@ -201,21 +208,24 @@ func TestDirectoryRefreshWithoutASessionIsRefused(t *testing.T) {
 	}
 }
 
-// The first token-bearing call a restarted shell makes is what starts the
-// maintenance: no separate handshake, and no page has to be opened first.
-func TestTokenBearingCallTeachesTheCoreAndStartsTheMaintenance(t *testing.T) {
+// Current-user confirms the existing durable session before directory maintenance.
+func TestConfirmedCurrentSessionStartsTheMaintenance(t *testing.T) {
 	fake := &directoryCoordinator{
 		networks: []controlplane.Network{{NetworkID: protocol.NewID(), UserID: protocol.NewID(), Name: "mywork", MaxDevices: 10}},
 		devices:  map[string][]controlplane.DeviceEntry{},
 	}
 	host, account, recorder := directoryAccount(t, fake)
+	host.SetDeviceKeys(newMemoryStore())
+	if err := host.saveAccountSession(account.identity.ServiceID, persistedAccountSession{Token: strings.Repeat("b", 64), ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+		t.Fatal(err)
+	}
 	fake.member(fake.networks[0].NetworkID, controlplane.DeviceEntry{DeviceID: protocol.NewID(), Name: "Mac", Presence: "online"})
 
 	payload, err := json.Marshal(map[string]string{"token": strings.Repeat("b", 64)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := host.manage(context.Background(), account, "devices.list", payload); err != nil {
+	if _, err := host.manage(context.Background(), account, "user.current", payload); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -236,7 +246,15 @@ func TestLogoutClearsTheMaintainedDirectory(t *testing.T) {
 		devices:  map[string][]controlplane.DeviceEntry{},
 	}
 	host, account, _ := directoryAccount(t, fake)
-	account.rememberToken(strings.Repeat("c", 64))
+	host.SetDeviceKeys(newMemoryStore())
+	session := persistedAccountSession{Token: strings.Repeat("c", 64), ExpiresAt: time.Now().Add(time.Hour).Unix()}
+	if err := host.saveAccountSession(account.identity.ServiceID, session); err != nil {
+		t.Fatal(err)
+	}
+	if stored, exists, err := host.readAccountSession(account.identity.ServiceID); err != nil || !exists || stored != session {
+		t.Fatal("directory logout fixture lacks its exact durable selected session", err)
+	}
+	account.rememberToken(session.Token)
 	if _, err := account.refreshDirectory(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -250,6 +268,9 @@ func TestLogoutClearsTheMaintainedDirectory(t *testing.T) {
 	if account.snapshot(account.identity.ServiceID).Known {
 		t.Fatal("signing out kept the previous session's directory")
 	}
+	if _, exists, err := host.readAccountSession(account.identity.ServiceID); err != nil || exists {
+		t.Fatal("directory logout retained its durable selected session", err)
+	}
 }
 
 // A write that changes who belongs to a network re-reads without being asked.
@@ -258,15 +279,23 @@ func TestMembershipWritesRefreshTheDirectory(t *testing.T) {
 		networks: []controlplane.Network{{NetworkID: protocol.NewID(), UserID: protocol.NewID(), Name: "mywork", MaxDevices: 10}},
 		devices:  map[string][]controlplane.DeviceEntry{},
 	}
-	_, account, recorder := directoryAccount(t, fake)
+	host, account, recorder := directoryAccount(t, fake)
 	account.rememberToken(strings.Repeat("d", 64))
+	if err := host.saveAccountSession(account.identity.ServiceID, persistedAccountSession{Token: strings.Repeat("d", 64), ExpiresAt: time.Now().Add(time.Hour).Unix()}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := account.refreshDirectory(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	<-recorder.seen
 
 	fake.member(fake.networks[0].NetworkID, controlplane.DeviceEntry{DeviceID: protocol.NewID(), Name: "joined"})
-	account.refreshAfterWrite()
+	account.mu.Lock()
+	err := account.refreshAfterWrite(context.Background())
+	account.mu.Unlock()
+	if err != nil {
+		t.Fatal(err)
+	}
 	select {
 	case <-recorder.seen:
 	case <-time.After(5 * time.Second):

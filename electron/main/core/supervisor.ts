@@ -8,6 +8,7 @@ import { createPeerChannel, removePeerChannel } from '../p2p/private-channel'
 import { PeerRpc, type PeerMainHandler } from '../p2p/rpc'
 import { stopChild, verifyCoreExecutable } from '../p2p/supervisor'
 import { exactPeerObject, PeerHelperError } from '../p2p/wire'
+import { assertCoreVersion } from './version-contract'
 
 const execFileAsync = promisify(execFile)
 
@@ -359,13 +360,11 @@ export class CoreSupervisor {
         diagnose(`version-probe-failed ${String(error)}`)
         throw error
       })
-      if (
-        typeof version !== 'object' ||
-        version === null ||
-        (version as { version?: unknown }).version !== 1
-      ) {
+      try {
+        assertCoreVersion(version)
+      } catch (error) {
         diagnose(`version-rejected ${JSON.stringify(version)}`)
-        throw new PeerHelperError('p2p.protocol_mismatch')
+        throw error
       }
       diagnose(`ready core.version=${JSON.stringify(version)}`)
       return new CoreSupervisor(child, exit, directory, rpc, dispatch, options.onUnavailable, false)
@@ -404,17 +403,7 @@ export class CoreSupervisor {
         'attached'
       ])
       if (attached.attached !== true) throw new PeerHelperError('p2p.protocol_mismatch')
-      const version = exactPeerObject(await rpc.call('core.version', {}, budget), [
-        'version',
-        'methodTableVersion',
-        'methods'
-      ])
-      if (
-        version.version !== 1 ||
-        version.methodTableVersion !== 1 ||
-        !Array.isArray(version.methods)
-      )
-        throw new PeerHelperError('p2p.protocol_mismatch')
+      assertCoreVersion(await rpc.call('core.version', {}, budget))
       return new CoreSupervisor(
         undefined,
         undefined,

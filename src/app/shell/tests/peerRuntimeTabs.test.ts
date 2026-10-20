@@ -133,6 +133,7 @@ describe('paired computer Run tabs', () => {
       ['punching', { kind: 'connecting' }],
       ['starting-runtime', { kind: 'connecting' }],
       ['ready', { kind: 'ready' }],
+      ['suspended', { kind: 'suspended' }],
       ['disconnected', { kind: 'disconnected' }]
     ] as const
     for (const [stage, expected] of stages) {
@@ -274,6 +275,139 @@ describe('paired computer Run tabs', () => {
     await nextTick()
     await Promise.resolve()
   }
+
+  it('retains an admitted guest/navigation through exact-primary suspension without another entry read', async () => {
+    const entry = { url: 'http://127.0.0.1:42120/?token=original', partition: 'persist:primary' }
+    await readyPeerWithEntry(entry)
+    vi.mocked(p2pConnections.isReady).mockImplementation(
+      (service, pair) => p2pConnections.find(service, pair)?.stage === 'ready'
+    )
+    const deepUrl = 'http://127.0.0.1:42120/project/original-session'
+    runtimeBrowser.updateTab(`peer:${connectionId}`, { url: deepUrl })
+    const suspended = peer({ stage: 'suspended' })
+    vi.mocked(p2pConnections.find).mockReturnValue(suspended)
+    p2pConnections.state.peers = [suspended]
+    await settle()
+    expect(peerTab()).toMatchObject({
+      url: deepUrl,
+      partition: entry.partition,
+      status: { kind: 'suspended' }
+    })
+    expect(p2pConnections.entry).toHaveBeenCalledTimes(1)
+
+    vi.mocked(p2pConnections.find).mockReturnValue(peer())
+    p2pConnections.state.peers = [peer()]
+    await settle()
+    expect(peerTab()).toMatchObject({ url: deepUrl, status: { kind: 'ready' } })
+    expect(p2pConnections.entry).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([{ attemptId: 'e'.repeat(32) }, { generation: 2 }, { runtimeGeneration: 2 }])(
+    'never gives a different suspended authority the old admitted entry %o',
+    async (change) => {
+      await readyPeerWithEntry({ url: 'http://127.0.0.1:42121/', partition: 'persist:old' })
+      const suspended = peer({ stage: 'suspended', ...change })
+      vi.mocked(p2pConnections.find).mockReturnValue(suspended)
+      p2pConnections.state.peers = [suspended]
+      await settle()
+      expect(peerTab()?.url).toBeUndefined()
+      expect(peerTab()?.partition).toBeUndefined()
+      expect(p2pConnections.entry).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('does not grant a fresh entry to a suspended primary or retain it after revocation', async () => {
+    const suspended = peer({ stage: 'suspended' })
+    vi.spyOn(p2pConnections, 'find').mockReturnValue(suspended)
+    const entryRead = vi.spyOn(p2pConnections, 'entry').mockResolvedValue(undefined)
+    p2pConnections.state.peers = [suspended]
+    await settle()
+    expect(peerTab()?.url).toBeUndefined()
+    expect(entryRead).not.toHaveBeenCalled()
+
+    await readyPeerWithEntry({ url: 'http://127.0.0.1:42122/', partition: 'persist:revoked' })
+    vi.mocked(p2pConnections.find).mockReturnValue(suspended)
+    p2pConnections.state.peers = [suspended]
+    p2pManagement.catalog.value = catalog([computer({ pairState: 'revoked' })])
+    await settle()
+    expect(peerTab()?.url).toBeUndefined()
+    expect(peerTab()?.partition).toBeUndefined()
+  })
+
+  it('replaces old navigation with the recovered generation entry in the same partition', async () => {
+    const partition = 'persist:dshker-peer-recovered'
+    await readyPeerWithEntry(
+      { url: 'http://127.0.0.1:42101/?token=old', partition },
+      { generation: 41 }
+    )
+    runtimeBrowser.updateTab(`peer:${connectionId}`, { url: 'http://127.0.0.1:42101/old-page' })
+    vi.mocked(p2pConnections.entry).mockResolvedValue({
+      url: 'http://127.0.0.1:42102/?token=new',
+      partition
+    })
+    const recovered = peer({ generation: 42, attemptId: '7'.repeat(12) })
+    vi.mocked(p2pConnections.find).mockReturnValue(recovered)
+    p2pConnections.state.peers = [recovered]
+    await settle()
+
+    expect(peerTab()?.url).toBe('http://127.0.0.1:42102/?token=new')
+    expect(peerTab()?.partition).toBe(partition)
+    expect(vi.mocked(p2pConnections.entry)).toHaveBeenLastCalledWith(serviceId, pairId, 42)
+  })
+
+  it.each(['revoked', 'failed'] as const)(
+    'does not retain a pending entry after the pair becomes %s',
+    async (change) => {
+      vi.spyOn(p2pConnections, 'isReady').mockReturnValue(true)
+      let current = peer({ generation: 51 })
+      vi.spyOn(p2pConnections, 'find').mockImplementation(() => current)
+      let answer!: (value: { url: string; partition: string }) => void
+      const entry = vi
+        .spyOn(p2pConnections, 'entry')
+        .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+      p2pConnections.state.peers = [current]
+      await settle()
+
+      if (change === 'revoked')
+        p2pManagement.catalog.value = catalog([computer({ pairState: 'revoked' })])
+      else {
+        current = peer({ generation: 51, stage: 'failed', error: 'p2p.runtime_unavailable' })
+        p2pConnections.state.peers = [current]
+      }
+      await settle()
+      answer({
+        url: 'http://127.0.0.1:42103/?token=stale',
+        partition: 'persist:dshker-peer-stale-lookup'
+      })
+      await settle()
+      expect(peerTab()?.url).toBeUndefined()
+
+      entry.mockResolvedValueOnce(undefined)
+      current = peer({ generation: 51 })
+      p2pManagement.catalog.value = catalog([computer()])
+      p2pConnections.state.peers = [current]
+      await settle()
+      expect(entry).toHaveBeenCalledTimes(2)
+      expect(peerTab()?.url).toBeUndefined()
+    }
+  )
+
+  it('reads a replacement attempt even when its generation is unchanged', async () => {
+    await readyPeerWithEntry(
+      { url: 'http://127.0.0.1:42104/?token=previous', partition: 'persist:attempt-pair' },
+      { generation: 61 }
+    )
+    const next = peer({ generation: 61, attemptId: '7'.repeat(12), runtimeGeneration: 2 })
+    vi.mocked(p2pConnections.find).mockReturnValue(next)
+    vi.mocked(p2pConnections.entry).mockResolvedValue({
+      url: 'http://127.0.0.1:42105/?token=replacement',
+      partition: 'persist:attempt-pair'
+    })
+    p2pConnections.state.peers = [next]
+    await settle()
+    expect(vi.mocked(p2pConnections.entry)).toHaveBeenCalledTimes(2)
+    expect(peerTab()?.url).toBe('http://127.0.0.1:42105/?token=replacement')
+  })
 
   /**
    * A peer can be replaced while main is still answering about the previous

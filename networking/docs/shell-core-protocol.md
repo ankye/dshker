@@ -1,6 +1,10 @@
 # Shell to core private protocol
 
-Version 1. Frozen by the OpenSpec change `go-owned-headless-core`, tasks 1.1
+Frame/bootstrap version 1, method-table version 2. The `peer.state` contract now
+admits a primary's `suspended` stage and ticket-authorized 32-hex attempt IDs.
+The shell and core must match method-table version 2; neither side substitutes
+the previous cached `ready` state. Device, pair and network IDs remain 12 hex.
+The original channel was frozen by OpenSpec `go-owned-headless-core`, tasks 1.1
 to 1.3. The core process (`dshkerd`, and before it `dshker-peer`) is started as
 a child of the shell. This document is the contract between them; it describes
 what `internal/localrpc` already enforces, so the shell half can be replaced
@@ -40,6 +44,44 @@ Startup, reconnection and an hourly core-lifetime loop maintain certificates
 inside the server's seven-day renewal window. Updating a verified certificate
 changes future TLS handshakes without replacing a peer manager, ending active
 peer transports, or starting/stopping DSH.
+
+`device.certificate_recovery_scope` is an additive, main-only table-2 read with
+exact request `{serviceId,data:{deviceId,token}}` and reply `{user,networks}`.
+Each network has the existing `DirectoryNetwork` fields and real device members;
+there is no invented directory revision or renderer capability. The core requires
+the service's recorded original device/key and the exact unexpired durable
+selected session, then freshly reads public current-user and owned-network
+authorization under that named recovery owner. It rechecks caller, account,
+session and original-credential scope after every read. It does not choose a
+network, issue a certificate or publish an ordinary directory snapshot. Main
+still requires the fresh user's explicitly remembered network, ownership and
+original-device membership, with selection/token/abort rechecks around issuance.
+
+Ordinary Bearer management/directory operations use an explicitly recorded
+setup/device/closed HTTP phase. Setup uses its existing public account path;
+device phase requires its original live certificate transport, while missing or
+expired resources refuse. Neither an HTTP/TLS error nor a nil device client can
+select public retry. Named session confirmation and logout preselect their auth
+transport before dispatch: explicit setup or a fully validated expired original
+device uses public auth; a valid original device uses its exact mTLS client. This
+decision never requires WSS/candidate activation or substitutes certificate owner
+A for selected Bearer B. Login, original-key certificate query/recovery and the
+narrow legacy recovery-scope owner retain their explicit public contracts.
+
+`user.current` and `user.logout` are named authentication confirmation and
+revocation operations, not ordinary device-directory transport requests. When an
+exact validated original device is expired, confirmed authentication is distinct
+from activation: the core fences the old signaling scope locally, records typed
+certificate-recovery-pending status and returns only the actual user/session or
+revocation result. It does not dial WSS or claim ready. For the same account,
+original workbench intent/gateway/runtime remain retained; logout/account change
+clears the former scope. Signal-worker joins occur after releasing account.mu.
+Only that validated pending provenance can bridge issuance→current-user→restore;
+a fresh certificate changes the auth transport to mTLS but cannot complete
+activation or dial WSS. Missing original identity or a request failure never
+selects public retry. The same manager must pass
+read-only registration, fresh scoped pins and candidate activation before pending
+clears. Normal valid-device network errors remain refusals.
 
 Exactly three things cross the boundary:
 
@@ -207,10 +249,10 @@ start that computer. `integration/failure_codes_test.go` drives the real daemon
 through authorization, runtime availability and peer presence and asserts three
 different codes arrive, none of them the generic fallback.
 
-## 6. Method table version 1
+## 6. Method table version 2
 
 The table is published in code as `localrpc.Methods`, with
-`localrpc.MethodTableVersion` equal to `1`, and is checked against the shipped
+`localrpc.MethodTableVersion` equal to `2`, and is checked against the shipped
 dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 
 - **shell** - the shell sends the request and the core answers.
@@ -221,26 +263,53 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
 | core      | `core.version`, `core.catalog_commit`, `core.catalog_enable`, `core.catalog_inspect`, `core.catalog_remove_service`, `core.install_catalog_commit`, `core.install_catalog_inspect`, `core.roots_commit`, `core.roots_inspect`, `core.runtime_binding`, `core.secret_delete`, `core.secret_get`, `core.secret_set` | shell  |
 | managed   | `managed.checkout_prepare`, `managed.checkout_verify`, `managed.git_register`, `managed.repository_inspect`                                                                                                                                                                                                       | shell  |
-| device    | `device.createCSR`, `device.createKey`, `device.certificate`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                                                              | shell  |
+| device    | `device.createCSR`, `device.createKey`, `device.certificate`, `device.certificate_recovery_scope`, `device.enroll`, `device.enrollmentToken`, `device.enrollmentResult`, `device.restore`                                                                                                                         | shell  |
 | directory | `directory.inspect`, `directory.refresh`                                                                                                                                                                                                                                                                          | shell  |
 | devices   | `devices.bind`, `devices.list`, `devices.unbind`                                                                                                                                                                                                                                                                  | shell  |
 | network   | `network.join`, `network.leave`, `network.invalidate`                                                                                                                                                                                                                                                             | shell  |
 | networks  | `networks.create`, `networks.delete`, `networks.deletePair`, `networks.devices`, `networks.limit`, `networks.list`, `networks.pairs`, `networks.rename`                                                                                                                                                           | shell  |
-| pairs     | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.pin`, `pairs.share`                                                                                                                                                                                                         | shell  |
-| peer      | `peer.connect`, `peer.disconnect`                                                                                                                                                                                                                                                                                 | shell  |
+| pairs     | `pairs.action`, `pairs.adopt`, `pairs.identity`, `pairs.invite`, `pairs.list`, `pairs.share`                                                                                                                                                                                                                      | shell  |
+| peer      | `peer.connect`, `peer.entry`, `peer.disconnect`                                                                                                                                                                                                                                                                   | shell  |
 | remote    | `remote.connect`, `remote.directory`, `remote.disconnect`, `remote.roots`, `remote.status`                                                                                                                                                                                                                        | shell  |
 | runtime   | `runtime.console`, `runtime.invalidate`, `runtime.port_get`, `runtime.port_set`, `runtime.start`, `runtime.status`, `runtime.stop`                                                                                                                                                                                | shell  |
 | service   | `service.configure`                                                                                                                                                                                                                                                                                               | shell  |
 | user      | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                                                                                                                      | shell  |
-| callback  | `runtime.connect`, `peer.state`, `directory.changed`, `catalog.changed`                                                                                                                                                                                                                                           | parent |
+| callback  | `runtime.connect`, `runtime.resume`, `peer.state`, `directory.changed`, `catalog.changed`                                                                                                                                                                                                                         | parent |
 
 `peer.connect` carries `{ "pairId": "...", "generation": N, "requestWorkbench": B }`.
 The desktop shell sets `requestWorkbench` to `true` only for an explicit remote
-workbench action. The core's automatic catalog reconciliation sets it to `false`,
-which keeps the authenticated peer transport alive without asking the local DSH
-runtime owner to start a child. A transport-only connection is reported as
-`connected` with runtime generation `0`; `ready` is reserved for a usable
-workbench.
+workbench action. The manager retains an admitted workbench intent for that
+service/pair during its lifetime. Automatic catalog reconciliation never grants
+cold-start authority: a pair without workbench intent remains transport-only;
+a previously opened workbench requests bind-only resume. Explicit disconnect,
+revocation, service removal and core close clear the intent.
+
+A transport-only connection is reported as `connected` with runtime generation
+`0`; a refused workbench may remain `connected` with its exact typed `error`.
+`ready` requires a usable workbench and an empty error. Temporary workbench
+refusals retain the original gateway and follow the existing retry backoff;
+terminal authorization refusals do not retry.
+
+`peer.entry` is a read-only shell-role operation. Its exact request is
+`{serviceId,data:{pairId,generation}}`; its exact response is
+`{serviceId,state,url}`. It returns only the currently authorized, outbound,
+ready attempt and its attached local loopback gateway. A missing, non-ready,
+superseded or revoked owner refuses explicitly. It does not connect, start DSH,
+relabel a cached URL or expose a new renderer capability. The shell rechecks
+scope and lifecycle after the read; the URL carries a credential and is never
+logged.
+
+`runtime.resume` is a parent-role callback with the same exact request
+`{serviceId,pairId}` and binding response `{generation,url}` as `runtime.connect`.
+It reads only the actual running DSH binding, with pair authorization checked
+before and after the read. A stopped, failed or starting runtime refuses with
+`p2p.runtime_unavailable`; resume never calls runtime start. Manual explicit
+opening keeps the existing `runtime.connect` launch admission.
+
+Peer-wire resume advertises `workbench.resume.supported` and requests
+`workbench.resume` without `workbench.request`. A target without resume support
+is refused with `p2p.protocol_mismatch`, never retried as a cold-start request.
+The shell and core additions remain additive within method-table version 1.
 
 The `core.*` group is the local state the core owns outright: its version, the
 device credential store, the device catalog, the managed-root registry (4.1) and
@@ -289,7 +358,11 @@ The catalog of paired computers is maintained the same way, and by the same owne
 Each account reads the coordinator's pairs and every pair's identity on the same
 30-second interval, pins each active pair into its peer session, and records the
 result as the catalog's computers — the rules the shell used to apply when it did
-this work through `pairs.list`, `pairs.identity` and `pairs.pin`. A row the
+this work through shell-owned pairing reads. Method table 2 removes `pairs.pin`:
+caller-provided or cached identities cannot grant live peer authority. The core
+registers read-only first, reads the selected account's exact network/pair identity
+through control-v2, then activates candidate capability only after fresh catalog
+and pin admission succeed. A row the
 coordinator no longer carries is recorded as revoked rather than dropped, because
 dropping an active computer is what the catalog's transition guard refuses, and a
 connection authorized a second time is retired in a commit of its own before it is
@@ -298,8 +371,8 @@ Whenever the record changes the core sends the parent-role `catalog.changed`
 callback with `{ "serviceId", "revision" }`, where the revision is the catalog's
 own — unchanged when the record did not, so a pass that found the same pairs
 announces nothing. This is what removes the last "a page has to open before a newly
-paired computer exists" path: `pairs.list`, `pairs.pin` and `pairs.identity` remain
-published for the shell's own pairing flows, but nothing has to call them to keep
+paired computer exists" path: `pairs.list` and the isolated legacy read
+`pairs.identity` remain published for the shell's own pairing flows, but nothing has to call them to keep
 the computer list current.
 
 `core.install_catalog_inspect` and `core.install_catalog_commit` own the other
@@ -348,7 +421,8 @@ running child and the generation that identifies it — and refuses with
 `p2p.runtime_unavailable` when no child is running, which is the same code the desktop
 runtime owner reports for a stopped or failed child. The generation advances when the
 child is replaced or announces a different address and is stable while it is the same
-launch, so a peer that reconnects to an unchanged child is not told its proxy target
+launch, including a network-core crash and reattachment to the same independent
+runtime authority, so a peer that reconnects to an unchanged child is not told its proxy target
 moved. The address carries a session credential: it is a main-side value, and this
 method is only reachable on the private channel the shell's bootstrap created.
 
@@ -360,7 +434,8 @@ Two findings from writing this table down, both deliberate:
    dispatch admits **three** (`runtime.connect`, `peer.state` and
    `directory.changed`, the exact `PeerMainMethod` union in
    `electron/main/p2p/rpc.ts`); a fourth, `catalog.changed`, joined them when the
-   core took over the paired-computer catalog. `runtime.invalidate`,
+   core took over the paired-computer catalog. Bind-only `runtime.resume` was
+   added by `repair-open-workbench-reconnection`. `runtime.invalidate`,
    `remote.roots` and `remote.directory` travel the other way, from the shell
    into the core. Design decision D7 still holds, because D7 is about which
    process answers them, not about who initiates.
@@ -397,6 +472,36 @@ secret is the same secret; the difference is only who wrote it. The composition 
 the one the shell's child has, with one policy of its own: it accepts and drops
 `peer.state` because a host with no renderer has nothing to inform, and it answers
 the parent-role `runtime.connect` from the child it supervises (see section 6).
+
+### 8.1 Independent runtime lifetime
+
+Both core compositions reach DSH through one independent `runtime-owner` process
+in the same executable. The private `--runtime-owner` entry dispatches before any
+account store, Keychain provider or peer host is constructed. It is not a public
+CLI command or a renderer capability. The real Supervisor, child handles,
+stdout/stderr readers, console cursor and runtime binding generation live there.
+
+Core-to-owner RPC EOF or a core crash does not stop DSH. Reattachment authenticates
+the same owner and verifies the versioned instance, executable digest, OS process
+identity, canonical registered roots and hashed home context. Records and the OS
+lease are private under `<state>/runtime-owner`; transport is a same-user Windows
+pipe or an exactly recorded private short Unix socket directory. No loopback Web
+endpoint, cached runtime URL, PID scan or alternate Supervisor is used.
+
+The owner admits only `owner.hello`, `owner.start`, `owner.stop`, `owner.status`,
+`owner.console`, `owner.binding` and `owner.shutdown`, with exact payload schemas.
+Its local authorization secret is never sent to the renderer or logged. An
+existing corrupt, incompatible, cross-root or unreachable owner refuses explicitly;
+only a fresh root without an owner record can create its first empty authority.
+Creating the authority does not start DSH. Resume only reads a live binding.
+
+Explicit Stop invalidates the binding and joins the owned child. A ready core's
+normal shutdown explicitly stops and joins the owner; an unsuccessful boot only
+closes its connection and cannot stop an already recovered runtime (a fresh empty
+authority created by that unsuccessful boot is joined). Parent-driven
+shell EOF still causes that core's normal shutdown under section 8. An owner
+crash itself is not recoverable by adopting a surviving PID. Old orphan launches
+whose supervisor and output pipes were already lost are not claimed by this model.
 
 ## 9. Core arguments
 

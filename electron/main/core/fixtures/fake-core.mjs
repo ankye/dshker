@@ -117,7 +117,7 @@ function serve(socket, secret, server) {
             method: '',
             payload: {
               version: 1,
-              methodTableVersion: 1,
+              methodTableVersion: 2,
               methods: ['core.version']
             },
             error: ''

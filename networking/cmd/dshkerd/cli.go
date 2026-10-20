@@ -191,19 +191,19 @@ type headlessMain struct {
 	binding *core.RuntimeBinding
 }
 
-func (main headlessMain) Call(_ context.Context, method string, _ any) (json.RawMessage, error) {
+func (main headlessMain) Call(ctx context.Context, method string, _ any) (json.RawMessage, error) {
 	switch method {
 	case "peer.state":
 		// A headless host has no renderer to inform. The state is still real, and
 		// it is what the next `status` call reads.
 		return json.RawMessage("{}"), nil
-	case "runtime.connect":
+	case "runtime.connect", "runtime.resume":
 		// The remote asked this host to own its runtime. The answer is the same
 		// binding the desktop shell's runtime owner gives: the loopback address of
 		// the running child and the generation that identifies it. With no child
 		// there is nothing to bind, which is a named refusal and not an invented
 		// address.
-		binding, err := main.binding.Binding()
+		binding, err := main.binding.BindingContext(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -219,7 +219,7 @@ func (main headlessMain) Call(_ context.Context, method string, _ any) (json.Raw
 // runServe runs the core with no parent: it publishes its own endpoint and
 // answers every client that authenticates against it until the process is asked
 // to stop.
-func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
+func runServe(args []string, stdout io.Writer, stderr io.Writer) (exitCode int) {
 	flags := flag.NewFlagSet("serve", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	state := flags.String("state", "", "per-user state directory")
@@ -300,12 +300,22 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 		}
 		server.Catalog = store
 	}
-	supervisor := harnessruntime.NewSupervisor()
-	defer supervisor.Shutdown()
-	server.Runtime = supervisor
-	// The binding a peer is handed is answered from that supervisor, so a
-	// headless host serves its workbench with no shell and no display.
-	binding := &core.RuntimeBinding{Runtime: supervisor, Subject: HeadlessSubject}
+	runtimeOwner, err := openRuntimeOwner(ctx, options{
+		stateRoot: directory, dataRoot: effectiveData,
+		catalogRoot: effectiveCatalog, rootsPath: effectiveRoots,
+	})
+	if err != nil {
+		return fail(stderr, err)
+	}
+	runtimeReady := false
+	defer func() {
+		if err := finishRuntimeOwner(runtimeOwner, runtimeReady); err != nil {
+			exitCode = fail(stderr, err)
+		}
+	}()
+	server.Runtime = runtimeOwner
+	// Reattachment reads the surviving authority, not a new empty supervisor.
+	binding := &core.RuntimeBinding{Runtime: runtimeOwner, Subject: HeadlessSubject}
 	server.RuntimeBinding = binding
 	// The desktop shell reads and writes start-at-boot over this channel, so the
 	// toggle in its settings panel and the `autostart` subcommand are two clients
@@ -414,6 +424,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) int {
 	if _, err := fmt.Fprintf(stdout, "%s\n", readiness); err != nil {
 		return fail(stderr, err)
 	}
+	runtimeReady = true
 	go func() { <-ctx.Done(); listener.Close() }()
 	if err := localrpc.ServeEndpointWithPeers(ctx, listener, secretValue, func(peer *localrpc.Peer) localrpc.Handler {
 		handle := attachment.handlerFor(peer, &server)

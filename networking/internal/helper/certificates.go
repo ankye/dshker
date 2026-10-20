@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"log"
@@ -69,30 +70,141 @@ func sameDevice(left, right controlplane.Device) bool {
 	return left.DeviceID == right.DeviceID && bytes.Equal(left.PublicKey, right.PublicKey)
 }
 
-// device.restore historically carries the signed-in account as Device.UserID.
-// A certificate owns a device/key, while heartbeat presence owns a user session.
-// Resolve the original owner without changing that presence contract.
-func (host *Host) restoreDeviceOwner(ctx context.Context, account *account, supplied controlplane.Device, private ed25519.PrivateKey) (controlplane.Device, error) {
+type restoreCertificateKey struct{}
+type restoreCallerKey struct{}
+
+type restoreCallerScope struct {
+	generation   uint64
+	session      persistedAccountSession
+	hasSession   bool
+	sessionOwner *bootstrapSessionOwner
+	err          error
+}
+
+// This is one restore's local publication fence, not a retained certificate or
+// authorization result. Only this operation's confirmed writes advance its hash.
+type restoreCertificateAdmission struct {
+	host             *Host
+	account          *account
+	base             *controlplane.Client
+	serviceID        string
+	endpoints        controlplane.Endpoints
+	serviceKey       [32]byte
+	generation       uint64
+	credential       [32]byte
+	hasCredential    bool
+	session          [32]byte
+	sessionExpiresAt int64
+	hasSession       bool
+	sessionOwner     *bootstrapSessionOwner
+	previousGuard    func() error
+}
+
+func credentialFingerprint(record storedCredential) [32]byte {
+	body, _ := json.Marshal(record) // This fixed DTO has no fallible marshaler.
+	defer clear(body)
+	return sha256.Sum256(body)
+}
+
+func (admission *restoreCertificateAdmission) check(ctx context.Context) error {
+	if ctx.Err() != nil || admission.host.ctx.Err() != nil {
+		return errors.New("p2p.request_cancelled")
+	}
+	if admission.previousGuard != nil {
+		if err := admission.previousGuard(); err != nil {
+			return err
+		}
+	}
+	host, account := admission.host, admission.account
+	host.mu.Lock()
+	current := !host.closed && host.accounts[admission.serviceID] == account
+	host.mu.Unlock()
+	if !current || account.closed {
+		return errors.New("p2p.service_unconfigured")
+	}
+	if account.base != admission.base || account.identity.ServiceID != admission.serviceID || account.endpoints != admission.endpoints || sha256.Sum256(account.identity.PublicKey) != admission.serviceKey {
+		return errors.New("p2p.identity_mismatch")
+	}
+	host.bootstrapMu.Lock()
+	current = host.bootstrapGeneration[admission.serviceID] == admission.generation &&
+		(admission.sessionOwner == nil || !admission.sessionOwner.revoked && host.bootstrapSessionOwners[admission.serviceID] == admission.sessionOwner)
+	host.bootstrapMu.Unlock()
+	if !current {
+		return errors.New("p2p.user_scope_mismatch")
+	}
+	record, err := host.LoadCredential(admission.serviceID)
+	if err != nil && !errors.Is(err, secret.ErrMissing) {
+		return errors.New("p2p.certificate_sync_failed")
+	}
+	defer clear(record.PrivateKey)
+	if (err == nil) != admission.hasCredential || err == nil && credentialFingerprint(record) != admission.credential {
+		return errors.New("p2p.identity_mismatch")
+	}
+	session, exists, err := host.readAccountSession(admission.serviceID)
+	if err != nil {
+		return err
+	}
+	if exists != admission.hasSession || exists && (sha256.Sum256([]byte(session.Token)) != admission.session || session.ExpiresAt != admission.sessionExpiresAt) {
+		return errors.New("p2p.user_scope_mismatch")
+	}
+	if exists && session.ExpiresAt <= time.Now().Unix() {
+		return errors.New("p2p.user_session_expired")
+	}
+	return nil
+}
+
+// Owner resolution and preparation share the one fresh canonical query inside
+// prepareCertificate. Both shell restore and headless restore use this boundary;
+// standalone certificate operations still perform their own independent query.
+func (host *Host) prepareRestoreCertificate(ctx context.Context, account *account, supplied controlplane.Device, private ed25519.PrivateKey) (context.Context, controlplane.Device, error) {
 	canonical, err := host.LoadCredential(account.identity.ServiceID)
 	if err != nil && !errors.Is(err, secret.ErrMissing) {
-		return controlplane.Device{}, errors.New("p2p.certificate_sync_failed")
+		return ctx, controlplane.Device{}, errors.New("p2p.certificate_sync_failed")
 	}
+	defer clear(canonical.PrivateKey)
 	if err == nil && (canonical.DeviceID != supplied.DeviceID || !bytes.Equal(canonical.PublicKey, supplied.PublicKey)) {
-		return controlplane.Device{}, errors.New("p2p.identity_mismatch")
+		return ctx, controlplane.Device{}, errors.New("p2p.identity_mismatch")
 	}
 	if _, validation := account.base.ValidateDevice(supplied, private, account.identity, true); validation != nil {
-		return controlplane.Device{}, validation
+		return ctx, controlplane.Device{}, validation
 	}
-	current, err := account.base.ReadCertificate(ctx, supplied.DeviceID, private, account.identity)
+	admission := &restoreCertificateAdmission{host: host, account: account, base: account.base, serviceID: account.identity.ServiceID, endpoints: account.endpoints, serviceKey: sha256.Sum256(account.identity.PublicKey), hasCredential: err == nil, credential: credentialFingerprint(canonical)}
+	host.bootstrapMu.Lock()
+	admission.generation = host.bootstrapGeneration[admission.serviceID]
+	host.bootstrapMu.Unlock()
+	session, exists, err := host.readAccountSession(admission.serviceID)
 	if err != nil {
-		return controlplane.Device{}, certificateFailure(ctx, err)
+		return ctx, controlplane.Device{}, err
 	}
-	supplied.UserID = current.UserID
-	return supplied, nil
+	admission.hasSession, admission.sessionExpiresAt = exists, session.ExpiresAt
+	admission.session = sha256.Sum256([]byte(session.Token))
+	host.bootstrapMu.Lock()
+	if owner := host.bootstrapSessionOwners[admission.serviceID]; exists && owner != nil && owner.matches(session) {
+		admission.sessionOwner = owner
+	}
+	host.bootstrapMu.Unlock()
+	if caller, ok := ctx.Value(restoreCallerKey{}).(restoreCallerScope); ok {
+		if caller.err != nil {
+			return ctx, controlplane.Device{}, caller.err
+		}
+		admission.generation = caller.generation
+		admission.sessionOwner = caller.sessionOwner
+		admission.hasSession, admission.sessionExpiresAt = caller.hasSession, caller.session.ExpiresAt
+		admission.session = sha256.Sum256([]byte(caller.session.Token))
+	}
+	admission.previousGuard, _ = ctx.Value(bootstrapGuardKey{}).(func() error)
+	ctx = context.WithValue(ctx, restoreCertificateKey{}, admission)
+	guarded := ctx
+	ctx = context.WithValue(ctx, bootstrapGuardKey{}, func() error { return admission.check(guarded) })
+	device, err := host.prepareCertificate(ctx, account, supplied, private, "", "")
+	return ctx, device, err
 }
 
 // All callers hold account.mu, including the timer and both restore paths.
 func (host *Host) prepareCertificate(ctx context.Context, account *account, supplied controlplane.Device, private ed25519.PrivateKey, networkID, token string) (controlplane.Device, error) {
+	if account.closed {
+		return controlplane.Device{}, errors.New("p2p.service_unconfigured")
+	}
 	operation, cancel := context.WithCancel(ctx)
 	stop := context.AfterFunc(host.ctx, cancel)
 	defer stop()
@@ -145,6 +257,9 @@ func (host *Host) prepareCertificate(ctx context.Context, account *account, supp
 	current, err := account.base.ReadCertificate(ctx, device.DeviceID, private, account.identity)
 	if err != nil {
 		return controlplane.Device{}, certificateFailure(ctx, err)
+	}
+	if err := certificateContext(ctx); err != nil {
+		return controlplane.Device{}, err
 	}
 	currentLeaf, err := account.base.ValidateDevice(current, private, account.identity, true)
 	if err != nil {
@@ -241,12 +356,36 @@ func (host *Host) issueCertificate(ctx context.Context, account *account, device
 }
 
 func (host *Host) persistCertificate(ctx context.Context, account *account, device controlplane.Device, private ed25519.PrivateKey, metadata certificateMetadata) error {
+	if _, guarded := ctx.Value(restoreCertificateKey{}).(*restoreCertificateAdmission); guarded {
+		// Expected-record comparison, write/readback and expected-record advance
+		// share the same lock as independent SaveCredential writers. No foreign
+		// writer can slip between the comparison and this operation's write.
+		host.credentialMu.Lock()
+		defer host.credentialMu.Unlock()
+		return host.persistRestoreCertificateLocked(ctx, account, device, private, metadata)
+	}
 	if err := certificateContext(ctx); err != nil {
 		return err
 	}
 	if err := host.SaveCredential(account.identity.ServiceID, device, private); err != nil {
 		return errors.New("p2p.certificate_persist_failed")
 	}
+	if err := certificateContext(ctx); err != nil {
+		return err
+	}
+	return host.saveCertificateMetadata(account.identity.ServiceID, metadata)
+}
+
+func (host *Host) persistRestoreCertificateLocked(ctx context.Context, account *account, device controlplane.Device, private ed25519.PrivateKey, metadata certificateMetadata) error {
+	if err := certificateContext(ctx); err != nil {
+		return err
+	}
+	if err := host.saveCredentialLocked(account.identity.ServiceID, device, private); err != nil {
+		return errors.New("p2p.certificate_persist_failed")
+	}
+	admission := ctx.Value(restoreCertificateKey{}).(*restoreCertificateAdmission)
+	admission.credential = credentialFingerprint(storedCredential{Version: 1, ServiceID: admission.serviceID, Endpoints: admission.endpoints, ServiceKey: account.identity.PublicKey, DeviceID: device.DeviceID, UserID: device.UserID, Name: device.Name, PublicKey: device.PublicKey, Certificate: device.Certificate, PrivateKey: private})
+	admission.hasCredential = true
 	if err := certificateContext(ctx); err != nil {
 		return err
 	}
@@ -267,6 +406,9 @@ func certificateContext(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return errors.New("p2p.request_cancelled")
 	}
+	if admission, ok := ctx.Value(restoreCertificateKey{}).(*restoreCertificateAdmission); ok {
+		return admission.check(ctx)
+	}
 	return nil
 }
 
@@ -280,10 +422,18 @@ func certificateFailure(ctx context.Context, err error) error {
 	case "p2p.network_forbidden", "p2p.network_not_found", "p2p.network_unauthorized", "p2p.binding_unauthorized", "p2p.device_unauthorized", "p2p.device_not_bound", "p2p.invalid_enrollment_token":
 		return errors.New("p2p.certificate_recovery_forbidden")
 	case "p2p.server_unavailable", "p2p.protocol_limit":
-		return errors.New("p2p.certificate_sync_failed")
+		return &certificateCarrierFailure{cause: err}
 	}
 	return err
 }
+
+// Preserve the established public refusal while retaining its real carrier
+// cause for the explicit bootstrap transient whitelist. Corrupt local records
+// that independently return certificate_sync_failed have no transient cause.
+type certificateCarrierFailure struct{ cause error }
+
+func (failure *certificateCarrierFailure) Error() string { return "p2p.certificate_sync_failed" }
+func (failure *certificateCarrierFailure) Unwrap() error { return failure.cause }
 
 func (account *account) maintainCertificates(ctx context.Context) {
 	ticker := time.NewTicker(CertificateMaintenanceInterval)
@@ -305,6 +455,9 @@ func (account *account) maintainCertificate(parent context.Context) error {
 	defer cancel()
 	account.mu.Lock()
 	defer account.mu.Unlock()
+	if account.closed {
+		return errors.New("p2p.service_unconfigured")
+	}
 	if err := certificateContext(ctx); err != nil {
 		return err
 	}

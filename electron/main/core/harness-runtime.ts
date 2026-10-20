@@ -7,6 +7,7 @@
 import type { LauncherHarnessPortSetting } from '../../../src/shared/contracts'
 import type { PeerRpc } from '../p2p/rpc'
 import { PeerHelperError } from '../p2p/wire'
+import { runtimeOwnerError } from '../managed/runtime-errors'
 
 /** Launch states the core reports, which are the shell's own four. */
 export type CoreHarnessState = 'starting' | 'running' | 'stopped' | 'failed'
@@ -150,22 +151,32 @@ export class CoreHarnessRuntime implements CoreHarnessRuntimePort {
     this.#rpc = rpc
   }
 
+  async #call(method: string, payload: unknown, signal?: AbortSignal): Promise<unknown> {
+    try {
+      return await this.#rpc.call(method, payload, budget(signal))
+    } catch (error) {
+      const owner = runtimeOwnerError(error)
+      if (owner !== undefined) throw owner
+      throw error
+    }
+  }
+
   async start(
     request: CoreHarnessLaunchRequest,
     signal?: AbortSignal
   ): Promise<CoreHarnessLaunchView> {
-    return launchViewOf(await this.#rpc.call('runtime.start', { ...request }, budget(signal)))
+    return launchViewOf(await this.#call('runtime.start', { ...request }, signal))
   }
 
   async stop(subjectId: string, signal?: AbortSignal): Promise<CoreHarnessLaunchView> {
-    return launchViewOf(await this.#rpc.call('runtime.stop', { subjectId }, budget(signal)))
+    return launchViewOf(await this.#call('runtime.stop', { subjectId }, signal))
   }
 
   async status(
     subjectId: string,
     signal?: AbortSignal
   ): Promise<CoreHarnessLaunchView | undefined> {
-    const answer = await this.#rpc.call('runtime.status', { subjectId }, budget(signal))
+    const answer = await this.#call('runtime.status', { subjectId }, signal)
     if (!isRecord(answer) || answer.present !== true || !('launch' in answer)) return undefined
     return launchViewOf(answer)
   }
@@ -174,7 +185,7 @@ export class CoreHarnessRuntime implements CoreHarnessRuntimePort {
     cursor: number,
     signal?: AbortSignal
   ): Promise<Readonly<{ entries: readonly CoreHarnessConsoleEntry[]; cursor: number }>> {
-    const answer = await this.#rpc.call('runtime.console', { cursor }, budget(signal))
+    const answer = await this.#call('runtime.console', { cursor }, signal)
     if (!isRecord(answer) || !Array.isArray(answer.entries) || typeof answer.cursor !== 'number') {
       throw new PeerHelperError('p2p.invalid_payload')
     }
@@ -191,7 +202,7 @@ export class CoreHarnessRuntime implements CoreHarnessRuntimePort {
   }
 
   async portGet(filePath: string, signal?: AbortSignal): Promise<LauncherHarnessPortSetting> {
-    const answer = await this.#rpc.call('runtime.port_get', { filePath }, budget(signal))
+    const answer = await this.#call('runtime.port_get', { filePath }, signal)
     return portOf(isRecord(answer) ? answer.port : undefined)
   }
 
@@ -200,7 +211,7 @@ export class CoreHarnessRuntime implements CoreHarnessRuntimePort {
     port: LauncherHarnessPortSetting,
     signal?: AbortSignal
   ): Promise<LauncherHarnessPortSetting> {
-    const answer = await this.#rpc.call('runtime.port_set', { filePath, port }, budget(signal))
+    const answer = await this.#call('runtime.port_set', { filePath, port }, signal)
     return portOf(isRecord(answer) ? answer.port : undefined)
   }
 }

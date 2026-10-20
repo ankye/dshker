@@ -235,6 +235,15 @@ Signal subscriptions verify both HTTPS presence and WebSocket Ping/Pong, initial
 
 ### Registering this device
 
+Restored devices carry their own mTLS identity for ordinary account and directory
+requests, while the real Bearer session still determines account permissions.
+Computers sharing an IP do not share this authenticated device budget; the server
+retains its existing source/global limits. Named public authentication and
+certificate recovery remain separate so an expired device can recover its
+original identity, including a legacy manually selected network. A failed request
+never switches authentication paths. Admission refusal logs distinguish source,
+global and source-capacity pressure without logging credentials or request data.
+
 Device certificates renew automatically in their final seven days. An expired
 certificate does not mean the device or its pairings must be replaced:
 
@@ -267,6 +276,21 @@ explicit protocol failure, not permission to bypass certificate checks.
 | `p2p.invalid_device_key` / `p2p.invalid_csr` / `p2p.invalid_device_certificate` | Device key or certificate material is invalid. This is abnormal; send the full error.                                     |
 
 ### Pairing
+
+When a computer belongs to several networks, **+ → LAN computers** keeps its
+existing network while that selection is freshly authorized. A first ambiguous
+connection asks you to choose inside the same floating menu. No network is
+preselected and only one tab is created for that computer.
+
+- `p2p.network_selection_required`: choose the network for this computer in the
+  add-tab menu. Other unambiguous computers remain available.
+- `p2p.network_selection_stale`: the remembered network is no longer authorized.
+  Refresh the choices and explicitly select a currently authorized replacement;
+  the app does not silently change it or discard the remembered identity.
+- `p2p.network_selection_conflict`: another still-valid choice or operation owns
+  this computer. Read the current choices again before deciding. If a result is
+  unconfirmed, use readback rather than submitting the write again. Returning to
+  the list, closing the menu or switching accounts prevents a late page opening.
 
 | Code                                                      | Meaning and what to do                                                                                                                                                    |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -45,7 +45,7 @@ import { GitRuntimeError } from './managed/git'
 import { type ManagedInstallationService } from './managed/installation-service'
 import { type LauncherHarnessService } from './managed/launcher-harness-service'
 import { type AwesomePluginCatalog } from './managed/awesome-plugin-catalog'
-import { ManagedHarnessRuntimeError } from './managed/runtime-errors'
+import { ManagedHarnessRuntimeError, runtimeOwnerError } from './managed/runtime-errors'
 import { LAUNCHER_HARNESS_ERROR_CODES } from './managed/ipc-error-codes'
 import { type ManagedWorkspaceService } from './managed/service'
 import { SessionUsageReader } from './managed/session-usage-reader'
@@ -523,6 +523,10 @@ async function installationResult<T>(operation: () => Promise<T>): Promise<ApiRe
   try {
     return apiOk(await operation())
   } catch (error) {
+    const owner = runtimeOwnerError(error)
+    if (owner !== undefined) {
+      return apiFail(LAUNCHER_HARNESS_ERROR_CODES[owner.code], owner.message)
+    }
     if (error instanceof ManagedRootError) return apiFail(error.code, error.message)
     if (error instanceof GitRuntimeError) {
       return apiFail('managed.git_operation_failed', 'Managed Git operation failed.')
@@ -561,6 +565,10 @@ async function launcherHarnessResult<T>(operation: () => Promise<T>): Promise<Ap
   try {
     return apiOk(await operation())
   } catch (error) {
+    const owner = runtimeOwnerError(error)
+    if (owner !== undefined) {
+      return apiFail(LAUNCHER_HARNESS_ERROR_CODES[owner.code], owner.message)
+    }
     if (error instanceof ManagedHarnessRuntimeError) {
       return apiFail(
         LAUNCHER_HARNESS_ERROR_CODES[error.code] ?? 'managed.harness_launch_failed',

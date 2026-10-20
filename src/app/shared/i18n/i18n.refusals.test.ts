@@ -10,6 +10,41 @@ import { enUSRefusals, refusalKeyForCode, zhCNRefusals } from './i18n.refusals'
  * did not start, and an authorization that is gone.
  */
 describe('connection refusal copy', () => {
+  it('explains an unbound selected account without replacing it with the enrollment owner', () => {
+    const key = refusalKeyForCode('p2p.binding_unauthorized')
+    expect(key).toBe('p2p.refusal.accountNotBound')
+    expect(zhCNRefusals[key]).toContain('不会改用其他账号')
+    expect(enUSRefusals[key]).toContain('another account will not be substituted')
+  })
+
+  it('explains every new candidate refusal without calling it an unreachable server', () => {
+    const groups = {
+      recoveryUnsupported: ['candidate_unsupported'],
+      recoveryChanged: ['registration_stale', 'active_changed', 'core_replaced', 'account_changed'],
+      recoveryPending: ['candidate_not_ready'],
+      recoveryRefused: [
+        'candidate_scope_mismatch',
+        'candidate_conflict',
+        'candidate_state_conflict',
+        'source_required'
+      ],
+      recoveryEnded: [
+        'candidate_expired',
+        'candidate_cancelled',
+        'attempt_not_active',
+        'connection_ended'
+      ],
+      coordinatorRestarted: ['coordinator_restarted']
+    } as const
+    for (const [category, codes] of Object.entries(groups))
+      for (const code of codes) {
+        const key = refusalKeyForCode(`p2p.${code}`)
+        expect(key).toBe(`p2p.refusal.${category}`)
+        expect(zhCNRefusals[key]).not.toContain('连不上协调服务器')
+        expect(enUSRefusals[key]).not.toContain('could not be reached')
+      }
+  })
+
   it('names the side that failed for every code a user meets', () => {
     expect(refusalKeyForCode('p2p.peer_offline')).toBe('p2p.refusal.peerOffline')
     expect(refusalKeyForCode('p2p.direct_unavailable')).toBe('p2p.refusal.noDirectPath')
@@ -63,6 +98,24 @@ describe('connection refusal copy', () => {
     expect(refusalKeyForCode('runtime.port_in_use')).toBe('p2p.refusal.runtimeUnavailable')
     expect(refusalKeyForCode('managed.harness_port_in_use')).toBe('p2p.refusal.runtimeUnavailable')
     expect(refusalKeyForCode('runtime.child_crashed')).toBe('p2p.refusal.runtimeUnavailable')
+  })
+
+  it('does not describe lost runtime authority as a stopped workbench', () => {
+    const unavailable = refusalKeyForCode('runtime.owner_unavailable')
+    expect(unavailable).toBe('p2p.refusal.runtimeOwnerUnavailable')
+    expect(zhCNRefusals[unavailable]).toContain('未尝试重新启动')
+    expect(enUSRefusals[unavailable]).toContain('not restarted')
+    for (const code of [
+      'runtime.owner_identity_mismatch',
+      'runtime.owner_record_invalid',
+      'runtime.owner_protocol_unsupported',
+      'runtime.owner_configuration_invalid'
+    ]) {
+      expect(refusalKeyForCode(code)).toBe('p2p.refusal.runtimeOwnerInvalid')
+    }
+    expect(refusalKeyForCode('runtime.owner_shutdown_failed')).toBe(
+      'p2p.refusal.runtimeOwnerShutdown'
+    )
   })
 
   it('falls back to a true generic line for a code nobody wrote copy for', () => {

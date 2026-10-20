@@ -82,14 +82,17 @@ func certificateCore(t *testing.T, f *realCoordinator, store *certificateSecrets
 	roots.AddCert(root)
 	host.SetRoots(roots)
 	host.SetDeviceKeys(store)
+	catalogStore := integrationOpenCatalog(t, f)
+	host.SetCatalog(catalogStore)
 	callbacks := &certificateCallbacks{}
 	host.BindMain(callbacks)
 	t.Cleanup(host.Close)
-	server := core.Serve{Store: store, Peer: host}
+	server := core.Serve{Store: store, Peer: host, Catalog: catalogStore}
 	data, err := json.Marshal(map[string]any{"endpoints": f.endpoints, "pinnedKey": f.authority.PublicKey, "telemetry": controlplane.Telemetry{}})
 	must(t, err)
 	_, err = server.Handle(f.ctx, "service.configure", data)
 	must(t, err)
+	integrationSelectDirectAccount(t, f.ctx, server, f.authority.ServiceID, f.userSession)
 	return host, server, callbacks
 }
 
@@ -201,19 +204,20 @@ func TestCertificateRealCoordinatorLifecycle(t *testing.T) {
 		runtimeURL, stopRuntime := startStubDSH(t)
 		defer stopRuntime()
 		var ownerCalls atomic.Int32
-		remote, err := peersession.New(ctx, f.devices[1], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private}, []controlplane.PairIdentity{config.Pin}, func(context.Context, string) (runtimebridge.Binding, error) {
+		remote, err := peersession.New(ctx, f.devices[1], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private, CoreInstanceID: integrationCoreInstanceID(t)}, []controlplane.PairIdentity{}, func(context.Context, string) (runtimebridge.Binding, error) {
 			ownerCalls.Add(1)
 			return runtimebridge.Binding{Generation: 1, URL: runtimeURL}, nil
 		}, func(peersession.State) {})
 		must(t, err)
+		integrationActivateManager(t, ctx, remote, f, 1)
 		defer remote.Close()
 		store := &certificateSecrets{values: map[string][]byte{}}
 		host, server, callbacks := certificateCore(t, f, store)
-		payload, err := json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"device": f.config[0].Device, "privateKey": f.config[0].Private, "pins": []controlplane.PairIdentity{f.config[0].Pin}}})
+		payload, err := json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"device": f.config[0].Device, "accountUserId": f.userSession.User.UserID, "privateKey": f.config[0].Private, "pins": []controlplane.PairIdentity{}}})
 		must(t, err)
 		_, err = server.Handle(ctx, "device.restore", payload)
 		must(t, err)
-		payload, err = json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"pairId": f.config[0].Pin.Pair.PairID, "generation": 1, "requestWorkbench": true}})
+		payload, err = json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"pairId": f.config[1].Device.DeviceID, "generation": 1, "requestWorkbench": true}})
 		must(t, err)
 		connected, err := server.Handle(ctx, "peer.connect", payload)
 		must(t, err)
@@ -289,9 +293,8 @@ func TestCertificateRealCoordinatorLifecycle(t *testing.T) {
 		if canonical["userId"] != owner.UserID {
 			t.Fatal("legacy presence owner did not converge from authenticated query")
 		}
-		reported := owner
-		reported.UserID = session.User.UserID
-		payload, err := json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"device": reported, "privateKey": f.config[0].Private, "pins": []controlplane.PairIdentity{f.config[0].Pin}}})
+		integrationSelectDirectAccount(t, f.ctx, server, f.authority.ServiceID, session)
+		payload, err := json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"device": owner, "accountUserId": session.User.UserID, "privateKey": f.config[0].Private, "pins": []controlplane.PairIdentity{}}})
 		must(t, err)
 		_, err = server.Handle(f.ctx, "device.restore", payload)
 		must(t, err)
@@ -371,7 +374,7 @@ func TestCertificateRealCoordinatorLifecycle(t *testing.T) {
 			t.Fatal("stale shell downgraded renewed canonical certificate")
 		}
 		restore := func(device controlplane.Device) error {
-			payload, err := json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"device": device, "privateKey": f.config[0].Private, "pins": []controlplane.PairIdentity{f.config[0].Pin}}})
+			payload, err := json.Marshal(map[string]any{"serviceId": f.authority.ServiceID, "data": map[string]any{"device": device, "accountUserId": f.userSession.User.UserID, "privateKey": f.config[0].Private, "pins": []controlplane.PairIdentity{}}})
 			must(t, err)
 			_, err = server.Handle(f.ctx, "device.restore", payload)
 			return err

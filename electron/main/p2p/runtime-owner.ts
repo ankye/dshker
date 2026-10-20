@@ -65,6 +65,15 @@ export class PeerRuntimeOwner {
     return waiting
   }
 
+  /** Reattach only an actual running child; recovery never authorizes a start. */
+  resume(signal: AbortSignal): Promise<PeerRuntimeBinding> {
+    if (this.#closed) return Promise.reject(new PeerHelperError('p2p.runtime_owner_closed'))
+    if (signal.aborted) return Promise.reject(new PeerHelperError('p2p.request_cancelled'))
+    this.#accept(this.source.getRuntimeState())
+    if (!this.#binding) return Promise.reject(new PeerHelperError('p2p.runtime_unavailable'))
+    return Promise.resolve({ ...this.#binding })
+  }
+
   close(): void {
     if (this.#closed) return
     this.#closed = true
@@ -75,8 +84,9 @@ export class PeerRuntimeOwner {
 
   /** Recheck after asynchronous authorization before a binding leaves main. */
   assertCurrent(binding: PeerRuntimeBinding): void {
+    if (this.#closed) throw new PeerHelperError('p2p.runtime_invalidated')
+    this.#accept(this.source.getRuntimeState())
     if (
-      this.#closed ||
       !this.#binding ||
       this.#binding.generation !== binding.generation ||
       this.#binding.url !== binding.url

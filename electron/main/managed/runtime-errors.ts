@@ -1,5 +1,26 @@
+import { PeerHelperError } from '../p2p/wire'
+
+/** Stable failures from the independent runtime owner, not the DSH checkout. */
+export const RUNTIME_OWNER_ERROR_MESSAGES = {
+  'runtime.owner_unavailable':
+    'The runtime owner is unavailable. DSH may still be running; inspect owner diagnostics before taking action.',
+  'runtime.owner_identity_mismatch':
+    'Runtime owner identity verification failed. The request was refused; verify the registered owner and roots.',
+  'runtime.owner_record_invalid':
+    'The runtime owner record is invalid. The request was refused; preserve the record and inspect diagnostics.',
+  'runtime.owner_protocol_unsupported':
+    'The runtime owner protocol is incompatible. The request was refused; verify matching Launcher and core versions.',
+  'runtime.owner_configuration_invalid':
+    'The runtime owner configuration is invalid. The request was refused; verify explicitly registered roots and environment.',
+  'runtime.owner_shutdown_failed':
+    'Runtime owner shutdown was not confirmed. DSH may still be running; inspect diagnostics before taking action.'
+} as const
+
+export type RuntimeOwnerErrorCode = keyof typeof RUNTIME_OWNER_ERROR_MESSAGES
+
 /** Stable failures from the Launcher-owned Harness child runtime supervisor. */
 export type ManagedHarnessRuntimeErrorCode =
+  | RuntimeOwnerErrorCode
   | 'runtime.input_invalid'
   | 'runtime.node_invalid'
   | 'runtime.worktree_invalid'
@@ -41,4 +62,16 @@ export class ManagedHarnessRuntimeError extends Error {
     this.code = code
     this.details = details
   }
+}
+
+/** Admit only known typed owner errors and discard all private error details. */
+export function runtimeOwnerError(error: unknown): ManagedHarnessRuntimeError | undefined {
+  if (!(error instanceof PeerHelperError) && !(error instanceof ManagedHarnessRuntimeError)) {
+    return undefined
+  }
+  if (!Object.prototype.hasOwnProperty.call(RUNTIME_OWNER_ERROR_MESSAGES, error.code)) {
+    return undefined
+  }
+  const code = error.code as RuntimeOwnerErrorCode
+  return new ManagedHarnessRuntimeError(code, RUNTIME_OWNER_ERROR_MESSAGES[code])
 }

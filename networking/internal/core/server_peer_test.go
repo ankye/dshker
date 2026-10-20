@@ -13,7 +13,12 @@ import (
 // answers with its own vocabulary, including a method the published table does
 // not list yet.
 type fakePeer struct {
-	handled []string
+	handled   []string
+	forgotten []string
+}
+
+func (peer *fakePeer) ForgetService(serviceID string) {
+	peer.forgotten = append(peer.forgotten, serviceID)
 }
 
 func (peer *fakePeer) Handle(_ context.Context, method string, _ json.RawMessage) (any, error) {
@@ -67,7 +72,7 @@ func TestHandleRoutesThePeerHalfOfTheTable(t *testing.T) {
 func TestHandleRefusesInboundCallbacks(t *testing.T) {
 	peer := &fakePeer{}
 	server := Serve{Peer: peer}
-	for _, method := range []string{"runtime.connect", "peer.state"} {
+	for _, method := range []string{"runtime.connect", "runtime.resume", "peer.state"} {
 		if _, err := server.Handle(context.Background(), method, json.RawMessage(`{}`)); err == nil || err.Error() != "p2p.invalid_operation" {
 			t.Errorf("Handle(%q) = %v, want p2p.invalid_operation", method, err)
 		}

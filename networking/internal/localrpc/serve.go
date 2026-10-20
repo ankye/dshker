@@ -171,6 +171,16 @@ func Connect(ctx context.Context, socket string, secret string) (net.Conn, error
 	if err != nil {
 		return nil, errors.New("p2p.helper_unavailable")
 	}
+	// The dialing context also owns the complete authentication exchange. A peer
+	// that accepts but never completes its acknowledgement must not pin startup.
+	if deadline, present := ctx.Deadline(); present {
+		if err := conn.SetDeadline(deadline); err != nil {
+			conn.Close()
+			return nil, errors.New("p2p.helper_parent_unavailable")
+		}
+	}
+	stopCancellation := context.AfterFunc(ctx, func() { conn.Close() })
+	defer stopCancellation()
 	reader := bufio.NewReaderSize(conn, protocol.MaxControlBytes+1)
 	if err := json.NewEncoder(conn).Encode(Authentication{Version: 1, Secret: secret}); err != nil {
 		conn.Close()
@@ -184,6 +194,17 @@ func Connect(ctx context.Context, socket string, secret string) (net.Conn, error
 	if err != nil || protocol.DecodeExact(line, &ack) != nil || ack.Version != 1 || !ack.Authenticated {
 		conn.Close()
 		return nil, errors.New("p2p.helper_authentication_failed")
+	}
+	// Detach startup cancellation before returning the long-lived connection.
+	// If cancellation has already won, its callback may still be about to close
+	// the socket: do not return that socket as a successful authentication.
+	if !stopCancellation() || ctx.Err() != nil {
+		conn.Close()
+		return nil, errors.New("p2p.helper_parent_unavailable")
+	}
+	if conn.SetDeadline(time.Time{}) != nil {
+		conn.Close()
+		return nil, errors.New("p2p.helper_parent_unavailable")
 	}
 	return &authenticatedConn{Conn: conn, reader: reader}, nil
 }

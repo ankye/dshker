@@ -13,11 +13,14 @@ import (
 )
 
 type SignalEvent struct {
-	Type     string
-	Lease    Lease
-	Signal   protocol.Signal
-	PairID   string
-	Revision uint64
+	Type         string
+	Lease        Lease
+	Signal       protocol.Signal
+	PairID       string
+	Revision     uint64
+	Ticket       protocol.CandidateTicket
+	State        protocol.CandidateState
+	Registration protocol.PeerRegistration
 }
 
 // SignalSuperseded is the coordinator's close reason when this device opened a
@@ -48,13 +51,15 @@ func (failure *signalHealthError) Error() string { return failure.code }
 func (failure *signalHealthError) Unwrap() error { return failure.cause }
 
 type Signals struct {
-	connection *websocket.Conn
-	ctx        context.Context
-	cancel     context.CancelCauseFunc
-	events     chan SignalEvent
-	finished   chan struct{}
-	healthDone chan struct{}
-	writeMu    sync.Mutex
+	connection    *websocket.Conn
+	ctx           context.Context
+	cancel        context.CancelCauseFunc
+	events        chan SignalEvent
+	finished      chan struct{}
+	healthDone    chan struct{}
+	telemetryDone chan struct{}
+	writeMu       sync.Mutex
+	controlReady  *protocol.ControlReady
 
 	// closeMu guards the close reason the read loop recorded when it ended.
 	closeMu     sync.Mutex
@@ -130,20 +135,20 @@ func (client *Client) Subscribe(ctx context.Context, deviceID string) (*Signals,
 // beat proves both presence admission and the actual signalling carrier. Ping
 // waits for the read goroutine to process its matching Pong, even on an idle socket.
 func (signals *Signals) beat(client *Client, deviceID string) error {
-	var heartbeat struct {
-		DeviceID string `json:"deviceId"`
-		At       int64  `json:"at"`
+	if signals.controlReady != nil {
+		return signals.ping()
 	}
 	// The heartbeat carries this build's own description so the coordinator's device
 	// directory can tell deployments apart, and the account this machine is signed
 	// in to, because presence belongs to an account: signed in nowhere reports none
 	// and reads as offline.
-	if err := client.call(signals.ctx, "POST", "/v1/heartbeat", "", client.heartbeat(), &heartbeat); err != nil {
+	if err := signals.reportTelemetry(client, deviceID); err != nil {
 		return &signalHealthError{channel: "https", code: err.Error(), cause: err}
 	}
-	if heartbeat.DeviceID != deviceID {
-		return &signalHealthError{channel: "https", code: "p2p.identity_mismatch"}
-	}
+	return signals.ping()
+}
+
+func (signals *Signals) ping() error {
 	pingCtx, cancel := context.WithTimeout(signals.ctx, signalPongTimeout)
 	defer cancel()
 	if err := signals.connection.Ping(pingCtx); err != nil {
@@ -211,6 +216,21 @@ func (signals *Signals) read() {
 			return
 		}
 		event := SignalEvent{Type: header.Type}
+		if signals.controlReady != nil {
+			var admitted bool
+			event, admitted, err = decodeControlEvent(data)
+			if err != nil {
+				signals.failRead(err, "p2p.protocol_mismatch")
+				return
+			}
+			if !admitted {
+				continue
+			}
+			if !signals.publish(event) {
+				return
+			}
+			continue
+		}
 		switch header.Type {
 		case "attempt":
 			var value struct {
@@ -252,17 +272,7 @@ func (signals *Signals) read() {
 			// would break every older launcher. Skip it and keep reading.
 			continue
 		}
-		select {
-		case signals.events <- event:
-		case <-signals.ctx.Done():
-			return
-		default:
-			// A slow event consumer must not prevent this reader from handling Pong
-			// or coordinator Close frames. End this bounded subscription explicitly;
-			// continuing after dropping an admitted signal would corrupt negotiation.
-			err := errors.New("p2p.signal_limit")
-			log.Printf("[p2p] signalling event queue exceeded its limit: %s", err)
-			signals.cancel(err)
+		if !signals.publish(event) {
 			return
 		}
 	}
@@ -295,6 +305,9 @@ func (signals *Signals) Err() error {
 }
 
 func (signals *Signals) Send(ctx context.Context, signal protocol.Signal) error {
+	if signals.controlReady != nil {
+		return errors.New("p2p.protocol_mismatch")
+	}
 	signals.writeMu.Lock()
 	defer signals.writeMu.Unlock()
 	data, err := json.Marshal(signal)
@@ -310,4 +323,7 @@ func (signals *Signals) Close() {
 	signals.stop(context.Canceled)
 	<-signals.finished
 	<-signals.healthDone
+	if signals.telemetryDone != nil {
+		<-signals.telemetryDone
+	}
 }

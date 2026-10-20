@@ -27,8 +27,10 @@ go test -race -count=1 -timeout 8m ./...
 
 Each DSH process gets a temporary project and isolated `DSH_HOME`; the selected
 checkout and normal DSH data are not rewritten. The startup URL is consumed only
-in process memory and is not printed. Temporary certificates and pairing data
-are test-owned and are not production resources.
+in process memory and is not printed. A failed readiness check logs only the
+validated numeric loopback port, an allowlisted Probe code and a fixed cause;
+neither the announced URL nor raw error details may expose its token. Temporary
+certificates and pairing data are test-owned and are not production resources.
 
 ## Assertions
 

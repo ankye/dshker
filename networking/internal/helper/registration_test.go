@@ -29,7 +29,7 @@ func registrationAccount(t *testing.T, handler http.Handler) *account {
 		t.Fatal(err)
 	}
 	t.Cleanup(client.Close)
-	return &account{base: client}
+	return &account{base: client, httpPhase: accountHTTPSetup}
 }
 
 // user.register must hand back a usable session: the coordinator's register

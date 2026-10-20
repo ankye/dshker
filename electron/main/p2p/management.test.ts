@@ -63,6 +63,11 @@ describe('bringing enrolled services online at startup', () => {
     const results = await f.owner.goOnline()
     expect(results).toEqual([{ serviceId, online: true }])
     expect(f.call.mock.calls.map(([method]) => method)).toContain('device.restore')
+    expect(deviceRestoreUser(f)).toBe('')
+    const restore = f.call.mock.calls.find(([method]) => method === 'device.restore')
+    expect(restore?.[1]).toMatchObject({
+      data: { device: { userId: user.userId }, accountUserId: '' }
+    })
   })
 
   it('shares one persisted-account restore with the first account read', async () => {
@@ -143,23 +148,52 @@ describe('bringing enrolled services online at startup', () => {
   })
 
   /**
-   * The coordinator admits only an account the device is linked to, so naming one
-   * it is not linked to would end the session. When the account's own list does
-   * not carry this machine, the enrolled account stays in use.
+   * An unlinked selected account is a refusal, never permission to substitute
+   * the enrollment owner as if the user had logged in to it.
    */
-  it('keeps speaking as the enrolled account when the signed-in one has no such device', async () => {
+  it('refuses an unlinked selected account without substituting the enrollment owner', async () => {
     const f = fixture()
     enrolled()
     await signedInAsSecondAccount(f, [])
 
-    expect(deviceRestoreUser(f)).toBe(user.userId)
+    expect(deviceRestoreUser(f)).toBeUndefined()
+    expect(await f.owner.serviceSessions()).toContainEqual(
+      expect.objectContaining({ serviceId, code: 'p2p.binding_unauthorized' })
+    )
   })
 
-  /** The account named in the device identity handed to the core. */
+  it('preserves a failed membership read instead of reporting the enrollment owner online', async () => {
+    const f = fixture()
+    enrolled()
+    const base = f.call.getMockImplementation()
+    f.call.mockImplementation(async (method, payload, signal) => {
+      if (method === 'user.login')
+        return { user: secondAccount, token: '8'.repeat(64), expiresAt: futureExpiry() }
+      if (method === 'user.current') return secondAccount
+      if (method === 'directory.inspect' || method === 'directory.refresh')
+        throw new PeerHelperError('p2p.server_unavailable')
+      if (!base) throw new Error('test fixture call implementation missing')
+      return base(method, payload, signal)
+    })
+    await f.owner.login(
+      serviceId,
+      secondAccount.username,
+      'test-password',
+      new AbortController().signal
+    )
+    expect(await f.owner.goOnline()).toContainEqual({
+      serviceId,
+      online: false,
+      code: 'p2p.server_unavailable'
+    })
+    expect(deviceRestoreUser(f)).toBeUndefined()
+  })
+
+  /** Selected account is separate from the immutable device enrollment owner. */
   function deviceRestoreUser(f: ReturnType<typeof fixture>): string | undefined {
     const call = f.call.mock.calls.find(([method]) => method === 'device.restore')
-    const payload = call?.[1] as { data?: { device?: { userId?: string } } } | undefined
-    return payload?.data?.device?.userId
+    const payload = call?.[1] as { data?: { accountUserId?: string } } | undefined
+    return payload?.data?.accountUserId
   }
 
   /**
@@ -521,14 +555,15 @@ describe('formal P2P management composition', () => {
    * the *previous* attempt's gateway URL. A tab asking for an address then gets a
    * stale one — or a `p2p.stale_generation` refusal — for a pair that is actually up.
    *
-   * The rule this pins: a stage the shell did not cause must invalidate the cached
-   * address, so the answer is an honest "not found" that a caller can act on rather
-   * than a URL that no longer routes.
+   * The read must ask the core for the current ready attempt, even when the shell
+   * never called connect for it. Reusing the earlier cached address is forbidden.
    */
-  it('does not serve a stale workbench address after the core reconnects a pair', async () => {
+  it('reads the new workbench address after the core automatically reconnects a pair', async () => {
     const f = await loggedIn()
     const pairId = '2'.repeat(12)
     const url = 'http://127.0.0.1:3099/?token=first-attempt'
+    const recoveredUrl = 'http://127.0.0.1:3100/?token=recovered-attempt'
+    let coreEntry: { state: ReturnType<typeof helperState>; url: string } | undefined
     // A paired machine is an enrolled one: naming a pair at all goes through the
     // device session first.
     const credential = {
@@ -555,32 +590,62 @@ describe('formal P2P management composition', () => {
         const generation = (payload as { data?: { generation?: number } }).data?.generation ?? 0
         return { state: helperState(pairId, 'b'.repeat(12), generation, 'punching'), url }
       }
+      if (method === 'peer.entry') return { serviceId, ...coreEntry }
       return base!(method, payload, signal)
     })
 
-    // The shell's own connect records the address, which is the only path that does.
+    // Dispatching alone cannot prove a workbench is ready, even with a cached URL.
     const accepted = await f.owner.connect(serviceId, pairId, new AbortController().signal)
-    expect(f.owner.entry(serviceId, pairId, accepted.generation).url).toBe(url)
+    await expect(
+      f.owner.entry(serviceId, pairId, accepted.generation, new AbortController().signal)
+    ).rejects.toMatchObject({ code: 'p2p.connection_not_found' })
+    coreEntry = { state: helperState(pairId, 'b'.repeat(12), accepted.generation, 'ready'), url }
+    await f.peerStage({ serviceId, state: coreEntry.state })
+    expect(
+      (await f.owner.entry(serviceId, pairId, accepted.generation, new AbortController().signal))
+        .url
+    ).toBe(url)
 
     // The pair drops and the core re-establishes it. The shell is told the stage, but
     // it never ran connect, so nothing refreshed the address it is still holding.
-    await f.peerStage({
-      serviceId,
-      state: helperState(pairId, 'c'.repeat(12), accepted.generation + 1, 'ready')
-    })
+    coreEntry = {
+      state: helperState(pairId, 'c'.repeat(12), accepted.generation + 1, 'ready'),
+      url: recoveredUrl
+    }
+    await f.peerStage({ serviceId, state: coreEntry.state })
 
-    expect(() => f.owner.entry(serviceId, pairId, accepted.generation)).toThrow(
-      'p2p.connection_not_found'
+    await expect(
+      f.owner.entry(serviceId, pairId, accepted.generation, new AbortController().signal)
+    ).rejects.toMatchObject({ code: 'p2p.stale_generation' })
+    const connectionsBeforeRead = f.call.mock.calls.filter(
+      ([method]) => method === 'peer.connect'
+    ).length
+    expect(
+      (
+        await f.owner.entry(
+          serviceId,
+          pairId,
+          accepted.generation + 1,
+          new AbortController().signal
+        )
+      ).url
+    ).toBe(recoveredUrl)
+    expect(f.call.mock.calls.filter(([method]) => method === 'peer.connect')).toHaveLength(
+      connectionsBeforeRead
+    )
+    expect(f.call).toHaveBeenLastCalledWith(
+      'peer.entry',
+      {
+        serviceId,
+        data: { pairId, generation: accepted.generation + 1 }
+      },
+      expect.any(AbortSignal)
     )
   })
 
   /**
-   * The other half of the retire rule.
-   *
-   * A stage announcement for the attempt the tab is currently using — or for one
-   * already superseded — must not delete its address. Retiring on any announcement
-   * would blank a working tab every time the core reported progress on the very
-   * connection it is showing.
+   * Repeated reads remain tied to current core authority, including when the
+   * current attempt announces ready again.
    */
   it('keeps the address of the attempt a tab is using when its own stage is announced', async () => {
     const f = await loggedIn()
@@ -610,11 +675,14 @@ describe('formal P2P management composition', () => {
         const generation = (payload as { data?: { generation?: number } }).data?.generation ?? 0
         return { state: helperState(pairId, 'b'.repeat(12), generation, 'punching'), url }
       }
+      if (method === 'peer.entry') {
+        const { generation } = (payload as { data: { generation: number } }).data
+        return { serviceId, state: helperState(pairId, 'b'.repeat(12), generation, 'ready'), url }
+      }
       return base!(method, payload, signal)
     })
 
     const accepted = await f.owner.connect(serviceId, pairId, new AbortController().signal)
-    expect(f.owner.entry(serviceId, pairId, accepted.generation).url).toBe(url)
 
     // Progress on this very attempt: same generation, so the address still applies.
     await f.peerStage({
@@ -622,7 +690,19 @@ describe('formal P2P management composition', () => {
       state: helperState(pairId, 'b'.repeat(12), accepted.generation, 'ready')
     })
 
-    expect(f.owner.entry(serviceId, pairId, accepted.generation).url).toBe(url)
+    expect(
+      (await f.owner.entry(serviceId, pairId, accepted.generation, new AbortController().signal))
+        .url
+    ).toBe(url)
+    await f.peerStage({
+      serviceId,
+      state: helperState(pairId, 'b'.repeat(12), accepted.generation, 'ready')
+    })
+    expect(
+      (await f.owner.entry(serviceId, pairId, accepted.generation, new AbortController().signal))
+        .url
+    ).toBe(url)
+    expect(f.call.mock.calls.filter(([method]) => method === 'peer.entry')).toHaveLength(2)
   })
 
   it('announces the core catalog revision to subscribers and stops when released', async () => {

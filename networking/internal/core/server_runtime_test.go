@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/ankye/dshker/networking/internal/harnessruntime"
+	"github.com/ankye/dshker/networking/internal/runtimeowner"
 )
 
 // fakeLauncher writes a stand-in pnpm that ignores the DSH arguments, announces
@@ -72,7 +74,7 @@ func portPayload(filePath string, port *harnessruntime.PortSetting) json.RawMess
 func TestRuntimePortPreferencesAreOwnedByTheCore(t *testing.T) {
 	base := t.TempDir()
 	filePath := filepath.Join(base, harnessruntime.PreferencesFileName)
-	server := Serve{Runtime: harnessruntime.NewSupervisor()}
+	server := Serve{Runtime: runtimeowner.NewLocal()}
 
 	loaded, err := server.Handle(context.Background(), "runtime.port_get", portPayload(filePath, nil))
 	if err != nil {
@@ -115,7 +117,7 @@ func TestRuntimePortPreferencesAreOwnedByTheCore(t *testing.T) {
 func TestRuntimeStartStopThroughTheCore(t *testing.T) {
 	base := t.TempDir()
 	executable, prefix := fakeLauncher(t, base)
-	server := Serve{Runtime: harnessruntime.NewSupervisor()}
+	server := Serve{Runtime: runtimeowner.NewLocal()}
 	ctx := context.Background()
 	started, err := server.Handle(ctx, "runtime.start", startPayload(t, base, executable, prefix, `{"mode":"auto"}`))
 	if err != nil {
@@ -212,7 +214,7 @@ func TestRuntimeMethodsNeedAProcessAuthority(t *testing.T) {
 }
 
 func TestRuntimeRejectsMalformedPayloads(t *testing.T) {
-	server := Serve{Runtime: harnessruntime.NewSupervisor()}
+	server := Serve{Runtime: runtimeowner.NewLocal()}
 	for name, payload := range map[string]string{
 		"an unknown field": `{"subjectId":"subject_main","extra":1}`,
 		"a missing field":  `{}`,
@@ -244,11 +246,12 @@ func managedStartPayload(directory, nodeExecutable, logPath string) json.RawMess
 // built entry from its own worktree, an entry that is not direct is refused
 // before anything spawns, and the child stops with its subject.
 func TestRuntimeRunsAManagedInstallationThroughTheCore(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		// The managed profile runs a JavaScript entry, and this stand-in is a
-		// shell script; the constructed command itself is pinned by the
-		// package's own platform-agnostic test.
-		t.Skip("the stand-in entry is a shell script")
+	node, err := exec.LookPath("node")
+	if err != nil {
+		t.Fatalf("managed Node lifecycle requires the CI-supplied Node executable: %v", err)
+	}
+	if !filepath.IsAbs(node) {
+		t.Fatalf("resolved Node executable is not absolute: %q", node)
 	}
 	base := t.TempDir()
 	worktree := filepath.Join(base, "worktree")
@@ -256,16 +259,20 @@ func TestRuntimeRunsAManagedInstallationThroughTheCore(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(entry), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(entry, []byte("#!/bin/sh\necho 'dsh web: http://127.0.0.1:3098/?token=managed'\nexec sleep 30\n"), 0o700); err != nil {
+	entryJS := "'use strict';\n" +
+		"if (JSON.stringify(process.argv.slice(2)) !== JSON.stringify(['web', '--no-open'])) process.exit(42);\n" +
+		"console.log('dsh web: http://127.0.0.1:3098/?token=managed');\n" +
+		"setInterval(() => {}, 1000);\n"
+	if err := os.WriteFile(entry, []byte(entryJS), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	server := Serve{Runtime: harnessruntime.NewSupervisor()}
+	server := Serve{Runtime: runtimeowner.NewLocal()}
 	ctx := context.Background()
 
-	if _, err := server.Handle(ctx, "runtime.start", managedStartPayload(base, "/bin/sh", "")); !errors.Is(err, harnessruntime.ErrWorktreeInvalid) {
+	if _, err := server.Handle(ctx, "runtime.start", managedStartPayload(base, node, "")); !errors.Is(err, harnessruntime.ErrWorktreeInvalid) {
 		t.Fatalf("missing entry = %v", err)
 	}
-	started, err := server.Handle(ctx, "runtime.start", managedStartPayload(worktree, "/bin/sh", ""))
+	started, err := server.Handle(ctx, "runtime.start", managedStartPayload(worktree, node, ""))
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -274,7 +281,9 @@ func TestRuntimeRunsAManagedInstallationThroughTheCore(t *testing.T) {
 		t.Fatalf("start = %+v", started)
 	}
 	defer func() {
-		_, _ = server.Handle(ctx, "runtime.stop", json.RawMessage(`{"subjectId":"installation_main"}`))
+		if _, err := server.Handle(ctx, "runtime.stop", json.RawMessage(`{"subjectId":"installation_main"}`)); err != nil {
+			t.Errorf("managed Node cleanup stop: %v", err)
+		}
 	}()
 
 	var running harnessruntime.LaunchView
@@ -302,7 +311,10 @@ func TestRuntimeRunsAManagedInstallationThroughTheCore(t *testing.T) {
 		t.Fatalf("stop: %v", err)
 	}
 	view, ok := stopped.(runtimeResult)
-	if !ok || view.Launch == nil || view.Launch.State == harnessruntime.StateRunning {
+	if !ok || view.Launch == nil || view.Launch.State != harnessruntime.StateStopped {
 		t.Fatalf("stop = %+v", stopped)
+	}
+	if harnessruntime.ProcessAlive(launch.Launch.PID) {
+		t.Fatalf("managed Node pid %d survived the stop", launch.Launch.PID)
 	}
 }

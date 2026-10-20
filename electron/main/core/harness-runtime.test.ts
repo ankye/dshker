@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { PeerHelperError } from '../p2p/wire'
+import {
+  ManagedHarnessRuntimeError,
+  RUNTIME_OWNER_ERROR_MESSAGES,
+  runtimeOwnerError
+} from '../managed/runtime-errors'
 import { CoreHarnessRuntime, type CoreHarnessLaunchView } from './harness-runtime'
 
 function launchView(): CoreHarnessLaunchView {
@@ -137,6 +142,43 @@ describe('core harness runtime client', () => {
     })
     await expect(new CoreHarnessRuntime(rpc).start({} as never)).rejects.toMatchObject({
       code: 'runtime.operation_in_progress'
+    })
+  })
+
+  for (const code of Object.keys(RUNTIME_OWNER_ERROR_MESSAGES)) {
+    it.each(['start', 'stop', 'status'] as const)(
+      `keeps ${code} typed and non-secret through %s instead of absent/stopped`,
+      async (method) => {
+        const error = new PeerHelperError(code)
+        error.message = 'token=sentinel private filesystem information'
+        const runtime = new CoreHarnessRuntime(
+          fakeRpc(() => {
+            throw error
+          })
+        )
+        const answer =
+          method === 'start' ? runtime.start({} as never) : runtime[method]('launcher-harness')
+        await expect(answer).rejects.toBeInstanceOf(ManagedHarnessRuntimeError)
+        await expect(answer).rejects.toMatchObject({ code, details: {} })
+        await expect(answer).rejects.not.toHaveProperty('message', error.message)
+      }
+    )
+  }
+
+  it('admits owner codes only from typed failures, never arbitrary objects or unknown codes', () => {
+    expect(
+      runtimeOwnerError({ code: 'runtime.owner_unavailable', message: 'private' })
+    ).toBeUndefined()
+    expect(runtimeOwnerError(new Error('runtime.owner_unavailable'))).toBeUndefined()
+    expect(runtimeOwnerError(new PeerHelperError('runtime.owner_unknown'))).toBeUndefined()
+    expect(runtimeOwnerError(new PeerHelperError('__proto__'))).toBeUndefined()
+    const typed = new ManagedHarnessRuntimeError('runtime.owner_shutdown_failed', 'private', {
+      private: 'sentinel'
+    })
+    expect(runtimeOwnerError(typed)).toMatchObject({
+      code: 'runtime.owner_shutdown_failed',
+      message: RUNTIME_OWNER_ERROR_MESSAGES['runtime.owner_shutdown_failed'],
+      details: {}
     })
   })
 })

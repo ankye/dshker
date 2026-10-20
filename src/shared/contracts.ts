@@ -162,6 +162,13 @@ export type ManagedOperationErrorCode =
   | 'managed.bundled_seed_invalid'
   | 'managed.harness_launch_failed'
   | 'managed.harness_launch_in_progress'
+  /** Independent runtime-owner refusal; never an absent or stopped DSH record. */
+  | 'managed.runtime_owner_unavailable'
+  | 'managed.runtime_owner_identity_mismatch'
+  | 'managed.runtime_owner_record_invalid'
+  | 'managed.runtime_owner_protocol_unsupported'
+  | 'managed.runtime_owner_configuration_invalid'
+  | 'managed.runtime_owner_shutdown_failed'
   /** A version or plugin operation was refused because DSH Web is still running. */
   | 'managed.harness_busy_running'
   /** A launch port is held by another program the Launcher must not stop. */

@@ -26,6 +26,12 @@ const CapabilityOptionalWorkbench = "workbench.optional"
 // it must never cause a DSH process to be started as a side effect of reconnect.
 const CapabilityWorkbenchRequest = "workbench.request"
 
+// CapabilityWorkbenchResumeSupported advertises a bind-only runtime owner.
+// CapabilityWorkbenchResume requests that owner for this attempt. It must never
+// be combined with CapabilityWorkbenchRequest, which grants cold-start authority.
+const CapabilityWorkbenchResumeSupported = "workbench.resume.supported"
+const CapabilityWorkbenchResume = "workbench.resume"
+
 // PeerCapabilities is what this build advertises during a peer handshake.
 //
 // The list is the extension point for the peer contract, and it is deliberately a
@@ -36,7 +42,7 @@ const CapabilityWorkbenchRequest = "workbench.request"
 func PeerCapabilities() []string {
 	// A fresh slice per call: a caller must not be able to alter what this build
 	// claims. Never nil, because an omitted or null field is refused on the wire.
-	return []string{CapabilityOptionalWorkbench}
+	return []string{CapabilityOptionalWorkbench, CapabilityWorkbenchResumeSupported}
 }
 
 // PeerCapabilitiesFor returns the capabilities for one connection intent.
@@ -48,6 +54,12 @@ func PeerCapabilitiesFor(requestWorkbench bool) []string {
 		capabilities = append(capabilities, CapabilityWorkbenchRequest)
 	}
 	return capabilities
+}
+
+// PeerResumeCapabilities requests only an already-running workbench. Older
+// peers do not recognize this request and therefore cannot mistake it for start.
+func PeerResumeCapabilities() []string {
+	return append(PeerCapabilities(), CapabilityWorkbenchResume)
 }
 
 // HasCapability reports whether an advertised list contains one name.

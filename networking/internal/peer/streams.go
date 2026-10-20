@@ -47,7 +47,7 @@ type Mux struct {
 // machine whose DSH could not run could not be connected to at all. The scope
 // still has to match on both sides; zero is simply one of the values it may hold.
 func NewMux(link StreamLink, scope StreamScope) (*Mux, error) {
-	if link == nil || !protocol.ValidID(scope.AttemptID) || scope.Generation == 0 {
+	if link == nil || !protocol.ValidAttemptID(scope.AttemptID) || scope.Generation == 0 {
 		return nil, errors.New("p2p.frame_scope_mismatch")
 	}
 	mux := &Mux{link: link, scope: scope, streams: make(map[uint32]*Stream), accepted: make(chan *Stream, protocol.MaxStreams), changed: make(chan struct{}), done: make(chan struct{})}
@@ -106,6 +106,11 @@ func (mux *Mux) Close() error {
 }
 
 func (mux *Mux) RuntimeGeneration() uint64 { return mux.scope.RuntimeGeneration }
+
+func (mux *Mux) Done() <-chan struct{} { return mux.done }
+
+// Err reads the first terminal cause without closing the mux or consuming data.
+func (mux *Mux) Err() error { return mux.failure() }
 
 func (mux *Mux) failure() error {
 	mux.mu.Lock()

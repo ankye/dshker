@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "change": "Close and reopen remote tabs and explicitly select an ambiguous computer network",
+  "acceptance_stage": "diagnostic",
+  "implementation_complete": true,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "prerequisites": [],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "workflows": [
+    {
+      "id": "close-remote-tab",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["active", "background", "keyboard", "compact"],
+      "requires_public_ui": true,
+      "selector": ".browser-tab-close",
+      "expected_state": {
+        "closed_guest_present": false,
+        "local_tab_present": true,
+        "selected_tab_focused": true,
+        "remote_runtime_stopped": false,
+        "saved_computer_removed": false
+      },
+      "expected_native_event": "Closed browser guest destroyed; existing remote runtime and connection record retained",
+      "requires_persistence": false,
+      "invariants": [
+        "Local cannot close",
+        "Background close preserves the active tab",
+        "Active close selects the right neighbor or left neighbor at the end",
+        "Other mounted guests and isolated peer partitions stay intact"
+      ],
+      "required_content_checks": ["accessible_actions", "focus", "guest_identity"]
+    },
+    {
+      "id": "reopen-closed-computer",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": ["ssh-ready", "ssh-reconnect", "peer-ready", "pending-close"],
+      "requires_public_ui": true,
+      "selector": ".runtime-add-tab-option",
+      "expected_state": {
+        "new_guest_created": true,
+        "exact_computer_selected": true,
+        "old_page_navigation_restored": false,
+        "late_completion_reopened_closed_tab": false
+      },
+      "expected_native_event": "New guest mounts the admitted current entry for the selected computer",
+      "requires_persistence": false,
+      "invariants": [
+        "Ready entries do not request another connection",
+        "Disconnected SSH uses the existing connection record and named connect operation",
+        "Pending SSH operations remain unavailable to repeat input",
+        "Late connect and entry replies never change closed-tab membership"
+      ],
+      "required_content_checks": ["computer_identity", "partition_identity", "async_ownership"]
+    },
+    {
+      "id": "choose-computer-network",
+      "kind": "control",
+      "minimum_attempts": 1,
+      "profiles": [
+        "required",
+        "stale",
+        "pending",
+        "unknown-outcome",
+        "empty",
+        "long-name",
+        "keyboard",
+        "compact",
+        "account-change"
+      ],
+      "requires_public_ui": true,
+      "selector": "[data-testid=runtime-network-choice]",
+      "expected_state": {
+        "network_preselected": false,
+        "nested_dialog_present": false,
+        "duplicate_computer_tab_present": false,
+        "late_completion_opens_dismissed_tab": false,
+        "unknown_write_replayed": false
+      },
+      "expected_native_event": "An exact current-account network choice is durably admitted and opens only its one computer tab; stale or dismissed operations cannot open a guest",
+      "requires_persistence": true,
+      "invariants": [
+        "Keep a freshly authorized saved network without inferring a replacement",
+        "First ambiguous choice has no default and requires an explicit action",
+        "Back and Escape restore focus; Tab remains in the same floating dialog",
+        "Account/service changes and unmount invalidate pending page opening",
+        "Unknown outcome permits fresh readback only; unavailable choices are disabled",
+        "Empty discovery preserves the stale network lineage"
+      ],
+      "required_content_checks": [
+        "network_identity",
+        "focus",
+        "overflow",
+        "async_ownership",
+        "persistence"
+      ]
+    }
+  ]
+}

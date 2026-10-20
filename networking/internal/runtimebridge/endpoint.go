@@ -30,7 +30,7 @@ type Endpoint struct {
 	// onDetach ends the connections of the session being dropped. The gateway
 	// registers itself here so a caller cannot forget to do it and leave pooled
 	// connections pointing at a dead session.
-	onDetach func()
+	onDetach func(*peer.Mux)
 	// onReplace and onClose forward the lifecycle to a peer.Listener for the
 	// non-browser (ServeTarget) direction, where the mux is read by Accept
 	// rather than dialled. Both are nil for a browser endpoint.
@@ -65,12 +65,14 @@ func (endpoint *Endpoint) replace(mux *peer.Mux, binding Binding, dropPrevious b
 		return errors.New("p2p.gateway_closed")
 	}
 	previous := endpoint.mux
-	endpoint.mux, endpoint.binding = mux, binding
-	detach, onReplace := endpoint.onDetach, endpoint.onReplace
-	endpoint.mu.Unlock()
-	if dropPrevious && previous != nil && previous != mux && detach != nil {
-		detach()
+	// Accept stamps browser connections under this same lock. Retiring the old
+	// cohort before publishing the new mux cannot close a newly admitted socket.
+	if dropPrevious && previous != nil && previous != mux && endpoint.onDetach != nil {
+		endpoint.onDetach(previous)
 	}
+	endpoint.mux, endpoint.binding = mux, binding
+	onReplace := endpoint.onReplace
+	endpoint.mu.Unlock()
 	if onReplace != nil {
 		onReplace(mux)
 	}
@@ -92,10 +94,10 @@ func (endpoint *Endpoint) Detach(expected *peer.Mux) bool {
 	}
 	endpoint.mux = nil
 	detach, onReplace := endpoint.onDetach, endpoint.onReplace
-	endpoint.mu.Unlock()
 	if detach != nil {
-		detach()
+		detach(expected)
 	}
+	endpoint.mu.Unlock()
 	if onReplace != nil {
 		onReplace(nil)
 	}

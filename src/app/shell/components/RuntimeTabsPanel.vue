@@ -16,16 +16,11 @@ import {
   runtimeBrowserZoomCommandForInput,
   type RuntimeBrowserZoomCommand
 } from '@/shared/runtime-browser-zoom'
-import {
-  isLoopbackAddress,
-  runtimeBrowser,
-  type RuntimeTab,
-  type RuntimeTabId
-} from '../runtimeBrowserState'
+import { isLoopbackAddress, runtimeBrowser, type RuntimeTabId } from '../runtimeBrowserState'
 import EmptyState from './EmptyState.vue'
 import RemoteRunActions from './RemoteRunActions.vue'
 import RuntimePeerEmptyState from './RuntimePeerEmptyState.vue'
-import RuntimeTabAddMenu from './RuntimeTabAddMenu.vue'
+import RuntimeTabStrip from './RuntimeTabStrip.vue'
 
 /** The Electron <webview> members this panel drives. */
 interface RuntimeWebview extends HTMLElement {
@@ -196,25 +191,7 @@ function onDomReady(id: RuntimeTabId): void {
   if (id === browser.activeTabId.value && diagnosticsOpen.value) void refreshDiagnostics()
 }
 
-/** Records the page title the guest reports, so the tab strip stays truthful. */
-/**
- * The name of the machine a tab belongs to.
- *
- * Deliberately not the page title: that changed on every navigation, so several
- * machines open at once drifted into indistinguishable labels. The page title is
- * still worth showing, but as the tooltip below.
- */
-function tabLabel(tab: RuntimeTab): string {
-  return tab.source === 'local' ? t('runtime.localTab') : tab.label
-}
-
-/** Where the page's own title and address remain visible, without moving the label. */
-function tabTooltip(tab: RuntimeTab): string {
-  const label = tabLabel(tab)
-  const detail = tab.title || tab.url
-  return detail ? `${label} — ${detail}` : label
-}
-
+/** Records the page title for the tab tooltip without changing the computer label. */
 function onTitleUpdated(id: RuntimeTabId, event: unknown): void {
   const title = (event as { title?: unknown }).title
   if (typeof title === 'string' && title.length > 0) browser.updateTab(id, { title })
@@ -414,29 +391,7 @@ onUnmounted(() => {
       </template>
     </EmptyState>
     <template v-else>
-      <div class="browser-tabbar">
-        <div class="browser-tab-strip" role="tablist" :aria-label="t('runtime.title')">
-          <button
-            v-for="tab in browser.tabs.value"
-            :key="tab.id"
-            class="browser-tab"
-            type="button"
-            role="tab"
-            :aria-selected="browser.activeTabId.value === tab.id"
-            :data-active="browser.activeTabId.value === tab.id"
-            :data-state="
-              tab.source === 'local' ? (tab.url ? 'ready' : 'disconnected') : tab.status?.kind
-            "
-            :title="tabTooltip(tab)"
-            :data-testid="`runtime-tab-${tab.id}`"
-            @click="browser.activeTabId.value = tab.id"
-          >
-            <span class="browser-tab-status" aria-hidden="true" />
-            <span class="browser-tab-title">{{ tabLabel(tab) }}</span>
-          </button>
-        </div>
-        <RuntimeTabAddMenu @navigate="emit('navigate', $event)" />
-      </div>
+      <RuntimeTabStrip @navigate="emit('navigate', $event)" />
 
       <div v-if="browser.activeTab.value?.url" class="browser-bar">
         <button
@@ -592,6 +547,14 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <p
+        v-if="browser.activeTab.value?.status?.kind === 'suspended'"
+        class="browser-recovery-status"
+        role="status"
+        data-testid="runtime-peer-recovering"
+      >
+        {{ t('p2p.connection.stageSuspended') }}
+      </p>
       <div
         v-if="browser.tabs.value.some((entry) => entry.url !== undefined)"
         class="browser-viewport-stack"
@@ -680,95 +643,11 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-/* Browser chrome stays compact so the DSH page owns the visual canvas. */
-.browser-tabbar {
-  display: flex;
-  min-width: 0;
-  align-items: flex-start;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.browser-tab-strip {
-  display: flex;
-  flex: 1;
-  min-width: 0;
-  align-items: flex-end;
-  gap: 0.125rem;
-  padding: var(--space-2) var(--space-3) 0;
-  overflow-x: auto;
-  background: transparent;
-}
-
-.browser-tab {
-  position: relative;
-  display: flex;
-  max-width: 13rem;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-2);
-  padding: 0.5rem 0.75rem;
-  border: none;
-  border-radius: var(--radius) var(--radius) 0 0;
-  background: transparent;
-  color: var(--color-text-muted);
+.browser-recovery-status {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-accent);
   font-size: var(--type-caption);
-  cursor: pointer;
-}
-
-.browser-tab:hover {
-  background: color-mix(in srgb, var(--color-text), transparent 94%);
-  color: var(--color-text);
-}
-
-/* The active tab opens downward into the framed page, so its bottom edge is
- * square and its top corners rounded — the classic connected-tab shape.
- * An accent underline makes it unmistakable which tab is selected. */
-.browser-tab[data-active='true'] {
-  background: var(--color-bg);
-  color: var(--color-text);
-}
-.browser-tab[data-active='true']::after {
-  content: '';
-  position: absolute;
-  inset: auto 0 0 0;
-  height: 2px;
-  background: var(--color-accent);
-  pointer-events: none;
-}
-
-.browser-tab:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-}
-
-.browser-tab-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.browser-tab-status {
-  width: 0.45rem;
-  height: 0.45rem;
-  flex: none;
-  border-radius: 999px;
-  background: var(--color-text-muted);
-}
-
-.browser-tab[data-state='ready'] .browser-tab-status {
-  background: var(--color-success);
-}
-
-.browser-tab[data-state='connecting'] .browser-tab-status {
-  background: var(--color-accent);
-}
-
-.browser-tab[data-state='failed'] .browser-tab-status {
-  background: var(--color-danger);
-}
-
-.browser-tab[data-state='disconnected'] .browser-tab-status {
-  background: var(--color-danger);
 }
 
 .browser-bar {

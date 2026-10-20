@@ -5,7 +5,14 @@ export interface PeerHelperState {
   pairId: string
   attemptId: string
   generation: number
-  stage: 'punching' | 'starting-runtime' | 'connected' | 'ready' | 'failed' | 'disconnected'
+  stage:
+    | 'punching'
+    | 'starting-runtime'
+    | 'connected'
+    | 'ready'
+    | 'suspended'
+    | 'failed'
+    | 'disconnected'
   error: string
   path: { localType: string; remoteType: string; protocol: string }
   runtimeGeneration: number
@@ -23,7 +30,12 @@ export function parseHelperState(value: unknown): PeerHelperState {
     'runtimeGeneration'
   ])
   assertAccountId(record.pairId)
-  assertAccountId(record.attemptId)
+  // v1 explicit connections use 12hex; control-v2 attempts use 128-bit 32hex.
+  // Neither format widens admission for device/network/pair identifiers.
+  assertAccountId(
+    record.attemptId,
+    typeof record.attemptId === 'string' && record.attemptId.length === 32 ? 32 : 12
+  )
   const path = exactPeerObject(record.path, ['localType', 'remoteType', 'protocol'])
   const emptyPath = path.localType === '' && path.remoteType === '' && path.protocol === ''
   const directPath =
@@ -35,18 +47,21 @@ export function parseHelperState(value: unknown): PeerHelperState {
     (record.generation as number) <= 0 ||
     !Number.isSafeInteger(record.runtimeGeneration) ||
     (record.runtimeGeneration as number) < 0 ||
-    !['punching', 'starting-runtime', 'connected', 'ready', 'failed', 'disconnected'].includes(
-      record.stage as string
-    ) ||
+    ![
+      'punching',
+      'starting-runtime',
+      'connected',
+      'ready',
+      'suspended',
+      'failed',
+      'disconnected'
+    ].includes(record.stage as string) ||
     typeof record.error !== 'string' ||
     (record.error !== '' && !peerErrorCode(record.error)) ||
     (!emptyPath && !directPath)
   )
     throw new PeerHelperError('p2p.invalid_peer_state')
-  if (
-    record.stage === 'connected' &&
-    (!directPath || record.runtimeGeneration !== 0 || record.error !== '')
-  )
+  if (record.stage === 'connected' && (!directPath || record.runtimeGeneration !== 0))
     throw new PeerHelperError('p2p.invalid_peer_state')
   if (
     record.stage === 'ready' &&
@@ -54,6 +69,8 @@ export function parseHelperState(value: unknown): PeerHelperState {
   )
     throw new PeerHelperError('p2p.invalid_peer_state')
   if (record.stage === 'failed' && record.error === '')
+    throw new PeerHelperError('p2p.invalid_peer_state')
+  if (record.stage === 'suspended' && (!directPath || record.error !== ''))
     throw new PeerHelperError('p2p.invalid_peer_state')
   return { ...record, path: { ...path } } as unknown as PeerHelperState
 }
@@ -67,11 +84,28 @@ export function assertStateProgress(previous: PeerHelperState, next: PeerHelperS
   // there — the ranks are the replay guard — while a different attempt is a new
   // lineage whose freshness the caller decides by whether it has seen it before.
   if (next.attemptId !== previous.attemptId) return
+  if (next.generation !== previous.generation) throw new PeerHelperError('p2p.stale_generation')
+  // Suspension is a reversible state of this exact carrier, not a new attempt
+  // and not permission to revive a terminal one. Preserve its runtime authority.
+  if (next.stage === 'suspended' || previous.stage === 'suspended') {
+    const allowed =
+      (['connected', 'ready', 'suspended'].includes(previous.stage) &&
+        next.stage === 'suspended' &&
+        previous.runtimeGeneration === next.runtimeGeneration) ||
+      (previous.stage === 'suspended' &&
+        ((next.stage === 'connected' && previous.runtimeGeneration === 0) ||
+          (next.stage === 'ready' && previous.runtimeGeneration > 0)) &&
+        previous.runtimeGeneration === next.runtimeGeneration) ||
+      (previous.stage === 'suspended' && (next.stage === 'failed' || next.stage === 'disconnected'))
+    if (!allowed) throw new PeerHelperError('p2p.stale_generation')
+    return
+  }
   const ranks = {
     punching: 0,
     'starting-runtime': 1,
     connected: 2,
     ready: 3,
+    suspended: 3,
     failed: 4,
     disconnected: 4
   }

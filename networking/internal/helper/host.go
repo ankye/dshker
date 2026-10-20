@@ -8,8 +8,8 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
-	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ankye/dshker/networking/internal/autoconnect"
@@ -33,8 +33,9 @@ type Host struct {
 	roots        *x509.CertPool
 	// deviceKeys is the machine's own key store, separate from any account's
 	// credential: see machineDeviceKey.
-	deviceKeys secret.Store
-	deviceKey  ed25519.PrivateKey
+	deviceKeys     secret.Store
+	deviceKey      ed25519.PrivateKey
+	coreInstanceID string
 	// catalog is the store this machine's paired computers are recorded in. It
 	// belongs to the core and the pairing half lives here, so the record is written
 	// where the pairs are read. See members.go.
@@ -44,17 +45,30 @@ type Host struct {
 	// reconnect is this machine's single reconnection engine, created on first use.
 	// The backoff and the recorded terminal refusals are per-machine state, so a
 	// shell-driven pass and the daemon's own sweep must share one instance.
-	reconnect *autoconnect.Engine
-	closed    bool
+	reconnect              *autoconnect.Engine
+	closed                 bool
+	removalRevision        uint64
+	removedAt              map[string]uint64
+	bootstrapMu            sync.Mutex
+	bootstraps             map[string]*bootstrapJob
+	bootstrapGeneration    map[string]uint64
+	bootstrapSessionOwners map[string]*bootstrapSessionOwner
 }
 type account struct {
-	mu        sync.Mutex
-	base      *controlplane.Client
-	client    *controlplane.Client
-	identity  controlplane.Identity
-	endpoints controlplane.Endpoints
-	device    controlplane.Device
-	manager   *peersession.Manager
+	mu                sync.Mutex
+	closed            bool
+	httpPhase         accountHTTPPhase
+	lifetime          context.Context
+	cancel            context.CancelFunc
+	base              *controlplane.Client
+	client            *controlplane.Client
+	identity          controlplane.Identity
+	endpoints         controlplane.Endpoints
+	device            controlplane.Device
+	manager           *peersession.Manager
+	activationPending error
+	activationSource  *authRecoverySource
+	authRecoveryJoins []*peersession.AccountRecoveryCompletion
 	// host is the process this account belongs to: the directory announces its
 	// changes through the host's parent channel, and the host's lifetime is the
 	// one the maintenance loop follows.
@@ -63,7 +77,8 @@ type account struct {
 	// every transition through the emit callback below, so recording them here is
 	// what lets reconnection ask "is this pair already up?" without inventing a
 	// second source of truth or polling the transport.
-	stages map[string]string
+	stages   map[string]string
+	refusals map[string]string
 	// directory is this account's single snapshot of the coordinator's device
 	// directory. See directory.go.
 	directory directory
@@ -76,9 +91,16 @@ type scopedRequest struct {
 	Data      json.RawMessage `json:"data"`
 }
 
+type deviceRestoreRequest struct {
+	Device        controlplane.Device         `json:"device"`
+	PrivateKey    []byte                      `json:"privateKey"`
+	Pins          []controlplane.PairIdentity `json:"pins"`
+	AccountUserID string                      `json:"accountUserId"`
+}
+
 func New(ctx context.Context) *Host {
 	child, cancel := context.WithCancel(ctx)
-	return &Host{ctx: child, cancel: cancel, accounts: make(map[string]*account)}
+	return &Host{ctx: child, cancel: cancel, accounts: make(map[string]*account), coreInstanceID: protocol.NewNonce()}
 }
 func (host *Host) BindMain(main Main) { host.mu.Lock(); host.main = main; host.mu.Unlock() }
 
@@ -182,34 +204,15 @@ func (host *Host) Close() {
 		accounts = append(accounts, value)
 	}
 	host.mu.Unlock()
+	host.cancelBootstraps("")
+	host.mu.Lock()
+	reconnect := host.reconnect
+	host.mu.Unlock()
+	if reconnect != nil {
+		reconnect.Close()
+	}
 	for _, value := range accounts {
-		// Extract the manager reference under the lock, then release before calling
-		// manager.Close(). The session tear-down calls back into the account (emit
-		// → announce), which re-acquires account.mu. Holding it across manager.Close
-		// would deadlock: host.Close holds account.mu while waiting for the session
-		// to finish, and the session waits for account.mu before it can finish.
-		value.mu.Lock()
-		manager := value.manager
-		value.manager = nil
-		client := value.client
-		value.client = nil
-		base := value.base
-		value.base = nil
-		value.mu.Unlock()
-		if manager != nil {
-			manager.Close()
-		}
-		if client != nil {
-			client.Close()
-		}
-		// An account can exist without a control-plane client: it is registered
-		// under its service id before one is built, and a configure that failed part
-		// way leaves exactly that. The two references above are already guarded;
-		// this one was not, so shutting down in that window panicked on the path
-		// whose whole job is to release the process's resources.
-		if base != nil {
-			base.Close()
-		}
+		value.close()
 	}
 }
 
@@ -264,12 +267,55 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	if protocol.DecodeExact(payload, &request) != nil {
 		return nil, errors.New("p2p.invalid_request")
 	}
+	if (method == "peer.entry" || method == "device.certificate_recovery_scope") && !protocol.ValidID(request.ServiceID) {
+		return nil, errors.New("p2p.invalid_request")
+	}
 	host.mu.Lock()
 	account := host.accounts[request.ServiceID]
 	closed := host.closed
 	host.mu.Unlock()
 	if account == nil || closed {
 		return nil, errors.New("p2p.service_unconfigured")
+	}
+	if account.lifetime != nil {
+		stopAccount := context.AfterFunc(account.lifetime, cancel)
+		defer stopAccount()
+	}
+	if method == "user.current" || method == "device.restore" {
+		if err := host.admitSelectedSessionRead(request.ServiceID, method, request.Data); err != nil {
+			return nil, err
+		}
+	}
+	if method == "user.logout" {
+		admission, err := host.admitLogoutBootstrap(request.ServiceID, request.Data)
+		if err != nil {
+			return nil, err
+		}
+		if err := host.cancelLogoutBootstrap(admission); err != nil {
+			return nil, err
+		}
+	} else if method == "user.login" || method == "user.register" || method == "user.current" || method == "device.restore" {
+		// A bootstrap may be waiting for account.mu: cancel and join before
+		// taking that lock, never from an account-owned callback.
+		host.cancelBootstraps(request.ServiceID)
+	}
+	host.bootstrapMu.Lock()
+	operationGeneration := host.bootstrapGeneration[request.ServiceID]
+	host.bootstrapMu.Unlock()
+	if method == "device.restore" || method == "user.current" || method == "user.login" || method == "user.register" {
+		ctx = withBootstrapLocalFence(ctx, request.ServiceID, operationGeneration, nil, false)
+	}
+	var expectedSession persistedAccountSession
+	var expectedSessionExists bool
+	var expectedSessionErr error
+	if method == "device.restore" || method == "user.current" {
+		expectedSession, expectedSessionExists, expectedSessionErr = host.readAccountSession(request.ServiceID)
+	}
+	if method == "device.restore" || method == "user.current" {
+		ctx = host.selectedCallerContext(ctx, account, operationGeneration, expectedSession, expectedSessionExists, expectedSessionErr)
+	}
+	if method == "peer.entry" {
+		return account.entry(request.Data)
 	}
 	if method == "peer.autoconnect_reconcile" || method == "peer.autoconnect_retry_now" ||
 		method == "peer.autoconnect_clear_refusals" {
@@ -301,34 +347,172 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 		return account.directoryOperation(ctx, method, request.Data)
 	}
 	account.mu.Lock()
-	defer account.mu.Unlock()
+	if account.closed {
+		account.mu.Unlock()
+		return nil, errors.New("p2p.service_unconfigured")
+	}
+	var result any
+	var err error
 	if method == "device.restore" {
-		return host.restore(ctx, account, request.Data)
+		result, err = host.restore(ctx, account, request.Data)
+	} else if method == "device.certificate" {
+		result, err = host.certificate(ctx, account, request.Data)
+	} else if method == "device.certificate_recovery_scope" {
+		if account.identity.ServiceID != request.ServiceID {
+			err = errors.New("p2p.identity_mismatch")
+		} else {
+			result, err = account.certificateRecoveryScope(ctx, request.Data)
+		}
+	} else {
+		result, err = host.manage(ctx, account, method, request.Data)
 	}
-	if method == "device.certificate" {
-		return host.certificate(ctx, account, request.Data)
+	var retry *bootstrapJob
+	if bootstrapTransient(err) && ctx.Err() == nil && (method == "device.restore" || method == "user.login" || method == "user.register" || method == "user.current") {
+		captured, captureErr := host.captureBootstrap(request.ServiceID)
+		if captureErr == nil {
+			matching := captured.generation == operationGeneration
+			if method == "device.restore" || method == "user.current" {
+				matching = matching && expectedSessionErr == nil && captured.hasSession == expectedSessionExists && captured.session == expectedSession
+			}
+			if matching {
+				retry = captured
+			} else {
+				clear(captured.credential.PrivateKey)
+			}
+		}
 	}
-	return host.manage(ctx, account, method, request.Data)
+	completions := account.authRecoveryJoins
+	account.authRecoveryJoins = nil
+	pendingAuthentication := account.activationPending != nil && (method == "user.login" || method == "user.register" || method == "user.current" || method == "user.logout")
+	account.mu.Unlock()
+	// Old receive/emit callbacks can wait for account.mu. This exact operation
+	// owns their join after unlocking, including cancelled/error paths.
+	for _, completion := range completions {
+		completion.Wait()
+	}
+	if pendingAuthentication && ctx.Err() != nil && err == nil {
+		err = errors.New("p2p.request_cancelled")
+		result = nil
+	}
+	if retry != nil {
+		host.scheduleCapturedBootstrap(retry)
+	}
+	return result, err
 }
 
 // manage answers one account operation and keeps the maintained directory in step
 // with it.
 //
-// Every operation that names a user session carries its token, which is how the
-// core learns which session this account is being used with: the first such call
-// after a restart — the shell's own session restore reads the account — is enough
-// to bring the directory up to date and announce it, with no separate handshake
-// and no page needing to be opened first.
+// Only a confirmed durable login/current session may publish directory authority.
+// A token on an unrelated read is not a login or permission to switch accounts.
 func (host *Host) manage(ctx context.Context, account *account, method string, data json.RawMessage) (any, error) {
+	if account.closed {
+		return nil, errors.New("p2p.service_unconfigured")
+	}
+	if method == "user.logout" {
+		return account.logout(ctx, data)
+	}
+	if directoryChangesOn(method) || catalogChangesOn(method) {
+		// These writes schedule selected-account authority work. Capture before
+		// their first HTTP; ordinary explicit Bearer data reads remain unchanged.
+		scope, err := account.selectedSessionScopeLocked(ctx)
+		if err != nil {
+			return nil, err
+		}
+		ctx = scope.Context(ctx)
+	}
 	var probe struct {
 		Token string `json:"token"`
 	}
-	if protocol.DecodeExact(data, &probe) == nil && account.rememberToken(probe.Token) {
-		account.refreshAfterWrite()
+	if method == "user.current" {
+		if protocol.DecodeExact(data, &probe) != nil {
+			return nil, errors.New("p2p.invalid_request")
+		}
+		if err := account.confirmCurrentSession(probe.Token); err != nil {
+			return nil, err
+		}
+		if err := account.checkCallerSessionLocked(ctx); err != nil {
+			return nil, err
+		}
+		scope, err := account.selectedSessionScopeLocked(ctx)
+		if err != nil {
+			return nil, err
+		}
+		ctx = scope.Context(ctx)
+	}
+	authentication := method == "user.login" || method == "user.register" || method == "user.current"
+	if authentication {
+		if _, err := account.authRecoveryRequiredLocked(ctx); err != nil {
+			return nil, err
+		}
 	}
 	result, err := account.management(ctx, method, data)
 	if err != nil {
 		return result, err
+	}
+	if method == "user.login" || method == "user.register" {
+		session, ok := result.(controlplane.UserSession)
+		if !ok {
+			return nil, errors.New("p2p.invalid_user_session")
+		}
+		if err := account.confirmLogin(ctx, session); err != nil {
+			return nil, err
+		}
+		ctx, err = account.confirmedSessionContextLocked(ctx, session)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if method == "user.current" {
+		user, ok := result.(controlplane.User)
+		if !ok || !protocol.ValidID(user.UserID) || user.Username == "" {
+			return nil, errors.New("p2p.invalid_user_session")
+		}
+		if err := account.confirmCurrentSession(probe.Token); err != nil {
+			return nil, err
+		}
+		account.rememberToken(probe.Token)
+	}
+	if authentication {
+		if err := checkBootstrapContext(ctx); err != nil {
+			return nil, err
+		}
+		session, exists, err := host.readAccountSession(account.identity.ServiceID)
+		if err != nil {
+			return nil, err
+		}
+		if !exists {
+			return nil, errors.New("p2p.user_login_required")
+		}
+		if err := host.checkSessionRevocation(account.identity.ServiceID, session); err != nil {
+			return nil, err
+		}
+	}
+	// Authentication and its durable confirmation have really completed. Only
+	// this fresh identity/expiry admission may choose pending versus activation;
+	// no failed WSS/catalog operation is caught and converted into auth success.
+	recoveryPending := false
+	if authentication {
+		var err error
+		recoveryPending, err = account.authRecoveryRequiredLocked(ctx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if recoveryPending {
+		var userID string
+		if method == "user.current" {
+			userID = result.(controlplane.User).UserID
+		} else {
+			userID = result.(controlplane.UserSession).User.UserID
+		}
+		if err := account.deferAccountActivationLocked(ctx, userID); err != nil {
+			return nil, err
+		}
+		if err := checkBootstrapContext(ctx); err != nil {
+			return nil, err
+		}
+		return result, nil
 	}
 	// Report presence for the account actually in use.
 	//
@@ -344,33 +528,50 @@ func (host *Host) manage(ctx context.Context, account *account, method string, d
 	// persisted session before the device.
 	if account.client != nil {
 		switch method {
-		case "user.login":
+		case "user.login", "user.register":
 			if session, ok := result.(controlplane.UserSession); ok && session.User.UserID != "" {
-				account.client.SetAccount(session.User.UserID)
+				if err := account.reportAccount(ctx, session.User.UserID); err != nil {
+					return nil, err
+				}
 			}
 		case "user.current":
 			// A restart signs in by restoring its persisted token rather than by
 			// logging in again, and this is the call that reads it. Without this the
 			// fix above would only hold until the next launch.
 			if user, ok := result.(controlplane.User); ok && user.UserID != "" {
-				account.client.SetAccount(user.UserID)
+				if err := account.reportAccount(ctx, user.UserID); err != nil {
+					return nil, err
+				}
 			}
-		case "user.logout":
-			// Signed in nowhere reads as offline, which is the truth: an account that
-			// is no longer signed in must not keep this machine reachable.
-			account.client.SetAccount("")
 		}
 	}
-	if method == "user.logout" {
-		account.forgetToken()
-		account.host.announceDirectory(account.identity.ServiceID, account.snapshot(account.identity.ServiceID).Revision)
-		return result, nil
+	if method == "user.login" || method == "user.register" || method == "user.current" {
+		if account.client != nil {
+			if _, err := account.refreshCatalogLocked(ctx); err != nil {
+				return nil, err
+			}
+		}
+		if err := checkBootstrapContext(ctx); err != nil {
+			return nil, err
+		}
+		if err := account.refreshAfterWrite(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if directoryChangesOn(method) {
-		account.refreshAfterWrite()
+		if err := account.refreshAfterWrite(ctx); err != nil {
+			return nil, err
+		}
 	}
 	if catalogChangesOn(method) {
-		account.refreshCatalogAfterWrite()
+		if err := account.refreshCatalogAfterWrite(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if authentication {
+		if err := checkBootstrapContext(ctx); err != nil {
+			return nil, err
+		}
 	}
 	return result, nil
 }
@@ -410,6 +611,11 @@ func (account *account) directoryOperation(ctx context.Context, method string, d
 	if method == "directory.refresh" {
 		return account.refreshDirectory(ctx)
 	}
+	account.mu.Lock()
+	defer account.mu.Unlock()
+	if account.closed {
+		return nil, errors.New("p2p.service_unconfigured")
+	}
 	return account.snapshot(account.identity.ServiceID), nil
 }
 
@@ -426,6 +632,7 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 	}
 	host.mu.Lock()
 	roots := host.roots
+	admittedRevision := host.removalRevision
 	host.mu.Unlock()
 	base, err := controlplane.New(request.Endpoints, roots)
 	if err != nil {
@@ -447,6 +654,10 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 		base.Close()
 		return nil, errors.New("p2p.helper_unavailable")
 	}
+	if host.removedAt[identity.ServiceID] > admittedRevision {
+		base.Close()
+		return nil, errors.New("p2p.service_unconfigured")
+	}
 	if previous := host.accounts[identity.ServiceID]; previous != nil {
 		base.Close()
 		if previous.endpoints != request.Endpoints {
@@ -454,43 +665,76 @@ func (host *Host) configure(ctx context.Context, payload json.RawMessage) (any, 
 		}
 		return identity, nil
 	}
-	host.accounts[identity.ServiceID] = &account{base: base, identity: identity, endpoints: request.Endpoints, host: host}
+	lifetime, cancel := context.WithCancel(host.ctx)
+	host.accounts[identity.ServiceID] = &account{base: base, httpPhase: accountHTTPSetup, identity: identity, endpoints: request.Endpoints, host: host, cancel: cancel, lifetime: lifetime}
 	// The directory is maintained for as long as the account exists: once the
 	// shell hands over a user session, the core keeps the list current on its own
 	// instead of waiting for a page to be opened. The catalog of paired computers
 	// is maintained the same way, from the pairs the same account reads.
-	go host.accounts[identity.ServiceID].maintainDirectory(host.ctx)
-	go host.accounts[identity.ServiceID].maintainCatalog(host.ctx)
-	go host.accounts[identity.ServiceID].maintainCertificates(host.ctx)
+	go host.accounts[identity.ServiceID].maintainDirectory(lifetime)
+	go host.accounts[identity.ServiceID].maintainCatalog(lifetime)
+	go host.accounts[identity.ServiceID].maintainCertificates(lifetime)
 	return identity, nil
 }
 
 func (host *Host) restore(ctx context.Context, account *account, data json.RawMessage) (any, error) {
-	var request struct {
-		Device     controlplane.Device         `json:"device"`
-		PrivateKey []byte                      `json:"privateKey"`
-		Pins       []controlplane.PairIdentity `json:"pins"`
+	if account.closed {
+		return nil, errors.New("p2p.service_unconfigured")
 	}
+	var request deviceRestoreRequest
 	if protocol.DecodeExact(data, &request) != nil {
 		return nil, errors.New("p2p.invalid_device_state")
 	}
+	if request.Pins == nil || len(request.Pins) != 0 {
+		return nil, errors.New("p2p.invalid_request")
+	}
 	defer clear(request.PrivateKey)
-	reportedAccount := request.Device.UserID
-	ownedDevice, err := host.restoreDeviceOwner(ctx, account, request.Device, request.PrivateKey)
+	var err error
+	ctx, err = account.restoreSessionContextLocked(ctx, request)
 	if err != nil {
 		return nil, err
 	}
-	request.Device = ownedDevice
-	device, err := host.prepareCertificate(ctx, account, request.Device, request.PrivateKey, "", "")
+	reportedAccount := request.AccountUserID
+	if reportedAccount != "" {
+		if !protocol.ValidID(reportedAccount) {
+			return nil, errors.New("p2p.invalid_request")
+		}
+		selected, err := account.selectedAccount(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if selected != reportedAccount {
+			return nil, errors.New("p2p.user_scope_mismatch")
+		}
+	}
+	ctx, device, err := host.prepareRestoreCertificate(ctx, account, request.Device, request.PrivateKey)
 	if err != nil {
 		return nil, err
 	}
 	request.Device = device
+	if err := certificateContext(ctx); err != nil {
+		return nil, err
+	}
 	if account.manager != nil {
 		if !sameDevice(account.device, device) {
 			return nil, errors.New("p2p.identity_mismatch")
 		}
-		account.client.SetAccount(reportedAccount)
+		if err := account.reportAccount(ctx, reportedAccount); err != nil {
+			return nil, err
+		}
+		// Failed activation can leave this same account's read-only owner closed.
+		// Repair it before a fresh scoped identity read needs its registration.
+		if !account.manager.CandidatesActive() {
+			if err := account.manager.ReconnectSignals(ctx); err != nil {
+				return nil, err
+			}
+		}
+		if _, err := account.refreshCatalogLocked(ctx); err != nil {
+			return nil, err
+		}
+		if err := account.finishRestoreLocked(ctx); err != nil {
+			return nil, err
+		}
 		return struct {
 			DeviceID string `json:"deviceId"`
 		}{device.DeviceID}, nil
@@ -507,15 +751,10 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		return nil, errors.New("p2p.helper_parent_unavailable")
 	}
 	owner := func(ctx context.Context, pairID string) (runtimebridge.Binding, error) {
-		data, err := host.callMain(ctx, "runtime.connect", struct {
-			ServiceID string `json:"serviceId"`
-			PairID    string `json:"pairId"`
-		}{account.identity.ServiceID, pairID})
-		var binding runtimebridge.Binding
-		if err == nil {
-			err = protocol.DecodeExact(data, &binding)
-		}
-		return binding, err
+		return host.runtimeBinding(ctx, "runtime.connect", account.identity.ServiceID, pairID)
+	}
+	resumeOwner := func(ctx context.Context, pairID string) (runtimebridge.Binding, error) {
+		return host.runtimeBinding(ctx, "runtime.resume", account.identity.ServiceID, pairID)
 	}
 	roots := func(ctx context.Context) ([]runtimebridge.Root, error) {
 		data, err := host.callMain(ctx, "runtime.roots", struct {
@@ -532,29 +771,28 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 		}
 		return result.Roots, nil
 	}
-	emit := func(state peersession.State) {
-		// Record before announcing: a reconnection pass that runs between the two
-		// must see the new stage, not the one it replaced.
-		account.mu.Lock()
-		if account.stages == nil {
-			account.stages = make(map[string]string)
-		}
-		account.stages[state.PairID] = state.Stage
-		account.mu.Unlock()
-		ctx, cancel := context.WithTimeout(host.ctx, 5*time.Second)
-		defer cancel()
-		_, _ = host.callMain(ctx, "peer.state", struct {
-			ServiceID string            `json:"serviceId"`
-			State     peersession.State `json:"state"`
-		}{account.identity.ServiceID, state})
-	}
+	publication := &restorePublication{host: host, account: account}
 	client.SetAccount(reportedAccount)
-	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: append(ed25519.PrivateKey(nil), request.PrivateKey...), Roots: roots}, request.Pins, owner, emit)
+	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: append(ed25519.PrivateKey(nil), request.PrivateKey...), Roots: roots, ResumeOwner: resumeOwner, CoreInstanceID: host.coreInstanceID, Wake: func(pairID string) {
+		host.AutoConnectEngine().Wake(autoconnect.Intent{ServiceID: account.identity.ServiceID, PairID: pairID})
+	}}, request.Pins, owner, publication.emit)
 	if err != nil {
 		client.Close()
 		return nil, err
 	}
-	account.client, account.manager, account.device = client, manager, request.Device
+	if err := certificateContext(ctx); err != nil {
+		account.discardRestoreManagerLocked(manager, client)
+		return nil, err
+	}
+	if err := account.publishRestoreStateLocked(ctx, func() error {
+		account.client, account.manager, account.device = client, manager, request.Device
+		account.httpPhase = accountHTTPDevice
+		publication.published.Store(true)
+		return nil
+	}); err != nil {
+		account.discardRestoreManagerLocked(manager, client)
+		return nil, err
+	}
 	// A restored session starts with no pins, and the peer session admits a
 	// connection only for a pair it has pinned. The catalog pass is what pins, and
 	// answering this call is what the shell takes as "online", so the pass runs
@@ -563,15 +801,57 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 	// user could read. It runs with the account lock already held, which is why it
 	// is the locked half of the pass.
 	if _, err := account.refreshCatalogLocked(ctx); err != nil {
-		log.Printf("[p2p] catalog refresh after restore failed: %v", err)
+		return nil, err
+	}
+	if err := account.finishRestoreLocked(ctx); err != nil {
+		return nil, err
 	}
 	return struct {
 		DeviceID string `json:"deviceId"`
 	}{request.Device.DeviceID}, nil
 }
 
+type restorePublication struct {
+	host      *Host
+	account   *account
+	published atomic.Bool
+}
+
+func (publication *restorePublication) emit(state peersession.State) {
+	// Until publication this external Host callback must not wait for account.mu.
+	// Internal WSS registration/event processing remains owned by the Manager.
+	if !publication.published.Load() {
+		return
+	}
+	account, host := publication.account, publication.host
+	account.mu.Lock()
+	if account.manager == nil || !account.manager.OwnsState(state) {
+		account.mu.Unlock()
+		return
+	}
+	if account.stages == nil {
+		account.stages = make(map[string]string)
+	}
+	if account.refusals == nil {
+		account.refusals = make(map[string]string)
+	}
+	account.stages[state.PairID] = state.Stage
+	account.refusals[state.PairID] = state.Error
+	account.mu.Unlock()
+	ctx, cancel := context.WithTimeout(host.ctx, 5*time.Second)
+	defer cancel()
+	_, _ = host.callMain(ctx, "peer.state", struct {
+		ServiceID string            `json:"serviceId"`
+		State     peersession.State `json:"state"`
+	}{account.identity.ServiceID, state})
+}
+
 func (account *account) connection(ctx context.Context, method string, data json.RawMessage) (any, error) {
 	account.mu.Lock()
+	if account.closed {
+		account.mu.Unlock()
+		return nil, errors.New("p2p.service_unconfigured")
+	}
 	manager := account.manager
 	account.mu.Unlock()
 	if method == "network.invalidate" {

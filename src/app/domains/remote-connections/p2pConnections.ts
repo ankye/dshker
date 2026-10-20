@@ -3,7 +3,11 @@ import type { P2PConnectionView } from '@/shared/p2p-management'
 import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
 
 /** Stages that mean a connection attempt is still in progress. */
-const IN_FLIGHT: readonly P2PConnectionView['stage'][] = ['punching', 'starting-runtime']
+const IN_FLIGHT: readonly P2PConnectionView['stage'][] = [
+  'punching',
+  'starting-runtime',
+  'suspended'
+]
 
 export interface P2PConnectionsState {
   peers: P2PConnectionView[] | undefined
@@ -49,9 +53,7 @@ export class P2PConnectionsDomain {
     if (this.#polling !== undefined) return
     this.#polling = setTimeout(() => {
       this.#polling = undefined
-      const inFlight = (this.#state.peers ?? []).some(
-        (peer) => peer.stage === 'punching' || peer.stage === 'starting-runtime'
-      )
+      const inFlight = (this.#state.peers ?? []).some((peer) => IN_FLIGHT.includes(peer.stage))
       if (!inFlight) return
       void this.read().then(() => this.#scheduleFollowUp())
     }, 2000)
@@ -90,8 +92,13 @@ export class P2PConnectionsDomain {
 
   /** A direct path is required for `ready`; relayed transport is not offered. */
   isDirect(serviceId: string, pairId: string): boolean {
-    const path = this.find(serviceId, pairId)?.path
-    return path !== undefined && path.protocol === 'udp' && path.localType !== ''
+    const peer = this.find(serviceId, pairId)
+    return (
+      peer !== undefined &&
+      (peer.stage === 'ready' || peer.stage === 'connected') &&
+      peer.path.protocol === 'udp' &&
+      peer.path.localType !== ''
+    )
   }
 
   async connect(serviceId: string, pairId: string): Promise<void> {

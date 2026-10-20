@@ -5,6 +5,17 @@
  * catalogs spread it back in beside errors, updates and refusals.
  */
 export const zhCNP2P = {
+  'p2p.networkChoice.title': '选择连接网络',
+  'p2p.networkChoice.required': '选择网络后连接',
+  'p2p.networkChoice.stale': '原网络已失效，请重新选择',
+  'p2p.networkChoice.hint': '这台电脑加入了多个网络。你的选择只用于此电脑，并会保留。',
+  'p2p.networkChoice.back': '返回电脑列表',
+  'p2p.networkChoice.pending': '正在确认网络授权…',
+  'p2p.networkChoice.refresh': '刷新网络选择',
+  'p2p.networkChoice.loading': '正在读取可用网络…',
+  'p2p.networkChoice.readFailed': '可用网络读取失败，未改变原选择。请刷新重试。',
+  'p2p.networkChoice.unconfirmed': '选择结果尚未确认。请先刷新，不要重复提交。',
+  'p2p.networkChoice.empty': '这台电脑暂无可选择的授权网络。',
   'p2p.account.accountDetails': '账号技术信息',
   'p2p.account.accountIdHint': '账号 ID 仅用于排查问题，日常操作无需记忆或填写。',
   'p2p.account.networksTitle': '网络',
@@ -97,6 +108,7 @@ export const zhCNP2P = {
   'p2p.connection.stageStarting': '正在启动远端运行时…',
   'p2p.connection.stageConnected': '已连接，工作台按需启动',
   'p2p.connection.stageReady': '已连接，工作台可用',
+  'p2p.connection.stageSuspended': '连接中断，正在恢复…',
   'p2p.connection.stageFailed': '连接失败',
   'p2p.connection.stageDisconnected': '已断开',
   'p2p.connection.connect': '连接这台电脑',
@@ -331,6 +343,20 @@ export const zhCNP2P = {
 
 /** US English P2P copy, checked against every key above. */
 export const enUSP2P: Record<keyof typeof zhCNP2P, string> = {
+  'p2p.networkChoice.title': 'Choose connection network',
+  'p2p.networkChoice.required': 'Choose a network to connect',
+  'p2p.networkChoice.stale': 'Original network expired; choose again',
+  'p2p.networkChoice.hint':
+    'This computer belongs to multiple networks. Your explicit choice is saved for this computer only.',
+  'p2p.networkChoice.back': 'Back to computers',
+  'p2p.networkChoice.pending': 'Confirming network authority…',
+  'p2p.networkChoice.refresh': 'Refresh network choices',
+  'p2p.networkChoice.loading': 'Reading available networks…',
+  'p2p.networkChoice.readFailed':
+    'Available networks could not be read. The original selection is unchanged. Refresh to retry.',
+  'p2p.networkChoice.unconfirmed':
+    'The selection result is not confirmed. Refresh before submitting again.',
+  'p2p.networkChoice.empty': 'This computer has no authorized network available to choose.',
   'p2p.account.accountDetails': 'Account technical details',
   'p2p.account.accountIdHint':
     'The account ID is for troubleshooting. You do not need to remember or enter it for everyday use.',
@@ -437,6 +463,7 @@ export const enUSP2P: Record<keyof typeof zhCNP2P, string> = {
   'p2p.connection.stageStarting': 'Starting the remote runtime...',
   'p2p.connection.stageConnected': 'Connected, workbench starts on request',
   'p2p.connection.stageReady': 'Connected, workbench available',
+  'p2p.connection.stageSuspended': 'Connection interrupted — recovering...',
   'p2p.connection.stageFailed': 'Connection failed',
   'p2p.connection.stageDisconnected': 'Disconnected',
   'p2p.connection.connect': 'Connect this computer',

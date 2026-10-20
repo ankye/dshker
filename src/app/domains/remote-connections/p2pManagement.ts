@@ -47,6 +47,7 @@ const reads = new Set<Operation>([
   'catalog',
   'currentUser',
   'networks',
+  'networkChoices',
   'directory',
   'registration'
 ])
@@ -154,6 +155,7 @@ export class P2PManagementDomain {
     if (MACHINE_SCOPED.has(method)) return method
     const service = 'serviceId' in fields ? String(fields.serviceId) : 'catalog'
     if (method === 'directory' || method === 'refreshDirectory') return `directory:${service}`
+    if (method === 'networkChoices') return `network-choices:${service}`
     return service
   }
 

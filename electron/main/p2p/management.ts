@@ -3,8 +3,8 @@ import type { LauncherHarnessService } from '../managed/launcher-harness-service
 import { assertAccountId } from './account-records'
 import { PeerAccounts } from './accounts'
 import { PeerCatalog } from './catalog'
-import { peerPartition } from './partitions'
 import { PeerConnections } from './connections'
+import { readPeerWorkbenchEntry } from './workbench-entry'
 import { PeerCredentialStore } from './credentials'
 import { PeerCertificateRecoveryScope } from './certificate-recovery-scope'
 import { PeerDeviceSession } from './device-session'
@@ -21,6 +21,8 @@ import { PeerHelperError } from './wire'
 import { memberAsPair } from './management-projection'
 import { removeNetworkAuthority, removePairAuthority } from './management-authority'
 import { CoreAutoConnect } from './auto-connect'
+import { readNetworkChoices, selectComputerNetwork } from './network-selection'
+import type { P2PManagementInputs } from '../../../src/shared/p2p-management'
 import type { CoreCatalogPort } from '../core/catalog'
 import type { CoreSecretPort } from '../core/secrets'
 
@@ -112,23 +114,6 @@ export class PeerManagement {
       runtime: options.runtime,
       rootsProvider: options.rootsProvider,
       onUnavailable: () => this.#clearSession(),
-      // A drop is handed to the core's reconnection engine, which owns the
-      // widening schedule and the terminal-refusal set.
-      //
-      // This used to call reconcile directly on every drop, which dispatched a
-      // fresh connect with no delay at all. Because starting a connect also
-      // supersedes the pair's existing session, each of those attempts produced
-      // the very `disconnected` that triggered the next one: the logs show a
-      // connection reaching `ready` and being torn down about half a second
-      // later, forever, with the retry in between refused because this machine's
-      // signal subscription was still being rebuilt. The engine already retries
-      // a dropped pair — 1s, 2s, 5s, 15s, 60s — so the drop only needs to be
-      // reported, not raced.
-      onPeerStage: (serviceId, pairId, _stage, generation) => {
-        // The core can replace an attempt without this process calling connect, so
-        // the address cached under the old one must go. See `retire`.
-        this.#session?.connections.retire(serviceId, pairId, generation)
-      },
       // The core announces a directory revision instead of the shell discovering
       // one: the snapshot is the core's, and a page that already read it cannot
       // see a new device list otherwise.
@@ -450,6 +435,7 @@ export class PeerManagement {
     assertAccountId(serviceId, 12)
     this.#admit()
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
+    this.#session?.connections.invalidate(serviceId)
     // Local-only, tolerant removal: never contacts the coordinator, so a server
     // the user no longer runs (or a legacy record that no longer passes strict
     // re-validation) does not block deleting it.
@@ -631,17 +617,14 @@ export class PeerManagement {
 
   /**
    * The account this machine reports presence for, out of the ones it belongs to.
-   * Read after the persisted login is adopted; with nobody signed in, the
-   * credential's own account stands. The coordinator admits only a linked account,
-   * so the switch waits for its list to confirm the link.
+   * Read after the persisted login is adopted. No login means explicitly signed
+   * out; enrollment ownership is never a substitute for the selected account.
    *
    * This one read asks the core to read the coordinator instead of answering from
    * its snapshot, because the snapshot is not necessarily read yet at restore
-   * time — the core starts reading when it first sees the session token, which is
-   * this same startup path — and a "nothing read yet" answer here would report the
-   * credential's account and make the machine invisible to the account using it,
-   * which is the bug this check exists to fix. It is the same single coordinator
-   * read the old per-account `devices.list` performed.
+   * time — the core starts reading when it first sees the session token. An
+   * unread or failed list cannot authorize a switch to another account. This is
+   * the same single coordinator read the old per-account devices list performed.
    */
   async #reportedAccount(
     serviceId: string,
@@ -650,14 +633,15 @@ export class PeerManagement {
     signal: AbortSignal
   ): Promise<string> {
     const signedIn = session.accounts.currentUserId(serviceId)
-    if (signedIn === undefined || signedIn === credential.userId) return credential.userId
+    if (signedIn === undefined) return ''
+    if (signedIn === credential.userId) return signedIn
     const linked = await session.accounts
       .refreshDirectory(serviceId, this.#signal(signal))
       .then((directory) =>
         directory.devices.some((device) => device.deviceId === credential.deviceId)
       )
-      .catch(() => false)
-    return linked ? signedIn : credential.userId
+    if (!linked) throw new PeerHelperError('p2p.binding_unauthorized')
+    return signedIn
   }
 
   /**
@@ -701,6 +685,14 @@ export class PeerManagement {
       .filter((computer) => computer.serviceId === serviceId && computer.pairState === 'active')
       .map((computer) => memberAsPair(computer))
   }
+  async networkChoices(serviceId: string, signal: AbortSignal) {
+    const session = await this.#readyAsDevice(serviceId, signal)
+    return readNetworkChoices(session.rpc, serviceId, this.#signal(signal))
+  }
+  async selectNetwork(request: P2PManagementInputs['selectNetwork'], signal: AbortSignal) {
+    const session = await this.#readyAsDevice(request.serviceId, signal)
+    return selectComputerNetwork(session.rpc, request, this.#signal(signal))
+  }
   async pairIdentity(serviceId: string, pairId: string, signal: AbortSignal) {
     return (await this.#readyAsDevice(serviceId, signal)).pairing.identity(
       serviceId,
@@ -741,6 +733,7 @@ export class PeerManagement {
   /** Returns the catalog because revocation removes the paired computer record. */
   async revokePair(serviceId: string, pairId: string, signal: AbortSignal) {
     const session = await this.#ready(signal)
+    session.connections.invalidate(serviceId, pairId)
     await session.pairing.revoke(serviceId, pairId, this.#signal(signal))
     // The pair is gone: its local entry point must not remain usable.
     session.connections.invalidate(serviceId, pairId)
@@ -817,18 +810,31 @@ export class PeerManagement {
    * has already replaced is refused, so a tab cannot load a gateway its session no
    * longer owns.
    *
-   * It is synchronous on purpose: no device restore, no connection attempt, no
-   * retry. A tab asking for an address must never be the reason one is started.
+   * It only reads the core's current entry: no device restore, connection attempt
+   * or retry. A tab asking for an address must never be the reason one is started.
    */
-  entry(serviceId: string, pairId: string, generation: number) {
+  async entry(serviceId: string, pairId: string, generation: number, signal: AbortSignal) {
+    this.#admit()
     const session = this.#session
     if (!session) throw new PeerHelperError('p2p.device_unregistered')
-    // The guest is isolated per pair, and the partition name is derived here so the
-    // renderer never has to know how it is built.
-    return {
-      url: session.connections.entry(serviceId, pairId, generation),
-      partition: peerPartition(serviceId, pairId)
-    }
+    const admitEntry = session.connections.guardEntry(serviceId, pairId)
+    return readPeerWorkbenchEntry(
+      {
+        rpc: session.rpc,
+        catalog: this.#catalog,
+        current: (service, pair) =>
+          this.#host
+            .snapshot()
+            .peers.find((peer) => peer.serviceId === service && peer.state.pairId === pair)?.state,
+        admit: () => {
+          this.#admit()
+          if (this.#session !== session) throw new PeerHelperError('p2p.helper_unavailable')
+          admitEntry()
+        }
+      },
+      { serviceId, pairId, generation },
+      this.#signal(signal)
+    )
   }
 
   async remoteRoots(serviceId: string, pairId: string, signal: AbortSignal) {

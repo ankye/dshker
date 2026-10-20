@@ -40,6 +40,7 @@ type TransportOptions struct {
 	Scope         protocol.SignalScope
 	Revision      uint64
 	Lease         protocol.Lease
+	Ticket        *protocol.CandidateTicket
 }
 
 // iceServersFor renders the ICE server list for the options: the self-hosted
@@ -85,7 +86,11 @@ type Transport struct {
 	negotiated     bool
 	// graceTimer runs while ICE reports disconnected. A recovery cancels it; its
 	// expiry is what finally declares the direct path lost.
-	graceTimer *time.Timer
+	graceTimer      *time.Timer
+	graceWindow     uint64
+	diagnostics     transportDiagnosticState
+	diagnosticsDone chan struct{}
+	lifecycle       chan struct{}
 }
 
 // GracePeriod is how long a disconnected ICE connection is given to recover
@@ -99,20 +104,40 @@ const GracePeriod = 20 * time.Second
 // indefinitely by repeated events.
 func (transport *Transport) beginGrace() {
 	transport.mu.Lock()
-	defer transport.mu.Unlock()
 	if transport.graceTimer != nil {
+		transport.mu.Unlock()
 		return
 	}
+	transport.graceWindow++
+	window := transport.graceWindow
 	transport.graceTimer = time.AfterFunc(GracePeriod, func() {
-		transport.fail(errors.New("p2p.direct_unavailable"))
+		transport.expireGrace(window)
 	})
+	transport.mu.Unlock()
+	transport.changed()
+}
+
+func (transport *Transport) expireGrace(window uint64) {
+	transport.mu.Lock()
+	defer transport.mu.Unlock()
+	if window != transport.graceWindow || transport.graceTimer == nil {
+		return
+	}
+	transport.endGraceLocked()
+	transport.failFrom("grace-expired", errors.New("p2p.direct_unavailable"))
 }
 
 // endGrace cancels the recovery window after ICE returned to connected, so a
 // hiccup leaves no trace and the session keeps its already punched hole.
 func (transport *Transport) endGrace() {
 	transport.mu.Lock()
-	defer transport.mu.Unlock()
+	transport.endGraceLocked()
+	transport.mu.Unlock()
+	transport.changed()
+}
+
+func (transport *Transport) endGraceLocked() {
+	transport.graceWindow++
 	if transport.graceTimer == nil {
 		return
 	}
@@ -138,7 +163,7 @@ func NewTransport(parent context.Context, options TransportOptions) (*Transport,
 		return nil, err
 	}
 	ctx, cancel := context.WithCancel(parent)
-	transport := &Transport{options: options, pc: pc, ctx: ctx, cancel: cancel, closed: make(chan struct{}), ready: make(chan struct{}), messages: make(chan []byte, 64), errors: make(chan error, 1), lease: options.Lease, leaseChanged: make(chan struct{}, 1)}
+	transport := &Transport{options: options, pc: pc, ctx: ctx, cancel: cancel, closed: make(chan struct{}), ready: make(chan struct{}), messages: make(chan []byte, 64), errors: make(chan error, 1), lease: options.Lease, leaseChanged: make(chan struct{}, 1), lifecycle: make(chan struct{}, 1)}
 	ordered, negotiated, id, subprotocol := true, true, uint16(0), "dshker.direct.v1"
 	channel, err := pc.CreateDataChannel(subprotocol, &webrtc.DataChannelInit{Ordered: &ordered, Negotiated: &negotiated, ID: &id, Protocol: &subprotocol})
 	if err != nil {
@@ -147,15 +172,20 @@ func NewTransport(parent context.Context, options TransportOptions) (*Transport,
 		return nil, err
 	}
 	transport.channel = channel
+	transport.diagnostics.value.LeaseExpiresAt = options.Lease.ExpiresAt
 	transport.bindEvents()
 	leaseDone := make(chan struct{})
 	go func() { defer close(leaseDone); transport.enforceLease() }()
+	transport.diagnosticsDone = make(chan struct{})
+	go func() { defer close(transport.diagnosticsDone); transport.maintainDiagnostics() }()
 	// Normal Pion Close releases sockets but does not join its workers. Join
 	// outside all Pion callbacks before acknowledging transport cleanup.
 	go func() {
 		<-ctx.Done()
+		transport.recordTermination("owner-context", context.Cause(ctx))
 		pc.GracefulClose()
 		<-leaseDone
+		<-transport.diagnosticsDone
 		close(transport.closed)
 	}()
 	return transport, nil
@@ -179,13 +209,20 @@ func validateOptions(options TransportOptions) error {
 	if !((options.LocalDeviceID == options.Scope.FromDeviceID && options.PeerDeviceID == options.Scope.ToDeviceID) || (options.PeerDeviceID == options.Scope.FromDeviceID && options.LocalDeviceID == options.Scope.ToDeviceID)) {
 		return errors.New("p2p.lease_scope_mismatch")
 	}
+	if options.Ticket != nil {
+		lease := options.Ticket.Lease
+		if options.Scope.AttemptID != lease.AttemptID || options.Scope.PairID != lease.PairID || options.Scope.Generation != lease.Generation || options.Scope.FromDeviceID != lease.FromDeviceID || options.Scope.ToDeviceID != lease.ToDeviceID || options.UserID != lease.UserID || options.NetworkID != lease.NetworkID || options.Revision != lease.Revision {
+			return errors.New("p2p.candidate_scope_mismatch")
+		}
+		return options.Lease.VerifyCandidate(options.ServiceKey, *options.Ticket, time.Now())
+	}
 	return options.Lease.Verify(options.ServiceKey, options.Scope, options.UserID, options.NetworkID, options.Revision, time.Now())
 }
 
 func (transport *Transport) bindEvents() {
 	transport.pc.OnDataChannel(func(channel *webrtc.DataChannel) {
+		transport.failFrom("unexpected-data-channel", errors.New("p2p.unexpected_data_channel"))
 		channel.Close()
-		transport.fail(errors.New("p2p.unexpected_data_channel"))
 	})
 	transport.pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		switch state {
@@ -194,7 +231,7 @@ func (transport *Transport) bindEvents() {
 			// closed the connection (a killed process ends here via DTLS
 			// CloseNotify). A dead peer has to be reported at once, or the user
 			// keeps driving a tab that cannot answer.
-			transport.fail(errors.New("p2p.direct_unavailable"))
+			transport.failFrom("peer-connection-"+state.String(), errors.New("p2p.direct_unavailable"))
 		case webrtc.PeerConnectionStateDisconnected:
 			// Disconnected is not terminal and carries no such signal. ICE reports
 			// it for a few lost packets, a changed network or a machine waking up,
@@ -210,14 +247,16 @@ func (transport *Transport) bindEvents() {
 	})
 	transport.channel.OnOpen(func() {
 		if _, err := transport.Path(); err != nil {
-			transport.fail(err)
+			transport.failFrom("path-verification", err)
 			return
 		}
 		transport.readyOnce.Do(func() { close(transport.ready) })
+		transport.changed()
 	})
-	transport.channel.OnClose(func() { transport.fail(errors.New("p2p.direct_closed")) })
-	transport.channel.OnError(transport.fail)
+	transport.channel.OnClose(func() { transport.failFrom("data-channel-close", errors.New("p2p.direct_closed")) })
+	transport.channel.OnError(func(err error) { transport.failFrom("data-channel-error", err) })
 	transport.channel.OnMessage(func(message webrtc.DataChannelMessage) {
+		transport.recordMessageReceive()
 		// A message can arrive in the window between the channel opening and the
 		// identity check finishing. Failing here killed an otherwise healthy
 		// connection, and the faster the peers are the wider that window looks: on
@@ -233,13 +272,13 @@ func (transport *Transport) bindEvents() {
 			return
 		}
 		if message.IsString || len(message.Data) == 0 || len(message.Data) > protocol.MaxControlBytes {
-			transport.fail(errors.New("p2p.protocol_limit"))
+			transport.failFrom("data-channel-protocol", errors.New("p2p.protocol_limit"))
 			return
 		}
 		select {
 		case transport.messages <- append([]byte(nil), message.Data...):
 		default:
-			transport.fail(errors.New("p2p.receive_limit"))
+			transport.failFrom("receive-queue-limit", errors.New("p2p.receive_limit"))
 		}
 	})
 }
@@ -277,7 +316,7 @@ func (transport *Transport) Send(data []byte) error {
 	expires := transport.lease.ExpiresAt
 	transport.mu.Unlock()
 	if expires <= time.Now().Unix() {
-		transport.fail(errors.New("p2p.lease_expired"))
+		transport.failFrom("lease-expired", errors.New("p2p.lease_expired"))
 		return errors.New("p2p.lease_expired")
 	}
 	if len(data) == 0 || len(data) > protocol.MaxControlBytes || transport.channel.BufferedAmount()+uint64(len(data)) > protocol.MaxQueueBytes {
@@ -307,15 +346,32 @@ func (transport *Transport) Path() (DirectPath, error) {
 }
 
 func (transport *Transport) UpdateLease(lease protocol.Lease) error {
-	if err := lease.Verify(transport.options.ServiceKey, transport.options.Scope, transport.options.UserID, transport.options.NetworkID, transport.options.Revision, time.Now()); err != nil {
+	var err error
+	if transport.options.Ticket != nil {
+		err = lease.VerifyCandidate(transport.options.ServiceKey, *transport.options.Ticket, time.Now())
+	} else {
+		err = lease.Verify(transport.options.ServiceKey, transport.options.Scope, transport.options.UserID, transport.options.NetworkID, transport.options.Revision, time.Now())
+	}
+	if err != nil {
 		return err
 	}
 	transport.mu.Lock()
-	if transport.lease.ExpiresAt <= time.Now().Unix() || lease.ExpiresAt < transport.lease.ExpiresAt {
+	if transport.lease.ExpiresAt <= time.Now().Unix() {
 		transport.mu.Unlock()
 		return errors.New("p2p.lease_expired")
 	}
+	if lease.ExpiresAt < transport.lease.ExpiresAt {
+		transport.mu.Unlock()
+		if transport.options.Ticket != nil {
+			// HTTP readbacks may arrive behind a concurrent successful renewal.
+			// An authenticated older observation neither shortens nor invalidates
+			// the already accepted newer candidate lease.
+			return nil
+		}
+		return errors.New("p2p.lease_expired")
+	}
 	transport.lease = lease
+	transport.recordLeaseUpdate(lease.ExpiresAt)
 	transport.mu.Unlock()
 	select {
 	case transport.leaseChanged <- struct{}{}:
@@ -341,7 +397,7 @@ func (transport *Transport) enforceLease() {
 			expired := transport.lease.ExpiresAt <= time.Now().Unix()
 			transport.mu.Unlock()
 			if expired {
-				transport.fail(errors.New("p2p.lease_expired"))
+				transport.failFrom("lease-expired", errors.New("p2p.lease_expired"))
 				return
 			}
 		}
@@ -349,17 +405,32 @@ func (transport *Transport) enforceLease() {
 }
 
 func (transport *Transport) fail(err error) {
+	transport.failFrom("transport-error", err)
+}
+
+func (transport *Transport) failFrom(trigger string, err error) {
+	if transport.ctx.Err() != nil {
+		transport.recordTermination("owner-context", context.Cause(transport.ctx))
+	} else {
+		transport.recordTermination(trigger, err)
+	}
 	select {
 	case transport.errors <- err:
 	default:
 	}
 	transport.cancel()
+	transport.changed()
 }
 
 // Close ends the transport. The recovery window is dropped with it: a closed
 // connection must not be declared lost later by a timer that outlived it.
 func (transport *Transport) Close() error {
 	transport.endGrace()
+	if transport.ctx.Err() != nil {
+		transport.recordTermination("owner-context", context.Cause(transport.ctx))
+	} else {
+		transport.recordTermination("close", errors.New("p2p.direct_closed"))
+	}
 	transport.cancel()
 	<-transport.closed
 	return nil

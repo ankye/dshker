@@ -2,6 +2,10 @@ import type { PeerRpc } from './rpc'
 import { exactPeerObject, PeerHelperError } from './wire'
 import { P2P_NETWORK_DEVICE_LIMITS } from '../../../src/shared/p2p-management'
 import {
+  certificateRecoveryProjection,
+  type CertificateRecoveryProjection
+} from './certificate-recovery-projection'
+import {
   assertAccountEmail,
   assertAccountId,
   assertAccountText,
@@ -173,6 +177,46 @@ export class PeerAccounts {
     return pending.finally(() => {
       if (this.#currentUserInFlight.get(serviceId) === pending)
         this.#currentUserInFlight.delete(serviceId)
+    })
+  }
+
+  /** Explicit public recovery owner; never retries an ordinary device request. */
+  certificateRecoveryScope(
+    serviceId: string,
+    deviceId: string,
+    signal: AbortSignal
+  ): Promise<CertificateRecoveryProjection> {
+    assertAccountId(deviceId)
+    return this.#readOperation(serviceId, signal, async () => {
+      const session = this.#session(serviceId)
+      const assertCurrent = () => {
+        this.#assertOpen()
+        if (signal.aborted || this.#sessions.get(serviceId) !== session)
+          throw new PeerHelperError('p2p.request_cancelled')
+        this.#checkExpiry(session)
+      }
+      assertCurrent()
+      let response: unknown
+      try {
+        response = await this.rpc.call(
+          'device.certificate_recovery_scope',
+          { serviceId, data: { deviceId, token: session.token } },
+          signal
+        )
+      } catch (error) {
+        // A late refusal for the captured session must not revoke a newer login.
+        assertCurrent()
+        if (
+          error instanceof PeerHelperError &&
+          (error.code === 'p2p.user_unauthorized' || error.code === 'p2p.user_session_expired')
+        )
+          this.#sessions.delete(serviceId)
+        throw error
+      }
+      assertCurrent()
+      const projection = certificateRecoveryProjection(response, session.user)
+      assertCurrent()
+      return projection
     })
   }
 

@@ -2,93 +2,40 @@ package peersession
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/ankye/dshker/networking/internal/controlplane"
 	"github.com/ankye/dshker/networking/internal/peer"
 	"github.com/ankye/dshker/networking/internal/protocol"
 	"github.com/ankye/dshker/networking/internal/runtimebridge"
 )
 
-func TestConnectReplacesPendingBegin(t *testing.T) {
-	entered := make(chan struct{}, 2)
-	release := make(chan struct{})
-	requestCancelled := make(chan struct{}, 2)
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/attempt" {
-			t.Errorf("unexpected operation %s", r.URL.Path)
-		}
-		if _, err := io.Copy(io.Discard, r.Body); err != nil {
-			t.Errorf("request body read: %v", err)
-			return
-		}
-		entered <- struct{}{}
-		select {
-		case <-r.Context().Done():
-			requestCancelled <- struct{}{}
-		case <-release:
-		}
-	}))
-	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13}
-	server.StartTLS()
-	defer server.Close()
-	defer close(release)
-	roots := x509.NewCertPool()
-	roots.AddCert(server.Certificate())
-	client, err := controlplane.New(controlplane.Endpoints{HTTPSOrigin: server.URL, WSSURL: "wss" + strings.TrimPrefix(server.URL, "https") + "/v1/signals", STUNAddress: "127.0.0.1:3478"}, roots)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer client.Close()
+func TestCandidateReservationPreservesPrimaryAndRejectsOverlap(t *testing.T) {
 	manager, pin := pinFixture()
-	manager.ctx, manager.cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	manager.ctx, manager.cancel = context.WithCancel(context.Background())
 	defer manager.cancel()
-	manager.client, manager.sessions = client, make(map[string]*session)
+	manager.config.CoreInstanceID = protocol.NewNonce()
 	if err := manager.Pin(pin); err != nil {
 		t.Fatal(err)
 	}
-	result := make(chan error, 1)
-	go func() { _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 1, true); result <- err }()
-	select {
-	case <-entered:
-	case <-manager.ctx.Done():
-		t.Fatal("Begin did not reach server")
-	}
-	// A second connect supersedes the first: the old attempt's Begin request is
-	// cancelled and a fresh reservation replaces it. Refusing it as busy left a
-	// peer restart unable to reconnect for as long as the old transport lived.
-	go func() { _, err := manager.Connect(manager.ctx, pin.Pair.PairID, 2, true); result <- err }()
-	select {
-	case <-entered:
-	case <-manager.ctx.Done():
-		t.Fatal("replacement Begin did not reach server")
-	}
-	select {
-	case <-requestCancelled:
-	case <-manager.ctx.Done():
-		t.Fatal("superseded Begin HTTP request remained active")
-	}
-	if err := manager.Disconnect(pin.Pair.PairID); err != nil {
+	primary := newSession(manager.ctx)
+	primary.PairID = pin.Pair.PairID
+	manager.sessions = map[string]*session{pin.Pair.PairID: primary}
+	candidate, err := manager.reserveCandidate(pin.Pair.PairID, 1, true, true)
+	if err != nil {
 		t.Fatal(err)
 	}
-	manager.mu.Lock()
-	remaining := len(manager.sessions)
-	manager.mu.Unlock()
-	if remaining != 0 {
-		t.Fatal("Disconnect returned before reservation cleanup")
+	if manager.sessions[pin.Pair.PairID] != primary || primary.ctx.Err() != nil {
+		t.Fatal("reservation destroyed the live primary")
 	}
-	select {
-	case <-result:
-	case <-manager.ctx.Done():
-		t.Fatal("Connect did not settle after disconnect")
+	if _, err := manager.reserveCandidate(pin.Pair.PairID, 2, true, true); err == nil || err.Error() != "p2p.connection_busy" {
+		t.Fatalf("overlapping candidate = %v", err)
 	}
+	manager.finish(pin.Pair.PairID, candidate)
+	if manager.sessions[pin.Pair.PairID] != primary || primary.ctx.Err() != nil {
+		t.Fatal("candidate cleanup affected the primary")
+	}
+	manager.finish(pin.Pair.PairID, primary)
 }
 
 func TestInvalidationRejectsLateOwnerBinding(t *testing.T) {

@@ -1,0 +1,29 @@
+{
+  "publicKey": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w=",
+  "ticket": {
+    "version": 1,
+    "lease": {
+      "version": 1,
+      "serviceId": "34750f98bd59",
+      "userId": "aaaaaaaaaaaa",
+      "networkId": "bbbbbbbbbbbb",
+      "pairId": "dddddddddddd",
+      "attemptId": "11111111111111111111111111111111",
+      "fromDeviceId": "cccccccccccc",
+      "toDeviceId": "dddddddddddd",
+      "generation": 7,
+      "revision": 1,
+      "expiresAt": 1700000060,
+      "permission": "dsh-session",
+      "signature": "rhs-_l56xaV47H8wZsoXg-rHKZXVOTe2DNk5mFjIwvOw9n8OWO6tQpimDI5T80jyReMIHLHJAiCXL0HwCNacCw"
+    },
+    "serverEpoch": "55555555555555555555555555555555",
+    "previousAttemptId": "22222222222222222222222222222222",
+    "previousGeneration": 6,
+    "fromCoreInstanceId": "33333333333333333333333333333333",
+    "toCoreInstanceId": "44444444444444444444444444444444",
+    "prepareDeadline": 1700000120,
+    "signature": "gqCQgUqtVYbWpYUmjssKLpULJpu6kOjv96e_AykV734FDR0KTgSivGe9oHco_TeqbUy93SLrqZa0ktRtDLdDCg"
+  },
+  "signingBytes": "[\"dshker.candidate.v1\",1,[1,\"34750f98bd59\",\"aaaaaaaaaaaa\",\"bbbbbbbbbbbb\",\"dddddddddddd\",\"11111111111111111111111111111111\",\"cccccccccccc\",\"dddddddddddd\",7,1,1700000060,\"dsh-session\",\"rhs-_l56xaV47H8wZsoXg-rHKZXVOTe2DNk5mFjIwvOw9n8OWO6tQpimDI5T80jyReMIHLHJAiCXL0HwCNacCw\"],\"55555555555555555555555555555555\",\"22222222222222222222222222222222\",6,\"33333333333333333333333333333333\",\"44444444444444444444444444444444\",1700000120]"
+}

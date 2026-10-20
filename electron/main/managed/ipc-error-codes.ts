@@ -13,6 +13,12 @@ import type { ManagedHarnessRuntimeErrorCode } from './runtime-errors'
 
 /** Every runtime code the service can throw, in one enumerable list. */
 export const RUNTIME_ERROR_CODES: readonly ManagedHarnessRuntimeErrorCode[] = [
+  'runtime.owner_unavailable',
+  'runtime.owner_identity_mismatch',
+  'runtime.owner_record_invalid',
+  'runtime.owner_protocol_unsupported',
+  'runtime.owner_configuration_invalid',
+  'runtime.owner_shutdown_failed',
   'runtime.input_invalid',
   'runtime.node_invalid',
   'runtime.worktree_invalid',
@@ -47,6 +53,12 @@ export const RUNTIME_ERROR_CODES: readonly ManagedHarnessRuntimeErrorCode[] = [
 export const LAUNCHER_HARNESS_ERROR_CODES: Readonly<
   Record<ManagedHarnessRuntimeErrorCode, ManagedOperationErrorCode>
 > = {
+  'runtime.owner_unavailable': 'managed.runtime_owner_unavailable',
+  'runtime.owner_identity_mismatch': 'managed.runtime_owner_identity_mismatch',
+  'runtime.owner_record_invalid': 'managed.runtime_owner_record_invalid',
+  'runtime.owner_protocol_unsupported': 'managed.runtime_owner_protocol_unsupported',
+  'runtime.owner_configuration_invalid': 'managed.runtime_owner_configuration_invalid',
+  'runtime.owner_shutdown_failed': 'managed.runtime_owner_shutdown_failed',
   'runtime.input_invalid': 'managed.harness_input_invalid',
   'runtime.busy_running': 'managed.harness_busy_running',
   'runtime.port_in_use': 'managed.harness_port_in_use',

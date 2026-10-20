@@ -101,7 +101,13 @@ func (transport *Transport) accept(signal protocol.Signal, kind string, sdpType 
 		return errors.New("p2p.signal_state_conflict")
 	}
 	scope := protocol.SignalScope{AttemptID: transport.options.Scope.AttemptID, FromDeviceID: transport.options.PeerDeviceID, ToDeviceID: transport.options.LocalDeviceID, PairID: transport.options.Scope.PairID, Generation: transport.options.Scope.Generation, NextSequence: 1}
-	if err := signal.Verify(transport.options.PeerKey, scope, time.Now()); err != nil {
+	var err error
+	if transport.options.Ticket != nil {
+		err = signal.VerifyCandidate(transport.options.PeerKey, transport.options.ServiceKey, *transport.options.Ticket, scope, time.Now())
+	} else {
+		err = signal.Verify(transport.options.PeerKey, scope, time.Now())
+	}
+	if err != nil {
 		return err
 	}
 	body, err := base64.RawURLEncoding.DecodeString(signal.Payload)

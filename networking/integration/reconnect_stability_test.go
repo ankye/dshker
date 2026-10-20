@@ -131,12 +131,13 @@ func reconnectCycles(t *testing.T, initiator, runtimeOwner int) {
 		}
 		// Presence is reported per account, exactly as the shell configures its core.
 		f.devices[i].SetAccount(config.Device.UserID)
-		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private}, []controlplane.PairIdentity{config.Pin}, owner, func(state peersession.State) { states[i] <- state })
+		manager, err := peersession.New(ctx, f.devices[i], peersession.Config{Endpoints: config.Endpoints, Authority: config.Authority, Device: config.Device, PrivateKey: config.Private, CoreInstanceID: integrationCoreInstanceID(t)}, []controlplane.PairIdentity{}, owner, func(state peersession.State) { states[i] <- state })
 		must(t, err)
+		integrationActivateManager(t, ctx, manager, f, i)
 		managers[i] = manager
 		defer manager.Close()
 	}
-	pairID := f.config[initiator].Pin.Pair.PairID
+	pairID := f.config[runtimeOwner].Device.DeviceID
 	state := managers[initiator]
 
 	const cycles = 20

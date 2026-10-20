@@ -43,8 +43,8 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 	remote, err := peersession.New(
 		ctx,
 		f.devices[1],
-		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private},
-		[]controlplane.PairIdentity{f.config[1].Pin},
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private, CoreInstanceID: integrationCoreInstanceID(t)},
+		[]controlplane.PairIdentity{},
 		func(context.Context, string) (runtimebridge.Binding, error) {
 			bindingMu.Lock()
 			defer bindingMu.Unlock()
@@ -53,6 +53,7 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 		func(peersession.State) {},
 	)
 	must(t, err)
+	integrationActivateManager(t, ctx, remote, f, 1)
 	defer remote.Close()
 
 	var callbackMu sync.Mutex
@@ -86,7 +87,7 @@ func TestCoreDaemonCompletesAPeerConnection(t *testing.T) {
 	identity := configureCoreService(t, ctx, parent, f)
 	restoreCoreDevice(t, ctx, parent, f)
 
-	pairID := f.config[0].Pin.Pair.PairID
+	pairID := f.config[1].Device.DeviceID
 	connected := callCore(t, ctx, parent, "peer.connect", struct {
 		ServiceID string `json:"serviceId"`
 		Data      struct {
@@ -142,6 +143,7 @@ func configureCoreService(t *testing.T, ctx context.Context, parent *localrpc.Pe
 	if identity.ServiceID != f.authority.ServiceID {
 		t.Fatalf("service.configure reported %q", identity.ServiceID)
 	}
+	integrationConfigureCoreCatalog(t, ctx, parent, f)
 	return identity
 }
 
@@ -149,22 +151,25 @@ func configureCoreService(t *testing.T, ctx context.Context, parent *localrpc.Pe
 // is what gives the daemon something to connect with.
 func restoreCoreDevice(t *testing.T, ctx context.Context, parent *localrpc.Peer, f *fixture) {
 	t.Helper()
+	integrationSelectCoreAccount(t, ctx, parent, f)
 	// device.restore is a scoped request: the device travels inside "data",
 	// exactly as the shell sends it.
 	reply := callCore(t, ctx, parent, "device.restore", struct {
 		ServiceID string `json:"serviceId"`
 		Data      struct {
-			Device     controlplane.Device         `json:"device"`
-			PrivateKey []byte                      `json:"privateKey"`
-			Pins       []controlplane.PairIdentity `json:"pins"`
+			Device        controlplane.Device         `json:"device"`
+			AccountUserID string                      `json:"accountUserId"`
+			PrivateKey    []byte                      `json:"privateKey"`
+			Pins          []controlplane.PairIdentity `json:"pins"`
 		} `json:"data"`
 	}{
 		ServiceID: f.authority.ServiceID,
 		Data: struct {
-			Device     controlplane.Device         `json:"device"`
-			PrivateKey []byte                      `json:"privateKey"`
-			Pins       []controlplane.PairIdentity `json:"pins"`
-		}{Device: f.config[0].Device, PrivateKey: f.config[0].Private, Pins: []controlplane.PairIdentity{f.config[0].Pin}},
+			Device        controlplane.Device         `json:"device"`
+			AccountUserID string                      `json:"accountUserId"`
+			PrivateKey    []byte                      `json:"privateKey"`
+			Pins          []controlplane.PairIdentity `json:"pins"`
+		}{Device: f.config[0].Device, AccountUserID: f.userSession.User.UserID, PrivateKey: f.config[0].Private, Pins: []controlplane.PairIdentity{}},
 	})
 	var restored struct {
 		DeviceID string `json:"deviceId"`
@@ -200,7 +205,7 @@ func startCoreDaemon(t *testing.T, handler localrpc.Handler, args ...string) (*l
 
 	endpoint := coreEndpoint(t)
 	secret := strings.Repeat("b", 64)
-	cmd := exec.Command(binary, append([]string{"--state", desktopStateRoot(t)}, args...)...)
+	cmd := exec.Command(binary, append([]string{"--state", desktopStateRoot(t), "--catalog", t.TempDir()}, args...)...)
 	cmd.Stderr = os.Stderr
 	stdin, err := cmd.StdinPipe()
 	must(t, err)
@@ -292,8 +297,8 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 	remote, err := peersession.New(
 		ctx,
 		f.devices[1],
-		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private},
-		[]controlplane.PairIdentity{f.config[1].Pin},
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private, CoreInstanceID: integrationCoreInstanceID(t)},
+		[]controlplane.PairIdentity{},
 		func(context.Context, string) (runtimebridge.Binding, error) {
 			refusalMu.Lock()
 			refusals++
@@ -303,6 +308,7 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 		func(peersession.State) {},
 	)
 	must(t, err)
+	integrationActivateManager(t, ctx, remote, f, 1)
 	defer remote.Close()
 
 	coreStates := make(chan peersession.State, 256)
@@ -331,7 +337,7 @@ func TestCoreDaemonConnectsWhenThePeerHasNoWorkbench(t *testing.T) {
 	identity := configureCoreService(t, ctx, parent, f)
 	restoreCoreDevice(t, ctx, parent, f)
 
-	pairID := f.config[0].Pin.Pair.PairID
+	pairID := f.config[1].Device.DeviceID
 	connected := callCore(t, ctx, parent, "peer.connect", struct {
 		ServiceID string `json:"serviceId"`
 		Data      struct {
@@ -393,8 +399,8 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 	remote, err := peersession.New(
 		ctx,
 		f.devices[1],
-		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private},
-		[]controlplane.PairIdentity{f.config[1].Pin},
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private, CoreInstanceID: integrationCoreInstanceID(t)},
+		[]controlplane.PairIdentity{},
 		func(context.Context, string) (runtimebridge.Binding, error) {
 			ownerMu.Lock()
 			defer ownerMu.Unlock()
@@ -407,6 +413,7 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 		func(peersession.State) {},
 	)
 	must(t, err)
+	integrationActivateManager(t, ctx, remote, f, 1)
 	defer remote.Close()
 
 	parent, stopCore := startCoreDaemon(t, func(_ context.Context, method string, payload json.RawMessage) (any, error) {
@@ -423,7 +430,7 @@ func TestCoreDaemonAttachesAWorkbenchThatRecovers(t *testing.T) {
 
 	identity := configureCoreService(t, ctx, parent, f)
 	restoreCoreDevice(t, ctx, parent, f)
-	pairID := f.config[0].Pin.Pair.PairID
+	pairID := f.config[1].Device.DeviceID
 
 	connect := func(generation uint64, requestWorkbench bool) peersession.Connected {
 		raw := callCore(t, ctx, parent, "peer.connect", struct {
@@ -512,8 +519,8 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 	remote, err := peersession.New(
 		ctx,
 		f.devices[1],
-		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private},
-		[]controlplane.PairIdentity{f.config[1].Pin},
+		peersession.Config{Endpoints: f.config[1].Endpoints, Authority: f.config[1].Authority, Device: f.config[1].Device, PrivateKey: f.config[1].Private, CoreInstanceID: integrationCoreInstanceID(t)},
+		[]controlplane.PairIdentity{},
 		func(context.Context, string) (runtimebridge.Binding, error) {
 			ownerMu.Lock()
 			current := answer
@@ -523,6 +530,7 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 		func(peersession.State) {},
 	)
 	must(t, err)
+	integrationActivateManager(t, ctx, remote, f, 1)
 	defer remote.Close()
 
 	parent, stopCore := startCoreDaemon(t, func(_ context.Context, method string, payload json.RawMessage) (any, error) {
@@ -539,7 +547,7 @@ func TestCoreDaemonSurvivesEveryWorkbenchOutcome(t *testing.T) {
 
 	identity := configureCoreService(t, ctx, parent, f)
 	restoreCoreDevice(t, ctx, parent, f)
-	pairID := f.config[0].Pin.Pair.PairID
+	pairID := f.config[1].Device.DeviceID
 
 	connect := func(generation uint64) peersession.Connected {
 		raw := callCore(t, ctx, parent, "peer.connect", struct {

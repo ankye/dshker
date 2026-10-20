@@ -31,18 +31,20 @@ func TestManagersAlternateOfflineAndRecover(t *testing.T) {
 			ctx,
 			f.devices[index],
 			peersession.Config{
-				Endpoints:  config.Endpoints,
-				Authority:  config.Authority,
-				Device:     config.Device,
-				PrivateKey: config.Private,
+				Endpoints:      config.Endpoints,
+				Authority:      config.Authority,
+				Device:         config.Device,
+				PrivateKey:     config.Private,
+				CoreInstanceID: integrationCoreInstanceID(t),
 			},
-			[]controlplane.PairIdentity{config.Pin},
+			[]controlplane.PairIdentity{},
 			func(context.Context, string) (runtimebridge.Binding, error) {
 				return runtimebridge.Binding{Generation: 1, URL: runtimeURL}, nil
 			},
 			func(peersession.State) {},
 		)
 		must(t, err)
+		integrationActivateManager(t, ctx, manager, f, index)
 		return manager
 	}
 
@@ -55,12 +57,12 @@ func TestManagersAlternateOfflineAndRecover(t *testing.T) {
 		}
 	}()
 
-	pairID := f.config[0].Pin.Pair.PairID
 	generation := uint64(0)
 	stableURLs := [2]string{}
 	attempts := make(map[string]struct{})
 
 	connect := func(dialer int) {
+		pairID := f.config[1-dialer].Device.DeviceID
 		generation++
 		connected, err := managers[dialer].Connect(ctx, pairID, generation, true)
 		if err != nil {

@@ -64,12 +64,28 @@ func TestHeadlessCoreRestoresItsOwnCredential(t *testing.T) {
 		t.Fatalf("service configure answered %s", stdout)
 	}
 	serviceID := configured.ServiceID
+	// Initial setup supplies the real issued login independently of device owner.
+	sessionRecord := integrationSessionRecord(t, f.userSession)
+	secretPayload, err := json.Marshal(map[string]string{
+		"key":   "peer-user-session:" + serviceID,
+		"value": base64.StdEncoding.EncodeToString(sessionRecord),
+	})
+	must(t, err)
+	if _, stderr, code = runCLICommand(t, binary, "call", "core.secret_set", string(secretPayload), "--state", state); code != 0 {
+		stop()
+		t.Fatalf("initial session import failed: %s", stderr)
+	}
+	if _, stderr, code = runCLICommand(t, binary, "call", "user.current", envelope(t, serviceID, map[string]any{"token": f.userSession.Token}), "--state", state); code != 0 {
+		stop()
+		t.Fatalf("initial current account confirmation failed: %s", stderr)
+	}
 
 	// Hand over a credential the coordinator really issued, which is what a desktop
 	// does on the first launch after updating. The core has to take ownership of it
 	// here; that is what makes the second run possible at all.
 	device := f.config[0].Device
 	restorePayload := envelope(t, serviceID, map[string]any{
+		"accountUserId": f.userSession.User.UserID,
 		"device": map[string]any{
 			"deviceId":    device.DeviceID,
 			"userId":      device.UserID,
