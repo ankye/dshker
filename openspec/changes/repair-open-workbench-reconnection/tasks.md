@@ -18,6 +18,15 @@
 
 ## 3. Verification and handoff
 
+Publication sequencing exception (2026-10-20): after being informed that the
+long-duration gate is incomplete, the user explicitly requested direct stable
+publication. Publish the current production candidate through the unchanged
+GitHub tag/package workflow, with outstanding ICE, eight-hour/native and macOS
+packaging limitations stated in both Release languages. This changes publication
+order only: no failed or incomplete task below becomes passed, and the full
+recovery objective remains open. Do not ship the ignored D32/D33 overlays or
+claim the diagnostic build is a production fix.
+
 - [ ] 3.1 QA owner, after 1/2: run isolated real coordinator/core/DSH auto-recovery with original session/workspace readback, HTTP cookie and WebSocket traffic; record generations, attempts and stable gateway through repeated loss without a second explicit connect.
 - [ ] 3.2 QA/root, after 3.1: run isolated macOS and Windows candidate evidence without touching installed credentials or active DSH; report exactly what cross-machine/runtime tier was exercised and any missing physical UI acceptance.
 - [ ] 3.3 Root: add CHANGELOG, correct both READMEs, Agent Note and a complete test-integrity manifest; pass strict OpenSpec validation, source-size, relevant full tests, source builds, architecture, desktop validator and default test-integrity verify.
@@ -55,9 +64,32 @@
 - [x] 4.23 Client/root/reviewer: remove D27's legacy global terminal-reset shell operation and ordinary catalog/resume callers; preserve transient RetryNow and exact epoch-fenced durable Reauthorize only. Prove real shell/core admission, service A/B isolation, late old-scope results and unchanged retry budgets before freezing physical candidates. Focused races and 1,893 desktop source tests passed; independent review closed the historical Entry fixture race without relaxing ready admission. Physical acceptance is still separate under 4.19.
 - [x] 4.24 QA/root/reviewer: after sealing the D27 physical aggregate FAIL, correct the Windows test receipt reader's first-open sharing contract and observe exact orphan-runner early exit. Prove real DELETE-handle red/green, strict invalid receipt refusal and immediate named-stage failure without retries, budget changes or production edits; independently review before freezing and repeating the unchanged native preflights plus short/long/flap profiles. Native Windows 22 helper cases and Mac 32 pure cases passed; cleanup, compilation and independent review passed. These complete the helper repair only: historical 454ms/828ms subset passes remain distinct from the failed aggregate and still-pending fresh physical/crash/8h/native acceptance.
 - [x] 4.25 Client/root/reviewer: implement D29's exact predecessor grace gate before either endpoint publishes Ready, keeping the existing early observer and renew owner alive; close the coalesced-recovery notification race, recheck before commit dispatch and retain durable committed authority. The complete peersession/peer/runtimebridge race suites and vet passed after independent review closed incomplete-committed-broadcast and Stage-to-reservation recovery races. Actual local Pion HTTP and the original WS survive cancellation; grace, lease and business deadlines remain unchanged. This completes deterministic/source repair only: physical 25s, short-profile zero-attempt/resume, crash, idle and native acceptance remain separate under 4.19.
-- [ ] 4.26 Server/client/QA: implement D30's bounded shutdown-stage and bootstrap/stream termination diagnostics, consume exact stop errors and fail before post-stop database mutation. Reproduce and repair the actual shutdown owner under the existing 5s fixture guard in the independent server planning scope; prove races, source boundaries and current CI before deployment or another physical freeze. Do not label the startup, ICE and stop failures as one cause or mark source diagnostics as physical acceptance.
+- [x] 4.26 Server/client/QA: implement D30's bounded shutdown-stage and bootstrap/stream termination diagnostics, consume exact stop errors and fail before post-stop database mutation. The independent server's deterministic raw-connection/cancellation/final-flush barriers, focused races, exact-SHA full CI and production smoke passed at `9665b122`. Its verified Linux artifact is deployed with identity/state/8443 preserved, followed by separate trusted-TLS/owner readback and an actual mTLS WSS/v2/same-Mac two-Host DSH gate. The deploy operator's transient listener-parser failure remains retained; successful readback did not replay the switch. This closes the scoped source/CI repair, not a universal whole-process 5s guarantee, physical ICE cause or release acceptance.
 
-Current verification: D29's complete local peer/session/bridge race suites,
+- [x] 4.27 QA/root/reviewer: implement D32's diagnostic-only app-owned Go overlay after sealing D31. Ten Go pure/real-UDP race cases, eight Node collector cases, actual local two-Pion DTLS and independent review passed; the original legacy-ID collector guard failure remains with a distinct read-only continuation, not a network rerun. The sole physical diagnostic finished FAIL (short/long failed before injection, flap passed). Its first short attempt has complete zero-drop socket evidence at both endpoints; cleanup successor logs are incomplete and never counted as full-case proof. All overlay/operator/capture hashes are retained. Production transport, pinned modules, interface choice, deadlines and release gates remain unchanged.
+
+- [ ] 4.28 QA/root/reviewer: implement and test D33's separate ignored read-only exact-socket receive-queue overlay, explicitly distinguish Darwin head-datagram length/count/capacity from unknown/unsupported states, join its bounded sampler, independently review and freeze the new identity before one physical diagnostic. Preserve D32's failed and incomplete evidence. Do not infer privacy denial/netpoll cause from interface receipt or a single queue sample; production, eight-hour and native gates remain open.
+
+Latest D32 result: the same Mac socket read stayed pending for 26.208 seconds
+while its interface captured 133 valid complete requests; two earlier admitted
+nomination responses returned a real errno65 write failure. This is a precise
+socket-delivery boundary, not a confirmed OS/privacy/netpoll cause. No early
+socket close or read error occurred before cleanup. The coordinator is now
+deployed and its actual online control/DSH gate passes, but no physical aggregate,
+eight-hour original-session, final native interaction or release gate passes.
+Mac native continuation awaits manual unlock; no policy or permission was changed.
+
+Current D31 verification: exact client `4848983` Quality/Package and independent
+server `9665b122` CI all passed, as did six local joint integration groups (eight
+named cases including subtests). The single physical program run remains FAIL:
+short 3s and long 35s recovery passed in 766ms and 1000ms, while flap failed initial
+ICE before injection. All six native safety preflights passed. The original WS
+survived only the short case; the long case used automatic replacement. Failure
+evidence and both captures are sealed; no eight-hour run, core-crash acceptance,
+final native ledger, server deployment or release has completed on this snapshot.
+D32 observation is diagnostic-only and cannot certify a production candidate.
+
+Earlier D29/D30 verification: D29's complete local peer/session/bridge race suites,
 vet and independent source review pass, including exact committed admission,
 coalesced recovery and the actual Engine-to-reservation race. D30's initial and
 program failure observers, bounded stream diagnostics and platform-specific

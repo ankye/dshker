@@ -1184,6 +1184,89 @@ and the exact last-observed directed scope, or explicit unknown. Do not repeat t
 existing 45s deadline observer, consume another owner's event stream, or count
 diagnostic time as acceptance. Unknown attempt scope cannot dispatch Entry.
 
+### D31 — Preserve the new physical initial-ICE failure
+
+At exact client `4848983` / source digest `b49a53b2…` and independent server
+`9665b122`, both exact-SHA GitHub CI workflows and the six local joint integration
+groups passed. The single physical program run nevertheless remains FAIL: short
+3s and long 35s pauses recovered in 766ms and 1000ms respectively, but the flap
+profile failed its original 25s initial-transport barrier before fault injection.
+Only the short profile preserved the original WS; the long profile used automatic
+WS replacement while retaining its application identity. Neither proves eight
+hours, core-crash or native interaction acceptance.
+
+The retained dual captures show two initial ordinary IPv4 STUN requests receiving
+success responses on the same tuple, followed by a third unanswered ordinary
+request and 129 unanswered nominations over 24.446s at the Mac interface. The
+27 matching Windows nominations have identical captured IPv4/STUN bytes and valid
+captured checksums on both hosts. USERNAME hashes reverse consistently; MI is
+unknown without the key. The Mac all-goroutine snapshot has an idle Agent task
+loop and 19 UDP readers, but cannot associate one reader with the failing port.
+Do not infer socket delivery, checksum failure, MI refusal or a task-loop deadlock
+from these observations. The existing capture excludes ICMP4. All original
+failed logs, packet files and capture-preservation guard failures remain retained.
+
+### D32 — Diagnostic-only socket-chain observation
+
+Before changing transport behavior, use a separately identified Go build overlay
+that replaces only the application's SettingEngine construction and adds an
+observer. Do not edit production source or the pinned Pion module cache. The
+overlay must wrap the actual stdnet sockets, retain the UDP AddrPort fast path,
+and return every underlying read/write/deadline/close result unchanged. It must
+not retry, swallow errors, add deadlines, change interfaces or select IPv4/relay.
+
+Record bounded credential-free PID/socket/handle/local and remote endpoint,
+attempt/generation, STUN transaction/class/nomination and actual read/write results.
+Never record payloads, SDP, USERNAME, passwords or raw error sentences. A fixed
+BindingRequest callback returning false supplies positive evidence of Pion's
+admission and response-send path only; its absence is unknown, not proof of MI
+failure. Negative logger facts remain PC-scoped unless the source supplies a txid.
+Use nonblocking bounded queues outside task-loop I/O, count all drops and refuse
+complete-evidence claims on overflow or failed output. Join each observer only
+after its actual PC cleanup, including construction failure paths.
+
+Keep overlay, helper, private runner and original source hashes in the new run's
+manifest. Label every result diagnostic-only and explicitly false for release,
+eight-hour and installed-app acceptance. Collect the exact owned Windows logs
+before removing that unique test directory; preserve the original failure before
+cleanup. Pure/real-loopback tests and independent review precede a single new
+physical diagnostic; no automatic retry-to-green is allowed.
+
+### D33 — Read-only exact-socket receive-queue boundary
+
+D32's first short failure proves successful interface receipt without a return
+from the same actual Go UDP read for 26.208s. Two earlier nominations were admitted
+by Pion but their responses failed with Darwin errno 65. Other attempts show that
+errno 65 can be followed by successful same-socket I/O, so it is not sufficient to
+identify the root cause. Preserve all D32 failures and incomplete successor/long
+traces; do not relabel them after another diagnostic.
+
+Use a new ignored diagnostic overlay, never modify the frozen D32 files or the
+production/Pion source. At most once per second per socket, query only the owned
+UDP connection through its RawConn.Control callback. Keep the fd use inside that
+callback. Darwin SO_NREAD is the head datagram's data length, SO_NUMRCVPKT is the
+queued datagram count and SO_RCVBUF is capacity; they are distinct non-atomic
+getter observations, not a single queue snapshot. Record per-field validity,
+typed errno, exact socket/attempt/generation, sampling interval and read-call
+in-flight/last-return facts. A query error is unknown/incomplete, never zero.
+Windows is explicitly unsupported for these Darwin fields, not silently mapped
+to another mechanism. Never query SO_ERROR, consume/peek a datagram, change a
+deadline, register poll events, retry I/O or change network/permission policy.
+
+One bounded observer-owned sampler runs outside Pion's task loop and original
+I/O calls. Stop and join it before writer drain/summary/flush on every cleanup
+path. Getters may take kernel locks/hooks: this is diagnostic instrumentation,
+not a zero-perturbation production acceptance build. Continuous queued packets
+with a pending read establish a socket backlog, not by themselves a lost-wakeup
+root cause. An empty sampled queue does not prove a privacy denial or exclude
+packets between samples. Correlate with preserved packet and goroutine evidence.
+
+Prove real zero/nonzero UDP datagram non-consumption, fd/close ownership, explicit
+unsupported/error handling, bounded collection and sampler shutdown under races.
+Freeze distinct helper/operator/build identities and independently review before
+one new physical diagnostic. It cannot pass the production, eight-hour or native
+gates. A failed diagnostic ends and is sealed; no automatic repeat-to-green.
+
 ## Risks / Trade-offs
 
 - Runtime refusal could cause repeated workbench requests → keep existing backoff

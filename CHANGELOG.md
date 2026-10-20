@@ -4,6 +4,7 @@
 
 ### 简体中文 (zh-CN)
 
+- **已知限制：P2P 长时稳定性尚未验收。** 本版包含连接恢复改进和首因日志，但 Mac↔Windows 仍出现过偶发 ICE 建连/恢复失败，双向八小时长测及最终原生界面验证尚未完成，不能视为长时断连已彻底解决。macOS 局域网用途说明与应用签名封装也仍有待修项；当前继续提供未签名、需手动确认安装的公开包。
 - **短暂断线不抢先替换原连接。** 两端在原连接的恢复期内保留当前网页通道；原连接恢复便取消未提交的替换握手。保留已提交决定、设备重启和工作台升级各自的明确交接规则，不延长断线或恢复时限。
 - **启动日志区分管道结束和进程退出。** 记录输出流的 EOF、关闭或读取失败以及该子进程的退出回执；不把零输出误判为进程未执行，也不记录读取错误里的路径或凭据。修复日志关闭与输出写入之间的并发访问。
 - **目录刷新和唤醒不再重试无关的拒绝连接。** 普通刷新保留每台电脑的终态原因；只有该连接明确重新获得授权后，才清理它自己的拒绝记录，避免跨服务清空状态和额外拨号。
@@ -23,6 +24,7 @@
 
 ### English (en-US)
 
+- **Known limitations: long-duration P2P stability is not accepted yet.** This version includes recovery improvements and first-cause diagnostics, but intermittent Mac↔Windows ICE establishment/recovery failures remain under investigation. Bidirectional eight-hour and final native-UI verification are incomplete; this is not a claim that overnight disconnects are fully resolved. macOS local-network purpose metadata and bundle-signature sealing also remain outstanding. Public packages remain unsigned and require manual installation confirmation.
 - **Keep the original connection's recovery window.** Both endpoints retain its browser channel while recovery is still possible; recovery cancels an uncommitted replacement. Committed decisions, remote-core replacement and workbench upgrades keep their explicit handoff rules without extending disconnect or recovery deadlines.
 - **Distinguish output-stream termination from process exit.** Startup logs record EOF, closed or failed readers separately from that exact child's Wait receipt, without copying paths or credentials from read errors. Log closure and output writes now share one synchronized owner.
 - **Keep terminal refusals scoped across refresh and wake.** Ordinary catalog updates and system resume no longer clear unrelated connection refusals. Only that exact connection's fresh durable authorization resets its refusal, preventing cross-service redials.
