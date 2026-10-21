@@ -54,7 +54,8 @@
     "src/app/shell/tests/P2PAccountPanel.test.ts",
     "src/app/shell/tests/P2PJoinPanel.test.ts",
     "src/app/shell/tests/P2PNetworkAccountPanel.test.ts",
-    "tools/tests/account-session-ui.mjs"
+    "tools/tests/account-session-ui.mjs",
+    "networking/integration/certificate_legacy_cli_linux_test.go"
   ],
   "live_test_files": [
     "networking/integration/host_cold_bootstrap_test.go",
@@ -534,6 +535,16 @@
       "state": "recovery",
       "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
       "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "same-revision confirmed login survives a non-authentication refresh refusal",
+      "source": "the account sessionStatus at currentUser dispatch under the unchanged session revision",
+      "test": "preserves the same confirmed login when currentUser refresh reports %s",
+      "assertion": "expect(f.accounts.sessionStatus('a')).toBe('signedIn')",
+      "state": "partial",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "priorConfirmedSessionStatus"],
+      "missing_semantics": "Only an already confirmed same-revision login survives refresh failure. Initial unknown and historical identity cannot grant login; explicit no-session replies and logout invalidate it."
     }
   ],
   "real_commands": [

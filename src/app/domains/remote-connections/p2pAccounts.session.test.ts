@@ -43,18 +43,59 @@ describe('canonical account session state', () => {
     expect(f.accounts.state('a').user).toBeNull()
   })
 
-  it('retains confirmed authority while a failed refresh makes the current read unconfirmed', async () => {
+  const refreshFailures = [
+    'p2p.rate_limited',
+    'p2p.helper_busy',
+    'p2p.server_unavailable',
+    'p2p.helper_resource_unavailable'
+  ] as const
+
+  it.each(refreshFailures)(
+    'preserves the same confirmed login when currentUser refresh reports %s',
+    async (code) => {
+      const f = setup()
+      await f.accounts.currentUser('a')
+      vi.mocked(f.api.currentUser).mockResolvedValueOnce({
+        ok: false,
+        code,
+        message: 'refresh failed'
+      })
+      await f.accounts.currentUser('a')
+      expect(f.api.currentUser).toHaveBeenCalledTimes(2)
+      expect(f.accounts.state('a').user).toEqual(user)
+      expect(f.accounts.sessionStatus('a')).toBe('signedIn')
+      expect(f.management.operations.a).toMatchObject({ phase: 'failed', error: code })
+      expect(f.accounts.sessionStatus('b')).toBe('unknown')
+    }
+  )
+
+  it.each(refreshFailures)(
+    'does not infer login from an unread or historical identity when currentUser reports %s',
+    async (code) => {
+      const f = setup({
+        currentUser: vi.fn(async () => ({ ok: false as const, code, message: 'read failed' }))
+      })
+      await f.accounts.currentUser('a')
+      expect(f.accounts.state('a').user).toBeUndefined()
+      expect(f.accounts.sessionStatus('a')).toBe('unknown')
+      f.accounts.state('b').user = user
+      await f.accounts.currentUser('b')
+      expect(f.accounts.state('b').user).toEqual(user)
+      expect(f.accounts.sessionStatus('b')).toBe('unknown')
+    }
+  )
+
+  it.each([
+    'p2p.user_login_required',
+    'p2p.user_session_expired',
+    'p2p.user_unauthorized'
+  ] as const)('still clears a confirmed login when currentUser reports %s', async (code) => {
     const f = setup()
     await f.accounts.currentUser('a')
-    vi.mocked(f.api.currentUser).mockResolvedValueOnce({
-      ok: false,
-      code: 'p2p.helper_resource_unavailable',
-      message: 'provider temporarily unavailable'
-    })
+    vi.mocked(f.api.currentUser).mockResolvedValueOnce({ ok: false, code, message: 'no session' })
     await f.accounts.currentUser('a')
-    expect(f.accounts.state('a').user).toEqual(user)
-    expect(f.accounts.sessionStatus('a')).toBe('unknown')
-    expect(f.accounts.sessionStatus('b')).toBe('unknown')
+    expect(f.accounts.state('a').user).toBeNull()
+    expect(f.accounts.sessionStatus('a')).toBe('signedOut')
   })
 
   it('coalesces session announcements during an old read into one fresh session confirmation', async () => {
@@ -162,6 +203,21 @@ describe('canonical account session state', () => {
     await old
     expect(f.accounts.state('a').user).toBeUndefined()
     expect(f.accounts.sessionStatus('a')).toBe('unknown')
+  })
+
+  it('does not restore an old confirmed login from a late transient refusal after logout', async () => {
+    const f = setup({ logout: vi.fn(async () => ({ ok: true as const, data: undefined })) })
+    await f.accounts.currentUser('a')
+    let finish!: (value: { ok: false; code: 'p2p.rate_limited'; message: string }) => void
+    vi.spyOn(f.management, 'runRead').mockImplementationOnce(
+      () => new Promise((resolve) => (finish = resolve))
+    )
+    const old = f.accounts.currentUser('a')
+    await f.accounts.logout('a')
+    finish({ ok: false, code: 'p2p.rate_limited', message: 'late refresh refusal' })
+    await old
+    expect(f.accounts.state('a').user).toBeNull()
+    expect(f.accounts.sessionStatus('a')).toBe('signedOut')
   })
 
   it.each([

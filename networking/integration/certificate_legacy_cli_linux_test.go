@@ -66,6 +66,10 @@ func TestCertificateRealCoordinatorCLILegacyRecovery(t *testing.T) {
 			if certificateLegacyIssuanceCounts(t, legacy.f) != before {
 				t.Fatal("unscoped recovery minted or consumed an enrollment grant or issued a certificate")
 			}
+			// Setup, login and refusal readbacks share the coordinator's IP
+			// budget. Give fresh selection and its recovery transaction their own
+			// window; waiting only after recovery cannot admit those requests.
+			waitForRequestBudget()
 			certificateLegacyVerifySelection(t, legacy, session)
 			recovered := certificateLegacyRecover(t, legacy, session.Token)
 			waitForRequestBudget()

@@ -77,3 +77,30 @@ UI runner must keep DOM/rAF observations distinct from actual compositor pixel
 coverage. Missing frame evidence cannot be filled with zeroes or relabeled as
 physical/native acceptance. Candidate installation, public source/artifact
 identity and any final publication need their own evidence.
+
+## Installed candidate observations and retained failures
+
+The exact main-CI Windows x64 candidate for 77dedd7 was verified and installed
+under D:/Applications/DSHKer Launcher after a normal close of the old C-drive
+process. The installer exited zero and the program reads version 0.1.95. The
+original Mac process and credentials were not changed. A public native navigation
+through Remote and Account showed footer, network badge and account card all
+displaying the same signed-in label and the original Windows device ID.
+
+The diagnostic runner first encountered a hidden window, then an unconfirmed
+startup read; those input failures remain preserved. After native activation
+and public account navigation, its first two tab entries showed all three
+signed-in labels in about 30 ms and settled in about 92 ms. The third retained
+actual failure: user.current was rate limited and changed all three labels to
+unknown. D39 now distinguishes a failed refresh from revocation of a confirmed
+same-revision login. Keep the original failed raw frames; do not count this run
+as acceptance or replace its unknown pixel fields with zeroes.
+
+Same-source CI also retained three independent failures: Linux legacy
+certificate-recovery setup exhausted the documented IP budget before the actual
+scoped recovery; Windows ARM64 failed an atomic runtime-stage rename with EPERM;
+macOS x64 packaged smoke produced no final JSON after height adaptation.
+The legacy fixture now separates setup and selection/recovery using its existing
+budget boundary without changing limits, business retries or the overall
+deadline. Local Linux compilation alone is not a real Linux credential pass.
+No tag or Release was created for this candidate.

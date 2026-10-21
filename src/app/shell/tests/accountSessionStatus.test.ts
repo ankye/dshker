@@ -189,31 +189,39 @@ describe('shared account session presentation (component diagnostics)', () => {
     expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(true)
   })
 
-  it('preserves the confirmed identity while both surfaces report an unconfirmed current read', async () => {
-    const currentUser = vi
-      .fn<P2PManagementApi['currentUser']>()
-      .mockResolvedValue({ ok: true, data: user })
-    const { ui, domain } = await render({ currentUser })
-    expectBoth(ui, zhCN['p2p.accountSession.signedIn'], 'online')
-    currentUser.mockResolvedValueOnce({
-      ok: false,
-      code: 'p2p.helper_resource_unavailable',
-      message: 'core unavailable'
-    })
+  it.each(['p2p.rate_limited', 'p2p.helper_busy', 'p2p.server_unavailable'] as const)(
+    'preserves confirmed login on both surfaces when a same-session refresh reports %s',
+    async (code) => {
+      const currentUser = vi
+        .fn<P2PManagementApi['currentUser']>()
+        .mockResolvedValue({ ok: true, data: user })
+      const { ui, domain } = await render({ currentUser })
+      expectBoth(ui, zhCN['p2p.accountSession.signedIn'], 'online')
+      currentUser.mockResolvedValueOnce({
+        ok: false,
+        code,
+        message: 'core unavailable'
+      })
 
-    await ui.get('[data-testid="p2p-account-read-user"]').trigger('click')
-    await flushPromises()
-    expectBoth(ui, zhCN['p2p.accountSession.unknown'], 'unknown')
-    await expectEnglish(ui, 'p2p.accountSession.unknown', 'unknown')
-    expect(domain.p2pAccounts.state(serviceId).user).toEqual(user)
-    expect(ui.get('.p2p-account-identity-name').text()).toBe(user.username)
-    expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
-    expect(ui.get('[data-testid="p2p-network-create-open"]').attributes('disabled')).toBeDefined()
+      await ui.get('[data-testid="p2p-account-read-user"]').trigger('click')
+      await flushPromises()
+      expectBoth(ui, zhCN['p2p.accountSession.signedIn'], 'online')
+      await expectEnglish(ui, 'p2p.accountSession.signedIn', 'online')
+      expect(domain.p2pAccounts.state(serviceId).user).toEqual(user)
+      expect(ui.get('.p2p-account-identity-name').text()).toBe(user.username)
+      expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
+      expect(
+        ui.get('[data-testid="p2p-network-create-open"]').attributes('disabled')
+      ).toBeUndefined()
+      if (code === 'p2p.helper_busy') expect(ui.text()).toContain(zhCN['p2p.account.reading'])
+      else expect(ui.get('[data-testid="p2p-account-error-details"]').text()).toContain(code)
+      expect(currentUser).toHaveBeenCalledTimes(2)
 
-    await ui.get('[data-testid="p2p-account-read-user"]').trigger('click')
-    await flushPromises()
-    expectBoth(ui, zhCN['p2p.accountSession.signedIn'], 'online')
-  })
+      await ui.get('[data-testid="p2p-account-read-user"]').trigger('click')
+      await flushPromises()
+      expectBoth(ui, zhCN['p2p.accountSession.signedIn'], 'online')
+    }
+  )
 
   it('follows only the selected service while another account read completes', async () => {
     let finishOther!: (value: Awaited<ReturnType<P2PManagementApi['currentUser']>>) => void
@@ -267,6 +275,7 @@ describe('shared account session presentation (component diagnostics)', () => {
     await flushPromises()
     expect(domain.p2pAccounts.state(serviceId).user).toBeNull()
     expectBoth(ui, zhCN['p2p.accountSession.unknown'], 'unknown')
+    await expectEnglish(ui, 'p2p.accountSession.unknown', 'unknown')
     expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
     await ui.get('[data-testid="p2p-account-read-user"]').trigger('click')
     await flushPromises()

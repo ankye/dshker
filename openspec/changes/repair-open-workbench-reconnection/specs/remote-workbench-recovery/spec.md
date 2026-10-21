@@ -32,6 +32,12 @@ availability SHALL NOT establish or retain signed-in presentation.
 - **WHEN** the selected service changes while another service's account request is pending
 - **THEN** footer and account panel both reflect only the newly selected service's authentication
 
+#### Scenario: Refresh fails after a confirmed login
+
+- **WHEN** a current-user refresh in the same session revision is rate limited or fails without an authoritative no-session result
+- **THEN** an already confirmed signed-in state remains consistent on both surfaces
+- **AND** an initially unknown state or historical identity cannot become signed in from that failure
+
 ### Requirement: Retain explicit account transport ownership during recovery
 
 Ordinary Bearer management and directory operations SHALL use the exact existing

@@ -111,6 +111,7 @@ export class P2PAccountsDomain {
 
   async #readCurrentUser(serviceId: string, revision: number): Promise<void> {
     const state = this.state(serviceId)
+    const wasSignedIn = state.sessionStatus === 'signedIn'
     if (state.sessionStatus !== 'signedIn') state.sessionStatus = 'restoring'
     let result: P2PDomainResult<'currentUser'>
     try {
@@ -138,11 +139,11 @@ export class P2PAccountsDomain {
       if (this.#explicitSignOut.has(serviceId)) this.#retryAfterSession.delete(serviceId)
       else this.#retryAfterSession.add(serviceId)
     } else {
-      // A helper/service race is not proof that the user signed out. Keep the
-      // last accepted identity (or the initial unknown state) so a
-      // service-session announcement can retry it without discarding authority.
+      // Refresh failure cannot revoke this revision's confirmed login. An
+      // initial or unknown read still has no login evidence, even if it retains
+      // a historical user. Revision and signed-out checks above fence both.
       this.#retryAfterSession.add(serviceId)
-      state.sessionStatus = 'unknown'
+      state.sessionStatus = wasSignedIn ? 'signedIn' : 'unknown'
     }
   }
 

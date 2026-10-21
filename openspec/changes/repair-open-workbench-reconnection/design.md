@@ -1485,6 +1485,13 @@ logout and session invalidation update that shared state; a late old read cannot
 replace a newer login/logout outcome or another service's identity. Preserve
 explicit failed/unknown reads rather than substituting connectivity as authority.
 
+A later non-authentication refresh failure does not revoke an already confirmed
+signed-in session in the same revision. Retain that exact accepted state through
+rate limiting, helper admission refusal or network-read failure. This cannot
+promote an initially unknown state or a historical identity into signed-in
+authority; explicit no-session replies, logout and epoch changes retain their
+existing invalidation rules.
+
 Keep network transport reachability separate from account authentication. If
 reachability is still presented, label it explicitly without allowing an online
 transport to override signed-out or pending authentication. Reuse existing typed

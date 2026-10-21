@@ -29,17 +29,17 @@
     },
     {
       "name": "focused_tests",
-      "artifact": ".run/connection-busy/vitest-final.log",
+      "artifact": ".run/connection-busy/vitest-retention-final.log",
       "passed": true
     },
     {
       "name": "build",
-      "artifact": ".run/connection-busy/build-electron-final.log",
+      "artifact": ".run/connection-busy/build-electron-retention-final.log",
       "passed": true
     },
     {
       "name": "strict_specification",
-      "artifact": ".run/connection-busy/openspec-strict-final.log",
+      "artifact": ".run/connection-busy/openspec-retention-final.log",
       "passed": true
     }
   ],
