@@ -173,6 +173,12 @@ function splitPath(
 ): string[] {
   if (value === undefined || value.length === 0) return []
   const entries = value.split(delimiter)
+  // A single terminal semicolon is a conventional Windows PATH terminator,
+  // not an empty search entry. Preserve the strict rejection for every other
+  // empty entry so the current working directory is never added implicitly.
+  if (platform === 'win32' && source === 'inherited' && entries.at(-1) === '') {
+    entries.pop()
+  }
   if (entries.some((entry) => entry.length === 0)) {
     throw pathResolutionError(platform, `The ${source} PATH contains an empty entry.`)
   }

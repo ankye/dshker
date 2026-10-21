@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.92 — 2026-10-21
+
+### 简体中文 (zh-CN)
+
+- **修复 Windows PATH 末尾分号导致 DSH 启动失败。** 允许 PATH 以一个分号结束并在传给 DSH 前移除该结束符；开头或中间的空项仍明确报错，不会把当前目录加入搜索路径。
+
+### English (en-US)
+
+- **Fix DSH launch failures when Windows PATH ends with a semicolon.** A single terminal delimiter is removed before passing PATH to DSH; leading or interior empty entries still fail explicitly, and the current directory is never added to the search path.
+
 ## 0.1.91 — 2026-10-20
 
 ### 简体中文 (zh-CN)

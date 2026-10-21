@@ -90,6 +90,38 @@ describe('managed DSH command search path', () => {
     expect(readInheritedPath({ pAtH: 'C:\\tools' }, 'win32')).toBe('C:\\tools')
   })
 
+  it('accepts one terminal Windows PATH delimiter without adding an empty search entry', async () => {
+    const resolver = createManagedDshCommandSearchPathResolver({
+      platform: 'win32',
+      environment: { Path: 'C:\\Windows\\System32;C:\\Users\\Administrator\\scoop\\shims;' },
+      bundledRuntimeBin: 'C:\\DSHKer\\runtime\\bin'
+    })
+
+    await expect(resolver()).resolves.toBe(
+      'C:\\DSHKer\\runtime\\bin;C:\\Windows\\System32;C:\\Users\\Administrator\\scoop\\shims'
+    )
+  })
+
+  it('continues to reject interior, leading, and repeated terminal Windows PATH delimiters', async () => {
+    for (const inheritedPath of [
+      ';C:\\Windows\\System32',
+      'C:\\first;;C:\\second',
+      'C:\\Windows\\System32;;',
+      ';'
+    ]) {
+      const resolver = createManagedDshCommandSearchPathResolver({
+        platform: 'win32',
+        environment: { Path: inheritedPath },
+        bundledRuntimeBin: 'C:\\DSHKer\\runtime\\bin'
+      })
+
+      await expect(resolver()).rejects.toMatchObject({
+        code: 'runtime.spawn_failed',
+        message: 'The inherited PATH contains an empty entry.'
+      })
+    }
+  })
+
   it('rejects conflicting Windows PATH spellings instead of choosing one', async () => {
     const resolver = createManagedDshCommandSearchPathResolver({
       platform: 'win32',

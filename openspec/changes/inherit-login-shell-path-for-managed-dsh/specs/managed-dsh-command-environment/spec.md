@@ -19,6 +19,11 @@ When DSHKer starts DSH, it MUST preserve the PATH inherited by DSHKer and the bu
 - **WHEN** the Windows process has no inherited PATH
 - **THEN** DSHKer refuses to start DSH with a typed launch error instead of starting with only the bundled runtime path
 
+#### Scenario: Windows inherited PATH ends with one terminator
+- **WHEN** the Windows process has a usable inherited PATH ending in one semicolon
+- **THEN** DSHKer omits that terminal delimiter from the child PATH and starts without an empty search entry
+- **AND** a leading, interior, or repeated terminal empty entry still produces a typed launch error rather than searching the current working directory
+
 #### Scenario: Login-shell PATH cannot be resolved
 - **WHEN** a POSIX login-interactive shell is unavailable, exits unsuccessfully, times out, or returns an invalid PATH
 - **THEN** DSHKer refuses to start DSH with a typed launch error and does not substitute a guessed, partial, or system-only PATH
