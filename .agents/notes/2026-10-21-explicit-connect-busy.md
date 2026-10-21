@@ -163,9 +163,8 @@ push. No existing tag or Release was overwritten.
 
 Tag push triggered Package 39614812762, which rebuilds and verifies its native
 desktop and standalone CLI targets before creating the Release from the exact
-bilingual CHANGELOG entry. That entry retains the known limitations. Publication
-and final asset readback are pending this run; no installer or local process is
-changed as part of this publication request.
+bilingual CHANGELOG entry. That entry retains the known limitations. No installer
+or local process was changed as part of this publication request.
 
 Final independent readback confirms public stable/latest Release 419657247 at
 https://github.com/ankye/dshker/releases/tag/v0.1.95, published at
@@ -178,11 +177,10 @@ downloaded for this independent check; the actual build/publish assembly
 separately hashed the binaries. No large binary download or installation was
 performed during publication.
 
-All target build, smoke and upload steps succeeded. At final release readback,
-the Actions API still returned queued/null for the run and publish job; this
-stale aggregate status is not recorded as a successful final workflow conclusion.
-The public stable/latest release and its complete asset identities were verified
-independently of that status. Raw evidence is under
+All target build, smoke and upload steps succeeded. The Actions API initially
+returned queued/null after publication; a later fresh read confirmed Package run
+39614812762 completed successfully at 2026-10-21T14:30:31Z and its Publish job
+succeeded at 14:27:01Z. Raw evidence is under
 .run/release-0.1.95/tag-39614812762/, including
 independent-release-verification.json and tag-source-verification.json. The Mac
 installation remains unchanged and all prior native-frame/eight-hour limitations
