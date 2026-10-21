@@ -555,8 +555,10 @@ registration. A choice is never a caller-supplied pin. Selection must revalidate
 current user, exact catalog revision and fresh active membership before pinning
 and committing the exact network. An unchanged valid choice is idempotent; a
 different still-valid saved selection is an explicit conflict, not silent switching.
-Re-selecting after revoked authority must first revoke/retire the exact old row
-and release only its old live authority before a fresh selected row is committed.
+Re-selecting after genuinely revoked authority must first revoke/retire the exact
+old row and release only its old live authority before a fresh selected row is
+committed. D36 separately permits automatic recovery of a locally revoked row
+whose exact original scope and keys remain freshly authorized by the server.
 These are legal logical transitions, not three separately published files. Add
 the internal-only owning catalog operation `CommitTransitions(expectedRevision,
 steps)`: under the same store/CAS lock validate each bounded nonempty transition
@@ -578,8 +580,9 @@ The existing add-tab floating dialog owns selection. It lists each computer once
 an ambiguous or stale record opens an inline network-choice view within that same
 floating layer, never nested modals or a permanent page expansion. Show network
 name plus ID, no preselected network, a clear back/close action and visible pending
-or error feedback. Prevent duplicate submission. Only an authoritative successful
-selection may refresh the catalog and open/connect one tab. Closing/navigating
+or error feedback. Prevent duplicate submission. An authoritative successful
+selection may refresh the catalog and open/connect one tab; D36's automatic
+original-scope recovery does not itself open a tab. Closing/navigating
 while work is in flight must not open a late tab; preserve the committed choice,
 resolve an unknown result by readback, and never submit another network as retry.
 Mouse/Enter/Space activation, Tab/Shift+Tab containment, Esc/back and focus return
@@ -1073,8 +1076,9 @@ Remove this global reset operation from the unreleased table-2 shell contract,
 Host dispatch, Engine and shell port rather than adding a compatibility alias.
 An old request receives the existing unknown-method refusal. A catalog revision
 only reconciles; ordinary resume may clear transient waits through RetryNow but
-must preserve terminal refusals. Only the existing exact durable network-choice
-publication may call Reauthorize for its service/pair and advance its epoch.
+must preserve terminal refusals. Only an exact durable network-choice publication,
+including D36's freshly authorized original-scope recovery, may call Reauthorize
+or the atomic RecoverAuthorization owner for its service/pair and advance its epoch.
 Account/manager replacement retains its existing independent lifecycle semantics.
 No renderer capability, server wire, fallback, timeout or quota change is added.
 
@@ -1317,3 +1321,88 @@ remains an explicit error. The client never silently chooses another network,
 deletes a pair, rewrites credentials, or reports a current directory from a
 failed read. Existing device identity, network membership and pair rows are
 preserved.
+
+### D36 — Fresh original authority repairs a locally revoked saved choice
+
+The installed Windows client retained a revoked Mac catalog row while the
+coordinator still reported the original network and pair active and both devices
+online. The peer's authenticated candidate reached Windows, but the absent live
+pin produced `p2p.pair_unauthorized`. D35's membership synchronization could not
+repair this row because D18 treated its local revoked flag as a permanent demand
+for manual reselection, even after the original authority was freshly confirmed.
+
+The current server authority owns authorization. On the existing automatic
+catalog synchronization path, admit the saved original network when a fresh
+selected-account network/pair/identity read proves active authority with the same
+service, user, local and remote device IDs, and both public keys. A local revoked
+flag alone cannot require user selection. Do not select a different network,
+adopt a changed device/key, or substitute cached authorization. An actually
+revoked/missing original network or pair, foreign account, identity mismatch,
+failed read, or superseded selected session remains refused or stale; first-time
+multiple-network ambiguity still requires explicit selection.
+
+Use the existing catalog owner and atomic `CommitTransitions` CAS to retire the
+revoked row and publish the newly confirmed active row without exposing an
+intermediate deletion. Preserve selected-session and registration fences before
+publication and candidate activation. Only after durable exact recovery may its
+own engine intent be reauthorized; repeated synchronization of an already active
+choice without a recoverable authorization refusal is idempotent and cannot reset
+unrelated terminal refusals or in-flight epochs. The same fresh exact scope may
+also repair an authorization refusal left by missing old local admission; this
+is limited to `p2p.pair_unauthorized`, `p2p.pair_revoked`, `p2p.pair_not_found`
+and `p2p.network_revoked`. Identity/trust/lease/device authorization, runtime,
+transport and unrelated terminal failures are not cleared. The engine checks and
+resets its current exact intent under one lock, so a newer non-authorization
+failure cannot be cleared by an earlier qualifying observation.
+Use the existing production reconciliation owner to resume connection,
+not a parallel Connect, runtime-start request, new IPC operation, schema, timeout,
+quota or server-side pair mutation.
+
+The existing named `pairs.network_choices` boundary must not expose a recovered
+`selected` projection ahead of its authority. Every successful choice read first
+passes the fresh catalog CAS and live-pin publication, then returns `selected`
+with the resulting catalog revision. An unchanged record is a no-op CAS without
+a file write or revision change; it still reinstalls a missing live pin after a
+lost publication reply, even when there is no terminal refusal to trigger repair.
+If publication fails, preserve the explicit refusal instead of a selected
+projection backed only by memory. An ordinary unchanged choice read does not
+switch networks or reset engine epochs.
+
+Prove the regression from revoked durable row to active readback without
+`pairs.select_network`, repeat and restart behavior, failed publication/read and
+scope-change refusal, unchanged alternate-network ambiguity, and exact terminal
+isolation with focused races and a real isolated coordinator/helper integration.
+Source validation does not update installed clients or complete physical
+Mac/Windows, eight-hour, native UI or release acceptance.
+
+### D37 — Keep Windows local runtime commands in the background
+
+The user reported a Windows console window appearing when starting local DSH.
+The Go runtime owner started the supervised console program without explicit
+window suppression, and port inspection and process-tree termination also
+launched console tools through their own command constructors. These commands
+are background implementation work; the Launcher Console owns their visible
+process output and an additional native console window is not a product action.
+
+On Windows, the supervised runtime child uses `HideWindow` together with
+`CREATE_NO_WINDOW`. A shared platform-owned `backgroundCommand` constructor
+applies the same attributes to the port inspection commands and `taskkill`.
+Keep the original executable/arguments, command results and typed errors. Do not
+add a shell wrapper, change the user's terminal or hide an explicitly requested
+interactive application. On non-Windows platforms this constructor remains
+ordinary `exec.Command`; the supervised runtime still leads its existing POSIX
+process group.
+
+Window suppression must retain stdout/stderr pipes, URL readiness announcement,
+exit/wait receipts, Console/log output and existing launch/Stop behavior. The
+independent runtime owner's authenticated attachment, detachment and survival
+contracts remain unchanged. Preserve the current Windows tree-termination flags
+and POSIX process-group signaling. This is limited to local harnessruntime
+process construction; SSH commands and other product domains are out of scope.
+
+Verify Windows process attributes and actual background command execution with
+output/exit readback, the real native no-console child path, port inspection and
+Stop behavior, plus the existing owner/pipe lifecycle checks. Cross-build the
+non-Windows implementation without changing its process-group contract. Record
+source/native proof separately from installed-app verification; do not relabel
+section 6.4's retained broad failures or the physical ICE gates.

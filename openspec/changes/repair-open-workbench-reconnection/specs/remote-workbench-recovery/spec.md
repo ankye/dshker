@@ -138,11 +138,11 @@ one-use result, without caching current-active authority or changing deadlines.
 
 ### Requirement: Carry selected-session denial through every authority tail
 
-Authentication activation, restore, local catalog/pins, directory publication and
-named recovery authorization SHALL carry the exact captured selected-session
-scope across awaits. Locally revoked authority SHALL NOT be reacquired from a
-still-valid remote/durable token. The scope SHALL NOT cache remote authorization
-or replace ordinary explicit caller-Bearer data-read semantics.
+Authentication activation SHALL carry the exact captured selected-session scope,
+as SHALL restore, local catalog/pins, directory publication and named recovery
+authorization across awaits. Locally revoked selected-session authority SHALL NOT
+be reacquired from a still-valid remote/durable token. The scope SHALL NOT cache
+remote authorization or replace ordinary explicit caller-Bearer data-read semantics.
 
 #### Scenario: Logout wins before a pending authority read publishes
 
@@ -535,7 +535,8 @@ Catalog updates and ordinary system resume SHALL NOT clear terminal refusals or
 grant fresh authorization. Catalog updates SHALL reconcile existing intent, and
 resume MAY cancel transient backoff while preserving terminal intent. Only the
 existing exact service/pair's freshly authorized durable publication may reset
-its terminal state through the epoch-fenced Reauthorize owner.
+its terminal state through the epoch-fenced engine owner, using explicit
+Reauthorize or D36's atomic RecoverAuthorization admission.
 
 #### Scenario: Another service changes or the system resumes
 
@@ -577,8 +578,9 @@ registration and fresh selected membership; renderer input SHALL NOT supply pins
 - **WHEN** the user/account, catalog revision or network authority changes during
   selection, or the committed result is unknown
 - **THEN** the old request cannot authorize a different scope or open a late tab
-- **AND** revoked saved authority is not replaced automatically; a fresh explicit
-  choice uses the owning revoke/retire transition before recording new authority
+- **AND** genuinely revoked original authority is not replaced automatically;
+  choosing a different scope uses the owning revoke/retire transition before
+  recording new authority
 - **AND** unknown outcomes are read back, never retried under another network
 
 #### Scenario: Explicit reselection cannot persist an intermediate missing identity
@@ -589,6 +591,71 @@ registration and fresh selected membership; renderer input SHALL NOT supply pins
   bytes and revision remain intact and its strict identity guards are unchanged
 - **AND** repeated complete empty discovery retains stale selection lineage, so
   a later sole alternative still requires the user's explicit choice
+
+### Requirement: Fresh original authorization repairs local revoked state
+
+Automatic catalog synchronization SHALL restore a saved connection whose local
+state is revoked when fresh current-account network, pair and scoped identity
+reads confirm active authority for the same service, user, original network,
+local and remote device IDs, and both original public keys. The local revoked
+flag SHALL NOT require manual network reselection in that case. Recovery SHALL
+use the owning atomic catalog transition and current selected-session and
+registration fences; cached state or discovery order SHALL NOT grant authority.
+
+#### Scenario: Original network and pair remain active
+
+- **WHEN** a saved local revoked connection has freshly confirmed active server
+  authority for its exact original scope and device keys
+- **THEN** automatic synchronization atomically retires the revoked row and
+  records active authority without a user selection or intermediate deletion
+- **AND** only that durably recovered service/pair is reauthorized through its
+  existing automatic connection owner, without opening a tab or starting DSH
+
+#### Scenario: Repeated synchronization and restart
+
+- **WHEN** the same original authority is synchronized again or read after restart
+- **THEN** the connection remains one active record with its original network,
+  device identities and keys, without creating a duplicate or requiring selection
+- **AND** an already active unchanged record without a recoverable authorization
+  refusal does not reset engine terminal state or in-flight epochs
+
+#### Scenario: Network choices read encounters recoverable stale authority
+
+- **WHEN** `pairs.network_choices` freshly confirms exact original authority,
+  including a revoked record, a recoverable authorization refusal, or a durable
+  active record whose live pin was lost with an earlier publication reply
+- **THEN** it commits the exact catalog/live pin before returning `selected` and
+  the resulting catalog revision, or returns the owning explicit refusal
+- **AND** an unchanged record uses a no-op CAS without a file write or revision
+  change, while ordinary active reads do not reset engine terminal state
+- **AND** recoverable refusals are limited to `p2p.pair_unauthorized`,
+  `p2p.pair_revoked`, `p2p.pair_not_found` and `p2p.network_revoked`
+- **AND** recovery cannot clear identity, trust, lease, device-authorization,
+  unrelated or runtime/transport terminal failures
+
+#### Scenario: A different terminal failure wins during recovery
+
+- **WHEN** the exact engine intent acquires a non-authorization terminal refusal
+  after an earlier recovery check but before its stop can be reset
+- **THEN** the recovery owner atomically rechecks that current stop and preserves
+  its error, epoch and connection owner instead of clearing the newer failure
+
+#### Scenario: Original authority is absent or identity changes
+
+- **WHEN** the original network or pair is revoked or absent, the selected account
+  changes, or either original device ID or public key differs from fresh authority
+- **THEN** automatic synchronization grants no replacement authority
+- **AND** another authorized network, even a sole alternative, is not selected
+  without the user's explicit choice
+
+#### Scenario: Fresh read or publication cannot complete
+
+- **WHEN** an authoritative read, catalog validation, CAS or pre-publication write
+  fails, or the selected session or registration changes before publication
+- **THEN** recovery grants no live pin and cannot publish a late active record
+- **AND** original durable bytes and revision remain intact before publication;
+  an unknown publication outcome is resolved by authoritative readback
+- **AND** recovery does not clear another service/pair's terminal refusal
 
 ### Requirement: Running DSH survives a network-core crash
 
@@ -658,8 +725,8 @@ credential-free typed admission decisions with exact scope and owner identity.
 
 ### Requirement: Grace recovery cannot prematurely retire the original workbench
 
-For an exact suspended predecessor with an existing usable workbench, each
-endpoint SHALL retain that predecessor's original recovery authority before
+Each endpoint SHALL retain an exact suspended predecessor's original recovery
+authority while its existing usable workbench remains in recovery before
 publishing candidate Ready. The candidate SHALL wait for actual predecessor
 termination or cancel itself if the original transport recovers. Scope mismatch
 and expiry SHALL fail explicitly. Waiting SHALL NOT extend the original grace,
@@ -683,3 +750,35 @@ roll back a dispatched or verified committed coordinator decision.
 - **AND** explicit remote-core replacement and transport-only workbench upgrade
   keep their distinct existing behavior rather than waiting for an unrelated
   healthy transport to terminate
+
+### Requirement: Windows local runtime commands stay in the background
+
+Windows local runtime commands SHALL suppress console-window creation for launch,
+port inspection and process-tree termination while preserving their existing
+stdout/stderr pipes, output, errors, readiness and process ownership. The shared
+platform command constructor SHALL apply `HideWindow` and `CREATE_NO_WINDOW`
+on Windows. Non-Windows helper commands and supervised process-group behavior
+SHALL retain their existing contracts. This change SHALL NOT alter SSH flows,
+runtime-owner lifetime, launch/Stop meaning, logging or renderer capabilities.
+
+#### Scenario: Start local DSH on Windows
+
+- **WHEN** the runtime owner starts the local supervised DSH console program
+- **THEN** its process has no new console window and its standard output/error
+  still reach the existing Launcher Console/log and URL readiness owners
+- **AND** exit receipts and independent runtime-owner survival remain unchanged
+
+#### Scenario: Inspect the local port or stop its process tree
+
+- **WHEN** the Windows runtime invokes its existing port-inspection tools or
+  `taskkill` for the owned process tree
+- **THEN** the helper runs without a new console window and returns its actual
+  output and exit/error result to the existing caller
+- **AND** the existing termination arguments and cleanup ownership are preserved
+
+#### Scenario: Execute on a non-Windows platform
+
+- **WHEN** the runtime starts a helper command or its supervised DSH process on
+  a non-Windows platform
+- **THEN** helper construction adds no Windows attributes and the supervised
+  child retains its existing process-group and stop-signal behavior

@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.1.94 — 2026-10-21
+
+### 简体中文 (zh-CN)
+
+- **自动修复本地网络状态不同步。** 服务器确认原账号、原网络及两台设备的配对仍有效时，自动恢复本地误标为失效的连接，无需重新选择网络。真实撤权、身份变化或读取失败仍明确拒绝，不会自动换网。
+- **Windows 本地启动不再弹出控制台。** DSH 及其端口检查、进程清理工具在后台运行，真实输出仍保留在 Launcher 控制台和日志中，启动与停止行为不变。
+- **已知限制。** 安装包仍未签名，需手动确认安装。Mac↔Windows 偶发 ICE 建连/恢复及双向八小时、最终原生界面验收仍未完成；本次修复不代表长时连接问题全部解决。
+
+### English (en-US)
+
+- **Repair stale local network state automatically.** When fresh server authority confirms the original account, network and both device identities remain authorized, restore a locally revoked connection without asking for network reselection. Real revocation, identity changes and failed reads remain explicit; no other network is selected automatically.
+- **Keep Windows local startup in the background.** DSH, port checks and process cleanup no longer open console windows. Real output remains in Launcher Console and logs, with the same launch and stop behavior.
+- **Known limitations.** Installers remain unsigned and require manual confirmation. Intermittent Mac↔Windows ICE establishment/recovery, bidirectional eight-hour and final native-UI acceptance remain incomplete; these fixes do not establish long-duration connection stability.
+
 ## 0.1.93 — 2026-10-21
 
 ### 简体中文 (zh-CN)

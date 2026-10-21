@@ -282,9 +282,14 @@ existing network while that selection is freshly authorized. A first ambiguous
 connection asks you to choose inside the same floating menu. No network is
 preselected and only one tab is created for that computer.
 
+If local state alone marks that connection revoked, automatic synchronization
+restores it after freshly verifying the same account, original network, and both
+device identities and keys. No manual network selection is needed. Failed reads,
+real server revocation or a changed identity do not authorize recovery.
+
 - `p2p.network_selection_required`: choose the network for this computer in the
   add-tab menu. Other unambiguous computers remain available.
-- `p2p.network_selection_stale`: the remembered network is no longer authorized.
+- `p2p.network_selection_stale`: the remembered scope no longer has matching authorization.
   Refresh the choices and explicitly select a currently authorized replacement;
   the app does not silently change it or discard the remembered identity.
 - `p2p.network_selection_conflict`: another still-valid choice or operation owns

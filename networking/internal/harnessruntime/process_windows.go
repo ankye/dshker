@@ -24,7 +24,7 @@ func terminateProcessTree(pid int, force bool) error {
 	// taskkill terminates the whole tree on Windows; its forced mode is the only
 	// one that reliably reaches a Node child holding a listening socket.
 	_ = force
-	return exec.Command("taskkill", "/pid", strconv.Itoa(pid), "/t", "/f").Run()
+	return backgroundCommand("taskkill", "/pid", strconv.Itoa(pid), "/t", "/f").Run()
 }
 
 // processIsAlive reports whether one process still exists.
@@ -41,6 +41,14 @@ func processIsAlive(pid int) bool {
 	return code == stillActive
 }
 
-// processGroupAttributes is empty on Windows: the tree is addressed through
-// taskkill rather than through a group identifier.
-func processGroupAttributes() *syscall.SysProcAttr { return nil }
+// Keep the supervised console program in the background. Tree termination still
+// uses taskkill; creating a console or detaching stdio is not required for it.
+func processGroupAttributes() *syscall.SysProcAttr {
+	return &syscall.SysProcAttr{HideWindow: true, CreationFlags: windows.CREATE_NO_WINDOW}
+}
+
+func backgroundCommand(executable string, arguments ...string) *exec.Cmd {
+	command := exec.Command(executable, arguments...)
+	command.SysProcAttr = processGroupAttributes()
+	return command
+}

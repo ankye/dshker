@@ -29,7 +29,9 @@ func authRecoveryFixture(t *testing.T) (*certificateFixture, controlplane.UserSe
 
 func authDeviceFixture(t *testing.T, remaining time.Duration) (*certificateFixture, controlplane.UserSession) {
 	t.Helper()
-	f := newCertificateFixture(t, remaining)
+	// Establish the real WSS owner before starting a potentially two-second
+	// expiry scenario. Initialization must not consume the scenario's lifetime.
+	f := newCertificateFixture(t, 30*24*time.Hour)
 	f.selectedUserID = f.original.UserID
 	client, err := f.account.base.WithDevice(f.original, f.private, f.account.identity)
 	if err != nil {
@@ -43,14 +45,26 @@ func authDeviceFixture(t *testing.T, remaining time.Duration) (*certificateFixtu
 		client.Close()
 		t.Fatal(err)
 	}
-	f.account.client, f.account.manager, f.account.device, f.account.httpPhase = client, manager, f.original, accountHTTPDevice
-	if err := f.host.SaveCredential(f.account.identity.ServiceID, f.original, f.private); err != nil {
-		t.Fatal(err)
-	}
+	f.account.client, f.account.manager, f.account.httpPhase = client, manager, accountHTTPDevice
 	session := controlplane.UserSession{User: controlplane.User{UserID: protocol.NewID(), Username: "selected@example.test"}, Token: strings.Repeat("a", 64), ExpiresAt: time.Now().Add(time.Hour).Unix()}
 	f.mu.Lock()
 	f.loginSession, f.selectedUserID, f.grantSessionToken = &session, session.User.UserID, session.Token
 	f.mu.Unlock()
+	// Install a newly signed certificate for the exact requested duration using
+	// the production TLS update path. Keep the same device, key, client and WSS;
+	// subsequent expiry assertions still cross this real signed NotAfter.
+	device := f.original
+	device.Certificate = f.sign(time.Now().Add(remaining))
+	if err := client.UpdateCertificate(device, f.private, f.account.identity); err != nil {
+		t.Fatal(err)
+	}
+	f.mu.Lock()
+	f.original.Certificate, f.current = device.Certificate, device
+	f.mu.Unlock()
+	f.account.device = device
+	if err := f.host.SaveCredential(f.account.identity.ServiceID, device, f.private); err != nil {
+		t.Fatal(err)
+	}
 	return f, session
 }
 

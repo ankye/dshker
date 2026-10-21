@@ -1,0 +1,180 @@
+{
+  "change": "windows-background-console",
+  "risk": "data_critical",
+  "scope_note": "Windows-managed runtime starts, port inspection and taskkill keep console-subsystem children without a console HWND while preserving pipes, logs, failures and exact process-tree shutdown. GetConsoleProcessList is recorded only; its nonzero count is not interpreted as a window. Unix delegates background commands to the unchanged exec.Command contract and is source-reviewed, not claimed as a Unix runtime pass. This manifest also declares the still-uncommitted authorized-network recovery source and its existing verified evidence. The test-only probe under testdata is listed in production_files solely because the integrity scanner treats its main.go as changed code; it is explicitly built by the test and excluded from the application dependency graph, not an application runtime or fallback.",
+  "production_files": [
+    "networking/internal/helper/network_selection.go",
+    "networking/internal/autoconnect/engine.go",
+    "networking/internal/harnessruntime/process_windows.go",
+    "networking/internal/harnessruntime/process_unix.go",
+    "networking/internal/harnessruntime/port.go",
+    "networking/internal/harnessruntime/testdata/windows-console-probe/main.go"
+  ],
+  "test_files": [
+    "networking/internal/helper/network_selection_recovery_test.go",
+    "networking/internal/helper/network_selection_test.go",
+    "networking/internal/helper/selected_session_scope_test.go",
+    "networking/internal/autoconnect/reauthorize_recovery_test.go",
+    "networking/integration/authorized_network_recovery_windows_test.go",
+    "networking/internal/harnessruntime/background_windows_test.go",
+    "networking/internal/harnessruntime/testdata/windows-console-probe/main.go"
+  ],
+  "live_test_files": [
+    "networking/integration/authorized_network_recovery_windows_test.go",
+    "networking/internal/harnessruntime/background_windows_test.go",
+    "networking/internal/harnessruntime/testdata/windows-console-probe/main.go"
+  ],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestAuthorizedNetworkRecoveryRealCoordinatorRestoresRevokedOriginalScope"
+    },
+    {
+      "state": "no_op",
+      "test": "TestNetworkSelectionAutomaticallyRecoversExactAuthorizedRevokedNetwork"
+    },
+    {
+      "state": "partial",
+      "test": "TestNetworkSelectionRecoveryLostReplyWithoutTerminalRestoresLivePin"
+    },
+    {
+      "state": "recovery",
+      "test": "TestNetworkSelectionRecoveryFreshReadFailureKeepsRevokedAuthority"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestNetworkSelectionRecoveryFreshReplyRejectsActualLogout"
+    },
+    {
+      "state": "reset",
+      "test": "TestAuthorizedNetworkRecoveryRealCoordinatorRestoresRevokedOriginalScope"
+    },
+    {
+      "state": "rejected",
+      "test": "TestNetworkSelectionRecoveryRequiresExactOriginalIdentity"
+    },
+    {
+      "state": "conflict",
+      "test": "TestNetworkSelectionRecoveryCatalogConflictPreservesConcurrentRecord"
+    },
+    {
+      "state": "windows_success",
+      "test": "TestWindowsBackgroundSupervisorHasNoConsoleAndPreservesLifecycle"
+    },
+    {
+      "state": "windows_no_op_reset",
+      "test": "TestWindowsBackgroundSupervisorHasNoConsoleAndPreservesLifecycle"
+    },
+    {
+      "state": "windows_probe_failure",
+      "test": "TestWindowsBackgroundSystemCommandRunnerHasNoConsole"
+    },
+    {
+      "state": "windows_spawn_rejected",
+      "test": "TestWindowsBackgroundSpawnFailureKeepsTypedError"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "networking/internal/helper/network_selection.go",
+      "field": "automatic restoration of the original authorized network choice and durable active record",
+      "source": "fresh selected-account network membership, active pair identity, current registration and session fences plus the original persisted computer scope",
+      "test": "TestAuthorizedNetworkRecoveryRealCoordinatorRestoresRevokedOriginalScope",
+      "assertion": "automatic recovery changed original authorization scope instead of restoring its active state",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "localDeviceId",
+        "remoteDeviceId",
+        "localPublicKey",
+        "remotePublicKey",
+        "pairRevision",
+        "catalogRevision"
+      ],
+      "missing_semantics": "Missing, revoked, foreign, stale or unreadable coordinator authority does not restore a cached pin or choose another network. Failed persistence does not authorize the unpublished pin."
+    },
+    {
+      "production_file": "networking/internal/helper/network_selection.go",
+      "field": "terminal automatic-connect refusal ownership after exact durable authorization recovery",
+      "source": "the freshly verified same-scope recovery and successful catalog publication for the exact service and remote device",
+      "test": "TestNetworkSelectionRecoveryReauthorizesOnlyExactEngineIntent",
+      "assertion": "recovery woke an unrelated service or duplicated the exact attempt",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "networkId", "catalogRevision"],
+      "missing_semantics": "Unrelated service intents and transport or identity failures retain their original refusal; failed or unconfirmed publication cannot clear another connection's stop."
+    },
+    {
+      "production_file": "networking/internal/autoconnect/engine.go",
+      "field": "atomic exact-intent authorization refusal recovery with a bounded refusal whitelist",
+      "source": "the engine's existing refusal for the exact service and pair after fresh same-scope durable catalog publication",
+      "test": "TestRecoverAuthorizationAtomicallyPreservesNewNonAuthorizationStop",
+      "assertion": "rejected recovery changed the current stop, epoch or connect owner",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "pairId", "terminalCode", "attemptCount"],
+      "missing_semantics": "Identity, trust, lease, device and generic account authorization failures remain owned by their original terminal state. Recovery stays scoped to one intent and never reports transport readiness from catalog authority alone."
+    },
+    {
+      "production_file": "networking/internal/harnessruntime/process_windows.go",
+      "field": "CREATE_NO_WINDOW and HideWindow for supervised runtime and tree-termination commands",
+      "source": "fresh Windows process creation attributes used by Supervisor.StartCommand and the background taskkill command",
+      "test": "TestWindowsBackgroundSupervisorHasNoConsoleAndPreservesLifecycle",
+      "assertion": "background child has a Windows console window or lost its process identity",
+      "state": "windows_success",
+      "identity_keys": ["launchId", "subjectId", "pid", "parentPid", "consoleWindow", "exitCode"],
+      "missing_semantics": "Admission fails before starting a console program if hiding flags are absent. The real CUI child must report GetConsoleWindow zero, preserve both output streams and its Wait receipt, and both owned process IDs must exit through the real Stop path."
+    },
+    {
+      "production_file": "networking/internal/harnessruntime/port.go",
+      "field": "real bounded system command output and failure through the platform background command owner",
+      "source": "SystemCommandRunner calling a real console-subsystem probe through backgroundCommand without changing its argument vector",
+      "test": "TestWindowsBackgroundSystemCommandRunnerHasNoConsole",
+      "assertion": "hidden command lost its original failure code or stderr",
+      "state": "windows_probe_failure",
+      "identity_keys": ["executable", "arguments", "pid", "parentPid", "consoleWindow", "exitCode"],
+      "missing_semantics": "A failed child retains its actual exit code and stderr; a completed command cannot retain a live PID or gain a console HWND."
+    },
+    {
+      "production_file": "networking/internal/harnessruntime/process_unix.go",
+      "field": "unchanged Unix exec.Command argument and default-attribute semantics",
+      "source": "direct exec.Command delegation in the Unix backgroundCommand helper; existing Setpgid and group termination remain unchanged by source review",
+      "test": "TestWindowsBackgroundSystemCommandRunnerHasNoConsole",
+      "assertion": "system command stdout no longer contains its real receipt",
+      "state": "windows_success",
+      "identity_keys": ["executable", "arguments", "pid", "exitCode"],
+      "missing_semantics": "The shared command-runner regression exercises real output and exit semantics on Windows. The Unix no-op is established by direct source equivalence, not represented as an executed Unix test."
+    },
+    {
+      "production_file": "networking/internal/harnessruntime/testdata/windows-console-probe/main.go",
+      "field": "test-only Windows kernel console-window receipt from a real CUI executable",
+      "source": "GetConsoleWindow, GetConsoleProcessList, os.Getpid and os.Getppid called by the independently built testdata probe",
+      "test": "TestWindowsBackgroundSupervisorHasNoConsoleAndPreservesLifecycle",
+      "assertion": "probe must exercise a real console-subsystem executable",
+      "state": "windows_success",
+      "identity_keys": [
+        "PE subsystem",
+        "pid",
+        "parentPid",
+        "consoleWindow",
+        "consoleProcessCount",
+        "consoleError"
+      ],
+      "missing_semantics": "The probe is not linked into dshkerd. Missing Win32 entry points, malformed receipts, wrong parent identity or a nonzero console HWND fail rather than becoming a fabricated no-window result. The process list is raw observation only."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "powershell -NoProfile -Command \"New-Item -ItemType Directory -Force .run/windows-background-console | Out-Null; Set-Location networking; go test -json -race ./internal/harnessruntime -run '^TestWindowsBackground' -count=1 -timeout=90s | Set-Content -Encoding UTF8 ../.run/windows-background-console/runtime.jsonl; exit $LASTEXITCODE\"",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/authorized-network-recovery/real-coordinator.jsonl"
+    },
+    {
+      "artifact": ".run/windows-background-console/runtime.jsonl"
+    }
+  ]
+}

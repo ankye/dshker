@@ -215,6 +215,30 @@ func (engine *Engine) Reauthorize(intent Intent) {
 		engine.mu.Unlock()
 		return
 	}
+	engine.reauthorizeLocked(identifier)
+	engine.mu.Unlock()
+	engine.Wake(intent)
+}
+
+// RecoverAuthorization is the automatic counterpart of explicit reauthorization.
+// The caller has durably published fresh authority for the original exact scope.
+// Inspecting and resetting the current stop under one lock preserves a newer
+// identity, trust, lease or transport refusal that arrived during that read.
+func (engine *Engine) RecoverAuthorization(intent Intent) bool {
+	identifier := intent.key()
+	engine.mu.Lock()
+	code := engine.terminal[identifier]
+	if engine.closed || code != "" && code != "p2p.pair_unauthorized" && code != "p2p.pair_revoked" && code != "p2p.pair_not_found" && code != "p2p.network_revoked" {
+		engine.mu.Unlock()
+		return false
+	}
+	engine.reauthorizeLocked(identifier)
+	engine.mu.Unlock()
+	engine.Wake(intent)
+	return true
+}
+
+func (engine *Engine) reauthorizeLocked(identifier string) {
 	engine.epochs[identifier]++
 	delete(engine.terminal, identifier)
 	delete(engine.attempts, identifier)
@@ -222,8 +246,6 @@ func (engine *Engine) Reauthorize(intent Intent) {
 		close(cancel)
 		delete(engine.pending, identifier)
 	}
-	engine.mu.Unlock()
-	engine.Wake(intent)
 }
 
 // Close stops every scheduled retry and waits for in-flight attempts to settle.

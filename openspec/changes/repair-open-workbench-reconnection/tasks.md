@@ -27,6 +27,14 @@ order only: no failed or incomplete task below becomes passed, and the full
 recovery objective remains open. Do not ship the ignored D32/D33 overlays or
 claim the diagnostic build is a production fix.
 
+Publication/install continuation (2026-10-21): the user explicitly authorized
+packaging these two scoped fixes, updating the local Windows installation, and
+committing/pushing/tagging/publishing version 0.1.94 after the remote tag was
+confirmed unused. Preserve device/account/network/pair data and record the exact
+installed artifact and readback. Keep the prior incomplete broad and physical
+gates visible; this authorization does not turn them into passes or waive the
+tag workflow's own quality, native-package and asset validation.
+
 - [ ] 3.1 QA owner, after 1/2: run isolated real coordinator/core/DSH auto-recovery with original session/workspace readback, HTTP cookie and WebSocket traffic; record generations, attempts and stable gateway through repeated loss without a second explicit connect.
 - [ ] 3.2 QA/root, after 3.1: run isolated macOS and Windows candidate evidence without touching installed credentials or active DSH; report exactly what cross-machine/runtime tier was exercised and any missing physical UI acceptance.
 - [ ] 3.3 Root: add CHANGELOG, correct both READMEs, Agent Note and a complete test-integrity manifest; pass strict OpenSpec validation, source-size, relevant full tests, source builds, architecture, desktop validator and default test-integrity verify.
@@ -264,3 +272,23 @@ the actual candidate rather than substituted from headless or smoke results.
 - [x] After adoption, have the independent coordinator publish the source device's authenticated registration to currently online devices authorized on a shared network.
 - [x] On recipients, validate the account/session, refresh the peer catalog and device directory, and notify active renderer network-choice views without changing saved selections.
 - [x] Verify client, server, and renderer state transitions with focused and full local test gates; keep failures explicit and retain prior device/network/pair state. Vitest 1,896/1,896, Go client helper/peer-session race suites, the real local Gin/WSS/SQLite coordinator push integration, full independent server `go test -race ./...`, server vet, client/server source-size gates, app test-integrity default verify, OpenSpec strict validation, desktop-app validation and renderer/Electron builds passed. Physical Mac↔Windows and overnight ICE acceptance remain separate and are not claimed here.
+
+## 6. Restore freshly authorized original network state
+
+- [x] 6.1 Root/product: reconcile D18/D27/D35 with D36 and specify automatic recovery only for freshly active original service/account/network/device/key authority; update bilingual release/user guidance and Agent Note, then pass strict OpenSpec validation.
+- [x] 6.2 Client: restore a locally revoked original choice through legal atomic catalog transitions under selected-session/registration fences, then recover only its durably authorized engine intent through the atomic current-stop whitelist. Every choice read publishes fresh pins through a CAS, including a no-op record after a lost reply; it does not select another network, change identity, mutate server pairs or start DSH.
+- [x] 6.3 QA/reviewer: prove the revoked-row regression, repeat/restart readback, real revocation/alternate network/account/key refusal, failed reads/publication and terminal isolation with focused races and an isolated real coordinator/helper case. Final scoped races passed 89 named tests/subtests with zero failures/skips; real integration retained old-source failure and current-source success, default test-integrity passed for two production/five test files, six affected desktop suites passed 28 tests, and source-size/scoped formatting checks passed. Keep the broad checks in 6.4, installed-app, physical Mac↔Windows, overnight and release evidence separate.
+- [x] 6.4 Root/QA: retain the original failures and resolve their causes before release. Short-lived certificates are now issued after fixture setup, preserving real expiry; the full helper race package passed in 188.444 seconds, beyond the old 180-second cutoff. Formatting now excludes the per-machine configuration; portable fixtures/examples clear all three parent-validator findings. Local desktop coverage passed 1,876 cases with the version-worktree fixture explicitly excluded; a prior npm forwarding mistake ran and cleaned that fixture and was disclosed. Complete Go coverage is one first run plus successful whole-package repairs for two existing Windows fixtures, not a single all-green invocation. Remote full CI and installed-app evidence remain separate release gates.
+
+## 7. Keep Windows local startup in the background
+
+- [x] 7.1 Root/product: add D37, its native-background-process contract, bilingual release/user guidance and Agent Note; pass strict OpenSpec validation while preserving the prior network recovery work and section 6.4's broad-check status.
+- [x] 7.2 Runtime owner: apply Windows HideWindow/CREATE_NO_WINDOW to the supervised child and shared background command constructor used by port inspection and taskkill; preserve non-Windows exec/process-group behavior, pipes, logs, readiness, Stop and independent-owner lifetime without changing SSH flows.
+- [x] 7.3 QA/reviewer: the complete harnessruntime race suite passed 56 named tests/subtests, native root/grandchild and standalone command probes produced five zero-console-HWND receipts with preserved output/exit/Stop behavior, and combined default test-integrity passed for seven declared test files. The original mistaken zero-process-count assertion remains failed evidence. Vet, five code-file size checks, native build and same-SHA five-observation headless smoke passed; the production dependency/binary probe-isolation scan and independent review passed. Darwin ARM64 test compilation passed without claiming a Mac runtime result. Installed-app, section 6.4's broad failures and physical ICE/release proof remain separate.
+
+## 8. Authorized 0.1.94 packaging, local update and publication
+
+- [x] 8.1 Release/docs: after confirming the remote version is unused, synchronize package and root lockfile versions to 0.1.94, record both fixes and known limitations in its bilingual CHANGELOG entry, and use that exact entry as the Release body. Root version identity, body extraction and bilingual-limit checks, scoped formatting, diff checks and strict OpenSpec validation passed.
+- [ ] 8.2 Release/root: produce and verify the native Windows 0.1.94 package, update the explicitly authorized local installation while preserving existing roots/account/device/network/pair data, then read back installed version, artifact identity and relevant local startup behavior. Keep source, package and installed-app evidence distinct.
+- [ ] 8.3 Root: commit only the approved scoped source/tests/docs/version files, push the selected existing branch and create/push the matching unused v0.1.94 tag; record exact commit and remote receipts without including generated artifacts, credentials or local roots.
+- [ ] 8.4 Release/root: follow the same-source native desktop and CLI packaging workflow, verify its published manifests/checksums/assets and exact bilingual CHANGELOG-derived body, then record the public Release and local-update results. Preserve failed/unfinished jobs and section 6.4, physical ICE, overnight and signing limitations without claiming broad acceptance.

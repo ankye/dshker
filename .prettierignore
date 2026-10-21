@@ -12,6 +12,8 @@ coverage/
 .vite/
 .run/
 .codex/
+# Per-machine developer settings are not repository formatting inputs.
+.claude/settings.local.json
 openspec/
 .env.example
 # Git's attribute file has no Prettier parser; the format gate must not choke on it.

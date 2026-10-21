@@ -96,8 +96,6 @@ func newCertificateFixture(t *testing.T, remaining time.Duration) *certificateFi
 		t.Fatal(err)
 	}
 	f.original = controlplane.Device{DeviceID: protocol.NewID(), UserID: protocol.NewID(), Name: "original computer", PublicKey: f.private.Public().(ed25519.PublicKey)}
-	f.original.Certificate = f.sign(time.Now().Add(remaining))
-	f.current = f.original
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if observe := f.httpObserver(); observe != nil {
 			observe(w, r, f.serve)
@@ -138,6 +136,10 @@ func newCertificateFixture(t *testing.T, remaining time.Duration) *certificateFi
 	}
 	f.host.SetCatalog(catalogStore)
 	t.Cleanup(f.host.Close)
+	// TLS server and catalog setup are not part of the expiry scenario. Start
+	// the requested certificate lifetime only after those resources are ready.
+	f.original.Certificate = f.sign(time.Now().Add(remaining))
+	f.current = f.original
 	return f
 }
 

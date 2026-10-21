@@ -2,7 +2,6 @@ package harnessruntime
 
 import (
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -37,7 +36,7 @@ type CommandRunner func(executable string, arguments []string) (string, error)
 // SystemCommandRunner is the production runner for the platform tools the port
 // check needs.
 func SystemCommandRunner(executable string, arguments []string) (string, error) {
-	output, err := exec.Command(executable, arguments...).Output()
+	output, err := backgroundCommand(executable, arguments...).Output()
 	return string(output), err
 }
 

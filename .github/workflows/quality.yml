@@ -87,6 +87,12 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
 
+      - name: Set up Go for the Windows headless core
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: networking/go.mod
+          cache-dependency-path: networking/go.sum
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -102,6 +108,23 @@ jobs:
       # test asserting LF-formatted source failed.
       - name: Run unit tests
         run: npm test -- --run
+
+      - name: Verify real Windows background processes
+        shell: pwsh
+        working-directory: networking
+        run: |
+          New-Item -ItemType Directory -Force -Path ../.run/windows-background-console | Out-Null
+          go test -json -race ./internal/harnessruntime -count=1 2>&1 | Tee-Object -FilePath ../.run/windows-background-console/ci-runtime.jsonl
+          exit $LASTEXITCODE
+
+      - name: Upload Windows background process evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-background-console-${{ github.run_id }}
+          path: .run/windows-background-console/ci-runtime.jsonl
+          if-no-files-found: error
+
       - name: Upload Windows path admission evidence
         if: always()
         uses: actions/upload-artifact@v4

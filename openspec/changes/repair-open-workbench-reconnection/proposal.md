@@ -49,6 +49,10 @@ without requiring a restart, login, or another click.
 - Use current authenticated peer registrations and event-driven recovery rather
   than waiting for the periodic sweep after grace expiry. Keep ICE/grace and
   physical recovery deadlines unchanged. Never claim cached ready as live ready.
+- Automatically repair a locally revoked saved connection when fresh server
+  authority confirms the same account, original network and both original
+  device identities and keys. Preserve explicit selection for a different scope
+  and fail closed on real revocation or an unavailable authoritative read.
 
 ## Capabilities
 
