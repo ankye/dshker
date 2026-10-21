@@ -41,6 +41,7 @@ function catalog(entry: P2PComputerView): P2PCatalogView {
 }
 
 beforeEach(() => {
+  p2pConnections.state.refusals = {}
   p2pManagement.catalog.value = catalog(computer())
   vi.spyOn(p2pManagement, 'busy').mockReturnValue(false)
   vi.spyOn(p2pConnections, 'find').mockReturnValue(undefined)
@@ -58,6 +59,15 @@ function mountActions() {
 }
 
 describe('P2P Run disconnected actions', () => {
+  it('shows only the operation refusal owned by this computer', () => {
+    p2pConnections.state.refusals[`${serviceId}:${pairId}`] = 'p2p.connection_busy'
+    const wrapper = mountActions()
+    expect(wrapper.get('[data-testid="p2p-run-refusal"]').text()).toContain('p2p.connection_busy')
+    p2pManagement.catalog.value = catalog(computer({ pairId: '8'.repeat(12) }))
+    const other = mountActions()
+    expect(other.find('[data-testid="p2p-run-refusal"]').exists()).toBe(false)
+  })
+
   it('offers a connect action that targets the same record', async () => {
     const connect = vi.spyOn(p2pConnections, 'connect').mockResolvedValue(undefined)
     const wrapper = mountActions()

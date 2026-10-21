@@ -1,5 +1,9 @@
 ## Why
 
+The Mac can also show an online footer while Account and Network is signed out.
+Both surfaces must use one authoritative selected-account session state, as
+requested by the user; transport presence cannot substitute for user login.
+
 For users keeping a remote DSH workbench open overnight, a recovered P2P link can
 report connected while its original browser gateway remains detached and returns
 HTTP 502. Restore the explicitly requested workbench, not just device transport,
@@ -55,6 +59,11 @@ without requiring a restart, login, or another click.
   and fail closed on real revocation or an unavailable authoritative read.
 
 ## Capabilities
+
+The Run-page continuation also repairs explicit-connect ownership: a user click
+must not start competing background retries, lose its workbench intent behind a
+bind-only candidate, or retain another computer's historical busy message. Keep
+unknown durable prepare authority intact while exposing its actual progress.
 
 The joint implementation also requires an explicit current-account v2 pair
 identity read and read-only-registration/fresh-pin/candidate-capability bootstrap.

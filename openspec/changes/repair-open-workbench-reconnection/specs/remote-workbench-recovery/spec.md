@@ -6,6 +6,32 @@ between background transport connections and a user-requested workbench.
 
 ## ADDED Requirements
 
+### Requirement: Footer and account panel share selected-account authentication
+
+The Launcher SHALL derive both footer and Account and Network authentication
+presentation from the same selected service's current account session. Transport
+availability SHALL NOT establish or retain signed-in presentation.
+
+#### Scenario: Core is reachable without a user session
+
+- **WHEN** the core or coordinator is online but the selected service has no valid user session
+- **THEN** both surfaces show signed out and neither reports account online from transport state
+
+#### Scenario: Account restoration has not settled
+
+- **WHEN** the selected service's current account is still unread or restoring
+- **THEN** both surfaces retain a pending state without inventing a signed-in or signed-out result
+
+#### Scenario: Login or logout overtakes an older read
+
+- **WHEN** a confirmed login, logout or session invalidation supersedes an older current-user read
+- **THEN** both surfaces reflect the current operation's account state and the late read cannot restore old authority
+
+#### Scenario: A different service is selected
+
+- **WHEN** the selected service changes while another service's account request is pending
+- **THEN** footer and account panel both reflect only the newly selected service's authentication
+
 ### Requirement: Retain explicit account transport ownership during recovery
 
 Ordinary Bearer management and directory operations SHALL use the exact existing
@@ -782,3 +808,62 @@ runtime-owner lifetime, launch/Stop meaning, logging or renderer capabilities.
   a non-Windows platform
 - **THEN** helper construction adds no Windows attributes and the supervised
   child retains its existing process-group and stop-signal behavior
+
+### Requirement: Explicit workbench requests share the unique connection owner
+
+An explicit Run-page connection SHALL dispatch once without first starting
+background retries. When a bind-only or resume candidate owns the outbound slot,
+one exact waiting explicit request MAY retain its own generation and intent until
+that candidate safely promotes or finishes cleanup. The request SHALL revalidate
+account, pin/device/key, subscription, registration and cancellation ownership
+atomically with its new reservation. It SHALL NOT upgrade the borrowed
+candidate's negotiation or return its old generation as the new request's result.
+
+#### Scenario: A user connects while background preparation is in flight
+
+- **WHEN** the exact authorized pair has a background candidate and the user
+  requests its workbench
+- **THEN** the existing candidate remains the unique owner until its actual
+  outcome, and at most one explicit waiter is registered
+- **AND** after safe promotion or cleanup, the waiting request reserves its own
+  current generation and explicit workbench permission
+- **AND** a healthy promoted primary does not have to terminate for the request
+
+#### Scenario: A pending explicit request is cancelled or loses authority
+
+- **WHEN** its caller leaves, Disconnect occurs, or its account, pin/key,
+  subscription, registration or manager lifetime changes while waiting
+- **THEN** the request cannot reserve a late replacement or revive old intent
+- **AND** caller cancellation does not cancel the borrowed background owner
+- **AND** a stale explicit generation remains a typed refusal
+
+### Requirement: In-flight preparation and refusal readback remain truthful
+
+A pre-ticket reservation SHALL expose its actual preparation attempt and
+generation as in-flight without claiming server admission or Ready. It SHALL NOT
+replace an existing primary's public projection. Renderer busy hints SHALL be
+scoped by service and pair and yield to that pair's subsequent actual state.
+An accepted reply and a delayed main callback SHALL NOT leave the Run page
+permanently showing an empty snapshot and a historical busy hint.
+
+#### Scenario: Preparation has not yet returned a ticket
+
+- **WHEN** a current candidate owns an initial pair's outbound slot
+- **THEN** its actual attempt and generation are observable as in-flight
+- **AND** neither a workbench URL nor Ready is fabricated
+- **AND** a different computer's busy record is not displayed for this pair
+
+#### Scenario: Rate limiting follows an ambiguous prepare reply
+
+- **WHEN** an attempt previously had a lost, malformed or transport-ambiguous
+  prepare result and a later replay is rate-limited with a temporary missing read
+- **THEN** the same attempt remains owned for authoritative resolution
+- **AND** only an attempt with no ambiguous dispatch history may return a fresh
+  explicit rate-limit plus same-scope absence to the existing retry backoff
+
+#### Scenario: A late connection callback follows an accepted reply
+
+- **WHEN** the current connection reply precedes its renderer-visible callback
+- **THEN** readback continues under the exact accepted identity until actual state
+  is known or authority ends, without dispatching another connection
+- **AND** historical busy is cleared only for the matching pair and actual state

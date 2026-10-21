@@ -50,11 +50,17 @@ export class PeerConnections {
    * usable workbench requires the helper to report progress through
    * `peer.state`, so a caller cannot treat dispatch as success.
    */
-  async connect(serviceId: string, pairId: string, signal: AbortSignal): Promise<PeerHelperState> {
+  async connect(
+    serviceId: string,
+    pairId: string,
+    signal: AbortSignal,
+    publish?: (state: PeerHelperState, assertCurrent: () => void) => Promise<void>
+  ): Promise<PeerHelperState> {
     assertAccountId(serviceId, 12)
     assertAccountId(pairId)
     return this.#operation(serviceId, pairId, async () => {
       this.invalidate(serviceId, pairId)
+      const assertCurrent = this.#guardRevision(serviceId, pairId)
       const generation = this.#nextGeneration()
       const reply = await this.rpc.call(
         'peer.connect',
@@ -66,6 +72,13 @@ export class PeerConnections {
       if (state.pairId !== pairId) throw new PeerHelperError('p2p.identity_mismatch')
       if (state.generation !== generation) throw new PeerHelperError('p2p.stale_generation')
       if (typeof record.url !== 'string') throw new PeerHelperError('p2p.invalid_socket')
+      const admitReply = () => {
+        assertCurrent()
+        if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
+      }
+      admitReply()
+      await publish?.(state, admitReply)
+      admitReply()
       // An address is what a workbench has, not what a connection needs.
       //
       // Requiring one here rejected a perfectly good link whenever the far side
@@ -102,6 +115,18 @@ export class PeerConnections {
   /** Fences a read against main operations before their stage callback arrives. */
   guardEntry(serviceId: string, pairId: string): () => void {
     const key = this.#key(serviceId, pairId)
+    const admitRevision = this.#guardRevision(serviceId, pairId)
+    const assertCurrent = () => {
+      admitRevision()
+      if (this.#busy.has(key)) throw new PeerHelperError('p2p.connection_busy')
+    }
+    assertCurrent()
+    return assertCurrent
+  }
+
+  /** The operation itself may publish while busy, but never after invalidation. */
+  #guardRevision(serviceId: string, pairId: string): () => void {
+    const key = this.#key(serviceId, pairId)
     const serviceRevision = this.#entryRevisions.get(serviceId)
     const pairRevision = this.#entryRevisions.get(key)
     const assertCurrent = () => {
@@ -111,7 +136,6 @@ export class PeerConnections {
         this.#entryRevisions.get(key) !== pairRevision
       )
         throw new PeerHelperError('p2p.stale_generation')
-      if (this.#busy.has(key)) throw new PeerHelperError('p2p.connection_busy')
     }
     assertCurrent()
     return assertCurrent

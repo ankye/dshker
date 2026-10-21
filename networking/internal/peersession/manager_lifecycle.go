@@ -39,6 +39,7 @@ func (manager *Manager) finish(pairID string, connection *session) {
 }
 func (manager *Manager) Disconnect(pairID string) error {
 	manager.mu.Lock()
+	manager.cancelManualWaitLocked(pairID, "p2p.connection_cancelled")
 	delete(manager.workbenches, pairID)
 	endpoint := manager.endpoints[pairID]
 	connection, exists := manager.sessions[pairID]
@@ -100,6 +101,7 @@ func (manager *Manager) InvalidateRuntime(generation uint64) {
 func (manager *Manager) Close() {
 	manager.mu.Lock()
 	manager.closed = true
+	manager.cancelAllManualWaitsLocked("p2p.helper_unavailable")
 	clear(manager.workbenches)
 	signals := manager.signals
 	pending := make([]<-chan struct{}, 0, len(manager.sessions)+len(manager.inbound))
@@ -150,6 +152,7 @@ func (manager *Manager) revokeExpected(pairID, networkID string) error {
 		manager.mu.Unlock()
 		return errors.New("p2p.network_selection_conflict")
 	}
+	manager.cancelManualWaitLocked(pairID, "p2p.pair_revoked")
 	delete(manager.pins, pairID)
 	delete(manager.workbenches, pairID)
 	if pinned {

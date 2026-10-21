@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.1.95 — 2026-10-21
+
+### 简体中文 (zh-CN)
+
+- **登录状态统一显示。** 状态栏与“账户和网络”使用同一份当前账户状态；无有效会话时显示未登录，恢复期间显示待确认，不再用网络核心在线代替用户登录。登录、退出和会话失效同步更新，迟到的旧结果不会覆盖新会话。
+- **运行页连接不再被后台握手长期占住。** 点击连接时，等待同一配对正在进行的后台握手安全交接，再建立本次工作台连接；取消、断开或授权变化会终止等待。页面及时显示真实连接进度，旧的忙碌提示不会影响其他电脑或掩盖当前结果。
+- **已知限制。** 安装包仍未签名，需手动确认安装；Mac↔Windows 双向八小时及最终跨平台原生界面验收仍未完成。
+
+### English (en-US)
+
+- **Show one consistent account state.** The footer and Account and Network use the same current-account state. Missing sessions show signed out and restoration stays pending; an online network core no longer implies user login. Login, logout and session invalidation update both surfaces, and old replies cannot overwrite a newer session.
+- **Keep Run-page connections moving behind background handshakes.** An explicit connection waits for the same pair's background handshake to hand over safely, then starts its own workbench attempt. Cancellation, disconnect and authorization changes stop that wait. The page reads back actual progress, and an old busy refusal cannot affect another computer or mask the current result.
+- **Known limitations.** Installers remain unsigned and require manual confirmation. Bidirectional eight-hour Mac↔Windows and final cross-platform native-UI acceptance remain incomplete.
+
 ## 0.1.94 — 2026-10-21
 
 ### 简体中文 (zh-CN)

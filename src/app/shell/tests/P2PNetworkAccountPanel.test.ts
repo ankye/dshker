@@ -124,4 +124,43 @@ describe('signed-in card concurrent entry reads', () => {
     expect(ui.text()).not.toContain(zhCN['p2p.enrollment.unknown'])
     expect(ui.text()).not.toContain(zhCN['p2p.account.networksUnknown'])
   })
+
+  it('shows the joined sign-out gate only after the current session actually confirms sign-out', async () => {
+    const currentUser = vi.fn<P2PManagementApi['currentUser']>().mockResolvedValueOnce({
+      ok: false,
+      code: 'p2p.helper_resource_unavailable',
+      message: 'current session unread'
+    })
+    const ui = await renderCard({
+      catalog: async () => ({ ok: true, data: catalog }),
+      currentUser,
+      registration: async () => ({
+        ok: true,
+        data: {
+          serviceId: service.serviceId,
+          kind: 'registered',
+          deviceId: 'device-a',
+          name: 'This Mac',
+          userId: user.userId,
+          publicKey: 'device-key',
+          revision: 'rev-1'
+        }
+      })
+    })
+    expect(ui.find('[data-testid="p2p-account-mesh-gate"]').exists()).toBe(false)
+    expect(ui.get('[data-testid="p2p-account-session-status"]').text()).toBe(
+      zhCN['p2p.accountSession.unknown']
+    )
+    currentUser.mockResolvedValueOnce({
+      ok: false,
+      code: 'p2p.user_login_required',
+      message: 'no selected login session'
+    })
+    await ui.get('[data-testid="p2p-account-read-user"]').trigger('click')
+    await flushPromises()
+    expect(ui.find('[data-testid="p2p-account-mesh-gate"]').exists()).toBe(true)
+    expect(ui.get('[data-testid="p2p-account-session-status"]').text()).toBe(
+      zhCN['p2p.accountSession.signedOut']
+    )
+  })
 })

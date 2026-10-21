@@ -29,6 +29,7 @@ func (manager *Manager) RevokeNetwork(networkID string) error {
 		if pin.Pair.NetworkID != networkID {
 			continue
 		}
+		manager.cancelManualWaitLocked(pairID, "p2p.network_revoked")
 		delete(manager.pins, pairID)
 		delete(manager.workbenches, pairID)
 		manager.revokedPairs[pairID] = networkID

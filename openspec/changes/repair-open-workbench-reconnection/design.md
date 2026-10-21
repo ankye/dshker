@@ -1406,3 +1406,93 @@ Stop behavior, plus the existing owner/pipe lifecycle checks. Cross-build the
 non-Windows implementation without changing its process-group contract. Record
 source/native proof separately from installed-app verification; do not relabel
 section 6.4's retained broad failures or the physical ICE gates.
+
+### D38 — Preserve explicit workbench intent behind background preparation
+
+The installed 0.1.94 Run page can report `p2p.connection_busy` while the original
+network is active. Electron first wakes background retries twice, then dispatches
+the explicit connection. A background bind-only candidate can already own the
+only outbound slot; rejection occurs before accepting the user's cold-start
+intent. Its pre-ticket reservation has no public State until transport creation.
+The renderer also retains one global refusal after successful reads, so a past
+busy code can outlive the request and appear on another computer.
+
+Remove both Electron pre-connect retry wakes. The existing Go `peer.connect`
+boundary already repairs the exact account's signal subscription. Keep one
+explicit dispatch and retain strict reply pair/generation validation. Normal
+maintenance continues to own background retries.
+
+When an explicit workbench request meets a background bind/resume candidate,
+the Go manager may register one exact waiting owner for that pair. It preserves
+the existing candidate, ticket, negotiation and prepare-resolution lifetime.
+Waiting does not upgrade that candidate's permissions or cancel it when the
+caller leaves. A successful borrowed candidate must be promoted out of the slot;
+a failed candidate must finish its exact cleanup. Never wait for a healthy
+promoted primary's lifetime `done`. Only then reserve a new candidate with the
+explicit request's own generation and cold-start intent. An existing explicit
+candidate remains single-flight; no second explicit waiter or fabricated old
+generation response is admitted.
+
+Capture and revalidate the manager, selected account, exact pin/device/key scope,
+signal owner/subscription and registration fence. The waiting owner's per-pair
+cancellation epoch and new reservation share the manager lock. Disconnect clears
+that ownership atomically before cleanup; a late waiter cannot restore the
+cancelled intent. Revocation, account/fence changes, stale generation and shutdown
+remain typed refusals. The waiting owner has priority over a new background
+reservation but cannot displace an already admitted candidate.
+
+Initialize a pre-ticket candidate's public in-flight state from its actual
+Prepare attempt ID and generation. Current-state ownership must recognize that
+reservation without claiming a ticket, workbench, path or Ready. Preserve an
+existing primary's projection until authoritative promotion. Preparation
+diagnostics record only bounded phase, identity/fence, classified error and
+ownership fields; no tokens, keys, tickets, payloads or arbitrary error text.
+
+Unknown prepare replies retain the exact immutable attempt. A new, explicit
+rate-limit refusal followed by same-scope authoritative absence may return to
+the engine's existing backoff only when this attempt has never had an ambiguous
+dispatch result. Earlier lost, decoder or transport results remain sticky:
+a later 429 plus temporary absence cannot erase them. No caller timeout,
+counter reset or new arbitrary deadline proves server non-admission.
+
+Renderer refusals belong to an exact service/pair operation. A current peer
+readback replaces a historical busy hint with its actual stage/error, while
+unrelated computer and real refusal records remain isolated. Close the accepted
+reply/late-callback readback gap using the existing typed state ownership; do not
+invent Ready from dispatch, poll indefinitely without an in-flight owner, replay
+renderer IPC IDs or add a parallel connection controller.
+
+Verify duplicate wake removal, delayed state publication, per-pair refusal
+isolation, background/manual interleavings, caller cancellation, disconnect's
+reservation barrier, stale scope/generation, exact unknown prepare retention,
+safe rate-limit backoff and no implicit runtime start from background recovery.
+Exercise a real coordinator and the actual public Run control separately from
+unit cases; retain source, installed artifact, native interaction and physical
+cross-machine outcomes as distinct evidence.
+
+### D39 — One account authority for the footer and account panel
+
+The user observed the Mac footer reporting online while Account and Network
+reported signed out, then explicitly requested one consistent state, including
+signed out when no valid account session exists. A running core, reachable
+coordinator, device certificate or transport is not proof of a signed-in user.
+
+The footer and Account and Network panel consume the same selected service's
+account-domain session state. An unread/restoring session stays pending; an
+authoritatively absent/expired session is signed out on both surfaces. Only a
+confirmed current user grants signed-in presentation. Signing in, registration,
+logout and session invalidation update that shared state; a late old read cannot
+replace a newer login/logout outcome or another service's identity. Preserve
+explicit failed/unknown reads rather than substituting connectivity as authority.
+
+Keep network transport reachability separate from account authentication. If
+reachability is still presented, label it explicitly without allowing an online
+transport to override signed-out or pending authentication. Reuse existing typed
+account readback and locale dictionaries; no new credential exposure or arbitrary
+renderer capability is needed. Do not relogin, reset credentials, change networks
+or restart processes to manufacture consistent presentation.
+
+Verify selected-service isolation, startup restore, missing session, successful
+login, logout, failed reads and stale asynchronous results. Compare the footer
+and account card from the same live domain through public UI controls, and keep
+this visual/account-state evidence separate from physical transport readiness.

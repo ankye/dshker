@@ -638,6 +638,7 @@ export const zhCN = {
   'footer.dshVersion': 'DSH',
   'footer.runtime': 'DSH运行',
   'footer.network': '网络',
+  'footer.account': '账户',
   'footer.value.loading': '读取中',
   'footer.dsh.preparing': '准备中',
   'footer.dsh.missing': '未安装',

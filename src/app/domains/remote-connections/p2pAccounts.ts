@@ -6,10 +6,11 @@ import type {
   P2PNetworkView,
   P2PUserView
 } from '@/shared/p2p-management'
-import { p2pManagement, type P2PManagementDomain } from './p2pManagement'
+import { p2pManagement, type P2PManagementDomain, type P2PDomainResult } from './p2pManagement'
 
 export interface P2PAccountState {
   user: P2PUserView | null | undefined
+  sessionStatus: P2PAccountSessionStatus
   networks: P2PNetworkView[] | undefined
   /** Last network-list read failure; existing rows remain usable when present. */
   networksError: string | undefined
@@ -28,11 +29,16 @@ export interface P2PAccountState {
   devicesFailed: Record<string, boolean>
 }
 
+export type P2PAccountSessionStatus = 'unknown' | 'restoring' | 'signedIn' | 'signedOut'
+
 /** Account state is partitioned by the pinned service identity, never by its name. */
 export class P2PAccountsDomain {
   readonly #states = reactive<Record<string, P2PAccountState>>({})
   /** Startup and the mounted account panel share one current-user read. */
-  readonly #currentUserInFlight = new Map<string, Promise<void>>()
+  readonly #currentUserInFlight = new Map<string, { revision: number; pending: Promise<void> }>()
+  readonly #sessionRevisions = new Map<string, number>()
+  /** An announcement during a read requires one fresh read after that one settles. */
+  readonly #readAfterCurrent = new Set<string>()
   #unsubscribe: (() => void) | undefined
   #sessionUnsubscribe: (() => void) | undefined
   /** A login-required reply during startup is provisional until service restore runs. */
@@ -45,6 +51,7 @@ export class P2PAccountsDomain {
     if (!this.#states[serviceId])
       this.#states[serviceId] = {
         user: undefined,
+        sessionStatus: 'unknown',
         networks: undefined,
         networksError: undefined,
         selectedNetworkId: undefined,
@@ -56,6 +63,11 @@ export class P2PAccountsDomain {
         devicesFailed: {}
       }
     return this.#states[serviceId]
+  }
+
+  /** The selected account's confirmed login state, independent of device transport. */
+  sessionStatus(serviceId: string): P2PAccountSessionStatus {
+    return this.state(serviceId).sessionStatus
   }
 
   /**
@@ -83,20 +95,34 @@ export class P2PAccountsDomain {
   }
 
   currentUser(serviceId: string): Promise<void> {
+    const revision = this.#revision(serviceId)
     const previous = this.#currentUserInFlight.get(serviceId)
-    if (previous) return previous
-    const pending = this.#readCurrentUser(serviceId)
-    this.#currentUserInFlight.set(serviceId, pending)
+    if (previous?.revision === revision) return previous.pending
+    const pending = this.#readCurrentUser(serviceId, revision)
+    const entry = { revision, pending }
+    this.#currentUserInFlight.set(serviceId, entry)
     return pending.finally(() => {
-      if (this.#currentUserInFlight.get(serviceId) === pending)
-        this.#currentUserInFlight.delete(serviceId)
+      if (this.#currentUserInFlight.get(serviceId) !== entry) return
+      this.#currentUserInFlight.delete(serviceId)
+      if (this.#readAfterCurrent.delete(serviceId) && !this.#explicitSignOut.has(serviceId))
+        void this.currentUser(serviceId)
     })
   }
 
-  async #readCurrentUser(serviceId: string): Promise<void> {
-    const result = await this.management.runRead('currentUser', { serviceId })
+  async #readCurrentUser(serviceId: string, revision: number): Promise<void> {
     const state = this.state(serviceId)
+    if (state.sessionStatus !== 'signedIn') state.sessionStatus = 'restoring'
+    let result: P2PDomainResult<'currentUser'>
+    try {
+      result = await this.management.runRead('currentUser', { serviceId })
+    } finally {
+      if (this.#revision(serviceId) === revision && state.sessionStatus === 'restoring')
+        state.sessionStatus = 'unknown'
+    }
+    if (this.#revision(serviceId) !== revision) return
     if (result.ok) {
+      if (state.user && state.user.userId !== result.data.userId)
+        this.#advanceSessionRevision(serviceId)
       this.#retryAfterSession.delete(serviceId)
       this.#explicitSignOut.delete(serviceId)
       this.#acceptUser(state, result.data)
@@ -107,6 +133,7 @@ export class P2PAccountsDomain {
     // half state: the user was neither accepted nor cleared, so the panel showed
     // the password form again while still believing a read was in progress.
     if (p2pRefusalKind(result.code) === 'signedOut') {
+      this.#advanceSessionRevision(serviceId)
       this.#signedOut(state)
       if (this.#explicitSignOut.has(serviceId)) this.#retryAfterSession.delete(serviceId)
       else this.#retryAfterSession.add(serviceId)
@@ -115,12 +142,15 @@ export class P2PAccountsDomain {
       // last accepted identity (or the initial unknown state) so a
       // service-session announcement can retry it without discarding authority.
       this.#retryAfterSession.add(serviceId)
+      state.sessionStatus = 'unknown'
     }
   }
 
   async login(serviceId: string, username: string, password: string): Promise<void> {
+    if (this.management.busy(serviceId)) return
     const result = await this.management.run('login', { serviceId, username, password })
     if (!result.ok) return
+    this.#invalidateSessionRead(serviceId)
     this.#explicitSignOut.delete(serviceId)
     this.#retryAfterSession.delete(serviceId)
     this.#acceptUser(this.state(serviceId), result.data)
@@ -140,8 +170,10 @@ export class P2PAccountsDomain {
    * sign-in. The server refuses a duplicate email (p2p.user_conflict).
    */
   async register(serviceId: string, email: string, password: string): Promise<void> {
+    if (this.management.busy(serviceId)) return
     const result = await this.management.run('register', { serviceId, email, password })
     if (!result.ok) return
+    this.#invalidateSessionRead(serviceId)
     this.#explicitSignOut.delete(serviceId)
     this.#retryAfterSession.delete(serviceId)
     this.#acceptUser(this.state(serviceId), result.data)
@@ -150,20 +182,32 @@ export class P2PAccountsDomain {
 
   async logout(serviceId: string): Promise<void> {
     if (this.management.busy(serviceId)) return
+    const wasExplicitSignOut = this.#explicitSignOut.has(serviceId)
+    this.#invalidateSessionRead(serviceId)
     this.#explicitSignOut.add(serviceId)
     this.#retryAfterSession.delete(serviceId)
     const result = await this.management.run('logout', { serviceId })
+    if (!result.ok && result.code === 'p2p.service_busy') {
+      if (!wasExplicitSignOut) this.#explicitSignOut.delete(serviceId)
+      if (this.state(serviceId).sessionStatus === 'restoring')
+        this.state(serviceId).sessionStatus = 'unknown'
+      return
+    }
     // Main discards local login authority before attempting server revocation.
     // A lost response is unknown; do not keep displaying usable account authority.
-    if (result.ok) this.#signedOut(this.state(serviceId))
+    if (result.ok || p2pRefusalKind(result.code) === 'signedOut')
+      this.#signedOut(this.state(serviceId))
     else if (result.code !== 'p2p.service_busy') {
       this.#signedOut(this.state(serviceId))
       this.state(serviceId).user = undefined
+      this.state(serviceId).sessionStatus = 'unknown'
     }
   }
 
   async networks(serviceId: string): Promise<void> {
+    const revision = this.#revision(serviceId)
     const result = await this.management.runRead('networks', { serviceId })
+    if (this.#revision(serviceId) !== revision) return
     const state = this.state(serviceId)
     if (!result.ok) {
       // A sibling read already owns the helper channel. It is not a failed
@@ -192,6 +236,7 @@ export class P2PAccountsDomain {
     const userId = state.user?.userId
     if (userId !== undefined) {
       const remembered = await this.management.runRead('accountSelection', { serviceId, userId })
+      if (this.#revision(serviceId) !== revision) return
       const preferred = remembered.ok ? remembered.data.networkId : null
       if (preferred !== null && result.data.some((item) => item.networkId === preferred)) {
         state.selectedNetworkId = preferred
@@ -212,7 +257,9 @@ export class P2PAccountsDomain {
    */
   async readDirectory(serviceId: string): Promise<void> {
     this.subscribe()
+    const revision = this.#revision(serviceId)
     const result = await this.management.runRead('directory', { serviceId })
+    if (this.#revision(serviceId) !== revision) return
     if (!result.ok) {
       // A directory that could not be read keeps what was last projected: the
       // failure belongs to the page that asked, not to every row on it.
@@ -233,7 +280,9 @@ export class P2PAccountsDomain {
    */
   async refreshDirectory(serviceId: string): Promise<void> {
     this.subscribe()
+    const revision = this.#revision(serviceId)
     const result = await this.management.run('refreshDirectory', { serviceId })
+    if (this.#revision(serviceId) !== revision) return
     if (!result.ok) {
       // A read that is already in flight answers this request too, so a busy
       // refusal is not a failure: reporting it would put a warning over a list
@@ -279,13 +328,16 @@ export class P2PAccountsDomain {
       this.#sessionUnsubscribe = api.onServiceSessionsChange(() => {
         const serviceId = this.management.selectedServiceId.value
         if (serviceId === undefined) return
+        if (this.#explicitSignOut.has(serviceId)) return
         // The main process establishes coordinator/device sessions after the
         // window exists. A first account read can therefore finish before that
         // restore. A login-required reply from that window is provisional; an
         // explicit user logout is the only state that must stay signed out.
         const state = this.state(serviceId)
-        if (state.user !== null || this.#retryAfterSession.has(serviceId))
-          void this.currentUser(serviceId)
+        if (state.user !== null || this.#retryAfterSession.has(serviceId)) {
+          if (this.#currentUserInFlight.has(serviceId)) this.#readAfterCurrent.add(serviceId)
+          else void this.currentUser(serviceId)
+        }
       })
     }
   }
@@ -297,6 +349,12 @@ export class P2PAccountsDomain {
     this.#sessionUnsubscribe?.()
     this.#sessionUnsubscribe = undefined
     this.#currentUserInFlight.clear()
+    for (const serviceId of Object.keys(this.#states)) {
+      this.#invalidateSessionRead(serviceId)
+      if (this.state(serviceId).sessionStatus === 'restoring')
+        this.state(serviceId).sessionStatus = 'unknown'
+    }
+    this.#readAfterCurrent.clear()
     this.#retryAfterSession.clear()
     this.#explicitSignOut.clear()
   }
@@ -425,6 +483,10 @@ export class P2PAccountsDomain {
     await this.networks(serviceId)
   }
   #acceptUser(state: P2PAccountState, user: P2PUserView): void {
+    if (state.user && state.user.userId !== user.userId) {
+      state.devices = {}
+      state.devicesFailed = {}
+    }
     if (state.user?.userId !== user.userId) {
       state.networks = undefined
       state.networksError = undefined
@@ -433,14 +495,31 @@ export class P2PAccountsDomain {
       state.networkWriteUnconfirmed = false
     }
     state.user = user
+    state.sessionStatus = 'signedIn'
   }
   #signedOut(state: P2PAccountState): void {
     state.user = null
+    state.sessionStatus = 'signedOut'
     state.networks = undefined
     state.networksError = undefined
     state.selectedNetworkId = undefined
     state.renameDrafts = {}
     state.networkWriteUnconfirmed = false
+    state.devices = {}
+    state.devicesFailed = {}
+  }
+
+  #revision(serviceId: string): number {
+    return this.#sessionRevisions.get(serviceId) ?? 0
+  }
+
+  #invalidateSessionRead(serviceId: string): void {
+    this.#advanceSessionRevision(serviceId)
+    this.#readAfterCurrent.delete(serviceId)
+  }
+
+  #advanceSessionRevision(serviceId: string): void {
+    this.#sessionRevisions.set(serviceId, this.#revision(serviceId) + 1)
   }
 
   #networkFailure(state: P2PAccountState, code: string): void {

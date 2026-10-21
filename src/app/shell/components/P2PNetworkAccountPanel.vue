@@ -46,12 +46,11 @@ const accountState = computed(() =>
 const enrollmentState = computed(() =>
   serviceId.value === undefined ? undefined : enrollment.state(serviceId.value)
 )
-const loggedIn = computed(
-  () => accountState.value?.user !== undefined && accountState.value?.user !== null
-)
 /** Joined but signed out: the local device cannot mesh until it logs in. */
 const joinedNotLoggedIn = computed(
-  () => !loggedIn.value && enrollmentState.value?.registration !== undefined
+  () =>
+    accountState.value?.sessionStatus === 'signedOut' &&
+    enrollmentState.value?.registration !== undefined
 )
 </script>
 <template>

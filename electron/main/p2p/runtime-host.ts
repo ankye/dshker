@@ -57,6 +57,8 @@ export class PeerRuntimeHost {
   readonly #lifetime = new AbortController()
   readonly #runtimeServices = new Set<string>()
   readonly #states = new Map<string, { serviceId: string; state: PeerHelperState }>()
+  /** Catalog announcements fence authorization reads already awaiting the core. */
+  readonly #catalogRevisions = new Map<string, string>()
   /** Preserve every state transition in arrival order across async authorization. */
   readonly #stateAdmissions = new Map<string, Promise<void>>()
   /**
@@ -137,6 +139,18 @@ export class PeerRuntimeHost {
     }
   }
 
+  /** Captures dispatch ownership; an actual reply cannot replace a later callback. */
+  prepareConnectReply(serviceId: string, pairId: string) {
+    assertAccountId(serviceId, 12)
+    assertAccountId(pairId)
+    const previous = this.#states.get(`${serviceId}:${pairId}`)
+    return async (value: PeerHelperState, signal: AbortSignal, assertCurrent: () => void) => {
+      const state = parseHelperState(value)
+      if (state.pairId !== pairId) throw new PeerHelperError('p2p.identity_mismatch')
+      await this.#recordState(serviceId, state, signal, { previous, assertCurrent })
+    }
+  }
+
   close(): Promise<void> {
     this.#closing ??= this.#stop()
     return this.#closing
@@ -174,6 +188,7 @@ export class PeerRuntimeHost {
       // else is a callback this shell cannot route.
       if (typeof changed.revision !== 'string' || !/^[a-f0-9]{64}$/.test(changed.revision))
         throw new PeerHelperError('p2p.invalid_payload')
+      this.#catalogRevisions.set(changed.serviceId, changed.revision)
       this.options.onCatalogChange?.(changed.serviceId, changed.revision)
       return {}
     }
@@ -211,8 +226,9 @@ export class PeerRuntimeHost {
     const pairId = state ? state.pairId : fields.pairId
     assertAccountId(pairId)
     if (state) return this.#recordState(fields.serviceId, state, signal)
-    await this.#authorize(fields.serviceId, pairId)
+    const admitPair = await this.#authorize(fields.serviceId, pairId)
     this.#admit(signal)
+    admitPair()
     // The stage a runtime request used to require is gone with the inbound
     // session's announcements: the core owns one slot per direction now and
     // asks for a runtime only while an answered attempt is at starting-runtime,
@@ -225,8 +241,9 @@ export class PeerRuntimeHost {
     const binding = await (method === 'runtime.connect'
       ? this.#runtime.connect(signal)
       : this.#runtime.resume(signal))
-    await this.#authorize(fields.serviceId, pairId)
+    const admitBinding = await this.#authorize(fields.serviceId, pairId)
     this.#admit(signal)
+    admitBinding()
     this.#runtime.assertCurrent(binding)
     return binding
   }
@@ -234,14 +251,38 @@ export class PeerRuntimeHost {
   async #recordState(
     serviceId: string,
     state: PeerHelperState,
-    signal: AbortSignal
+    signal: AbortSignal,
+    reply?: {
+      previous: { serviceId: string; state: PeerHelperState } | undefined
+      assertCurrent(): void
+    }
   ): Promise<Record<string, never>> {
     const key = `${serviceId}:${state.pairId}`
     const admit = async () => {
       this.#admit(signal)
-      await this.#authorize(serviceId, state.pairId)
+      reply?.assertCurrent()
+      const admitPair = await this.#authorize(serviceId, state.pairId)
       this.#admit(signal)
+      reply?.assertCurrent()
+      admitPair()
       const previous = this.#states.get(key)
+      if (reply && previous !== reply.previous) {
+        // Callbacks own every subsequent transition. A reply for that same
+        // attempt only confirms admission; a replaced attempt is a stale reply.
+        if (
+          previous?.state.attemptId === state.attemptId &&
+          previous.state.generation === state.generation
+        )
+          return
+        // Releasing the owner already present at dispatch may report its final
+        // stage before the core accepts this explicit replacement. That old
+        // lineage progressing is not a new attempt superseding the request.
+        if (
+          previous?.state.attemptId !== reply.previous?.state.attemptId ||
+          previous?.state.generation !== reply.previous?.state.generation
+        )
+          throw new PeerHelperError('p2p.stale_generation')
+      }
       if (previous) {
         if (state.attemptId !== previous.state.attemptId && this.#sawAttempt(key, state.attemptId))
           throw new PeerHelperError('p2p.stale_generation')
@@ -274,8 +315,14 @@ export class PeerRuntimeHost {
     this.#attempts.set(key, seen.includes(attemptId) ? seen : [...seen, attemptId].slice(-4))
   }
 
-  async #authorize(serviceId: string, pairId: string): Promise<void> {
+  async #authorize(serviceId: string, pairId: string): Promise<() => void> {
+    const revision = this.#catalogRevisions.get(serviceId)
+    const assertCurrent = () => {
+      if (this.#catalogRevisions.get(serviceId) !== revision)
+        throw new PeerHelperError('p2p.stale_generation')
+    }
     const saved = await this.options.catalog.inspect()
+    assertCurrent()
     if (!saved) throw new PeerHelperError('p2p.not_enabled')
     const { record } = saved
     if (record.forgottenServiceIds.includes(serviceId))
@@ -290,6 +337,7 @@ export class PeerRuntimeHost {
       )
     )
       throw new PeerHelperError('p2p.pair_unauthorized')
+    return assertCurrent
   }
 
   async #invalidate(generation: number): Promise<void> {
@@ -332,6 +380,7 @@ export class PeerRuntimeHost {
     this.#detach = undefined
     this.#runtimeServices.clear()
     this.#states.clear()
+    this.#catalogRevisions.clear()
     this.#stateAdmissions.clear()
   }
 

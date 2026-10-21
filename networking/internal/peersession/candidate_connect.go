@@ -3,6 +3,7 @@ package peersession
 import (
 	"context"
 	"errors"
+	"net/http"
 	"time"
 
 	"github.com/ankye/dshker/networking/internal/controlplane"
@@ -14,20 +15,26 @@ func (manager *Manager) connectCandidate(ctx context.Context, pairID string, gen
 	if ctx.Err() != nil {
 		return Connected{}, ctx.Err()
 	}
-	connection, err := manager.reserveCandidate(pairID, generation, requestWorkbench, resume)
+	connection, err := manager.reserveConnectCandidate(ctx, pairID, generation, requestWorkbench, resume)
 	if err != nil {
 		return Connected{}, err
 	}
+	manager.emitCurrent(connectionState(connection))
 	go manager.sourceCandidate(connection)
 	return waitCandidate(ctx, connection)
 }
 
 func (manager *Manager) reserveCandidate(pairID string, generation uint64, requested, resume bool) (*session, error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+	return manager.reserveCandidateLocked(pairID, generation, requested, resume, nil)
+}
+
+// Caller holds manager.mu, including any deferred explicit owner's barrier.
+func (manager *Manager) reserveCandidateLocked(pairID string, generation uint64, requested, resume bool, waiter *manualCandidateWait) (*session, error) {
 	if !protocol.ValidID(pairID) || !protocol.ValidGeneration(generation) {
 		return nil, errors.New("p2p.invalid_request")
 	}
-	manager.mu.Lock()
-	defer manager.mu.Unlock()
 	if manager.closed {
 		return nil, errors.New("p2p.helper_unavailable")
 	}
@@ -45,7 +52,7 @@ func (manager *Manager) reserveCandidate(pairID string, generation uint64, reque
 	if err != nil {
 		return nil, err
 	}
-	if manager.candidates[pairID] != nil {
+	if manager.candidates[pairID] != nil || (manager.manualWaiters[pairID] != nil && manager.manualWaiters[pairID] != waiter) {
 		return nil, errors.New("p2p.connection_busy")
 	}
 	if generation <= manager.generations[pairID] {
@@ -80,6 +87,7 @@ func (manager *Manager) reserveCandidate(pairID string, generation uint64, reque
 		}
 	}
 	connection.prepare = &protocol.PrepareCandidate{AttemptID: protocol.NewNonce(), UserID: pin.Initiator.UserID, NetworkID: pin.Pair.NetworkID, PairID: target, Generation: generation}
+	connection.result.State = State{PairID: pairID, AttemptID: connection.prepare.AttemptID, Generation: generation, Stage: "punching"}
 	manager.candidates[pairID] = connection
 	return connection, nil
 }
@@ -122,12 +130,16 @@ func (manager *Manager) sourceCandidate(connection *session) {
 }
 
 func (manager *Manager) prepareCandidate(connection *session) error {
+	diagnostic := manager.newPrepareDiagnostic(connection)
+	request := *connection.prepare
 	fence, err := manager.registration()
+	request.Registration = fence
+	diagnostic.report("registration", request, err)
 	if err != nil {
 		return err
 	}
-	request := *connection.prepare
 	state, err := manager.client.LinkState(connection.ctx, protocol.LinkStateRequest{Registration: fence, UserID: request.UserID, NetworkID: request.NetworkID, PairID: request.PairID})
+	diagnostic.report("link-state", request, err)
 	if err != nil {
 		return err
 	}
@@ -142,23 +154,37 @@ func (manager *Manager) prepareCandidate(connection *session) error {
 	// Once dispatched, the slot remains occupied until this exact id is resolved.
 	// A lost prepare reply is resolved by state-by-id or an identical replay.
 	unknown := false
+	// A later explicit refusal cannot erase an earlier potentially durable
+	// dispatch whose reply was lost, malformed, or otherwise uncertain.
+	ambiguous := false
 	for manager.ctx.Err() == nil {
 		if manager.client.Account() != request.UserID {
 			return errors.New("p2p.user_unauthorized")
 		}
 		request.Registration, err = manager.registration()
+		diagnostic.report("registration", request, err)
 		if err == nil {
 			var ticket protocol.CandidateTicket
 			ticket, err = manager.client.PrepareCandidate(manager.ctx, request)
+			diagnostic.report("prepare", request, err)
 			if err == nil {
 				err = manager.installCandidateTicket(connection, ticket)
+				if err != nil {
+					ambiguous = true
+				}
 				if err == nil && !unknown {
+					diagnostic.report("resolved", request, nil)
 					return nil
 				}
+			} else if !refusedPrepare(err) && !controlplane.IsHTTPRefusal(err, http.StatusTooManyRequests, "p2p.rate_limited") {
+				ambiguous = true
 			}
 		}
 		unknown = true
-		state, readErr := manager.readPreparedCandidate(connection, request)
+		state, readFence, readErr := manager.readPreparedCandidateWithFence(request)
+		readRequest := request
+		readRequest.Registration = readFence
+		diagnostic.report("state", readRequest, readErr)
 		if readErr == nil {
 			readErr = manager.installCandidateTicket(connection, state.Ticket)
 			if readErr == nil {
@@ -166,8 +192,10 @@ func (manager *Manager) prepareCandidate(connection *session) error {
 			}
 			if readErr == nil {
 				if state.Decision.Status == "cancelled" || state.Decision.Status == "expired" {
+					diagnostic.report("resolved", readRequest, errors.New(state.Decision.Reason))
 					return errors.New(state.Decision.Reason)
 				}
+				diagnostic.report("resolved", readRequest, nil)
 				return nil
 			}
 		}
@@ -176,6 +204,11 @@ func (manager *Manager) prepareCandidate(connection *session) error {
 		// candidate left to resolve. In particular, cancelling the caller is not
 		// itself evidence of non-admission.
 		if refusedPrepare(err) && prepareDefinitelyAbsent(readErr) {
+			diagnostic.report("resolved", readRequest, err)
+			return err
+		}
+		if !ambiguous && controlplane.IsHTTPRefusal(err, http.StatusTooManyRequests, "p2p.rate_limited") && controlplane.IsHTTPRefusal(readErr, http.StatusNotFound, "p2p.attempt_not_found") && request.Registration == readFence && manager.currentPrepareScope(connection, request, readFence) {
+			diagnostic.report("resolved", readRequest, err)
 			return err
 		}
 		// A malformed or lost reply may follow durable prepare. Keep this id
@@ -226,11 +259,28 @@ func uncertainControlError(err error) bool {
 }
 
 func (manager *Manager) readPreparedCandidate(connection *session, request protocol.PrepareCandidate) (protocol.CandidateState, error) {
+	state, _, err := manager.readPreparedCandidateWithFence(request)
+	return state, err
+}
+
+func (manager *Manager) readPreparedCandidateWithFence(request protocol.PrepareCandidate) (protocol.CandidateState, protocol.RegistrationFence, error) {
 	fence, err := manager.registration()
 	if err != nil {
-		return protocol.CandidateState{}, err
+		return protocol.CandidateState{}, fence, err
 	}
-	return manager.client.CandidateState(manager.ctx, protocol.CandidateStateRequest{Registration: fence, AttemptID: request.AttemptID, UserID: request.UserID, NetworkID: request.NetworkID, PairID: request.PairID})
+	state, err := manager.client.CandidateState(manager.ctx, protocol.CandidateStateRequest{Registration: fence, AttemptID: request.AttemptID, UserID: request.UserID, NetworkID: request.NetworkID, PairID: request.PairID})
+	return state, fence, err
+}
+
+func (manager *Manager) currentPrepareScope(connection *session, request protocol.PrepareCandidate, fence protocol.RegistrationFence) bool {
+	return manager.withRegistration(fence, request.UserID, func() error {
+		pin, exists := manager.pins[connection.PairID]
+		remote, err := manager.targetDevice(pin)
+		if !exists || err != nil || remote != request.PairID || pin.Initiator.UserID != request.UserID || pin.Pair.NetworkID != request.NetworkID || connection.scopeRetired || manager.candidates[connection.PairID] != connection {
+			return errors.New("p2p.candidate_scope_mismatch")
+		}
+		return nil
+	}) == nil
 }
 
 func (manager *Manager) preparePause(connection *session) bool {

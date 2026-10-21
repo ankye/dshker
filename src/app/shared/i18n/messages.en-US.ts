@@ -688,6 +688,7 @@ export const enUS: Record<MessageKey, string> = {
   'footer.dshVersion': 'DSH',
   'footer.runtime': 'DSH runtime',
   'footer.network': 'Network',
+  'footer.account': 'Account',
   'footer.value.loading': 'Reading',
   'footer.dsh.preparing': 'Preparing',
   'footer.dsh.missing': 'Not installed',

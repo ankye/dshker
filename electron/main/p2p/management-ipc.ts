@@ -211,11 +211,9 @@ export function registerPeerManagementIpc(
       if (!window.isDestroyed())
         window.webContents.send(P2P_CATALOG_CHANGED_CHANNEL, { serviceId, revision })
   })
-  // Starting a connection is a write: it consumes an attempt and a generation.
-  // Clearing the auto-connect backoff first means a user click never waits for a
-  // stuck sweep cycle — the attempt is tried at once.
+  // One explicit operation owns its attempt. Waking background maintenance here
+  // would race that operation for the same candidate slot before it is sent.
   register('connect', true, async (r, s) => {
-    owner.resumeConnectivity()
     return projectPeerConnection(r.serviceId, await owner.connect(r.serviceId, r.pairId, s))
   })
   register('disconnect', true, (r, s) => owner.disconnect(r.serviceId, r.pairId, s))

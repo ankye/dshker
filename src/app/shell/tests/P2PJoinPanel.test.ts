@@ -60,9 +60,8 @@ afterEach(() => {
 
 /** Mounts with the built-in service catalog and selection pre-set. */
 /**
- * The card reports the coordinator session, so every bridge must supply it.
- * An empty list is a read that found no session, which the card states as
- * offline rather than as unknown.
+ * The transport session supplies connection diagnostics. Login status is read
+ * from the account domain and is never inferred from this transport snapshot.
  */
 function sessionReader(sessions: P2PServiceSessionView[] = []) {
   return vi
@@ -205,11 +204,14 @@ describe('P2P 「我的网络」 card', () => {
     expect(joinNetwork).not.toHaveBeenCalled()
   })
 
-  it('shows the registered card with no input, honest offline status and a leave action', async () => {
+  it('shows the registered card with no input, unconfirmed login and a leave action', async () => {
     const ui = await render({})
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pEnrollment.state(serviceId).registration = registered
     domain.p2pEnrollment.state(serviceId).joinNetworkIdDraft = 'network-a'
+    // A cached username is useful context, but an unread current session cannot
+    // authorize account-only actions.
+    domain.p2pAccounts.state(serviceId).user = { userId: 'user-a', username: 'cached-owner' }
     await flushPromises()
     const info = ui.get('[data-testid="p2p-device-info"]')
     expect(info.text()).toContain('My computer')
@@ -221,9 +223,9 @@ describe('P2P 「我的网络」 card', () => {
     expect(ui.find('.connect-membership-details').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-join-form"]').exists()).toBe(false)
     expect(ui.find('[data-testid="p2p-pending-state"]').exists()).toBe(false)
-    // Offline unless a live ready connection stage proves otherwise.
-    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('离线')
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('登录状态待确认')
     expect(ui.find('[data-testid="p2p-leave-network"]').exists()).toBe(true)
+    expect(ui.get('[data-testid="p2p-leave-network"]').attributes('disabled')).toBeDefined()
   })
 
   it('recovers one legacy joined network id from the authoritative local directory', async () => {
@@ -258,31 +260,39 @@ describe('P2P 「我的网络」 card', () => {
     expect(ui.get('[data-testid="p2p-joined-network"]').text()).toContain('network-a')
   })
 
-  it('reports online from the coordinator session, with no paired computer', async () => {
-    // The decisive case: one enrolled computer, zero pairs. A pair stage can
-    // never reach ready here, so deriving status from it reported offline for a
-    // machine the coordinator lists as online.
+  it('requires confirmed login even when the coordinator transport is online without peers', async () => {
     const ui = await render({
-      serviceSessions: sessionReader([{ serviceId, state: 'online', code: '' }])
+      serviceSessions: sessionReader([{ serviceId, state: 'online', code: '' }]),
+      currentUser: async () => ({ ok: true, data: { userId: 'user-a', username: 'owner' } }),
+      networks: async () => ({ ok: true, data: [] })
     })
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pEnrollment.state(serviceId).registration = registered
     await flushPromises()
     expect(domain.p2pManagement.catalog.value?.computers).toHaveLength(0)
-    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('在线')
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('登录状态待确认')
+    await domain.p2pAccounts.currentUser(serviceId)
+    await flushPromises()
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('已登录')
     expect(ui.find('[data-testid="p2p-network-reason"]').exists()).toBe(false)
   })
 
-  it('explains a down session instead of stating a bare offline', async () => {
+  it('keeps transport diagnostics separate from confirmed signed-out status', async () => {
     const ui = await render({
       serviceSessions: sessionReader([
         { serviceId, state: 'offline', code: 'p2p.device_unregistered' }
-      ])
+      ]),
+      currentUser: async () => ({
+        ok: false,
+        code: 'p2p.user_login_required',
+        message: 'no account session'
+      })
     })
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pEnrollment.state(serviceId).registration = registered
+    await domain.p2pAccounts.currentUser(serviceId)
     await flushPromises()
-    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('离线')
+    expect(ui.get('[data-testid="p2p-network-status"]').text()).toContain('未登录')
     // Without the refusal the user saw an unexplained offline and had nothing to
     // act on; the cause was only reachable by inspecting files.
     expect(ui.get('[data-testid="p2p-network-reason"]').text()).toContain('p2p.device_unregistered')
@@ -354,6 +364,7 @@ describe('P2P 「我的网络」 card', () => {
     const ui = await render({ leaveNetwork })
     const domain = await import('@/app/domains/remote-connections')
     domain.p2pAccounts.state(serviceId).user = { userId: 'u'.repeat(12), username: 'owner' }
+    domain.p2pAccounts.state(serviceId).sessionStatus = 'signedIn'
     domain.p2pEnrollment.state(serviceId).registration = registered
     domain.p2pEnrollment.state(serviceId).joinNetworkIdDraft = 'network-a'
     await flushPromises()

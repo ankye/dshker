@@ -213,7 +213,7 @@ func (client *Client) response(ctx context.Context, method, path, token string, 
 		if protocol.DecodeExact(data, &failure) != nil || !strings.HasPrefix(failure.Code, "p2p.") || strings.ContainsAny(failure.Code, " \r\n\t") {
 			return nil, errors.New("p2p.invalid_server_response")
 		}
-		return nil, errors.New(failure.Code)
+		return nil, &httpRefusal{status: response.StatusCode, code: failure.Code}
 	}
 	return data, nil
 }

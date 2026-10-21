@@ -31,6 +31,7 @@ import ShellStatusbar from './components/ShellStatusbar.vue'
 import ShellToast from './components/ShellToast.vue'
 import VersionManagementPanel from './components/VersionManagementPanel.vue'
 import { startLocale } from '../shared/i18n/useLocale'
+import { useP2PAccountSession } from './useP2PAccountSession'
 import { startTheme } from '../shared/theme/useTheme'
 import { useConsoleDrawer } from './consoleDrawerState'
 import { useLauncherShell } from './useLauncherShell'
@@ -260,22 +261,9 @@ const dshRuntimeLabel = computed(() => {
   }
 })
 
-/**
- * The coordinator session, shown in the status bar so it is legible from every
- * route rather than only from the Connect tab.
- *
- * Network reach is a global fact: it decides whether a remote workbench can be
- * opened at all, so a surface that depends on it should not have to derive it.
- * Undefined means unread, which stays distinct from a confirmed offline state.
- */
-const networkOnline = computed(() => {
-  const id = p2pManagement.selectedServiceId.value
-  return id === undefined ? undefined : p2pNetwork.isOnline(id)
-})
-const networkLabel = computed(() => {
-  if (networkOnline.value === undefined) return shell.t('p2p.myNetwork.statusUnknown')
-  return shell.t(networkOnline.value ? 'p2p.myNetwork.online' : 'p2p.myNetwork.offline')
-})
+const { labelKey: accountStatusKey, indicator: accountIndicator } = useP2PAccountSession(
+  p2pManagement.selectedServiceId
+)
 
 /** The tail's link hands over to the full Console route and collapses itself. */
 function openConsoleRoute(): void {
@@ -416,11 +404,9 @@ function openConsoleRoute(): void {
       :runtime-state="dshRuntimeState"
       :operation-label="statusbarOperationLabel"
       :operation-progress="statusbarProgressRatio"
-      :network-label="shell.t('footer.network')"
-      :network-value="networkLabel"
-      :network-state="
-        networkOnline === undefined ? 'unknown' : networkOnline ? 'online' : 'offline'
-      "
+      :network-label="shell.t('footer.account')"
+      :network-value="shell.t(accountStatusKey)"
+      :network-state="accountIndicator"
       :sidebar-state="shell.sidebarState.value"
       :collapse-label="shell.t('nav.collapse')"
       :hide-label="shell.t('nav.hide')"

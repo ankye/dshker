@@ -19,11 +19,8 @@ defineProps<{
    */
   readonly operationProgress?: number
   /**
-   * The coordinator session for the selected service.
-   *
-   * Shown here because network reach decides whether any remote workbench can
-   * be opened, which is not a fact that belongs to one route. `unknown` keeps an
-   * unread session distinct from a confirmed offline state.
+   * The selected service's confirmed account session, shared with its account
+   * page. `unknown` covers restoration and an unconfirmed current-session read.
    */
   readonly networkLabel: string
   readonly networkValue: string

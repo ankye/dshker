@@ -79,6 +79,7 @@ func (manager *Manager) FenceAccountForCertificateRecovery(userID string) (*Acco
 	_, retired := manager.replaceAccountScopeLocked(userID)
 	manager.candidatesActive = false
 	previous := manager.signals
+	manager.cancelAllManualWaitsLocked("p2p.registration_stale")
 	retired.admissions = append(retired.admissions, manager.cancelInboundAdmissionsLocked(previous)...)
 	manager.signals = nil
 	manager.mu.Unlock()
@@ -127,6 +128,7 @@ func (manager *Manager) replaceAccountScopeLocked(userID string) (bool, accountS
 // idempotent local fence cannot retain stale pins, gateways or workbench intent.
 func (manager *Manager) retireAccountScopeLocked(userID string) accountScopeRetirement {
 	retired := accountScopeRetirement{}
+	manager.cancelAllManualWaitsLocked("p2p.user_unauthorized")
 	manager.accountUserID = userID
 	manager.candidatesActive = false
 	for _, job := range manager.endJobs {

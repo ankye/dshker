@@ -589,9 +589,10 @@ describe('formal P2P management composition', () => {
 
     // Dispatching alone cannot prove a workbench is ready, even with a cached URL.
     const accepted = await f.owner.connect(serviceId, pairId, new AbortController().signal)
+    expect(f.owner.connections().peers).toEqual([{ serviceId, state: accepted }])
     await expect(
       f.owner.entry(serviceId, pairId, accepted.generation, new AbortController().signal)
-    ).rejects.toMatchObject({ code: 'p2p.connection_not_found' })
+    ).rejects.toMatchObject({ code: 'p2p.not_connected' })
     coreEntry = { state: helperState(pairId, 'b'.repeat(12), accepted.generation, 'ready'), url }
     await f.peerStage({ serviceId, state: coreEntry.state })
     expect(
