@@ -1,6 +1,8 @@
+import { flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { P2PNetworkSelectionDomain } from './p2pNetworkSelection'
 import { P2PManagementDomain } from './p2pManagement'
+import type { DesktopApi } from '@/shared/contracts'
 import type { P2PManagementApi, P2PNetworkChoicesView } from '@/shared/p2p-management'
 
 const serviceId = 'a'.repeat(12)
@@ -27,6 +29,7 @@ function view(): P2PNetworkChoicesView {
   }
 }
 function fixture() {
+  let catalogListener: ((event: { serviceId: string; revision: string }) => void) | undefined
   const networkChoices = vi.fn(async () => ({ ok: true as const, data: view() }))
   const selectNetwork = vi.fn(async () => ({
     ok: true as const,
@@ -39,14 +42,25 @@ function fixture() {
       }))
     } as P2PNetworkChoicesView
   }))
-  const api = { networkChoices, selectNetwork } as unknown as P2PManagementApi
+  const api = {
+    networkChoices,
+    selectNetwork,
+    onCatalogChange: (listener: typeof catalogListener) => {
+      catalogListener = listener
+      return () => {
+        catalogListener = undefined
+      }
+    }
+  } as unknown as P2PManagementApi
   const management = new P2PManagementDomain(() => api)
   vi.spyOn(management, 'readCatalog').mockResolvedValue()
   return {
     domain: new P2PNetworkSelectionDomain(management),
+    api,
     networkChoices,
     selectNetwork,
-    management
+    management,
+    fireCatalogChange: (event: { serviceId: string; revision: string }) => catalogListener?.(event)
   }
 }
 function deferred<T>() {
@@ -58,6 +72,30 @@ function deferred<T>() {
 }
 
 describe('explicit computer network choice', () => {
+  it('refreshes choices for the active service when another device invalidates the catalog', async () => {
+    const f = fixture()
+    const previous = window.dshLauncher
+    window.dshLauncher = { p2pManagement: f.api } as unknown as DesktopApi
+    try {
+      f.domain.subscribe(serviceId)
+      f.fireCatalogChange({ serviceId: 'other-service', revision })
+      await flushPromises()
+      expect(f.networkChoices).not.toHaveBeenCalled()
+
+      f.fireCatalogChange({ serviceId, revision })
+      await flushPromises()
+      expect(f.networkChoices).toHaveBeenCalledTimes(1)
+      expect(f.domain.state(serviceId).view?.devices[0].choices).toHaveLength(2)
+
+      f.domain.stop()
+      f.fireCatalogChange({ serviceId, revision })
+      await flushPromises()
+      expect(f.networkChoices).toHaveBeenCalledTimes(1)
+    } finally {
+      window.dshLauncher = previous
+    }
+  })
+
   it('reads without picking a network and submits only the exact account/revision chosen by the user', async () => {
     const f = fixture()
     await f.domain.read(serviceId)

@@ -125,12 +125,11 @@ export class P2PAccountsDomain {
     this.#retryAfterSession.delete(serviceId)
     this.#acceptUser(this.state(serviceId), result.data)
     // Authentication is authoritative as soon as the main process has persisted
-    // and published the session. Network discovery is a separate, recoverable
-    // read: keeping it out of this promise lets the panel show the signed-in
-    // identity immediately while the network section reports its own loading or
-    // retry state. The read still starts here so the list is ready without a
-    // second click in the common case.
-    void this.#readNetworksForSession(serviceId)
+    // and published the session. Re-read that confirmed session asynchronously:
+    // the core uses this authenticated read to adopt existing network membership
+    // and notify online peers, while the panel shows the signed-in identity
+    // immediately and owns any later network-list error state.
+    void this.currentUser(serviceId)
   }
 
   /**
@@ -146,7 +145,7 @@ export class P2PAccountsDomain {
     this.#explicitSignOut.delete(serviceId)
     this.#retryAfterSession.delete(serviceId)
     this.#acceptUser(this.state(serviceId), result.data)
-    void this.#readNetworksForSession(serviceId)
+    void this.currentUser(serviceId)
   }
 
   async logout(serviceId: string): Promise<void> {

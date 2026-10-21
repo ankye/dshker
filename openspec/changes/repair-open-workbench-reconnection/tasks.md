@@ -256,3 +256,11 @@ final native CI is pending. The user explicitly closed the original Mac app and
 authorized candidate UI verification, preserving all original account, device,
 network and pairing records. Native interaction proof must now be collected from
 the actual candidate rather than substituted from headless or smoke results.
+
+## 5. Login-driven network convergence
+
+- [x] After confirmed login/registration, start the same current-user synchronization automatically while keeping the signed-in identity immediate in the UI.
+- [x] On each exact confirmed current-user session, repair a displaced coordinator WSS subscription and idempotently adopt the device's existing authorized network memberships.
+- [x] After adoption, have the independent coordinator publish the source device's authenticated registration to currently online devices authorized on a shared network.
+- [x] On recipients, validate the account/session, refresh the peer catalog and device directory, and notify active renderer network-choice views without changing saved selections.
+- [x] Verify client, server, and renderer state transitions with focused and full local test gates; keep failures explicit and retain prior device/network/pair state. Vitest 1,896/1,896, Go client helper/peer-session race suites, the real local Gin/WSS/SQLite coordinator push integration, full independent server `go test -race ./...`, server vet, client/server source-size gates, app test-integrity default verify, OpenSpec strict validation, desktop-app validation and renderer/Electron builds passed. Physical Mac↔Windows and overnight ICE acceptance remain separate and are not claimed here.

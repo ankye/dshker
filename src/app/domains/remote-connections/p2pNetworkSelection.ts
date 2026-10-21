@@ -15,6 +15,8 @@ export interface NetworkSelectionState {
 export class P2PNetworkSelectionDomain {
   readonly #states = reactive<Record<string, NetworkSelectionState>>({})
   readonly #epochs = new Map<string, number>()
+  #unsubscribe: (() => void) | undefined
+  #serviceId: string | undefined
   constructor(private readonly management: P2PManagementDomain) {}
 
   state(serviceId: string): NetworkSelectionState {
@@ -39,6 +41,22 @@ export class P2PNetworkSelectionDomain {
       unconfirmed: false,
       error: ''
     })
+  }
+
+  /** Re-reads network choices when the core invalidates a signed-in catalog. */
+  subscribe(serviceId: string): void {
+    this.#serviceId = serviceId
+    if (this.#unsubscribe !== undefined) return
+    const api = window.dshLauncher?.p2pManagement
+    if (api?.onCatalogChange === undefined) return
+    this.#unsubscribe = api.onCatalogChange((event) => {
+      if (event.serviceId === this.#serviceId) void this.read(event.serviceId)
+    })
+  }
+
+  stop(): void {
+    this.#unsubscribe?.()
+    this.#unsubscribe = undefined
   }
 
   async read(serviceId: string): Promise<void> {

@@ -27,53 +27,56 @@ import (
 )
 
 type certificateFixture struct {
-	t                                                                  *testing.T
-	mu                                                                 sync.Mutex
-	host                                                               *Host
-	account                                                            *account
-	store                                                              *memoryStore
-	private                                                            ed25519.PrivateKey
-	caKey                                                              ed25519.PrivateKey
-	ca                                                                 *x509.Certificate
-	original                                                           controlplane.Device
-	current                                                            controlplane.Device
-	networkID                                                          string
-	queries, renewals, recoveries, grants, subscriptions, runtimeCalls int
-	queryCode, grantCode                                               string
-	grantSessionToken                                                  string
-	loginSession                                                       *controlplane.UserSession
-	authRequests                                                       []accountTransportRequest
-	authReplyGate                                                      func(*http.Request)
-	authReplyCode                                                      string
-	logoutRevoked                                                      bool
-	lostReply                                                          bool
-	afterIssue                                                         func()
-	queryEntered                                                       chan struct{}
-	queryRelease                                                       chan struct{}
-	selectedUserID                                                     string
-	scopedIdentity                                                     *controlplane.PairIdentity
-	scopedIdentities                                                   []controlplane.PairIdentity
-	networks                                                           []controlplane.Network
-	networkDevices                                                     []controlplane.DeviceEntry
-	identityCode                                                       string
-	hellos                                                             []protocol.ControlHello
-	identityRequests                                                   []protocol.PairIdentityRequest
-	identityEntered                                                    chan struct{}
-	identityRelease                                                    <-chan struct{}
-	signalAttempts                                                     []time.Time
-	rejectSignalAttempt                                                int
-	serviceCode                                                        string
-	serviceQueries                                                     int
-	serviceEntered                                                     chan struct{}
-	serviceRelease                                                     <-chan struct{}
-	observeHTTP                                                        func(http.ResponseWriter, *http.Request, http.HandlerFunc)
-	signalReadyGate                                                    func()
-	signalClosed                                                       chan struct{}
+	t                                                                             *testing.T
+	mu                                                                            sync.Mutex
+	host                                                                          *Host
+	account                                                                       *account
+	store                                                                         *memoryStore
+	private                                                                       ed25519.PrivateKey
+	caKey                                                                         ed25519.PrivateKey
+	ca                                                                            *x509.Certificate
+	original                                                                      controlplane.Device
+	current                                                                       controlplane.Device
+	networkID                                                                     string
+	queries, renewals, recoveries, grants, subscriptions, runtimeCalls, adoptions int
+	pairQueries, catalogAnnouncements                                             int
+	catalogChanged                                                                chan struct{}
+	queryCode, grantCode                                                          string
+	pairCode                                                                      string
+	grantSessionToken                                                             string
+	loginSession                                                                  *controlplane.UserSession
+	authRequests                                                                  []accountTransportRequest
+	authReplyGate                                                                 func(*http.Request)
+	authReplyCode                                                                 string
+	logoutRevoked                                                                 bool
+	lostReply                                                                     bool
+	afterIssue                                                                    func()
+	queryEntered                                                                  chan struct{}
+	queryRelease                                                                  chan struct{}
+	selectedUserID                                                                string
+	scopedIdentity                                                                *controlplane.PairIdentity
+	scopedIdentities                                                              []controlplane.PairIdentity
+	networks                                                                      []controlplane.Network
+	networkDevices                                                                []controlplane.DeviceEntry
+	identityCode                                                                  string
+	hellos                                                                        []protocol.ControlHello
+	identityRequests                                                              []protocol.PairIdentityRequest
+	identityEntered                                                               chan struct{}
+	identityRelease                                                               <-chan struct{}
+	signalAttempts                                                                []time.Time
+	rejectSignalAttempt                                                           int
+	serviceCode                                                                   string
+	serviceQueries                                                                int
+	serviceEntered                                                                chan struct{}
+	serviceRelease                                                                <-chan struct{}
+	observeHTTP                                                                   func(http.ResponseWriter, *http.Request, http.HandlerFunc)
+	signalReadyGate                                                               func()
+	signalClosed                                                                  chan struct{}
 }
 
 func newCertificateFixture(t *testing.T, remaining time.Duration) *certificateFixture {
 	t.Helper()
-	f := &certificateFixture{t: t, networkID: protocol.NewID(), store: newMemoryStore(), grantSessionToken: strings.Repeat("s", 64), networkDevices: []controlplane.DeviceEntry{}}
+	f := &certificateFixture{t: t, networkID: protocol.NewID(), store: newMemoryStore(), grantSessionToken: strings.Repeat("s", 64), networkDevices: []controlplane.DeviceEntry{}, catalogChanged: make(chan struct{}, 32)}
 	public, caKey, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		t.Fatal(err)
@@ -348,7 +351,30 @@ func (f *certificateFixture) serve(w http.ResponseWriter, r *http.Request) {
 		}{f.current.Certificate})
 	case "/v1/heartbeat":
 		_ = json.NewEncoder(w).Encode(map[string]any{"deviceId": f.original.DeviceID, "at": time.Now().Unix()})
+	case "/v1/adopt-network":
+		f.adoptions++
+		if len(r.TLS.PeerCertificates) != 1 || len(r.TLS.VerifiedChains) == 0 || r.TLS.PeerCertificates[0].Subject.CommonName != f.original.DeviceID || f.selectedUserID == "" {
+			f.t.Error("automatic network adoption did not use the authenticated original device and selected account")
+			f.refuse(w, "p2p.device_unauthorized")
+			return
+		}
+		pairs := make([]controlplane.Pair, 0, len(f.scopedIdentities))
+		for _, identity := range f.scopedIdentities {
+			if identity.Pair.State == "active" {
+				pairs = append(pairs, identity.Pair)
+			}
+		}
+		if f.scopedIdentity != nil && f.scopedIdentities == nil && f.scopedIdentity.Pair.State == "active" {
+			pairs = append(pairs, f.scopedIdentity.Pair)
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"pairs": pairs})
 	case "/v1/pairs":
+		f.pairQueries++
+		pairCode := f.pairCode
+		if pairCode != "" {
+			f.refuse(w, pairCode)
+			return
+		}
 		if f.scopedIdentities != nil {
 			pairs := make([]controlplane.Pair, 0, len(f.scopedIdentities))
 			for _, identity := range f.scopedIdentities {
@@ -510,6 +536,15 @@ func (owner certificateMain) Call(_ context.Context, method string, _ any) (json
 		owner.f.mu.Lock()
 		owner.f.runtimeCalls++
 		owner.f.mu.Unlock()
+	}
+	if method == "catalog.changed" {
+		owner.f.mu.Lock()
+		owner.f.catalogAnnouncements++
+		owner.f.mu.Unlock()
+		select {
+		case owner.f.catalogChanged <- struct{}{}:
+		default:
+		}
 	}
 	return json.RawMessage(`{}`), nil
 }

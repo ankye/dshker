@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+## 0.1.93 — 2026-10-21
+
+### 简体中文 (zh-CN)
+
+- **登录后自动同步局域网设备。** 账号登录或恢复确认后，自动同步本机已有的网络成员关系，并通知同网络在线电脑更新设备与网络选择列表；无需手动刷新或重新选择仍有效的网络。真实撤权仍明确显示，不会自动换网，也不删除设备或配对。
+- **已知范围。** 本次修复自动同步账号网络成员关系，不等同于 Mac↔Windows 长时间 ICE 稳定性验收；双向八小时验证仍未完成。
+
+### English (en-US)
+
+- **Synchronize network devices after sign-in.** Once login or session restoration is confirmed, the client synchronizes this device's existing network memberships and notifies online computers on the same network to update their device and network-choice views. No manual refresh or reselection is needed for an unchanged authorized network. Revocation remains explicit; the client never switches networks or deletes devices or pairings.
+- **Scope note.** This fixes account/network membership convergence; it is not acceptance of long-duration Mac↔Windows ICE stability. Bidirectional eight-hour verification remains incomplete.
+
 ## 0.1.92 — 2026-10-21
 
 ### 简体中文 (zh-CN)

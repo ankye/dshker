@@ -1290,3 +1290,30 @@ remain separate and must not be represented as passed. The disabled-firewall
 UDP profile remains failed historical evidence; D19 records the user's explicit
 program-unresponsiveness replacement. It cannot be relabeled as a successful
 UDP experiment or waive the eight-hour gate.
+
+### D35 — Authenticated network membership converges without user refresh
+
+Confirming the persisted/current account is the synchronization boundary. After
+a successful login/registration the renderer immediately requests that
+confirmation without delaying the visible signed-in state. After the exact
+account session is verified, the client repairs its coordinator WSS registration
+and idempotently adopts the device's already-authorized network memberships.
+This also runs for persisted-session confirmation, including when the launcher
+reconnects to an already-running core; it does not select a network, create a
+membership, or replace a saved per-computer network choice.
+
+After adoption commits, the independent coordinator republishes the source
+device's current authenticated registration to online devices authorized by an
+active shared network. The event uses the existing control-v2 peer-registration
+contract. A recipient validates the current account and selected session before
+refreshing the peer catalog and device directory, then notifies the renderer to
+refresh open network-choice views. The peer receive loop only schedules bounded
+work. If a recipient was offline, its own next confirmed account read performs
+the same idempotent synchronization; a missed transient event is not treated as
+revocation or repaired by a guessed network.
+
+Any rejected adoption, WSS repair, selected-session fence, or authoritative read
+remains an explicit error. The client never silently chooses another network,
+deletes a pair, rewrites credentials, or reports a current directory from a
+failed read. Existing device identity, network membership and pair rows are
+preserved.

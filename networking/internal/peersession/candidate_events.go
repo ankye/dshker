@@ -55,6 +55,9 @@ func (manager *Manager) peerRegistration(event protocol.PeerRegistration) {
 	for _, pairID := range wake {
 		manager.wake(pairID)
 	}
+	if manager.config.PeerRegistration != nil {
+		manager.config.PeerRegistration(event)
+	}
 }
 
 // CurrentState is the primary's live truth. A candidate never replaces it in

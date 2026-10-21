@@ -299,17 +299,15 @@ describe('RuntimeTabsPanel rendering controls', () => {
       computers: [peerComputer],
       forgottenServiceIds: []
     }
-    let announced: ((payload: { serviceId: string; revision: string }) => void) | undefined
+    const catalogListeners = new Set<(payload: { serviceId: string; revision: string }) => void>()
     installRuntimeApi({
       p2pManagement: {
         pairs: vi.fn(async () => ({ ok: true as const, data: [] })),
         catalog: vi.fn(async () => ({ ok: true as const, data: structuredClone(view) })),
         addService: vi.fn(),
         onCatalogChange: (listener: (payload: { serviceId: string; revision: string }) => void) => {
-          announced = listener
-          return () => {
-            announced = undefined
-          }
+          catalogListeners.add(listener)
+          return () => catalogListeners.delete(listener)
         }
       }
     })
@@ -322,7 +320,8 @@ describe('RuntimeTabsPanel rendering controls', () => {
 
     // The core records the new pair on another machine and announces the catalog.
     view.computers = [peerComputer, added]
-    announced?.({ serviceId: peerComputer.serviceId, revision: 'b'.repeat(64) })
+    for (const listener of catalogListeners)
+      listener({ serviceId: peerComputer.serviceId, revision: 'b'.repeat(64) })
     await flushPromises()
 
     expect(getAddMenu().querySelector(selector)).not.toBeNull()

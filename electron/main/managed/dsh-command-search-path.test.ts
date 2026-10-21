@@ -93,12 +93,12 @@ describe('managed DSH command search path', () => {
   it('accepts one terminal Windows PATH delimiter without adding an empty search entry', async () => {
     const resolver = createManagedDshCommandSearchPathResolver({
       platform: 'win32',
-      environment: { Path: 'C:\\Windows\\System32;C:\\Users\\Administrator\\scoop\\shims;' },
+      environment: { Path: 'C:\\Windows\\System32;C:\\Home\\dev\\scoop\\shims;' },
       bundledRuntimeBin: 'C:\\DSHKer\\runtime\\bin'
     })
 
     await expect(resolver()).resolves.toBe(
-      'C:\\DSHKer\\runtime\\bin;C:\\Windows\\System32;C:\\Users\\Administrator\\scoop\\shims'
+      'C:\\DSHKer\\runtime\\bin;C:\\Windows\\System32;C:\\Home\\dev\\scoop\\shims'
     )
   })
 

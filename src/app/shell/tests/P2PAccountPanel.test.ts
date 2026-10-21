@@ -185,11 +185,14 @@ describe('P2P account public controls (component diagnostics)', () => {
       .fn<P2PManagementApi['networks']>()
       .mockResolvedValue({ ok: true, data: [network] })
     const ui = await render({
-      currentUser: async () => ({
-        ok: false,
-        code: 'p2p.user_login_required',
-        message: 'required'
-      }),
+      currentUser: vi
+        .fn<P2PManagementApi['currentUser']>()
+        .mockResolvedValueOnce({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        })
+        .mockResolvedValue({ ok: true, data: user }),
       login,
       networks
     })
@@ -232,11 +235,14 @@ describe('P2P account public controls (component diagnostics)', () => {
     )
     const login = vi.fn<P2PManagementApi['login']>().mockResolvedValue({ ok: true, data: user })
     const ui = await render({
-      currentUser: async () => ({
-        ok: false,
-        code: 'p2p.user_login_required',
-        message: 'required'
-      }),
+      currentUser: vi
+        .fn<P2PManagementApi['currentUser']>()
+        .mockResolvedValueOnce({
+          ok: false,
+          code: 'p2p.user_login_required',
+          message: 'required'
+        })
+        .mockResolvedValue({ ok: true, data: user }),
       login,
       networks
     })

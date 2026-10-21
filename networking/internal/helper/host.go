@@ -350,6 +350,7 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	}
 	var result any
 	var err error
+	var catalogRevisionToAnnounce string
 	if method == "device.restore" {
 		result, err = host.restore(ctx, account, request.Data)
 	} else if method == "device.certificate" {
@@ -362,6 +363,9 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 		}
 	} else {
 		result, err = host.manage(ctx, account, method, request.Data)
+	}
+	if err == nil && method == "user.current" && account.client != nil && account.activationPending == nil {
+		catalogRevisionToAnnounce = account.catalogRevision
 	}
 	var retry *bootstrapJob
 	if bootstrapTransient(err) && ctx.Err() == nil && (method == "device.restore" || method == "user.login" || method == "user.register" || method == "user.current") {
@@ -390,6 +394,9 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 	if pendingAuthentication && ctx.Err() != nil && err == nil {
 		err = errors.New("p2p.request_cancelled")
 		result = nil
+	}
+	if err == nil && catalogRevisionToAnnounce != "" {
+		host.announceCatalog(request.ServiceID, catalogRevisionToAnnounce)
 	}
 	if retry != nil {
 		host.scheduleCapturedBootstrap(retry)
@@ -544,9 +551,38 @@ func (host *Host) manage(ctx context.Context, account *account, method string, d
 	}
 	if method == "user.login" || method == "user.register" || method == "user.current" {
 		if account.client != nil {
-			if _, err := account.refreshCatalogLocked(ctx); err != nil {
+			if method == "user.current" {
+				// The account is now verified and reported to WSS. Idempotently adopt
+				// active network memberships on every confirmed session read: the
+				// desktop can reconnect to a still-running core, and peers that missed
+				// an earlier WSS invalidation need a fresh publication after this login.
+				scope, ok := selectedSessionScopeFromContext(ctx)
+				if !ok || !scope.hasSession {
+					return nil, errors.New("p2p.user_scope_mismatch")
+				}
+				user := result.(controlplane.User)
+				if user.UserID == "" {
+					return nil, errors.New("p2p.invalid_user_session")
+				}
+				if account.manager == nil {
+					return nil, errors.New("p2p.device_unregistered")
+				}
+				// A persisted desktop session can be confirmed while its old core's
+				// WSS registration has gone away. Repair it before network adoption:
+				// otherwise the HTTP write would succeed but there would be no live
+				// channel on which to push the membership change to other devices.
+				if err := account.manager.ReconnectSignals(ctx); err != nil {
+					return nil, err
+				}
+				if _, err := account.client.AdoptNetwork(ctx); err != nil {
+					return nil, err
+				}
+			}
+			revision, err := account.refreshCatalogLocked(ctx)
+			if err != nil {
 				return nil, err
 			}
+			account.catalogRevision = revision
 		}
 		if err := checkBootstrapContext(ctx); err != nil {
 			return nil, err
@@ -772,7 +808,7 @@ func (host *Host) restore(ctx context.Context, account *account, data json.RawMe
 	client.SetAccount(reportedAccount)
 	manager, err := peersession.New(host.ctx, client, peersession.Config{Endpoints: account.endpoints, Authority: account.identity, Device: request.Device, PrivateKey: append(ed25519.PrivateKey(nil), request.PrivateKey...), Roots: roots, ResumeOwner: resumeOwner, CoreInstanceID: host.coreInstanceID, Wake: func(pairID string) {
 		host.AutoConnectEngine().Wake(autoconnect.Intent{ServiceID: account.identity.ServiceID, PairID: pairID})
-	}}, request.Pins, owner, publication.emit)
+	}, PeerRegistration: account.peerRegistrationChanged}, request.Pins, owner, publication.emit)
 	if err != nil {
 		client.Close()
 		return nil, err

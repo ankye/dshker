@@ -419,6 +419,53 @@ func (account *account) announceCatalog(revision string) {
 	account.host.announceCatalog(account.identity.ServiceID, revision)
 }
 
+// peerRegistrationChanged converges the saved peer catalog and visible device
+// directory when another computer signs in, adopts a network or goes offline.
+// The signaling receive loop only schedules this bounded read; it never waits on
+// account HTTP, catalog I/O or renderer IPC.
+func (account *account) peerRegistrationChanged(event protocol.PeerRegistration) {
+	if !protocol.ValidID(event.DeviceID) || !protocol.ValidID(event.UserID) || account.host == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(account.maintenanceLifetime(), directoryRefreshTimeout)
+		defer cancel()
+		account.mu.Lock()
+		if account.closed || account.client == nil || account.client.Account() != event.UserID || event.DeviceID == account.device.DeviceID {
+			account.mu.Unlock()
+			return
+		}
+		scope, err := account.selectedSessionScopeLocked(ctx)
+		account.mu.Unlock()
+		if err != nil {
+			log.Printf("[p2p] peer registration refresh refused: %s", err.Error())
+			return
+		}
+		ctx = scope.Context(ctx)
+		if event.Online {
+			revision, err := account.refreshCatalog(ctx)
+			if err != nil {
+				log.Printf("[p2p] peer registration catalog refresh failed: %v", err)
+			} else {
+				// Revalidate this exact session after the network read without writing
+				// account state from the background callback. The catalog revision is
+				// owned by account.mu; mutating it here would race maintenance and could
+				// invert the account/bootstrap lock order.
+				if err = scope.Publish(ctx, func() error { return nil }); err != nil {
+					log.Printf("[p2p] peer registration catalog publication refused: %s", err.Error())
+					return
+				}
+				// A registration is also an invalidation of network choices, even
+				// when the persisted computer rows already had this revision.
+				account.host.announceCatalog(account.identity.ServiceID, revision)
+			}
+		}
+		if _, err = account.refreshDirectory(ctx); err != nil {
+			log.Printf("[p2p] peer registration directory refresh failed: %v", err)
+		}
+	}()
+}
+
 // announceCatalog is the host half: the parent channel, when there is one.
 func (host *Host) announceCatalog(serviceID string, revision string) {
 	host.mu.Lock()

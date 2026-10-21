@@ -414,13 +414,23 @@ func TestPeerCoreReplacementSuspendsExactPrimaryWithoutCandidateProjection(t *te
 	var emitted []State
 	manager.emit = func(state State) { emitted = append(emitted, state) }
 	wakes := 0
+	registrations := make(chan protocol.PeerRegistration, 1)
 	manager.config.Wake = func(pairID string) {
 		if pairID == primary.PairID {
 			wakes++
 		}
 	}
+	manager.config.PeerRegistration = func(received protocol.PeerRegistration) { registrations <- received }
 	event := protocol.PeerRegistration{Version: 2, Type: "peer-registration", ServerEpoch: fence.ServerEpoch, DeviceID: pin.Target.DeviceID, UserID: pin.Initiator.UserID, CoreInstanceID: protocol.NewNonce(), Capabilities: []string{protocol.CapabilityCandidate}, Online: true}
 	manager.peerRegistration(event)
+	select {
+	case received := <-registrations:
+		if received.Version != event.Version || received.Type != event.Type || received.ServerEpoch != event.ServerEpoch || received.DeviceID != event.DeviceID || received.UserID != event.UserID || received.CoreInstanceID != event.CoreInstanceID || received.Online != event.Online || len(received.Capabilities) != 1 || received.Capabilities[0] != event.Capabilities[0] {
+			t.Fatal("accepted coordinator registration was not forwarded unchanged", received)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("accepted coordinator registration did not schedule catalog/directory convergence")
+	}
 	suspended, err := manager.CurrentState(primary.PairID)
 	if err != nil || suspended.Stage != "suspended" || suspended.AttemptID != ticket.Lease.AttemptID || suspended.Generation != 4 || suspended.RuntimeGeneration != 7 || suspended.Error != "" || wakes != 1 {
 		t.Fatal("replacement lost the exact primary identity or failed to wake", suspended, err, wakes)

@@ -420,7 +420,7 @@ describe('P2P user and network domain', () => {
     expect(accounts.state('service-a').selectedNetworkId).toBeUndefined()
   })
 
-  it('publishes a confirmed login before the network list finishes loading', async () => {
+  it('confirms login automatically before loading networks, without manual refresh', async () => {
     let resolveNetworks!: (value: Awaited<ReturnType<P2PManagementApi['networks']>>) => void
     const networks = vi.fn<P2PManagementApi['networks']>().mockReturnValue(
       new Promise((resolve) => {
@@ -428,14 +428,17 @@ describe('P2P user and network domain', () => {
       })
     )
     const login = vi.fn<P2PManagementApi['login']>().mockResolvedValue({ ok: true, data: user })
-    const { accounts } = setup({ login, networks })
+    const { accounts, api } = setup({ login, networks })
 
     await accounts.login('service-a', 'alice@example.com', 'login-secret')
+    await flushPromises()
 
     // The session is authoritative now; a slow list must not keep the account
-    // looking signed out or keep the password form mounted.
+    // looking signed out or keep the password form mounted. The follow-up
+    // current-user confirmation is automatic and performs network adoption.
     expect(accounts.state('service-a').user).toEqual(user)
     expect(accounts.state('service-a').networks).toBeUndefined()
+    expect(api.currentUser).toHaveBeenCalledTimes(1)
     expect(networks).toHaveBeenCalledTimes(1)
 
     resolveNetworks({ ok: true, data: [network] })
@@ -448,7 +451,7 @@ describe('P2P user and network domain', () => {
       ok: true,
       data: user
     })
-    const { accounts } = setup({ register })
+    const { accounts, api } = setup({ register })
     await accounts.register('service-a', 'alice@example.com', 'new-secret')
     await flushPromises()
     expect(register).toHaveBeenCalledWith(
@@ -459,6 +462,7 @@ describe('P2P user and network domain', () => {
       })
     )
     expect(accounts.state('service-a').user).toEqual(user)
+    expect(api.currentUser).toHaveBeenCalledTimes(1)
     // A confirmed registration is a session, so it loads its networks exactly
     // like a sign-in rather than leaving the new account looking empty.
     expect(accounts.state('service-a').networks).toEqual([network])

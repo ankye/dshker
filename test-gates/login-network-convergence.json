@@ -1,0 +1,164 @@
+{
+  "change": "login-network-convergence",
+  "risk": "data_critical",
+  "scope_note": "Confirms the current signed-in account, adopts only its already-authorized network memberships, and invalidates online peers' catalog and directory. Does not create a network membership, select a network, rewrite device identity, or delete a pair. Live local coordination is source-level evidence only, not physical Mac-Windows or overnight ICE acceptance.",
+  "production_files": [
+    "networking/internal/helper/host.go",
+    "networking/internal/helper/members.go",
+    "networking/internal/peersession/candidate_events.go",
+    "networking/internal/peersession/manager.go",
+    "src/app/domains/remote-connections/p2pAccounts.ts",
+    "src/app/domains/remote-connections/p2pNetworkSelection.ts",
+    "src/app/shell/components/RuntimeTabAddMenu.vue"
+  ],
+  "test_files": [
+    "networking/internal/helper/account_auth_recovery_test.go",
+    "networking/internal/helper/certificate_fixture_test.go",
+    "networking/internal/helper/account_session_test.go",
+    "networking/internal/helper/selected_session_scope_test.go",
+    "networking/internal/peersession/candidate_test.go",
+    "networking/integration/login_network_convergence_test.go",
+    "electron/main/managed/dsh-command-search-path.test.ts",
+    "src/app/domains/remote-connections/p2pAccounts.test.ts",
+    "src/app/domains/remote-connections/p2pNetworkSelection.test.ts",
+    "src/app/shell/tests/P2PAccountPanel.test.ts",
+    "src/app/shell/tests/RuntimeTabsPanel.test.ts"
+  ],
+  "live_test_files": ["networking/integration/login_network_convergence_test.go"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestAuthenticatedCurrentAdoptsNetworkAndPublishesPeersWithoutUserRefresh"
+    },
+    {
+      "state": "no_op",
+      "test": "TestAuthenticatedCurrentWithoutNetworkMembersKeepsEmptyCatalog"
+    },
+    {
+      "state": "partial",
+      "test": "TestNetworkSyncPartialCatalogReadRecoversOnNextAutomaticConfirmation"
+    },
+    {
+      "state": "recovery",
+      "test": "TestNetworkSyncPartialCatalogReadRecoversOnNextAutomaticConfirmation"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestSelectedSessionScopePublicationRechecksTypedFences"
+    },
+    {
+      "state": "reset",
+      "test": "reads the account and its directory at shell start"
+    },
+    {
+      "state": "rejected",
+      "test": "TestRejectedCurrentTokenCannotPublishDirectoryAuthority"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "confirmed selected account, WSS registration and existing network adoption",
+      "source": "the persisted account token, the exact original mTLS device identity and the coordinator's authoritative membership response",
+      "test": "TestAuthenticatedCurrentAdoptsNetworkAndPublishesPeersWithoutUserRefresh",
+      "assertion": "successful login required a separate manual network refresh before the remote computer appeared",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId", "deviceId", "networkId", "pairId", "sessionToken"],
+      "missing_semantics": "A current-user confirmation fails on WSS/adoption/read refusal; it never guesses an account or network and never reports a catalog that was not read back."
+    },
+    {
+      "production_file": "networking/internal/helper/members.go",
+      "field": "online peer registration invalidates pair catalog and refreshes device directory",
+      "source": "a validated coordinator peer-registration event after exact current-account and selected-session checks",
+      "test": "TestOnlinePeerRegistrationRefreshesCatalogAndChoiceInvalidation",
+      "assertion": "registration did not read current pair authority and invalidate the choice view",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId", "deviceId", "networkId", "catalogRevision"],
+      "missing_semantics": "Foreign, self, stale-session or malformed registration cannot change the local catalog; a failed authoritative read stays a logged failure and does not synthesize rows."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_events.go",
+      "field": "forwarded peer-registration event after manager validation and state application",
+      "source": "the authenticated control-v2 coordinator subscription bound to this server epoch",
+      "test": "TestPeerCoreReplacementSuspendsExactPrimaryWithoutCandidateProjection",
+      "assertion": "accepted coordinator registration did not schedule catalog/directory convergence",
+      "state": "success",
+      "identity_keys": ["deviceId", "userId", "serverEpoch", "coreInstanceId", "online"],
+      "missing_semantics": "The helper callback receives only validated events and cannot block the signalling receive loop."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager.go",
+      "field": "PeerRegistration callback capability on the real manager",
+      "source": "explicit manager configuration owned by the restored device account",
+      "test": "TestPeerCoreReplacementSuspendsExactPrimaryWithoutCandidateProjection",
+      "assertion": "accepted coordinator registration was not forwarded unchanged",
+      "state": "success",
+      "identity_keys": [
+        "deviceId",
+        "userId",
+        "serverEpoch",
+        "coreInstanceId",
+        "capabilities",
+        "online"
+      ],
+      "missing_semantics": "No unvalidated or rewritten identity event is passed to the account refresh owner."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "confirmed login automatically starts account-session synchronization",
+      "source": "the successful login result followed by the exact current-user read through the typed management bridge",
+      "test": "confirms login automatically before loading networks, without manual refresh",
+      "assertion": "expect(api.currentUser).toHaveBeenCalledTimes(1)",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId", "currentUserRequest"],
+      "missing_semantics": "The signed-in identity renders immediately; synchronization is started without requiring a refresh or network re-selection, and a read failure is not presented as signed out."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pNetworkSelection.ts",
+      "field": "active service network choices reload on catalog invalidation without changing the user's saved choice",
+      "source": "the typed main-process catalog-change event and subsequent authoritative networkChoices read",
+      "test": "refreshes choices for the active service when another device invalidates the catalog",
+      "assertion": "expect(f.networkChoices).toHaveBeenCalledTimes(1)",
+      "state": "success",
+      "identity_keys": ["serviceId", "catalogRevision", "selectedNetworkId", "pairId"],
+      "missing_semantics": "Events for another service are ignored; refresh reads choices only and never chooses or mutates a network."
+    },
+    {
+      "production_file": "src/app/shell/components/RuntimeTabAddMenu.vue",
+      "field": "open add-tab menu owns the network-choice invalidation subscription lifecycle",
+      "source": "the existing typed catalog event API for the exact selected coordinator",
+      "test": "lists a computer paired elsewhere while the menu stays open",
+      "assertion": "expect(getAddMenu().querySelector(selector)).not.toBeNull()",
+      "state": "success",
+      "identity_keys": ["serviceId", "catalogRevision", "remoteDeviceId", "runtimeTabId"],
+      "missing_semantics": "While open, an online peer's catalog push updates the list; unmount releases the subscription and no extra runtime tab is created by refresh."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "mkdir -p .run/login-network-convergence && npm test -- --run --reporter=json --outputFile=.run/login-network-convergence/renderer-tests.json",
+      "no_mock": true
+    },
+    {
+      "command": "npm run environment:check && npm run format:check && npm run architecture:check && npm run type-check",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && go test -json -race ./internal/helper ./internal/peersession -count=1 > ../.run/login-network-convergence/client-core-race.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "cd networking && test -n \"${DSHKER_SERVER_BINARY:?build the independent production coordinator first}\" && GOWORK=off DSHKER_SERVER_BINARY=\"$DSHKER_SERVER_BINARY\" go test -json -race ./integration -run '^TestNetworkAdoptionNotifiesOnlinePeerManager$' -count=1 -timeout=90s > ../.run/login-network-convergence/real-coordinator-client-push.jsonl",
+      "no_mock": true
+    },
+    {
+      "command": "npm run service:smoke && npm run visual:smoke && npm run build && npm run build:electron",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    { "artifact": ".run/login-network-convergence/renderer-tests.json" },
+    { "artifact": ".run/login-network-convergence/client-core-race.jsonl" },
+    { "artifact": ".run/login-network-convergence/real-coordinator-client-push.jsonl" }
+  ]
+}

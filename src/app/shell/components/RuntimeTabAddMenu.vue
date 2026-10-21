@@ -338,6 +338,7 @@ async function refreshPeers(): Promise<void> {
   // Subscribing to the coordinator being shown is what makes a newly paired
   // computer appear while this menu stays open.
   p2pPairing.subscribe(serviceId)
+  p2pNetworkSelection.subscribe(serviceId)
   await p2pPairing.read(serviceId)
   await p2pNetworkSelection.read(serviceId)
 }
@@ -353,6 +354,7 @@ onUnmounted(() => {
   // The pairing domain outlives this component, so its subscription to the core's
   // announcements is released with the component that asked for it.
   p2pPairing.stop()
+  p2pNetworkSelection.stop()
   removeGlobalListeners()
 })
 

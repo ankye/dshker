@@ -115,6 +115,11 @@ can enter the connection flow directly; the account page does not duplicate a
 separate pairing step. Explicit authorization remains available for a device
 that is not in one of your networks.
 
+When a computer signs in, it automatically synchronizes its existing network
+memberships and notifies online devices on those networks. Offline devices
+synchronize at their next sign-in; an unchanged authorized network needs no
+manual refresh or reselection.
+
 The device list is that network's membership: each computer shows its liveness, last
 seen time and reported build. **Remove** takes a device out of the network and drops
 the pairs it had there — an unbind affects only that network, so the machine keeps its

@@ -32,6 +32,10 @@ type Config struct {
 	ResumeOwner    runtimebridge.RuntimeOwner
 	CoreInstanceID string
 	Wake           func(string)
+	// PeerRegistration runs after a valid coordinator membership event has been
+	// applied to the local peer manager. It must schedule work rather than block
+	// the signalling receive loop.
+	PeerRegistration func(protocol.PeerRegistration)
 }
 type State struct {
 	PairID            string          `json:"pairId"`

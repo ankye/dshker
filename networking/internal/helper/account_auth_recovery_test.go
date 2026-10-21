@@ -70,6 +70,149 @@ func TestAccountAuthValidCertificateKeepsActualWSSFailure(t *testing.T) {
 	}
 }
 
+func TestAuthenticatedCurrentAdoptsNetworkAndPublishesPeersWithoutUserRefresh(t *testing.T) {
+	f, session := authDeviceFixture(t, 30*24*time.Hour)
+	identity, remote := plantedPair(t, f.original.DeviceID, session.User.UserID, f.original.PublicKey, "Windows computer", f.networkID)
+	f.scopedIdentity = &identity
+	f.networks = []controlplane.Network{{NetworkID: f.networkID, UserID: session.User.UserID, Name: "shared", MaxDevices: 10}}
+
+	value, err := authHandle(f, "user.login", map[string]string{"username": session.User.Username, "password": "test-only-password"})
+	if err != nil || value.(controlplane.UserSession) != session {
+		t.Fatal("login did not confirm the selected account", err)
+	}
+	value, err = authHandle(f, "user.current", map[string]string{"token": session.Token})
+	if err != nil || value.(controlplane.User) != session.User {
+		t.Fatal("confirmed login did not complete automatic network synchronization", err)
+	}
+	f.mu.Lock()
+	adoptions := f.adoptions
+	lastHello := f.hellos[len(f.hellos)-1]
+	helloCount := len(f.hellos)
+	f.mu.Unlock()
+	if adoptions != 1 || lastHello.UserID != session.User.UserID {
+		t.Fatalf("login did not adopt under the confirmed account and publish its WSS identity: adoptions=%d hello=%+v", adoptions, lastHello)
+	}
+	if _, err = authHandle(f, "user.current", map[string]string{"token": session.Token}); err != nil {
+		t.Fatal("re-reading the same confirmed session failed", err)
+	}
+	f.mu.Lock()
+	secondAdoptions := f.adoptions
+	secondHelloCount := len(f.hellos)
+	f.mu.Unlock()
+	if secondAdoptions != 2 {
+		t.Fatalf("a second confirmed login/session read did not republish network membership for online peers: got %d adoptions", secondAdoptions)
+	}
+	if secondHelloCount != helloCount {
+		t.Fatalf("confirming the same account unnecessarily replaced its healthy WSS registration: hellos %d→%d", helloCount, secondHelloCount)
+	}
+	saved, err := f.host.catalog.Inspect()
+	if err != nil {
+		t.Fatal("catalog readback after authentication failed", err)
+	}
+	for _, computer := range saved.Record.Computers {
+		if computer.ServiceID == f.account.identity.ServiceID && computer.RemoteDeviceID == remote.DeviceID && computer.NetworkID == f.networkID && computer.PairState == "active" {
+			return
+		}
+	}
+	t.Fatal("successful login required a separate manual network refresh before the remote computer appeared", saved.Record.Computers)
+}
+
+func TestAuthenticatedCurrentWithoutNetworkMembersKeepsEmptyCatalog(t *testing.T) {
+	f, session := authDeviceFixture(t, 30*24*time.Hour)
+	if _, err := authHandle(f, "user.login", map[string]string{"username": session.User.Username, "password": "test-only-password"}); err != nil {
+		t.Fatal("could not confirm the account before checking an empty network", err)
+	}
+	if _, err := authHandle(f, "user.current", map[string]string{"token": session.Token}); err != nil {
+		t.Fatal("empty network synchronization was refused", err)
+	}
+	f.mu.Lock()
+	adoptions := f.adoptions
+	f.mu.Unlock()
+	saved, err := f.host.catalog.Inspect()
+	if err != nil || adoptions != 1 || len(saved.Record.Computers) != 0 {
+		t.Fatal("empty membership synchronization fabricated a computer or skipped the authoritative read", adoptions, saved.Record.Computers, err)
+	}
+}
+
+func TestNetworkSyncPartialCatalogReadRecoversOnNextAutomaticConfirmation(t *testing.T) {
+	f, session := authDeviceFixture(t, 30*24*time.Hour)
+	if _, err := authHandle(f, "user.login", map[string]string{"username": session.User.Username, "password": "test-only-password"}); err != nil {
+		t.Fatal("could not confirm the account before the independent list failure", err)
+	}
+	identity, remote := plantedPair(t, f.original.DeviceID, session.User.UserID, f.original.PublicKey, "Windows computer", f.networkID)
+	f.scopedIdentity = &identity
+	f.networks = []controlplane.Network{{NetworkID: f.networkID, UserID: session.User.UserID, Name: "shared", MaxDevices: 10}}
+	f.mu.Lock()
+	f.pairCode = "p2p.server_unavailable"
+	f.mu.Unlock()
+	if value, err := authHandle(f, "user.current", map[string]string{"token": session.Token}); value != nil || err == nil || err.Error() != "p2p.server_unavailable" {
+		t.Fatal("a committed membership with a failed authoritative catalog read was presented as success", value, err)
+	}
+	f.mu.Lock()
+	firstAdoptions := f.adoptions
+	f.mu.Unlock()
+	partial, err := f.host.catalog.Inspect()
+	if err != nil || firstAdoptions != 1 || len(partial.Record.Computers) != 0 {
+		t.Fatal("partial catalog refresh fabricated peer data or skipped the actual adoption", firstAdoptions, partial.Record.Computers, err)
+	}
+	f.mu.Lock()
+	f.pairCode = ""
+	f.mu.Unlock()
+	value, err := authHandle(f, "user.current", map[string]string{"token": session.Token})
+	if err != nil || value.(controlplane.User) != session.User {
+		t.Fatal("the next automatic account confirmation did not recover the committed network state", err)
+	}
+	f.mu.Lock()
+	secondAdoptions := f.adoptions
+	f.mu.Unlock()
+	saved, err := f.host.catalog.Inspect()
+	if err != nil || secondAdoptions != 2 {
+		t.Fatal("automatic recovery did not idempotently republish membership", secondAdoptions, err)
+	}
+	for _, computer := range saved.Record.Computers {
+		if computer.ServiceID == f.account.identity.ServiceID && computer.RemoteDeviceID == remote.DeviceID && computer.NetworkID == f.networkID && computer.PairState == "active" {
+			return
+		}
+	}
+	t.Fatal("automatic recovery did not read back the exact active network peer", saved.Record.Computers)
+}
+
+func TestOnlinePeerRegistrationRefreshesCatalogAndChoiceInvalidation(t *testing.T) {
+	f, session := authDeviceFixture(t, 30*24*time.Hour)
+	identity, remote := plantedPair(t, f.original.DeviceID, session.User.UserID, f.original.PublicKey, "Windows computer", f.networkID)
+	f.scopedIdentity = &identity
+	f.networks = []controlplane.Network{{NetworkID: f.networkID, UserID: session.User.UserID, Name: "shared", MaxDevices: 10}}
+	if _, err := authHandle(f, "user.login", map[string]string{"username": session.User.Username, "password": "test-only-password"}); err != nil {
+		t.Fatal("could not establish the selected account for registration refresh", err)
+	}
+	if _, err := authHandle(f, "user.current", map[string]string{"token": session.Token}); err != nil {
+		t.Fatal("could not establish current account scope", err)
+	}
+	for {
+		select {
+		case <-f.catalogChanged:
+		default:
+			goto drained
+		}
+	}
+drained:
+	f.mu.Lock()
+	previousPairQueries, previousAnnouncements := f.pairQueries, f.catalogAnnouncements
+	f.mu.Unlock()
+	f.account.peerRegistrationChanged(protocol.PeerRegistration{Version: protocol.ControlVersion, Type: "peer-registration", ServerEpoch: protocol.NewNonce(), DeviceID: remote.DeviceID, UserID: session.User.UserID, CoreInstanceID: protocol.NewNonce(), Capabilities: []string{protocol.CapabilityCandidate}, Online: true})
+	select {
+	case <-f.catalogChanged:
+	case <-time.After(2 * time.Second):
+		t.Fatal("online coordinator registration did not notify the shell to refresh network choices")
+	}
+	f.mu.Lock()
+	pairQueries, announcements := f.pairQueries, f.catalogAnnouncements
+	f.mu.Unlock()
+	if pairQueries <= previousPairQueries || announcements != previousAnnouncements+1 {
+		t.Fatalf("registration did not read current pair authority and invalidate the choice view: pair reads %d→%d, announcements %d→%d", previousPairQueries, pairQueries, previousAnnouncements, announcements)
+	}
+}
+
 func TestAccountAuthExpiredBranchRequiresFullOriginalBinding(t *testing.T) {
 	for _, name := range []string{"missing-record", "wrong-key", "invalid-signature"} {
 		t.Run(name, func(t *testing.T) {
