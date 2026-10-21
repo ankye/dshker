@@ -305,3 +305,12 @@ the actual candidate rather than substituted from headless or smoke results.
 - [x] 10.1 Root/product: record D39, shared authentication semantics and current Mac observations; update user guidance and Agent Note, then pass strict validation.
 - [x] 10.2 Desktop owner: use one selected-service account state for footer and account panel, including pending, signed out, signed in, invalidation and stale result fences. Keep transport status separate and visible copy typed. Historical identity does not grant write authority while current state is unknown; only confirmed sign-out offers credentials. Late reads cannot replace a newer login/logout. Independent review and regressions passed.
 - [ ] 10.3 QA/root: verify shared presentation and account lifetime/service isolation, complete relevant source/build and default integrity gates, then exercise both surfaces in the real application. Preserve current successful installed 0.1.94 connectivity as an independent observation.
+
+Source/Windows candidate evidence for 9.4 and 10.3: 5cd505d passed the final local
+1,933-test desktop run and both exact-source CI workflows, including six native
+and six CLI packages. Installed D-drive payloads match the staged candidate and
+original identity/root records are unchanged. Public controls passed three shared
+account-label observations and opened the original Mac workbench with loaded
+guest content. Full default interactive verification still fails because actual
+display refresh and pixel-frame coverage are unproven; retain these tasks as
+incomplete. Mac candidate installation awaits the user's target/update decision.

@@ -329,6 +329,35 @@ async function click(client, s) {
   })
 }
 
+/** Plain observed selectors remain literal; raw DOM/AX JSON is retained beside it. */
+function observedTreeText(nodes) {
+  assert.ok(Array.isArray(nodes) && nodes.length > 0, 'test.account_ui_observed_tree_required')
+  const lines = nodes.flatMap((node) => {
+    assert.ok(
+      typeof node.selector === 'string' &&
+        node.selector.length > 0 &&
+        !/[\r\n]/.test(node.selector),
+      'test.account_ui_observed_selector_required'
+    )
+    return [
+      node.selector,
+      `  role=${node.role ?? ''} disabled=${node.disabled === true}`,
+      `  text=${String(node.text ?? '').replace(/[\r\n]+/g, ' ')}`,
+      `  rect=${JSON.stringify(node.rect)}`
+    ]
+  })
+  const result = lines.join('\n') + '\n'
+  // Check the serialized output itself. JSON escaping once concealed literal
+  // attribute selectors from the acceptance validator's raw tree search.
+  const serializedLines = new Set(result.split('\n'))
+  for (const node of nodes)
+    assert.ok(
+      serializedLines.has(node.selector),
+      'test.account_ui_observed_selector_serialization_lost'
+    )
+  return result
+}
+
 async function run(inputs) {
   const contract = JSON.parse(await readFile(contractPath, 'utf8'))
   if (contract.acceptance_stage !== 'diagnostic')
@@ -382,6 +411,7 @@ async function run(inputs) {
     await client.evaluate(`window.__accountUiObserver.waitControl(${JSON.stringify(selector)})`)
     const inventory = await client.evaluate('window.__accountUiObserver.tree()')
     await writeFile(path.join(output, 'inventory-ui-tree.json'), JSON.stringify(inventory, null, 2))
+    await writeFile(path.join(output, 'inventory-ui-tree.txt'), observedTreeText(inventory))
     await writeFile(
       path.join(output, 'inventory-events.json'),
       JSON.stringify(
@@ -403,7 +433,8 @@ async function run(inputs) {
         visible_enabled_controls: ['open-account-session'],
         control_selectors: { 'open-account-session': selector },
         artifacts: {
-          ui_tree: artifact('inventory-ui-tree.json'),
+          ui_tree: artifact('inventory-ui-tree.txt'),
+          raw_ui_tree: artifact('inventory-ui-tree.json'),
           event_log: artifact('inventory-events.json')
         }
       }) + '\n'
@@ -436,6 +467,11 @@ async function run(inputs) {
       await writeFile(
         path.join(output, `${prefix}-ui-tree.json`),
         JSON.stringify({ dom: report.tree, accessibility: ax }, null, 2)
+      )
+      await writeFile(path.join(output, `${prefix}-ui-tree.txt`), observedTreeText(report.tree))
+      await writeFile(
+        path.join(output, `${prefix}-accessibility.json`),
+        JSON.stringify(ax, null, 2)
       )
       await writeFile(
         path.join(output, `${prefix}-events.json`),
@@ -512,7 +548,9 @@ async function run(inputs) {
           }
         ],
         artifacts: {
-          ui_tree: artifact(`${prefix}-ui-tree.json`),
+          ui_tree: artifact(`${prefix}-ui-tree.txt`),
+          raw_ui_tree: artifact(`${prefix}-ui-tree.json`),
+          accessibility_tree: artifact(`${prefix}-accessibility.json`),
           event_log: artifact(`${prefix}-events.json`),
           screenshot: artifact(`${prefix}.png`)
         },

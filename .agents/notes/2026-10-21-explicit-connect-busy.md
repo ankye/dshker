@@ -104,3 +104,44 @@ The legacy fixture now separates setup and selection/recovery using its existing
 budget boundary without changing limits, business retries or the overall
 deadline. Local Linux compilation alone is not a real Linux credential pass.
 No tag or Release was created for this candidate.
+
+## Final delivered Windows candidate and remaining acceptance
+
+Production source 5cd505dd41efa49f82fcf7ca0a3a29c3a12fb66a retains a confirmed
+same-revision login through non-authentication refresh refusals. The final local
+desktop run passed 1,933 tests with 16 existing platform skips and the explicitly
+excluded worktree fixture. Source builds, types, formatting and strict OpenSpec
+passed. The independently reviewed Go production source is unchanged from its
+20-package race pass.
+
+Quality 39601044649 and Package 39601044712 both passed at 5cd505d. All six native
+and six CLI targets passed their gates. The formerly failing legacy certificate
+case passed inside 17 real Linux credential cases; 56 real Windows background
+process cases passed. Earlier failures remain preserved and are not relabeled.
+The first Windows ARM64 rename and Mac x64 smoke failures have no proven causal
+diagnosis; the new source's successful gates do not establish one.
+
+The locally built, metadata-verified and smoke-tested 5cd505d Windows candidate
+was installed normally into D:/Applications/DSHKer Launcher, exit zero. All five
+installed executable/asar/core/manifest/runtime payload hashes match the exact
+staged package. Original roots, installation catalog, computer catalog and
+selection file hashes are unchanged; both application shortcuts point to D.
+Three public account-tab entries passed the shared-label diagnostic. A second
+default-integrity execution also passed its real coordinator command and three
+public UI observations. The public Run/add-computer controls opened the original
+Mac workbench without busy refusal; its guest reached complete with a real app
+root and 53 interactive controls. Fresh authority readback confirms original
+Windows 0.1.95 and Mac 0.1.94 online with the original active network/pair.
+
+The complete interaction gate remains FAILED: actual display refresh period and
+complete pixel-frame coverage are unproven. The raw ledger preserves null values
+and releaseAccepted=false. Its initial JSON-selector serialization defect was
+fixed only in the test runner, retaining original JSON/AX plus a plain observed
+tree; the final verify failure now explicitly names refresh_period_ms. This is
+not a release-acceptance pass. Sections 9.4 and 10.3 remain open for that reason.
+
+No v0.1.95 tag or Release was created. The verified same-source Mac ARM64 DMG is
+ready, but the original Mac installation/processes remain untouched while the
+user decides whether to update and interrupt that workbench. Public 0.1.94 stays
+immutable. This follow-up note and diagnostic-serialization fix do not change
+the delivered production source or its recorded artifact identity.
