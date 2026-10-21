@@ -313,4 +313,10 @@ original identity/root records are unchanged. Public controls passed three share
 account-label observations and opened the original Mac workbench with loaded
 guest content. Full default interactive verification still fails because actual
 display refresh and pixel-frame coverage are unproven; retain these tasks as
-incomplete. Mac candidate installation awaits the user's target/update decision.
+incomplete. The user explicitly deferred updating the Mac installation; keep its
+current installed version and processes unchanged.
+
+## 11. Explicitly authorized 0.1.95 tag publication
+
+- [x] 11.1 Root/release: following the user's explicit publication request, create and push annotated v0.1.95 at the exact validated and installed production source 5cd505dd41efa49f82fcf7ca0a3a29c3a12fb66a. Remote annotated object 60c32ce39eeb1c342ea3e9ec4fc675cca2e0a475 resolves to that source. Subsequent fd9d8db only changes diagnostic tests and evidence. Retain the failed native-frame gate and incomplete eight-hour verification; publication does not complete 9.4 or 10.3.
+- [x] 11.2 Root/release: independently confirm public stable/latest Release 419657247 for v0.1.95 with all 25 assets uploaded. The annotated tag resolves to 5cd505d, its bilingual body exactly matches the tagged CHANGELOG, six desktop manifests retain the exact source/version, and GitHub's 14 binary SHA-256 digests match both checksum files and manifests. All target build/smoke/upload steps succeeded; the Actions API still reports queued/null at final publication readback, so do not claim its aggregate final conclusion. No installer was changed; the Mac remains on its existing version. Native-frame and eight-hour acceptance remain incomplete.

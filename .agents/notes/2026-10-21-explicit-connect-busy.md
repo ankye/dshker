@@ -145,3 +145,45 @@ ready, but the original Mac installation/processes remain untouched while the
 user decides whether to update and interrupt that workbench. Public 0.1.94 stays
 immutable. This follow-up note and diagnostic-serialization fix do not change
 the delivered production source or its recorded artifact identity.
+
+## Explicit 0.1.95 publication request
+
+The user explicitly chose not to update the Mac, then requested publication to a
+Git tag. The Mac installation and its current processes remain unchanged. The
+previously disclosed failed native interaction gate and incomplete eight-hour
+verification remain failed/incomplete; this request authorizes publication and
+does not establish acceptance or close OpenSpec tasks 9.4 and 10.3.
+
+Annotated v0.1.95 was created and pushed at the exact validated and installed
+production source 5cd505dd41efa49f82fcf7ca0a3a29c3a12fb66a. Remote object
+60c32ce39eeb1c342ea3e9ec4fc675cca2e0a475 resolves to that source. The later
+fd9d8db changes only diagnostic tests and evidence. Same-source main Quality
+39601044649 and Package 39601044712 were rechecked as successful before the tag
+push. No existing tag or Release was overwritten.
+
+Tag push triggered Package 39614812762, which rebuilds and verifies its native
+desktop and standalone CLI targets before creating the Release from the exact
+bilingual CHANGELOG entry. That entry retains the known limitations. Publication
+and final asset readback are pending this run; no installer or local process is
+changed as part of this publication request.
+
+Final independent readback confirms public stable/latest Release 419657247 at
+https://github.com/ankye/dshker/releases/tag/v0.1.95, published at
+2026-10-21T14:26:58Z with 25/25 uploaded assets. Its annotated tag resolves to the
+exact source above and its bilingual body matches the tagged CHANGELOG entry.
+All six desktop manifests have the correct source/version. GitHub's SHA-256
+digests for all eight desktop installers and six CLI archives agree with their
+checksum files and manifest entries. Only nine small metadata files were
+downloaded for this independent check; the actual build/publish assembly
+separately hashed the binaries. No large binary download or installation was
+performed during publication.
+
+All target build, smoke and upload steps succeeded. At final release readback,
+the Actions API still returned queued/null for the run and publish job; this
+stale aggregate status is not recorded as a successful final workflow conclusion.
+The public stable/latest release and its complete asset identities were verified
+independently of that status. Raw evidence is under
+.run/release-0.1.95/tag-39614812762/, including
+independent-release-verification.json and tag-source-verification.json. The Mac
+installation remains unchanged and all prior native-frame/eight-hour limitations
+remain open.
