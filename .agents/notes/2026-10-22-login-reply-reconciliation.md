@@ -53,6 +53,32 @@ The account panel was not mounted; the user's manual acceptance is separate
 from this readback. Native compositor-frame and latency acceptance remain false.
 Private raw evidence remains on D under the restricted recovery directory.
 
-Actual final archive scans, default integrity verification, same-revision native
-packaging and publication still require their real receipts. Preserve all
-earlier failures and the outstanding native-frame/eight-hour limitations.
+Final Windows stable source 8b1b8f7 built successfully. Its real ASAR scan passed
+605 members / 31 packages without forbidden content. Committed-manifest default
+verification passed 39 tests, six real commands and nine raw artifacts, including
+owner/secret integration, cleanup, headless and isolated packaged startup. The
+formal observer rerun 1b3af6b1-b12b-403b-9641-d8ac520b2436 retained the same real
+connections and sent no input. Parent desktop application validation passed.
+
+Annotated v0.1.96 object e1f59931073e782d4fa6d6c876353b842c83040b resolves to
+8b1b8f7185ca3af4598e5aec6dd5880e293e96d4. Quality run 39734279699 and all 14
+jobs in tag Package run 39735271916 passed. Main Package run 39734279629 first
+failed one Windows x64 runtime-stage rename with EPERM; no cause was proven.
+The failure logs remain intact. An explicitly recorded single failed-job retry
+passed as attempt 2; the independent tag Windows build also passed.
+
+Public latest Release 420393449 has 25 uploaded assets. All six native stable
+manifests retain the tagged source, version and formal identity; 14 binary GitHub
+SHA-256 digests match the public checksum files and manifests. Downloaded
+metadata/script digests match, and the bilingual body equals the tagged CHANGELOG.
+Readback receipts are ignored under .run/hotfix-0.1.96/public-v0.1.96/.
+The official Windows x64 installer was downloaded to D and its actual file
+SHA-256 9c615af5ffdbf7ff07ad7582d2e7e44b309bb02eb7a83467da2707ae40e22228
+matches both the public checksum and manifest. Its signature is NotSigned as
+declared; it was not executed or installed during this publication step.
+
+The currently working formal installation remains the previously installed
+19b41eb payload. This publication step does not replace or restart it after
+physical Esc stopped desktop automation. Mac remains unchanged. Do not present
+the final released source as already installed; retain final replacement/restart
+and the earlier native-frame/eight-hour limitations as incomplete.

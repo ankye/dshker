@@ -328,5 +328,14 @@ current installed version and processes unchanged.
 - [x] 12.2 Desktop/build: implement fail-closed test/stable profile selection before state access, distinct test installer/application identity, explicit independent test roots and complete native-home/bootstrap/catalog isolation; verify production-path exclusion and preserved formal defaults.
 - [x] 12.3 Core: contain owner admission refusal in both production compositions, preserve exact runtime errors and old owner evidence, and align graceful shutdown with its existing cleanup budgets; prove with real isolated compositions and focused races.
 - [ ] 12.4 Root/QA: securely back up existing formal records, retire the unisolated test copy, perform the explicitly authorized abandoned-owner recovery and prove identity/catalog preservation. Through formal public controls verify login, existing SSH and original LAN/P2P workbench restoration and normal restart.
-- [ ] 12.5 QA/reviewer: complete state/identity matrix, source-size/isolation, strict OpenSpec/default test-integrity, relevant full source/build gates and independent review. Preserve original failures and distinguish functional physical evidence from prior incomplete frame/eight-hour acceptance.
+- [x] 12.5 QA/reviewer: complete state/identity matrix, source-size/isolation, strict OpenSpec/default test-integrity, relevant full source/build gates and independent review. Preserve original failures and distinguish functional physical evidence from prior incomplete frame/eight-hour acceptance.
 - [ ] 12.6 Root/release: freeze unused 0.1.96 source, build and update the formal Windows installation with verified package identity, verify the installed recovery again, push exact source/tag and publish verified native/CLI assets with bilingual notes. Mac installation is not updated unless separately authorized.
+- [x] 12.7 Root/release: following the user's explicit confirmation that login, SSH and LAN work and request to publish Git, push source 8b1b8f7185ca3af4598e5aec6dd5880e293e96d4 and annotated v0.1.96 (object e1f59931073e782d4fa6d6c876353b842c83040b). Verify public latest Release 420393449, all 25 uploaded assets, six stable desktop manifests, 14 binary digests and the bilingual body against the tagged CHANGELOG. Package 39735271916 passed all 14 jobs; Quality 39734279699 passed. Main Package 39734279629 attempt 2 passed after the original Windows x64 staging EPERM failure was retained.
+
+12.4/12.6 remain incomplete for final-source formal replacement/restart. The
+current working C-drive installation retains source 19b41eb; it was not replaced
+or restarted during this Git-only publication step after physical Esc stopped
+desktop automation. Read-only formal observation and the user's manual control
+acceptance are recorded separately. Publication does not complete the previous
+native-frame, latency or eight-hour acceptance tasks. The Mac installation is
+unchanged.
