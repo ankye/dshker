@@ -21,6 +21,7 @@ const REMOTE_ERROR_KEYS: Readonly<Record<RemoteConnectionErrorCode, MessageKey>>
   'remote.invalid_record': 'remote.error.invalidRecord',
   'remote.unsupported_version': 'remote.error.unsupportedVersion',
   'remote.persistence_failed': 'remote.error.persistence',
+  'remote.core_unavailable': 'remote.error.coreUnavailable',
   'remote.connection_not_found': 'remote.error.notFound',
   'remote.connection_exists': 'remote.error.exists',
   'remote.connection_busy': 'remote.error.busy',

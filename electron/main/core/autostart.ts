@@ -70,20 +70,29 @@ function stateOf(value: unknown): CoreAutostartState {
 /** Calls the core.autostart_* methods of a live dshkerd over its private channel. */
 export class CoreAutostart implements CoreAutostartPort {
   readonly #rpc: Pick<PeerRpc, 'call'>
+  readonly #isolated: boolean
 
-  constructor(rpc: Pick<PeerRpc, 'call'>) {
+  constructor(rpc: Pick<PeerRpc, 'call'>, isolated = false) {
     this.#rpc = rpc
+    this.#isolated = isolated
   }
 
   async status(signal?: AbortSignal): Promise<CoreAutostartState> {
+    this.#assertAvailable()
     return stateOf(await this.#rpc.call('core.autostart_status', {}, budget(signal)))
   }
 
   async enable(signal?: AbortSignal): Promise<CoreAutostartState> {
+    this.#assertAvailable()
     return stateOf(await this.#rpc.call('core.autostart_enable', {}, budget(signal)))
   }
 
   async disable(signal?: AbortSignal): Promise<CoreAutostartState> {
+    this.#assertAvailable()
     return stateOf(await this.#rpc.call('core.autostart_disable', {}, budget(signal)))
+  }
+
+  #assertAvailable(): void {
+    if (this.#isolated) throw new PeerHelperError('p2p.autostart_unsupported')
   }
 }

@@ -192,9 +192,10 @@ func run(parsed options) (runErr error) {
 			catalog: parsed.catalogRoot, roots: parsed.rootsPath,
 		}
 	}
+	server.Autostart = autostartForProfile(server.Autostart)
 	var secrets secret.Store
 	if parsed.dataRoot != "" {
-		store, err := secretStoreFor(secret.Open, parsed.dataRoot)
+		store, err := secretStoreFor(openProfileSecretStore, parsed.dataRoot)
 		if err != nil {
 			return err
 		}
@@ -245,15 +246,17 @@ func run(parsed options) (runErr error) {
 		}
 		host.SetRoots(roots)
 	}
-	runtimeOwner, err := openRuntimeOwner(ctx, parsed)
-	if err != nil {
-		return err
+	runtimeAuthority, runtimeOwner, ownerErr := admitRuntimeAuthority(ctx, parsed)
+	if ownerErr != nil {
+		log.Printf("local runtime admission: %v", ownerErr)
 	}
 	runtimeReady := false
-	defer func() {
-		runErr = errors.Join(runErr, finishRuntimeOwner(runtimeOwner, runtimeReady))
-	}()
-	server.Runtime = runtimeOwner
+	if runtimeOwner != nil {
+		defer func() {
+			runErr = errors.Join(runErr, finishRuntimeOwner(runtimeOwner, runtimeReady))
+		}()
+	}
+	server.Runtime = runtimeAuthority
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute

@@ -18,6 +18,7 @@
 - **不装系统 Node/pnpm 也能装插件。** DSHKer 自带运行时：打包的 pnpm 跑在 Launcher 自己的进程上，包操作及其生命周期脚本解析的是内置的 `node`/`pnpm`，而不是机器上装了什么的拼运气。系统 pnpm 缺失、过旧或在桌面进程里不可见，都不再卡住扩展安装。
 - **更新时关闭也安全。** Git 刷新、依赖安装或内核构建进行中关闭窗口，只会隐藏 Launcher，让主进程继续完成任务；空闲时仍按原来的关闭偏好处理。
 - **数据始终是你的。** Harness、插件、预设、设置与原生 `~/.dsh` 目录都留在原地：Launcher 只是沿用，绝不静默替换或重置。
+- **测试数据单独保存。** 测试应用与安装器使用独立身份，并要求明确指定独立测试目录。正式版更新沿用现有账号、配对和 SSH 电脑；本地运行身份故障单独报错，不再锁住账户与 SSH 管理。
 - **旧机器自己收尾。** 在新电脑上登录就会自动登记上线；移除一台会带走它的配对；你选过的网络会被记住；一台已经不在当前网络里的电脑会明确说明，而不是悄悄消失。
 
 DSHKer Launcher 是面向 macOS 与 Windows 的 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 桌面启动器。
@@ -200,8 +201,19 @@ dshkerd autostart enable --state ~/.dshkerd
 
 ```bash
 npm ci
+DSHKER_TEST_PROFILE_ROOT="$PWD/.run/dev-profile" npm run dev
+```
+
+Windows PowerShell 先指定独立测试目录再启动：
+
+```powershell
+$env:DSHKER_TEST_PROFILE_ROOT = Join-Path $PWD '.run/dev-profile'
 npm run dev
 ```
+
+开发与本地测试包缺少独立测试目录时会拒绝启动。本地打包默认生成测试渠道，
+稳定 tag 包沿用正式用户数据；构建或安装获授权的正式候选前请阅读
+[发布与数据隔离说明](docs/release.md)。
 
 常用检查：
 

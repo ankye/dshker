@@ -364,6 +364,7 @@ export const zhCN = {
   'remote.error.invalidRecord': '远程电脑记录已损坏。',
   'remote.error.unsupportedVersion': '远程电脑记录版本不受支持。',
   'remote.error.persistence': '无法保存远程电脑记录。',
+  'remote.error.coreUnavailable': '连接核心尚未就绪，请重启 Launcher 后重试。',
   'remote.error.notFound': '找不到这台远程电脑。',
   'remote.error.exists': '已经存在同名远程电脑。',
   'remote.error.busy': '这台电脑正在测试、连接或已经连接。',

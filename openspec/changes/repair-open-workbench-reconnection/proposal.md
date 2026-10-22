@@ -91,3 +91,14 @@ The user approved local joint integration followed by production server
 replacement preserving port 8443, then physical bidirectional long tests and
 stable publication only after the gates pass. Preserve original installed
 client/DSH processes and credentials; build isolated candidates for validation.
+
+
+## Authorized formal-profile hotfix
+
+D40 records the user's 2026-10-22 instruction to isolate test/formal data,
+retain existing accounts, pairings and SSH computers, recover actual login/SSH/LAN
+behavior, then update the formal Windows installation and publish a new tag and
+Release. The scope contains runtime-owner failure without weakening owner or
+registered-root admission, preserves the formal profile, and makes test build
+identity/profile selection explicit before state access. Previous eight-hour and
+native-frame acceptance remains incomplete and is not relabeled by this hotfix.

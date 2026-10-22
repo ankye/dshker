@@ -387,6 +387,8 @@ export const enUS: Record<MessageKey, string> = {
   'remote.error.invalidRecord': 'The remote computer record is corrupt.',
   'remote.error.unsupportedVersion': 'The remote computer record version is unsupported.',
   'remote.error.persistence': 'The remote computer record could not be saved.',
+  'remote.error.coreUnavailable':
+    'The connection core is unavailable. Restart Launcher and try again.',
   'remote.error.notFound': 'This remote computer was not found.',
   'remote.error.exists': 'A remote computer already uses this name.',
   'remote.error.busy': 'This computer is being tested, connecting, or already connected.',

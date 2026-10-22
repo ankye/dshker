@@ -160,7 +160,7 @@ export function createWindow(
     height: saved.height ?? DEFAULT_HEIGHT,
     minWidth: 760,
     minHeight: 560,
-    title: APP_METADATA.name,
+    title: app.getName().endsWith(' Test') ? app.getName() : APP_METADATA.name,
     backgroundColor: '#121820',
     show: false,
     // Omitted when packaged: the bundle's embedded icon takes over there.

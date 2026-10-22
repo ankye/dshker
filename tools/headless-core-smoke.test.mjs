@@ -6,7 +6,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { requestServingShutdown } from './headless-core-smoke.mjs'
+import { requestServingShutdown, smokeCoreEnvironment } from './headless-core-smoke.mjs'
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const script = path.join(appRoot, 'tools', 'headless-core-smoke.mjs')
@@ -29,6 +29,21 @@ afterEach(async () => {
 })
 
 describe('headless core smoke', () => {
+  it('isolates native secrets and global autostart for every explicit smoke state', () => {
+    const first = smokeCoreEnvironment(path.resolve('.run/first-smoke'), {
+      DSHKER_SECRET_NAMESPACE: 'inherited-stable-or-test',
+      PATH: 'preserved'
+    })
+    expect(first.DSHKER_SECRET_NAMESPACE).toMatch(/^smoke-[a-f0-9]{64}$/u)
+    expect(first.PATH).toBe('preserved')
+    expect(smokeCoreEnvironment(path.resolve('.run/first-smoke'), {}).DSHKER_SECRET_NAMESPACE).toBe(
+      first.DSHKER_SECRET_NAMESPACE
+    )
+    expect(
+      smokeCoreEnvironment(path.resolve('.run/second-smoke'), {}).DSHKER_SECRET_NAMESPACE
+    ).not.toBe(first.DSHKER_SECRET_NAMESPACE)
+    expect(() => smokeCoreEnvironment('relative')).toThrow('Explicit absolute smoke state required')
+  })
   it('fails, and says why, when there is no core for this machine', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'headless-smoke-'))
     tempRoots.push(root)

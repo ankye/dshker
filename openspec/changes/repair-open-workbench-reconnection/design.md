@@ -1503,3 +1503,60 @@ Verify selected-service isolation, startup restore, missing session, successful
 login, logout, failed reads and stale asynchronous results. Compare the footer
 and account card from the same live domain through public UI controls, and keep
 this visual/account-state evidence separate from physical transport readiness.
+
+
+### D40 — Isolate test distribution and contain runtime-owner failure
+
+The user explicitly authorizes a hotfix after the formal 0.1.95 installation was
+blocked by a test installation's owner record. The test copy had reused the
+formal profile. Stable distributions preserve the existing formal profile and
+credential/catalog identities. Development and non-tag test distributions have
+a distinct application/installer identity and require an explicit absolute test
+profile root, disjoint from the formal profile. Selection happens before the
+single-instance lock, logs, bootstrap, credential access and core creation.
+Unknown distribution metadata, missing/relative/linked/conflicting test roots
+fail explicitly; they never fall back to the formal home. An explicit test root
+may also isolate a stable artifact for validation. Test native DSH home, Electron
+user/session data, bootstrap, managed roots, catalogs and runtime state all stay
+inside that isolated profile. Test installation cannot terminate or replace the
+formal installation through the shared installer identity.
+
+Admission also reads the formal bootstrap locator and validated root registry
+without writing them. A test root must not overlap any registered external
+settings, managed root or workspace; unreadable registration fails closed for
+test admission. Native credentials use a stable explicit namespace derived from
+the canonical test root on all platforms. Stable uses its original native key
+identity and ignores an inherited test namespace. Test missing secrets never
+read, migrate or delete stable entries. Isolated profiles cannot query, enable
+or disable the global stable autostart registration, and their core startup is
+independent of that registration. Real macOS Keychain and Linux Secret Service
+namespace read/write/delete checks are required in the native packaging gates.
+
+D12's strict owner record and authentication contract remains. A failed owner
+Open is a real unavailable runtime authority, not a replacement supervisor or an
+empty successful runtime. Both desktop and headless compositions continue to
+serve unrelated catalog, root, credential, SSH and device/account/P2P operations;
+all local runtime operations preserve the original typed owner refusal. Only a
+successfully opened owner participates in cleanup. Orderly desktop shutdown
+allows the already documented sequential broker and owner cleanup budgets before
+forced termination; normal closure must join its actual owner and remove its
+record. Corrupt, incompatible and unreachable ownership is never silently
+replaced, and retained owner evidence remains unchanged.
+
+The current abandoned Windows record has a separately authorized operator
+recovery: securely back up existing formal records on the data drive, normally
+close the formal application, verify the exact old owner is absent and no managed
+local DSH process remains, and quarantine only that stale runtime-owner record.
+This is explicit incident recovery, not an automatic product takeover policy.
+Account credentials, registered roots, server/network/device/key/pair identities
+and SSH computer records are preserved and read back after recovery. Retire the
+old unisolated test installation so it cannot write formal state again.
+
+Verification covers fresh/same-root/no-op, rejected root/channel, partial boot,
+identity mismatch, dead/corrupt owner, repeated/restarted core and graceful
+cleanup using real production compositions and disposable test roots. Before
+publication, exercise the formal application's public controls for restored
+sign-in, its existing SSH computer and original LAN/P2P computer with loaded
+workbench content. Source gates, independent review, exact native package and
+same-source CI are required. Preserve earlier native frame and eight-hour
+limitations; this hotfix is not acceptance of those unrelated long-duration gates.

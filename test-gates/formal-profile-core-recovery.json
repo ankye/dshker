@@ -1,0 +1,676 @@
+{
+  "change": "repair-open-workbench-reconnection: formal/test data isolation and runtime-owner failure containment",
+  "risk": "data_critical",
+  "scope_note": "Preserve current formal accounts, device/network/pair/key identities and SSH records while preventing test/dev installations from opening the formal profile. A refused local runtime owner cannot disable catalog, SSH, account or P2P services; its strict refusal and record remain unchanged. This is a persistence/lifecycle hotfix without new UI interaction semantics or layout. Required real packaged and formal public-control checks remain pending until their actual receipts exist; this manifest does not certify native compositor-frame budgets or overnight P2P stability. Local full-suite execution explicitly excludes the pre-existing launcher-version-store.test.ts because it creates Git worktrees forbidden by the user. Publication assembly requires the tagged cross-platform workflow in addition to local source/Windows functional acceptance. Native credential namespacing also changes Keychain/Secret Service provider identities for explicitly isolated profiles; Windows default verify proves real DPAPI only. The platform_acceptance_commands describe additional native release gates and cannot be treated as executed merely because this local manifest validates. The package workflow now includes mandatory native_secrets provider steps on native Linux/macOS runners; those steps have no absent-provider skip. Actual workflow run logs and success remain necessary publication evidence. The real Windows integration command includes TestProductionCoreSecretProfileIsolation for both production core compositions.",
+  "production_files": [
+    "electron/main/launcher-profile.ts",
+    "electron/main/launcher-profile-boundaries.ts",
+    "electron/main.ts",
+    "electron/main/smoke.ts",
+    "electron/main/window.ts",
+    "electron/main/core/supervisor.ts",
+    "electron/main/p2p/supervisor.ts",
+    "electron/main/p2p/runtime-owner.ts",
+    "electron/main/remote/service.ts",
+    "src/shared/contracts.ts",
+    "src/app/shell/components/RemoteSSHManagementPanel.vue",
+    "src/app/shared/i18n/messages.zh-CN.ts",
+    "src/app/shared/i18n/messages.en-US.ts",
+    "networking/cmd/dshkerd/runtime_owner.go",
+    "networking/cmd/dshkerd/main.go",
+    "networking/cmd/dshkerd/cli.go",
+    "tools/distribution-channel.mjs",
+    "tools/electron-builder.config.mjs",
+    "resources/installer-preserve-runtime.nsh",
+    "tools/release-artifacts.mjs",
+    "tools/release-smoke.mjs",
+    "tools/assemble-release-assets.mjs",
+    "tools/electron-renderer-smoke.mjs",
+    "electron/main/core/autostart.ts",
+    "networking/cmd/dshkerd/autostart.go",
+    "networking/cmd/dshkerd/autostart_isolation.go",
+    "networking/cmd/dshkerd/secret_namespace.go",
+    "networking/internal/secret/store.go",
+    "networking/internal/secret/store_windows.go",
+    "networking/internal/secret/store_darwin.go",
+    "networking/internal/secret/store_linux.go",
+    "networking/internal/secret/secretservice.go",
+    "networking/internal/secret/store_other.go",
+    "tools/headless-core-smoke.mjs"
+  ],
+  "changed_metadata": [
+    ".github/workflows/package.yml",
+    ".github/workflows/quality.yml",
+    "CHANGELOG.md",
+    "README.md",
+    "README.zh-CN.md",
+    "docs/release.md",
+    "package.json",
+    "package-lock.json",
+    "openspec/changes/repair-open-workbench-reconnection/design.md",
+    "openspec/changes/repair-open-workbench-reconnection/proposal.md",
+    "openspec/changes/repair-open-workbench-reconnection/specs/remote-workbench-recovery/spec.md",
+    "openspec/changes/repair-open-workbench-reconnection/tasks.md"
+  ],
+  "test_files": [
+    "electron/main/launcher-profile.test.ts",
+    "electron/main/smoke-lifecycle.test.ts",
+    "electron/main/window.test.ts",
+    "electron/main/core/supervisor.test.ts",
+    "electron/main/core/supervisor-runtime-owner.test.ts",
+    "electron/main/p2p/runtime-owner.test.ts",
+    "electron/main/remote/service.test.ts",
+    "src/app/shell/tests/RemoteConnectionsPanel.test.ts",
+    "networking/cmd/dshkerd/runtime_owner_test.go",
+    "networking/integration/runtime_owner_isolation_test.go",
+    "networking/integration/runtime_owner_isolation_windows_test.go",
+    "networking/integration/runtime_owner_isolation_unix_test.go",
+    "tools/distribution-channel.test.mjs",
+    "tools/release-artifacts.test.mjs",
+    "tools/release-smoke.test.mjs",
+    "tools/tests/formal-recovery-ui.mjs",
+    "tools/release-smoke.mjs",
+    "tools/assemble-release-assets.mjs",
+    "tools/electron-renderer-smoke.mjs",
+    "electron/main/core/autostart.test.ts",
+    "electron/main/core/supervisor-isolation.test.ts",
+    "networking/cmd/dshkerd/autostart_isolation_test.go",
+    "networking/cmd/dshkerd/secret_namespace_test.go",
+    "networking/internal/secret/namespace_test.go",
+    "networking/internal/secret/namespace_native_test.go",
+    "networking/internal/secret/namespace_windows_test.go",
+    "networking/internal/secret/namespace_darwin_test.go",
+    "networking/internal/secret/namespace_linux_test.go",
+    "networking/internal/secret/store_other_test.go",
+    "networking/internal/secret/secretservice_test.go",
+    "tools/assemble-release-assets.test.mjs",
+    "tools/headless-core-smoke.test.mjs",
+    "networking/integration/secret_profile_isolation_test.go",
+    "electron/main/core/catalog-core.test.ts",
+    "electron/main/core/secrets-core.test.ts"
+  ],
+  "live_test_files": [
+    "networking/integration/runtime_owner_isolation_test.go",
+    "networking/integration/runtime_owner_isolation_windows_test.go",
+    "networking/integration/runtime_owner_isolation_unix_test.go",
+    "electron/main/core/supervisor-runtime-owner.test.ts",
+    "tools/tests/formal-recovery-ui.mjs",
+    "tools/release-smoke.mjs",
+    "tools/assemble-release-assets.mjs",
+    "tools/electron-renderer-smoke.mjs",
+    "networking/internal/secret/namespace_native_test.go",
+    "networking/internal/secret/namespace_windows_test.go",
+    "networking/internal/secret/namespace_darwin_test.go",
+    "networking/internal/secret/namespace_linux_test.go",
+    "networking/integration/secret_profile_isolation_test.go",
+    "tools/headless-core-smoke.mjs"
+  ],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "places every owned test destination below the selected root and permits isolated stable-package verification",
+      "asserts": "Every selected test destination is a real descendant of the explicit independent root; formal sentinel remains byte-identical."
+    },
+    {
+      "state": "no_op",
+      "test": "refuses test and development startup without an explicit independent root",
+      "asserts": "No test directory is created and formal records remain byte-identical."
+    },
+    {
+      "state": "partial",
+      "test": "joins its runtime owner after the broker exhausts its existing graceful budget",
+      "asserts": "A real broker holding an incomplete request drains within its existing budget; exact independent owner and record are joined."
+    },
+    {
+      "state": "recovery",
+      "test": "TestRuntimeOwnerRefusalDoesNotDisableCoreServices",
+      "asserts": "Desktop and headless cores remain available against three real refused-owner cases, preserve catalog identity and SSH rows, and read back durable writes."
+    },
+    {
+      "state": "stale_timeout",
+      "test": "times out waiting for a real announcement and ignores a later event for that caller",
+      "asserts": "The timed-out caller cannot consume a later runtime announcement or cached ownership binding."
+    },
+    {
+      "state": "reset",
+      "test": "retires the exact generation on stop and uses the new announcement after restart",
+      "asserts": "The stopped generation is retired and only the new runtime announcement is handed out."
+    },
+    {
+      "state": "rejected",
+      "test": "rejects selected junctions and nested data-directory links without touching formal records",
+      "asserts": "Canonical path and junction checks reject formal-root escapes before owned-directory creation."
+    },
+    {
+      "state": "rejected",
+      "test": "distinguishes an unavailable core from a failed record write",
+      "asserts": "Visible error is localized core unavailability and excludes private diagnostic and persistence-error text."
+    },
+    {
+      "state": "reset",
+      "test": "TestProductionCoreSecretProfileIsolation",
+      "asserts": "Real desktop and headless core private-channel reads, writes, overwrite and deletion preserve two independent native credential profile identities at the same data root."
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/launcher-profile.ts",
+      "field": "distribution and canonical isolated storage destinations",
+      "source": "explicit packaged dshkerDistributionChannel plus --dshker-test-root or DSHKER_TEST_PROFILE_ROOT; stable native home and existing userData",
+      "test": "places every owned test destination below the selected root and permits isolated stable-package verification",
+      "assertion": "expect(value.startsWith(`${f.testRoot}${path.sep}`)).toBe(true)",
+      "state": "success",
+      "identity_keys": [
+        "distribution",
+        "testRoot",
+        "launcherRoot",
+        "userData",
+        "dshHome",
+        "nativeHome"
+      ],
+      "missing_semantics": "No channel/root guessing; absent test root, relative/overlapping/symlink destinations and conflicting selections fail before writes."
+    },
+    {
+      "production_file": "electron/main/launcher-profile-boundaries.ts",
+      "field": "persisted locator and registered root canonical paths",
+      "source": "existing typed locator and core registry owning boundaries",
+      "test": "rejects external root commits before dispatch and rejects copied external root readbacks",
+      "assertion": "expect(source.commit).not.toHaveBeenCalled()",
+      "state": "rejected",
+      "identity_keys": ["filePath", "canonicalPath", "workingDirectoryCanonicalPath", "testRoot"],
+      "missing_semantics": "A copied formal locator/registry or out-of-profile directory selection fails with managed.root_path_invalid before a write."
+    },
+    {
+      "production_file": "electron/main.ts",
+      "field": "profile selected before single-instance locking and service composition",
+      "source": "resolveLauncherProfile result supplies bootstrap, core data/state/catalog, native home and Electron-owned paths",
+      "test": "waits for success evidence before exiting on %s",
+      "assertion": "checks: { profileIsolation: true }",
+      "state": "success",
+      "identity_keys": [
+        "distribution",
+        "testRoot",
+        "launcherRoot",
+        "userData",
+        "dshHome",
+        "nativeHome"
+      ],
+      "missing_semantics": "Test startup without explicit independent root exits; stable startup retains existing user profile. The real packaged smoke command is required to exercise the complete main entry beyond this lifecycle assertion."
+    },
+    {
+      "production_file": "electron/main/smoke.ts",
+      "field": "profileIsolation in real renderer smoke receipt",
+      "source": "selected profile and actual app.getPath(userData), HOME, USERPROFILE and DSH_HOME",
+      "test": "waits for success evidence before exiting on %s",
+      "assertion": "checks: { profileIsolation: true }",
+      "state": "success",
+      "identity_keys": [
+        "distribution",
+        "testRoot",
+        "launcherRoot",
+        "userData",
+        "dshHome",
+        "nativeHome"
+      ],
+      "missing_semantics": "A missing or escaped profile destination makes smoke fail, even if shell and preload mount."
+    },
+    {
+      "production_file": "electron/main/window.ts",
+      "field": "visible Test application title",
+      "source": "app.getName() selected from explicit distribution identity",
+      "test": "labels test windows with their independent application name and keeps the stable product title",
+      "assertion": "expect((await build()).options.title).toBe('DSHKer Launcher Test')",
+      "state": "success",
+      "identity_keys": ["appId", "productName", "distribution"],
+      "missing_semantics": "Test title must be the independent application name and stable retains DSHKer Launcher; an application package name cannot replace the stable product title."
+    },
+    {
+      "production_file": "electron/main/core/supervisor.ts",
+      "field": "bounded graceful child and independent-owner shutdown",
+      "source": "the existing broker five-second drain followed by runtime-owner fifteen-second graceful cleanup",
+      "test": "joins its runtime owner after the broker exhausts its existing graceful budget",
+      "assertion": "expect(() => process.kill(owner.process.pid, 0)).toThrow()",
+      "state": "partial",
+      "identity_keys": [
+        "supervisor.pid",
+        "owner.process.pid",
+        "owner.config.executable",
+        "owner.config.stateRoot"
+      ],
+      "missing_semantics": "The core receives its existing sequential cleanup budget before escalation; close is not complete while the exact owner or owner record survives."
+    },
+    {
+      "production_file": "electron/main/p2p/supervisor.ts",
+      "field": "bounded graceful child and independent-owner shutdown",
+      "source": "the existing broker five-second drain followed by runtime-owner fifteen-second graceful cleanup",
+      "test": "joins its runtime owner after the broker exhausts its existing graceful budget",
+      "assertion": "expect(() => process.kill(owner.process.pid, 0)).toThrow()",
+      "state": "partial",
+      "identity_keys": [
+        "supervisor.pid",
+        "owner.process.pid",
+        "owner.config.executable",
+        "owner.config.stateRoot"
+      ],
+      "missing_semantics": "The core receives its existing sequential cleanup budget before escalation; close is not complete while the exact owner or owner record survives."
+    },
+    {
+      "production_file": "electron/main/p2p/runtime-owner.ts",
+      "field": "trusted startup failure wire code and diagnostic redaction",
+      "source": "ManagedHarnessRuntimeError admitted runtime-owner code from source.start callback",
+      "test": "preserves %s across the typed parent callback without private details",
+      "assertion": "expect(error).toMatchObject({ code, message: code })",
+      "state": "rejected",
+      "identity_keys": ["runtimeOwnerErrorCode", "subjectId", "generation"],
+      "missing_semantics": "Only admitted typed failures become public owner codes; untyped lookalikes remain untrusted and private details are not sent."
+    },
+    {
+      "production_file": "electron/main/remote/service.ts",
+      "field": "missing core refusal without catalog side effects",
+      "source": "RemoteConnectionService core route availability",
+      "test": "refuses every operation when the shell has no core",
+      "assertion": "expect(pathReads).toBe(0)",
+      "state": "no_op",
+      "identity_keys": ["connectionId", "coreRoute", "filePath"],
+      "missing_semantics": "Absent core returns remote.core_unavailable before path resolution or persistence; it never reports a failed record write."
+    },
+    {
+      "production_file": "src/shared/contracts.ts",
+      "field": "typed remote.core_unavailable localized presentation",
+      "source": "flat IPCReply code/message and locale dictionary mapping",
+      "test": "distinguishes an unavailable core from a failed record write",
+      "assertion": "expect(wrapper.text()).not.toContain('无法保存远程电脑记录')",
+      "state": "rejected",
+      "identity_keys": ["RemoteConnectionErrorCode", "code", "locale"],
+      "missing_semantics": "Unreadable core is distinct from persistence failure; private diagnostics cannot be displayed. Chinese visible copy is asserted directly; English typed dictionary completeness is checked by type-check."
+    },
+    {
+      "production_file": "src/app/shell/components/RemoteSSHManagementPanel.vue",
+      "field": "typed remote.core_unavailable localized presentation",
+      "source": "flat IPCReply code/message and locale dictionary mapping",
+      "test": "distinguishes an unavailable core from a failed record write",
+      "assertion": "expect(wrapper.text()).not.toContain('无法保存远程电脑记录')",
+      "state": "rejected",
+      "identity_keys": ["RemoteConnectionErrorCode", "code", "locale"],
+      "missing_semantics": "Unreadable core is distinct from persistence failure; private diagnostics cannot be displayed. Chinese visible copy is asserted directly; English typed dictionary completeness is checked by type-check."
+    },
+    {
+      "production_file": "src/app/shared/i18n/messages.zh-CN.ts",
+      "field": "typed remote.core_unavailable localized presentation",
+      "source": "flat IPCReply code/message and locale dictionary mapping",
+      "test": "distinguishes an unavailable core from a failed record write",
+      "assertion": "expect(wrapper.text()).not.toContain('无法保存远程电脑记录')",
+      "state": "rejected",
+      "identity_keys": ["RemoteConnectionErrorCode", "code", "locale"],
+      "missing_semantics": "Unreadable core is distinct from persistence failure; private diagnostics cannot be displayed. Chinese visible copy is asserted directly; English typed dictionary completeness is checked by type-check."
+    },
+    {
+      "production_file": "src/app/shared/i18n/messages.en-US.ts",
+      "field": "typed remote.core_unavailable localized presentation",
+      "source": "flat IPCReply code/message and locale dictionary mapping",
+      "test": "distinguishes an unavailable core from a failed record write",
+      "assertion": "expect(wrapper.text()).not.toContain('无法保存远程电脑记录')",
+      "state": "rejected",
+      "identity_keys": ["RemoteConnectionErrorCode", "code", "locale"],
+      "missing_semantics": "Unreadable core is distinct from persistence failure; private diagnostics cannot be displayed. Chinese visible copy is asserted directly; English typed dictionary completeness is checked by type-check."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/runtime_owner.go",
+      "field": "strict refusal authority and original diagnostic cause",
+      "source": "runtimeowner.Open error, errors.Is sentinel mapping and admitted cleanup lifetime",
+      "test": "TestRefusedRuntimeAuthorityRetainsEveryOperationFailure",
+      "assertion": "status hid the original refusal as an absent launch",
+      "state": "rejected",
+      "identity_keys": ["stateRoot", "executable", "subjectId", "runtimeOwnerErrorCode"],
+      "missing_semantics": "Runtime status/console/binding/start/stop retain refusal rather than pretending the runtime is empty. Only a successfully opened authority receives cleanup rights."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/main.go",
+      "field": "desktop services remain available when local runtime authority refuses",
+      "source": "actual desktop core composition with live different-installation, dead or corrupt owner record",
+      "test": "TestRuntimeOwnerRefusalDoesNotDisableCoreServices",
+      "assertion": "core changed or replaced the refused owner record",
+      "state": "recovery",
+      "identity_keys": [
+        "owner.process",
+        "owner.config",
+        "CatalogID",
+        "catalogRevision",
+        "connectionId"
+      ],
+      "missing_semantics": "Owner refusal remains strict and immutable while catalog/SSH/account/P2P boundaries start. Original SSH row and catalog identity are preserved through durable write/read-back."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/cli.go",
+      "field": "headless service availability and JSON launchError",
+      "source": "actual serve composition and status --json after refused runtime authority",
+      "test": "TestRuntimeOwnerRefusalDoesNotDisableCoreServices",
+      "assertion": "JSON status hid runtime refusal",
+      "state": "stale_timeout",
+      "identity_keys": [
+        "owner.process",
+        "owner.config",
+        "CatalogID",
+        "catalogRevision",
+        "connectionId"
+      ],
+      "missing_semantics": "Dead/corrupt/different-installation owner does not become absent success, and does not disable unrelated headless services."
+    },
+    {
+      "production_file": "tools/distribution-channel.mjs",
+      "field": "stable/test build identity and packaged channel admission metadata",
+      "source": "distributionBuildConfiguration/package.json evaluated by electron-builder",
+      "test": "keeps stable OS identity and gives test installers independent process and application identities",
+      "assertion": "expect(test.extraMetadata.dshkerDistributionChannel).toBe('test')",
+      "state": "success",
+      "identity_keys": [
+        "appId",
+        "productName",
+        "artifactName",
+        "executableName",
+        "dshkerDistributionChannel"
+      ],
+      "missing_semantics": "Local/non-tag builds default to test; stable is explicit; malformed channel selection throws instead of sharing installation identity."
+    },
+    {
+      "production_file": "tools/electron-builder.config.mjs",
+      "field": "stable/test build identity and packaged channel admission metadata",
+      "source": "distributionBuildConfiguration/package.json evaluated by electron-builder",
+      "test": "keeps stable OS identity and gives test installers independent process and application identities",
+      "assertion": "expect(test.extraMetadata.dshkerDistributionChannel).toBe('test')",
+      "state": "success",
+      "identity_keys": [
+        "appId",
+        "productName",
+        "artifactName",
+        "executableName",
+        "dshkerDistributionChannel"
+      ],
+      "missing_semantics": "Local/non-tag builds default to test; stable is explicit; malformed channel selection throws instead of sharing installation identity."
+    },
+    {
+      "production_file": "resources/installer-preserve-runtime.nsh",
+      "field": "observation-only installer process admission",
+      "source": "exact selected install-directory boundary and explicit installer PID exclusion",
+      "test": "uses an observation-only installer guard without process termination or directory-string interpolation",
+      "assertion": "expect(include).not.toMatch(/Stop-Process|taskkill|TerminateProcess|KILL_PROCESS/u)",
+      "state": "rejected",
+      "identity_keys": [
+        "INSTDIR",
+        "DSHKER_INSTALL_GUARD_ROOT",
+        "DSHKER_INSTALL_GUARD_PID",
+        "ExecutablePath"
+      ],
+      "missing_semantics": "Any running selected-installation process refuses silent installation or asks Retry/Cancel. Unknown inspection refuses; no process is force-terminated and directory strings are passed as data."
+    },
+    {
+      "production_file": "tools/release-artifacts.mjs",
+      "field": "release manifest version, distribution identity and artifact digest read-back",
+      "source": "generated current-version manifest and verify read-back",
+      "test": "round-trips the %s distribution identity independently of the current build environment",
+      "assertion": "expect(manifest.distributionChannel).toBe(channel)",
+      "state": "reset",
+      "identity_keys": [
+        "version",
+        "distributionChannel",
+        "appId",
+        "productName",
+        "relativePath",
+        "sha256"
+      ],
+      "missing_semantics": "Generated stable/test identities read back from their own manifest independently of current environment; invalid/missing distribution markers or channel-inconsistent identities are rejected before acceptance."
+    },
+    {
+      "production_file": "tools/release-smoke.mjs",
+      "field": "actual packaged profileIsolation and manifest identity checks",
+      "source": "real packaged app smoke receipt and current release manifest",
+      "test": "launchEvidenceChecks",
+      "assertion": "profileIsolation: payload?.checks?.profileIsolation === true",
+      "state": "success",
+      "identity_keys": ["version", "appId", "distributionChannel", "profile.testRoot"],
+      "missing_semantics": "--launch cannot pass on mounted renderer alone; real isolated profile and exact version/identity must be proven. This file is an executable acceptance checker, not a replacement application service."
+    },
+    {
+      "production_file": "tools/assemble-release-assets.mjs",
+      "field": "stable-only publication admission",
+      "source": "per-platform release-manifest.json distributionChannel and source/version identity",
+      "test": "refuses %s manifests before copying a published installer",
+      "assertion": "expect(await readdir(path.join(fixture, 'publish'))).toEqual([])",
+      "state": "rejected",
+      "identity_keys": [
+        "distributionChannel",
+        "version",
+        "gitRevision",
+        "platform",
+        "architecture"
+      ],
+      "missing_semantics": "Test and missing-channel manifests are rejected by the real assembly process before any installer is copied. Final stable native assembly and publication still require the tagged packaging workflow."
+    },
+    {
+      "production_file": "tools/electron-renderer-smoke.mjs",
+      "field": "development renderer receives explicit independent profile root",
+      "source": "workspace-owned mkdtemp root in child environment",
+      "test": "runElectronRendererSmoke",
+      "assertion": "DSHKER_TEST_PROFILE_ROOT: userDataRoot",
+      "state": "success",
+      "identity_keys": [
+        "userDataRoot",
+        "DSHKER_TEST_PROFILE_ROOT",
+        "ELECTRON_REMOTE_DEBUGGING_PORT"
+      ],
+      "missing_semantics": "The real development smoke must not use formal data or the default system profile. Its acceptance checker creates a fresh explicit root and returns failure when real renderer readiness is absent."
+    },
+    {
+      "production_file": "electron/main/core/autostart.ts",
+      "field": "test profile autostart admission",
+      "source": "explicit isolated constructor argument before any private RPC",
+      "test": "refuses every isolated operation before sending a core RPC",
+      "assertion": "expect(rpc.call).not.toHaveBeenCalled()",
+      "state": "no_op",
+      "identity_keys": [
+        "isolated",
+        "core.autostart_status",
+        "core.autostart_enable",
+        "core.autostart_disable"
+      ],
+      "missing_semantics": "Isolated profiles cannot inspect, install or remove the stable OS registration; stable retains the existing core authority."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/autostart.go",
+      "field": "isolated CLI autostart admission",
+      "source": "explicit DSHKER_SECRET_NAMESPACE selection before argument/state/platform access",
+      "test": "TestIsolatedAutostartCLIRefusesBeforePlatformAndStateAccess",
+      "assertion": "code == 0 || strings.TrimSpace(stderr.String()) != \"p2p.autostart_unsupported\" || stdout.Len() != 0",
+      "state": "rejected",
+      "identity_keys": ["DSHKER_SECRET_NAMESPACE", "verb", "stateRoot"],
+      "missing_semantics": "All three commands reject before platform registration access; they cannot unregister the stable job."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/autostart_isolation.go",
+      "field": "isolated RPC autostart authority and startup retirement",
+      "source": "explicit profile namespace at the core composition boundary",
+      "test": "TestIsolatedProfileCannotAccessSystemAutostart",
+      "assertion": "isolated profile reached stable authority",
+      "state": "no_op",
+      "identity_keys": ["DSHKER_SECRET_NAMESPACE", "autostartAuthority", "stateRoot"],
+      "missing_semantics": "Isolated status/enable/disable refuse and isolated startup never retires a formal job. Stable keeps the exact original authority."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/secret_namespace.go",
+      "field": "explicit native provider namespace composition",
+      "source": "DSHKER_SECRET_NAMESPACE passed explicitly to secret.OpenNamespace",
+      "test": "TestProductionCoreSecretProfileIsolation",
+      "assertion": "production core read another namespace's %s",
+      "state": "reset",
+      "identity_keys": ["DSHKER_SECRET_NAMESPACE", "dataRoot"],
+      "missing_semantics": "Both real desktop and serve cores isolate the same machine/account logical keys at the same data root; reads, overwrites and deletes retain each original namespace. Malformed namespace admission is checked separately before provider access."
+    },
+    {
+      "production_file": "networking/internal/secret/store.go",
+      "field": "validated native provider identity and stable legacy name",
+      "source": "OpenNamespace explicit namespace validation before openStore",
+      "test": "TestSecretNamespacePreservesLegacyAndRejectsUnsafeIdentity",
+      "assertion": "invalid namespace reached a provider",
+      "state": "rejected",
+      "identity_keys": ["namespace", "legacyService", "service"],
+      "missing_semantics": "Empty namespace preserves dshkerd; unsafe/overlong/path-like identity is refused before provider access with no migration or fallback."
+    },
+    {
+      "production_file": "networking/internal/secret/store_windows.go",
+      "field": "native credential profile identity for every logical key and chunk",
+      "source": "same real provider/dataRoot with two independently generated regression namespaces",
+      "test": "TestDPAPIProfileNamespaces",
+      "assertion": "native profile value changed for %s: %v",
+      "state": "reset",
+      "identity_keys": [
+        "namespace",
+        "service",
+        "dataRoot",
+        "machine.device-key",
+        "account.session"
+      ],
+      "missing_semantics": "Missing/deleted second-profile data never reads or deletes first-profile values. Fresh opens retain each profile. Stable provider keeps its existing file/service. macOS requires separate native_secrets CI execution; Windows evidence cannot certify Keychain.",
+      "composition_symbol": "exerciseNativeNamespaces",
+      "test_file": "networking/internal/secret/namespace_native_test.go"
+    },
+    {
+      "production_file": "networking/internal/secret/store_darwin.go",
+      "field": "native credential profile identity for every logical key and chunk",
+      "source": "same real provider/dataRoot with two independently generated regression namespaces",
+      "test": "TestKeychainProfileNamespaces",
+      "assertion": "native profile value changed for %s: %v",
+      "state": "reset",
+      "identity_keys": [
+        "namespace",
+        "service",
+        "dataRoot",
+        "machine.device-key",
+        "account.session"
+      ],
+      "missing_semantics": "Missing/deleted second-profile data never reads or deletes first-profile values. Fresh opens retain each profile. Stable provider keeps its existing file/service. macOS requires separate native_secrets CI execution; Windows evidence cannot certify Keychain.",
+      "composition_symbol": "exerciseNativeNamespaces",
+      "test_file": "networking/internal/secret/namespace_native_test.go"
+    },
+    {
+      "production_file": "networking/internal/secret/store_linux.go",
+      "field": "Secret Service attributes and label profile ownership",
+      "source": "explicit service identity supplied to lookup/store/clear; real native provider regressions run under native_secrets",
+      "test": "TestSecretServiceProfileIdentityAppliesToEveryOperation",
+      "assertion": "operation escaped profile identity: %v",
+      "state": "success",
+      "identity_keys": ["service", "key", "namespace"],
+      "missing_semantics": "Missing keys never fall back to legacy/another profile. Platform-independent argv assertions prove identity propagation; actual Linux provider acceptance additionally requires the native_secrets command in a configured keyring session."
+    },
+    {
+      "production_file": "networking/internal/secret/secretservice.go",
+      "field": "Secret Service attributes and label profile ownership",
+      "source": "explicit service identity supplied to lookup/store/clear; real native provider regressions run under native_secrets",
+      "test": "TestSecretServiceProfileIdentityAppliesToEveryOperation",
+      "assertion": "operation escaped profile identity: %v",
+      "state": "success",
+      "identity_keys": ["service", "key", "namespace"],
+      "missing_semantics": "Missing keys never fall back to legacy/another profile. Platform-independent argv assertions prove identity propagation; actual Linux provider acceptance additionally requires the native_secrets command in a configured keyring session."
+    },
+    {
+      "production_file": "networking/internal/secret/store_other.go",
+      "field": "unsupported native provider refusal",
+      "source": "OpenNamespace dispatch on unsupported platforms",
+      "test": "TestRefusesWithoutAProvider",
+      "assertion": "want p2p.secret_provider_unavailable",
+      "state": "rejected",
+      "identity_keys": ["platform", "namespace", "dataRoot"],
+      "missing_semantics": "An unsupported platform always refuses and writes nothing; no readable credential fallback is introduced."
+    },
+    {
+      "production_file": "electron/main/core/supervisor.ts",
+      "field": "native secret namespace and stable environment preservation",
+      "source": "explicit canonical isolatedProfileRoot at child environment composition",
+      "test": "derives a repeatable isolated namespace from the explicit canonical root and overrides inheritance",
+      "assertion": "expect(first).toEqual(coreProcessEnvironment({ isolatedProfileRoot: root }, {}))",
+      "state": "reset",
+      "identity_keys": ["isolatedProfileRoot", "DSHKER_SECRET_NAMESPACE", "ELECTRON_RUN_AS_NODE"],
+      "missing_semantics": "Stable clears inherited test namespace and isolated roots derive repeatable distinct identities; malformed roots reject before child startup."
+    },
+    {
+      "production_file": "tools/headless-core-smoke.mjs",
+      "field": "real headless smoke native secret and OS-job isolation",
+      "source": "unique explicit absolute smoke state path hashed into an overriding smoke-specific namespace for each real command and serve child",
+      "test": "isolates native secrets and global autostart for every explicit smoke state",
+      "assertion": "expect(first.DSHKER_SECRET_NAMESPACE).toMatch(/^smoke-[a-f0-9]{64}$/u)",
+      "state": "reset",
+      "identity_keys": [
+        "state",
+        "DSHKER_SECRET_NAMESPACE",
+        "nativeService",
+        "OSAutostartAuthority"
+      ],
+      "missing_semantics": "A missing/relative smoke state fails; same state produces same namespace, another state differs, inherited identity cannot address stable credentials or global autostart. The real --build smoke command proves the actual production entry."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; Set-Location networking; & go test -json -race ./cmd/dshkerd ./internal/runtimeowner ./internal/secret -count=1 -timeout=120s *> (Join-Path $r 'manifest-go-unit.jsonl'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-go-unit.jsonl') -Tail 8; exit $c\"",
+      "no_mock": true
+    },
+    {
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; Set-Location networking; & go test -json -race ./integration -run '^Test(RuntimeOwnerRefusalDoesNotDisableCoreServices|ProductionCoreSecretProfileIsolation)$' -count=1 -timeout=120s *> (Join-Path $r 'manifest-owner-isolation.jsonl'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-owner-isolation.jsonl') -Tail 8; exit $c\"",
+      "no_mock": true
+    },
+    {
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; $env:DSHKER_CORE_BINARY=Join-Path $r 'manifest-core.exe'; Push-Location networking; & go build -o $env:DSHKER_CORE_BINARY ./cmd/dshkerd; $c=$LASTEXITCODE; Pop-Location; if($c -ne 0){exit $c}; & node node_modules/vitest/vitest.mjs run electron/main/core/supervisor-runtime-owner.test.ts *> (Join-Path $r 'manifest-owner-shutdown.log'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-owner-shutdown.log') -Tail 10; exit $c\"",
+      "no_mock": true
+    },
+    {
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; & node tools/headless-core-smoke.mjs --build --json *> (Join-Path $r 'manifest-headless-smoke.log'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-headless-smoke.log') -Tail 5; exit $c\"",
+      "no_mock": true
+    },
+    {
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; $env:DSHKER_DISTRIBUTION_CHANNEL='stable'; & node tools/release-artifacts.mjs --release-dir release --verify; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & node tools/release-smoke.mjs --release-dir release --launch --json *> (Join-Path $r 'manifest-package-smoke.log'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-package-smoke.log') -Tail 5; exit $c\"",
+      "no_mock": true
+    },
+    {
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; if(-not $env:DSHKER_FORMAL_UI_PORT -or -not $env:DSHKER_FORMAL_UI_ARTIFACT_ROOT){throw 'Explicit installed formal CDP port and existing private D-drive artifact root required'}; & node tools/tests/formal-recovery-ui.mjs *> (Join-Path $r 'formal-ui-summary.jsonl'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'formal-ui-summary.jsonl'); exit $c\"",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/hotfix-0.1.96/manifest-go-unit.jsonl"
+    },
+    {
+      "artifact": ".run/hotfix-0.1.96/manifest-owner-isolation.jsonl"
+    },
+    {
+      "artifact": ".run/hotfix-0.1.96/manifest-owner-shutdown.log"
+    },
+    {
+      "artifact": ".run/hotfix-0.1.96/manifest-package-smoke.log"
+    },
+    {
+      "artifact": "release/release-smoke.log"
+    },
+    {
+      "artifact": ".run/hotfix-0.1.96/formal-ui-summary.jsonl"
+    },
+    {
+      "artifact": ".run/hotfix-0.1.96/manifest-headless-smoke.log"
+    },
+    {
+      "artifact": ".run/headless-core/latest.json"
+    }
+  ],
+  "platform_acceptance_commands": [
+    {
+      "platform": "darwin",
+      "command": "go test -tags native_secrets -race ./internal/secret -run \"^Test(KeychainProfileNamespaces|KeychainStableKeepsItsLegacyService)$\" -count=1 -timeout=120s",
+      "no_mock": true,
+      "requires": "Native macOS runner; records generated regression namespaces only; must preserve actual output artifact."
+    },
+    {
+      "platform": "linux",
+      "command": "go test -tags native_secrets -race ./internal/secret -run \"^Test(SecretServiceProfileNamespaces|SecretServiceStableKeepsItsLegacySchema)$\" -count=1 -timeout=120s",
+      "no_mock": true,
+      "requires": "Native Linux runner with real unlocked Secret Service and secret-tool; no absent-provider skip is accepted."
+    }
+  ]
+}

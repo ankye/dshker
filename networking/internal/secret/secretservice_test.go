@@ -29,7 +29,9 @@ func (tool *recorder) run(stdin string, arguments ...string) (string, string, er
 	return tool.stdout, tool.stderr, tool.err
 }
 
-func (tool *recorder) store() secretServiceStore { return secretServiceStore{run: tool.run} }
+func (tool *recorder) store() secretServiceStore {
+	return secretServiceStore{run: tool.run, service: legacyService}
+}
 
 // TestSecretServiceArgumentsAreTheContract pins the invocation: the attributes
 // are the item's identity and secret-tool takes them in pairs, the label is what

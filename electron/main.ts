@@ -13,7 +13,6 @@ import {
   BundledHarnessBootstrap,
   AwesomePluginCatalog,
   LauncherHarnessService,
-  ManagedBootstrapLocatorStore,
   ManagedHarnessWebRuntimeSupervisor,
   ManagedHarnessRuntimeError,
   ManagedInstallationService,
@@ -47,6 +46,18 @@ import {
 import { CoreRemoteRoute, type CoreRemoteRoutePort } from './main/core/remote-route'
 import { RemoteConnectionService } from './main/remote'
 import { LAUNCHER_HARNESS_SUBJECT } from './main/managed/launcher-harness-service'
+import {
+  launcherDistributionIdentity,
+  LauncherProfileError,
+  prepareTestProfile,
+  readLauncherDistribution,
+  resolveLauncherProfile
+} from './main/launcher-profile'
+import {
+  assertProfileStoragePath,
+  ProfileBootstrapLocatorStore,
+  ProfileCoreRoots
+} from './main/launcher-profile-boundaries'
 
 protocol.registerSchemesAsPrivileged([
   {
@@ -68,6 +79,47 @@ const IS_SMOKE_TEST =
   process.env.DESKTOP_APP_SMOKE_TEST === '1' ||
   process.env.ELECTRON_SMOKE_TEST === '1' ||
   process.argv.includes('--dshker-smoke')
+
+// Resolve and validate test isolation before the single-instance lock, logs,
+// bootstrap locators or native secret providers can touch a formal profile.
+const PROFILE = (() => {
+  try {
+    const profile = resolveLauncherProfile({
+      distribution: readLauncherDistribution(app.isPackaged, app.getAppPath()),
+      argv: process.argv,
+      environment: process.env,
+      nativeHome: homedir(),
+      formalUserData: app.getPath('userData')
+    })
+    if (IS_SMOKE_TEST && !profile.isolated) {
+      throw new LauncherProfileError('launcher.test_profile_required')
+    }
+    prepareTestProfile(profile)
+    return profile
+  } catch (error) {
+    console.error(
+      error instanceof LauncherProfileError ? error.code : 'launcher.test_profile_invalid'
+    )
+    app.exit(1)
+    process.exit(1)
+  }
+})()
+if (PROFILE.isolated && PROFILE.testRoot) {
+  app.setPath('userData', PROFILE.userData)
+  app.setPath('sessionData', path.join(PROFILE.testRoot, 'session'))
+  app.setPath('temp', path.join(PROFILE.testRoot, 'temp'))
+  app.setPath('downloads', path.join(PROFILE.testRoot, 'downloads'))
+  app.setPath('logs', path.join(PROFILE.testRoot, 'logs'))
+  app.setPath('crashDumps', path.join(PROFILE.testRoot, 'crashes'))
+  process.env.DSH_HOME = PROFILE.dshHome
+  process.env.HOME = PROFILE.nativeHome
+  process.env.USERPROFILE = PROFILE.nativeHome
+  process.env.DSHKER_STATE_DIR = path.join(PROFILE.launcherRoot, 'core-state')
+}
+if (PROFILE.distribution === 'test') app.setName(launcherDistributionIdentity('test').productName)
+if (process.platform === 'win32') {
+  app.setAppUserModelId(launcherDistributionIdentity(PROFILE.isolated ? 'test' : 'stable').appId)
+}
 
 // Electron's built-in single instance lock. Without this, each click of the
 // shortcut starts a new process that races the running one for the same data
@@ -151,7 +203,7 @@ async function startSmokeTest(): Promise<void> {
     path.join(launcherRoot, 'dsh-launcher-bootstrap.json')
   )
   await writeSmokeTrace('startSmokeTest:after-register-services')
-  await runSmokeTest(mainDirectory)
+  await runSmokeTest(mainDirectory, { ...PROFILE, launcherRoot })
   await writeSmokeTrace('startSmokeTest:after-runSmokeTest')
 }
 
@@ -159,13 +211,15 @@ async function start(): Promise<void> {
   await app.whenReady()
   await registerLauncherProtocol(mainDirectory)
   const services = await registerLauncherServices(
-    path.join(homedir(), '.dshlauncher'),
+    PROFILE.launcherRoot,
     path.join(app.getPath('userData'), 'dsh-launcher-bootstrap.json')
   )
   registerServicesShutdown(services)
-  app.once('browser-window-created', (_event, window) => {
-    scheduleLauncherUpdateCheckAfterWindowReady(window, services.launcherUpdateService)
-  })
+  if (!PROFILE.isolated) {
+    app.once('browser-window-created', (_event, window) => {
+      scheduleLauncherUpdateCheckAfterWindowReady(window, services.launcherUpdateService)
+    })
+  }
   const createLauncherWindow = (): void => {
     const window = createWindow(mainDirectory, services.runtimeBrowserController)
     // Bind every window, including one recreated from the macOS Dock, to the
@@ -185,7 +239,10 @@ async function start(): Promise<void> {
     const existing = BrowserWindow.getAllWindows().find((window) => !window.isDestroyed())
     if (existing) revealWindow(existing)
   })
-  void initializeActiveVersion(services.launcherHarnessService)
+  void initializeActiveVersion(
+    services.launcherHarnessService,
+    path.join(PROFILE.launcherRoot, 'harness')
+  )
   // Presence, the reported build, discoverability and pairing all ride on the
   // coordinator heartbeat, which only runs while a device session is held. Until
   // this ran at startup, a launcher that was open still looked offline to every
@@ -294,7 +351,7 @@ async function registerLauncherServices(
     versionsDirectory: path.join(launcherRoot, 'versions'),
     currentVersionPointerPath: path.join(launcherRoot, 'harness-current.json'),
     pluginSourcesDirectory: path.join(launcherRoot, 'plugins'),
-    dshHomeDirectory: path.join(homedir(), '.dsh'),
+    dshHomeDirectory: PROFILE.dshHome,
     launchPreferencesPath: path.join(launcherRoot, 'launch-preferences.json'),
     launchLogPath: path.join(launcherRoot, 'logs', 'dsh-web.log'),
     diagnosticsPatchPath: app.isPackaged
@@ -349,6 +406,7 @@ async function registerLauncherServices(
           : path.join(app.getAppPath(), 'build'),
         dataRoot: path.join(launcherRoot, 'core-data'),
         stateRoot: path.join(launcherRoot, 'core-state'),
+        isolatedProfileRoot: PROFILE.isolated ? PROFILE.testRoot : undefined,
         catalogRoot:
           settingsRoot === undefined ? undefined : path.join(settingsRoot, 'dsh-launcher'),
         onUnavailable: () => undefined
@@ -357,10 +415,10 @@ async function registerLauncherServices(
     )
     coreSecrets = new CoreSecrets(coreSupervisor.rpc)
     coreCatalog = new CoreCatalog(coreSupervisor.rpc)
-    coreRoots = new CoreRoots(coreSupervisor.rpc)
+    coreRoots = new ProfileCoreRoots(PROFILE, new CoreRoots(coreSupervisor.rpc))
     // The settings toggle reads and writes the core registration itself, so the
     // desktop control and `dshkerd autostart` never disagree about this machine.
-    coreAutostart = new CoreAutostart(coreSupervisor.rpc)
+    coreAutostart = new CoreAutostart(coreSupervisor.rpc, PROFILE.isolated)
     coreRemoteRoute = new CoreRemoteRoute(coreSupervisor.rpc)
     // Publishing the endpoint is best effort: a host with no runtime yet still
     // serves the page, and the broker refuses to hand out a session until one is
@@ -418,7 +476,10 @@ async function registerLauncherServices(
     platform: process.platform,
     arch: process.arch,
     downloadsDirectory: app.getPath('downloads'),
-    openInstaller: (installerPath) => shell.openPath(installerPath),
+    openInstaller: (installerPath) =>
+      PROFILE.isolated
+        ? Promise.resolve('An isolated test profile cannot open the stable installer.')
+        : shell.openPath(installerPath),
     hasActiveLauncherOperation: () =>
       launcherHarnessService.hasActiveOperation() ||
       managedInstallationService.hasActiveOperation() ||
@@ -428,7 +489,7 @@ async function registerLauncherServices(
   registerIpc({
     managedWorkspaceService,
     sessionUsageReader: new SessionUsageReader({
-      dshHomeDirectory: path.join(homedir(), '.dsh'),
+      dshHomeDirectory: PROFILE.dshHome,
       cachePath: path.join(launcherRoot, 'session-usage-cache.json')
     }),
     pluginCatalog: pluginCatalogService,
@@ -473,10 +534,13 @@ async function bringPeerServicesOnline(peerManagement: PeerManagement): Promise<
  * current commit as the first version directory. The repository's own working
  * tree is deliberately left untouched.
  */
-async function initializeActiveVersion(service: LauncherHarnessService): Promise<void> {
+async function initializeActiveVersion(
+  service: LauncherHarnessService,
+  harnessDirectory: string
+): Promise<void> {
   service.setBootstrapState('preparing')
   try {
-    await createBundledRepository(service)
+    await createBundledRepository(service, harnessDirectory)
     await service.prepareCurrentVersion()
     service.setBootstrapState(undefined)
   } catch (error) {
@@ -494,10 +558,13 @@ async function initializeActiveVersion(service: LauncherHarnessService): Promise
 }
 
 /** Creates the packaged initial repository only when the Launcher-owned root is empty. */
-async function createBundledRepository(service: LauncherHarnessService): Promise<void> {
+async function createBundledRepository(
+  service: LauncherHarnessService,
+  harnessDirectory: string
+): Promise<void> {
   if (!app.isPackaged) return
   await new BundledHarnessBootstrap().initialize({
-    harnessDirectory: path.join(homedir(), '.dshlauncher', 'harness'),
+    harnessDirectory,
     // One canonical staged layout: the Git bundle lives under `harness/`
     // beside the seed manifest and plugin generation.
     bundlePath: path.join(
@@ -523,9 +590,10 @@ async function createManagedWorkspaceService(
   installCatalog: () => CoreInstallCatalogPort | undefined
 ): Promise<ManagedWorkspaceService> {
   const pathStyle: ManagedPathStyle = process.platform === 'win32' ? 'win32' : 'posix'
-  const nativeDshHomePath = await resolveNativeDshHomePath()
+  const nativeDshHomePath = await resolveNativeDshHomePath(PROFILE.dshHome)
+  const directoryPicker = new ElectronDirectoryPicker()
   return new ManagedWorkspaceService({
-    locator: new ManagedBootstrapLocatorStore({
+    locator: new ProfileBootstrapLocatorStore(PROFILE, {
       filePath: locatorFilePath,
       pathStyle,
       nativeDshHomePath
@@ -533,7 +601,13 @@ async function createManagedWorkspaceService(
     capabilities: new DirectorySelectionCapabilities({
       ttlMilliseconds: DIRECTORY_SELECTION_TTL_MILLISECONDS
     }),
-    directoryPicker: new ElectronDirectoryPicker(),
+    directoryPicker: {
+      pickDirectory: async (purpose) => {
+        const selected = await directoryPicker.pickDirectory(purpose)
+        if (selected !== undefined) assertProfileStoragePath(PROFILE, selected)
+        return selected
+      }
+    },
     pathStyle,
     nativeDshHomePath,
     defaultRootPaths: {
@@ -548,12 +622,7 @@ async function createManagedWorkspaceService(
 }
 
 /** Resolves the existing DSH home only to keep Launcher roots out of it; it never rewrites its value. */
-async function resolveNativeDshHomePath(): Promise<string> {
-  const configured = process.env.DSH_HOME
-  const selected =
-    configured !== undefined && configured.trim().length > 0
-      ? expandHomePath(configured)
-      : path.join(homedir(), '.dsh')
+async function resolveNativeDshHomePath(selected: string): Promise<string> {
   const resolved = path.resolve(selected)
   try {
     return await realpath(resolved)
@@ -561,12 +630,6 @@ async function resolveNativeDshHomePath(): Promise<string> {
     if (isNodeCode(error, 'ENOENT')) return resolved
     throw error
   }
-}
-
-function expandHomePath(value: string): string {
-  if (value === '~') return homedir()
-  if (value.startsWith('~/') || value.startsWith('~\\')) return path.join(homedir(), value.slice(2))
-  return value
 }
 
 function isNodeCode(value: unknown, expected: string): boolean {

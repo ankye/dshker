@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -133,10 +132,13 @@ async function waitForRendererReady(client) {
 }
 
 export async function runElectronRendererSmoke() {
-  const userDataRoot = await mkdtemp(path.join(os.tmpdir(), 'desktop-renderer-smoke-'))
+  const profileParent = path.join(appRoot, '.run', 'electron-renderer-profiles')
+  await mkdir(profileParent, { recursive: true })
+  const userDataRoot = await mkdtemp(path.join(profileParent, 'profile-'))
   const child = spawn(process.execPath, [electronViteBin, 'dev'], {
     env: {
       ...process.env,
+      DSHKER_TEST_PROFILE_ROOT: userDataRoot,
       ELECTRON_REMOTE_DEBUGGING_PORT: port,
       DESKTOP_APP_USER_DATA_ROOT: userDataRoot,
       GAM_USER_DATA_ROOT: userDataRoot

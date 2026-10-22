@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { access, mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { execFile } from 'node:child_process'
@@ -100,7 +100,11 @@ function executableCandidates(releaseDir, manifest) {
   // spellings are kept as fallbacks for older layouts.
   const directories = ['linux-unpacked', 'linux-x64-unpacked', 'linux-arm64-unpacked']
   return directories.flatMap((directory) => [
-    path.join(releaseDir, directory, 'dshker-launcher'),
+    path.join(
+      releaseDir,
+      directory,
+      manifest.distributionChannel === 'test' ? 'dshker-launcher-test' : 'dshker-launcher'
+    ),
     path.join(releaseDir, directory, manifest.productName),
     path.join(releaseDir, directory, manifest.packageName)
   ])
@@ -307,12 +311,14 @@ async function launchSmoke(executablePath, timeoutMs, releaseDir) {
   }
 
   await mkdir(outputDir, { recursive: true })
+  const profileRoot = await mkdtemp(path.join(outputDir, 'isolated-profile-'))
   await recordTrace(`launch-start executable=${executablePath} timeoutMs=${timeoutMs}`)
   await rm(outputPath, { force: true })
   await rm(`${outputPath}.trace`, { force: true })
 
   const launchEnv = {
     ...process.env,
+    DSHKER_TEST_PROFILE_ROOT: profileRoot,
     DESKTOP_APP_SMOKE_OUTPUT: outputPath,
     DESKTOP_APP_SMOKE_TEST: '1',
     ELECTRON_SMOKE_OUTPUT: outputPath,
@@ -327,7 +333,7 @@ async function launchSmoke(executablePath, timeoutMs, releaseDir) {
   try {
     const result = await execFileAsync(
       executablePath,
-      ['--dshker-smoke', '--dshker-smoke-output', outputPath],
+      ['--dshker-smoke', '--dshker-smoke-output', outputPath, '--dshker-test-root', profileRoot],
       {
         cwd: path.dirname(executablePath),
         env: launchEnv,
@@ -385,6 +391,7 @@ function launchEvidenceChecks(payload, required) {
       launch: true,
       launchPayload: true,
       appIdentity: true,
+      profileIsolation: true,
       routeSmoke: true,
       rendererShellMounted: true,
       rendererShellElement: true,
@@ -400,6 +407,7 @@ function launchEvidenceChecks(payload, required) {
     launch: payload?.ok === true,
     launchPayload: Boolean(payload),
     appIdentity: payload?.checks?.appIdentity === true,
+    profileIsolation: payload?.checks?.profileIsolation === true,
     routeSmoke: payload?.checks?.routeSmoke === true,
     heightAdaptation: payload?.checks?.heightAdaptation === true,
     rendererShellMounted: payload?.checks?.rendererShellMounted === true,

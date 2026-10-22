@@ -88,24 +88,28 @@ jobs:
 
       # The Linux credential provider talks to the Secret Service, so proving it
       # round-trips needs a session bus and an unlocked keyring. Without them the
-      # provider reports itself unavailable, which the suite already covers; with
-      # them the round-trip runs instead of skipping. This step is best-effort on
-      # purpose: the tests decide, not the setup.
-      - name: Round-trip a credential through the Linux keyring
+      # Native profile isolation is a required real-provider check, never a skip.
+      - name: Verify independent Linux credential namespaces
         working-directory: networking
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libsecret-tools gnome-keyring dbus-x11
           dbus-run-session -- bash -lc '
-            set -u
-            eval "$(printf %s "unlock" | gnome-keyring-daemon --unlock --daemonize 2>/dev/null || true)"
+            set -eu
+            eval "$(printf %s "unlock" | gnome-keyring-daemon --unlock --daemonize)"
             export GNOME_KEYRING_CONTROL SSH_AUTH_SOCK
-            go test ./internal/secret/ -run SecretService -v
+            go test -tags native_secrets ./internal/secret/ -run "TestSecretServiceProfileNamespaces|TestSecretServiceStableKeepsItsLegacySchema" -count=1 -v
           '
+
+      - name: Verify real runtime-owner refusal compositions
+        working-directory: networking
+        run: go test -race ./integration -run TestRuntimeOwnerRefusalDoesNotDisableCoreServices -count=1 -v
 
   package:
     name: ${{ matrix.name }}
     needs: verify
+    env:
+      DSHKER_DISTRIBUTION_CHANNEL: ${{ startsWith(github.ref, 'refs/tags/') && 'stable' || 'test' }}
     strategy:
       fail-fast: false
       matrix:
@@ -193,6 +197,11 @@ jobs:
           go-version-file: networking/go.mod
           cache-dependency-path: networking/go.sum
 
+      - name: Verify independent macOS credential namespaces
+        if: ${{ runner.os == 'macOS' }}
+        working-directory: networking
+        run: go test -tags native_secrets ./internal/secret -run 'TestKeychainProfileNamespaces|TestKeychainStableKeepsItsLegacyService' -count=1 -v
+
       - name: Install locked dependencies
         run: npm ci
 
@@ -240,6 +249,15 @@ jobs:
 
       - name: Verify generated metadata
         run: npm run release:verify
+
+      - name: Verify packaged core profile admission and normal cleanup
+        if: ${{ !matrix.smokeSkip }}
+        shell: pwsh
+        run: |
+          $binaryName = if ($IsWindows) { 'dshkerd.exe' } else { 'dshkerd' }
+          $env:DSHKER_CORE_BINARY = Join-Path $PWD "build/p2p/${{ matrix.coreTarget }}/$binaryName"
+          node node_modules/vitest/vitest.mjs run electron/main/core/supervisor-isolation.test.ts electron/main/core/supervisor-runtime-owner.test.ts
+          exit $LASTEXITCODE
 
       # The core the installer carries must also answer as a headless host on the
       # machine that built it: the binary matches its manifest, serve publishes

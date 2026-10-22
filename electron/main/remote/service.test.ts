@@ -142,14 +142,19 @@ describe('RemoteConnectionService', () => {
   })
 
   it('refuses every operation when the shell has no core', async () => {
+    let pathReads = 0
     const service = new RemoteConnectionService(
-      async () => '/settings/dsh-launcher/remote-connections.json',
+      async () => {
+        pathReads += 1
+        return '/settings/dsh-launcher/remote-connections.json'
+      },
       () => undefined
     )
-    await expect(service.getState()).rejects.toMatchObject({ code: 'remote.persistence_failed' })
+    await expect(service.getState()).rejects.toMatchObject({ code: 'remote.core_unavailable' })
     await expect(service.connect(connection.connectionId)).rejects.toMatchObject({
-      code: 'remote.persistence_failed'
+      code: 'remote.core_unavailable'
     })
+    expect(pathReads).toBe(0)
   })
 
   it('invalidates a passed test when only the SSH identity path changes', async () => {

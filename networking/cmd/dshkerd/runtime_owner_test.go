@@ -7,7 +7,9 @@ import (
 	"testing"
 
 	"github.com/ankye/dshker/networking/internal/core"
+	"github.com/ankye/dshker/networking/internal/harnessruntime"
 	"github.com/ankye/dshker/networking/internal/runtimebridge"
+	"github.com/ankye/dshker/networking/internal/runtimeowner"
 )
 
 func TestRuntimeOwnerPrivateEntryRejectsIncompleteArguments(t *testing.T) {
@@ -27,6 +29,65 @@ func TestRuntimeOwnerConfigKeepsExplicitRootAbsence(t *testing.T) {
 	config, err := ownerConfig(options{stateRoot: state})
 	if err != nil || !filepath.IsAbs(config.Executable) || config.StateRoot != state || config.DataRoot != "" || config.CatalogRoot != "" || config.RootsPath != "" {
 		t.Fatalf("owner composition changed explicit configuration: %+v, %v", config, err)
+	}
+}
+
+func TestRefusedRuntimeAuthorityRetainsEveryOperationFailure(t *testing.T) {
+	cause := errors.Join(runtimeowner.ErrOwnerRecordInvalid, errors.New("test.original_owner_failure"))
+	public := publicRuntimeOwnerFailure(cause)
+	if public.Error() != "runtime.owner_record_invalid" || !errors.Is(public, cause) {
+		t.Fatal("public refusal leaked diagnostic text or dropped its original cause")
+	}
+	authority := refusedRuntimeAuthority{cause: public}
+	ctx := context.Background()
+	started, err := authority.Start(ctx, harnessruntime.LaunchRequest{})
+	if err != public || started != (harnessruntime.LaunchView{}) {
+		t.Fatal("start hid the original refusal or claimed a launch")
+	}
+	stopped, err := authority.Stop(ctx, "subject_main")
+	if err != public || stopped != (harnessruntime.LaunchView{}) {
+		t.Fatal("stop hid the original refusal or claimed a stopped child")
+	}
+	status, present, err := authority.Status(ctx, "subject_main")
+	if err != public || present || status != (harnessruntime.LaunchView{}) {
+		t.Fatal("status hid the original refusal as an absent launch")
+	}
+	entries, cursor, err := authority.Console(ctx, 9)
+	if err != public || entries != nil || cursor != 0 {
+		t.Fatal("console hid the original refusal as an empty feed")
+	}
+	binding, err := authority.Binding(ctx, "subject_main")
+	if err != public || binding != (runtimebridge.Binding{}) {
+		t.Fatal("binding hid the original refusal or returned a cached address")
+	}
+}
+
+func TestRuntimeAdmissionFailureHasNoCleanupAuthority(t *testing.T) {
+	authority, lifetime, failure := admitRuntimeAuthority(context.Background(), options{stateRoot: "relative"})
+	if lifetime != nil || !errors.Is(failure, runtimeowner.ErrOwnerConfiguration) {
+		t.Fatalf("invalid owner was admitted or given a cleanup lifetime: %v", failure)
+	}
+	if _, _, err := authority.Status(context.Background(), "subject_main"); !errors.Is(err, failure) || err.Error() != failure.Error() {
+		t.Fatal("runtime boundary did not retain the exact admission failure")
+	}
+}
+
+func TestRuntimeOwnerPublicFailuresKeepOnlyAdmittedCodes(t *testing.T) {
+	for _, code := range []error{
+		runtimeowner.ErrOwnerUnavailable, runtimeowner.ErrOwnerIdentityMismatch,
+		runtimeowner.ErrOwnerRecordInvalid, runtimeowner.ErrOwnerProtocol,
+		runtimeowner.ErrOwnerConfiguration, runtimeowner.ErrOwnerShutdown,
+	} {
+		original := errors.Join(code, errors.New("record publish errno=5 private-stage-detail"))
+		public := publicRuntimeOwnerFailure(original)
+		if public.Error() != code.Error() || !errors.Is(public, original) || !errors.Is(public, code) {
+			t.Fatalf("public owner failure changed its code or lost local diagnostics: %v", code)
+		}
+	}
+	unknown := errors.New("unknown private operating-system failure")
+	public := publicRuntimeOwnerFailure(unknown)
+	if public.Error() != runtimeowner.ErrOwnerUnavailable.Error() || !errors.Is(public, unknown) {
+		t.Fatal("unknown admission failure was exposed or mistaken for success")
 	}
 }
 

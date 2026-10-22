@@ -13,15 +13,16 @@ import { exactPeerObject, parsePeerJson, PeerHelperError } from './wire'
  * Ends a supervised child, escalating until it is actually gone.
  *
  * The private channel is already closed when this runs, and that closure is
- * itself the core's shutdown signal, so a short grace period covers the ordinary
- * case. Waiting the whole escalation budget before the first signal made every
- * quit appear to hang for ten seconds after the user asked to leave.
+ * itself the core's shutdown signal. The caller supplies its protocol cleanup
+ * budget when it exceeds the ordinary one-second grace; completed exits settle
+ * immediately instead of consuming that whole budget.
  */
 export async function stopChild(
   child: ChildProcessWithoutNullStreams,
-  exit: Promise<void>
+  exit: Promise<void>,
+  gracefulMilliseconds = 1_000
 ): Promise<void> {
-  if (await exitedWithin(exit, 1_000)) return
+  if (await exitedWithin(exit, gracefulMilliseconds)) return
   child.kill('SIGTERM')
   if (await exitedWithin(exit, 5_000)) return
   child.kill('SIGKILL')

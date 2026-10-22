@@ -1,7 +1,12 @@
-import { BrowserWindow, screen } from 'electron'
+import { app, BrowserWindow, screen } from 'electron'
 import { appendFile, mkdir, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { APP_METADATA } from '../../src/shared/contracts'
+import {
+  launcherDistributionIdentity,
+  readLauncherDistribution,
+  type LauncherProfile
+} from './launcher-profile'
 import { createPreloadWebPreferences } from './preload'
 import { installWindowNavigationPolicy } from './security'
 import { loadRenderer } from './window'
@@ -104,7 +109,7 @@ async function captureRouteScreenshots(
  * The window is positioned offscreen rather than hidden, because a hidden
  * window may never paint and would make the frame evidence meaningless.
  */
-export async function runSmokeTest(mainDirectory: string): Promise<void> {
+export async function runSmokeTest(mainDirectory: string, profile: LauncherProfile): Promise<void> {
   const workArea = screen.getPrimaryDisplay().workArea
   const smokeWidth = Math.min(1240, workArea.width)
   const smokeHeight = Math.min(820, workArea.height)
@@ -198,16 +203,35 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
   }
 
   const appIdentity = Boolean(APP_METADATA.bundleId && APP_METADATA.version)
+  const distribution = launcherDistributionIdentity(
+    readLauncherDistribution(app.isPackaged, app.getAppPath())
+  )
+  const profileIsolation = Boolean(
+    profile.isolated &&
+    profile.testRoot &&
+    [profile.launcherRoot, profile.userData, profile.dshHome, profile.nativeHome].every((value) => {
+      const suffix = relative(profile.testRoot!, value)
+      return (
+        suffix !== '' && suffix !== '..' && !suffix.startsWith(`..${sep}`) && !isAbsolute(suffix)
+      )
+    }) &&
+    resolve(app.getPath('userData')) === resolve(profile.userData) &&
+    process.env.DSH_HOME === profile.dshHome &&
+    process.env.HOME === profile.nativeHome &&
+    process.env.USERPROFILE === profile.nativeHome
+  )
   const payload = {
     app: {
       // The release manifest records the installed bundle identity, so the
       // evidence reports `bundleId` rather than the internal short `appId`.
-      appId: APP_METADATA.bundleId,
-      name: APP_METADATA.name,
+      appId: distribution.appId,
+      name: distribution.productName,
       version: APP_METADATA.version
     },
+    profile,
     ok:
       appIdentity &&
+      profileIsolation &&
       rendererEvidence.shellMounted &&
       rendererEvidence.shellElement &&
       rendererEvidence.rendererText &&
@@ -219,6 +243,7 @@ export async function runSmokeTest(mainDirectory: string): Promise<void> {
       rendererEvidence.errors.length === 0,
     checks: {
       appIdentity,
+      profileIsolation,
       routeSmoke: routeEvidence.ok,
       heightAdaptation: heightEvidence.ok,
       rendererShellMounted: rendererEvidence.shellMounted,

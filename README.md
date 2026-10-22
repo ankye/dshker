@@ -18,6 +18,7 @@
 - **Plugins install without a system Node or pnpm.** DSHKer carries its own runtime: the packaged pnpm runs on the Launcher's own process, and package operations and their lifecycle scripts resolve the bundled `node`/`pnpm` instead of whatever the machine has installed. A broken or invisible system pnpm no longer blocks extension installation.
 - **Close safely while updating.** Closing the window during Git refresh, dependency installation, or a core build hides the Launcher and lets the main-process task finish; the normal close preference still applies when it is idle.
 - **Your data stays yours.** Harness, plugins, presets, settings and your native `~/.dsh` folders stay where they are: the Launcher reuses them and never silently replaces or resets them.
+- **Test builds have their own data.** Test applications and installers have a separate identity and require an explicit independent profile. Stable updates keep existing accounts, pairings and SSH computers. A local runtime-owner failure is reported separately and does not disable account or SSH management.
 - **Old machines clean up after themselves.** Signing in on a new computer enrols it automatically, removing one takes its pairings with it, the network you picked is remembered, and a computer that is no longer part of the network you are looking at says so instead of quietly disappearing.
 
 DSHKer Launcher is a desktop app for running [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) on macOS and Windows.
@@ -287,8 +288,20 @@ Requirements: Node.js `^20.19.0 || >=22.12.0` and npm `>=10`.
 
 ```bash
 npm ci
+DSHKER_TEST_PROFILE_ROOT="$PWD/.run/dev-profile" npm run dev
+```
+
+On Windows PowerShell, set the explicit profile before starting:
+
+```powershell
+$env:DSHKER_TEST_PROFILE_ROOT = Join-Path $PWD '.run/dev-profile'
 npm run dev
 ```
+
+Development and local test packages refuse startup without an independent test
+root. Local packages default to the test channel; stable tag packages preserve
+the formal user profile. See [distribution profiles](docs/release.md) before
+building or installing an authorized stable candidate.
 
 Run the focused checks:
 

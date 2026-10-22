@@ -23,8 +23,9 @@ import (
 // explicit --data argument; Open refuses when it is absent or not a directory.
 const blobFileName = "credentials.json"
 
-// Open returns the Windows DPAPI provider rooted at dataRoot.
-func Open(dataRoot string) (Store, error) {
+// openStore returns the Windows DPAPI provider rooted at dataRoot. Stable keeps
+// credentials.json; an explicit namespace cannot address that legacy file.
+func openStore(dataRoot, service string) (Store, error) {
 	if dataRoot == "" {
 		return nil, ErrUnavailable
 	}
@@ -32,7 +33,11 @@ func Open(dataRoot string) (Store, error) {
 	if err != nil || !info.IsDir() {
 		return nil, ErrUnavailable
 	}
-	return &dpapiStore{path: filepath.Join(dataRoot, blobFileName)}, nil
+	name := blobFileName
+	if service != legacyService {
+		name = "credentials." + service + ".json"
+	}
+	return &dpapiStore{path: filepath.Join(dataRoot, name)}, nil
 }
 
 type dpapiStore struct {

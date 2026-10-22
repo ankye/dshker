@@ -138,9 +138,21 @@ async function resolveCore(appRoot, target) {
 }
 
 /** Runs one core command to completion and returns what the terminal saw. */
+export function smokeCoreEnvironment(state, inherited = process.env) {
+  if (!path.isAbsolute(state)) throw new Error('Explicit absolute smoke state required')
+  return {
+    ...inherited,
+    DSHKER_SECRET_NAMESPACE: `smoke-${createHash('sha256').update(state).digest('hex')}`
+  }
+}
+
 function runCore(executable, arguments_, timeoutMs) {
   return new Promise((resolve) => {
-    const child = spawn(executable, arguments_, { stdio: ['ignore', 'pipe', 'pipe'] })
+    const stateIndex = arguments_.indexOf('--state')
+    const child = spawn(executable, arguments_, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      ...(stateIndex >= 0 ? { env: smokeCoreEnvironment(arguments_[stateIndex + 1]) } : {})
+    })
     const stdout = []
     const stderr = []
     const timer = setTimeout(() => {
@@ -168,7 +180,8 @@ function runCore(executable, arguments_, timeoutMs) {
 /** Starts `serve` and waits for the readiness line it prints once it listens. */
 async function startServing(executable, state, timeoutMs) {
   const child = spawn(executable, ['serve', '--state', state], {
-    stdio: ['ignore', 'pipe', 'pipe']
+    stdio: ['ignore', 'pipe', 'pipe'],
+    env: smokeCoreEnvironment(state)
   })
   let buffered = ''
   const readiness = await new Promise((resolve) => {

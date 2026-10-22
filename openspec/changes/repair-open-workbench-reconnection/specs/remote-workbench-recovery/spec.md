@@ -873,3 +873,53 @@ permanently showing an empty snapshot and a historical busy hint.
 - **THEN** readback continues under the exact accepted identity until actual state
   is known or authority ends, without dispatching another connection
 - **AND** historical busy is cleared only for the matching pair and actual state
+
+
+### Requirement: Test distributions cannot use formal user state
+
+A test or development Launcher SHALL use a distinct application identity and an
+explicit absolute profile root disjoint from formal user state. Profile
+selection SHALL precede the single-instance lock, bootstrap, credential access
+and core startup. Stable distributions SHALL preserve existing formal account,
+network, device, pairing, registered-root and SSH identities.
+
+#### Scenario: Start a test build without a safe profile
+
+- **WHEN** a test build has no explicit root, or the root is relative, linked or
+  conflicts with formal state
+- **THEN** startup fails explicitly before accessing formal configuration
+- **AND** no formal owner, bootstrap, credentials or records are created or changed
+
+#### Scenario: Run test and formal applications together
+
+- **WHEN** a test build has a valid independent profile and a formal build runs
+- **THEN** their locks, native homes, settings, catalogs and runtime owners are independent
+- **AND** test installation and shutdown cannot replace or terminate the formal application
+
+### Requirement: Runtime-owner refusal does not disable unrelated core services
+
+Both desktop and headless cores SHALL retain the exact runtime-owner refusal for
+runtime operations while continuing to serve unrelated catalog, account,
+credential, SSH and device transport operations. An unavailable runtime SHALL
+NOT be represented as an empty successful state or replaced by another owner.
+
+#### Scenario: Existing ownership cannot be admitted
+
+- **WHEN** a runtime-owner record is incompatible, corrupt, unreachable or dead
+- **THEN** core version, registered-root, catalog and remote-computer operations remain usable
+- **AND** runtime start, stop, status, console and binding return the original typed refusal
+- **AND** the refused record and any existing owner remain unchanged
+
+#### Scenario: Close the formal application normally
+
+- **WHEN** its actual core is completing the documented broker and owner cleanup
+- **THEN** the shell allows that bounded cleanup before forced termination
+- **AND** successful normal shutdown joins its owner and removes its own record
+
+#### Scenario: Recover this explicitly authorized abandoned record
+
+- **WHEN** the operator has securely backed up formal records, closed the application,
+  verified the old owner is absent and verified no managed DSH child remains
+- **THEN** only that abandoned runtime record may be quarantined for this incident
+- **AND** restored sign-in, original pairing and SSH records are independently read back
+- **AND** no automatic abandoned-owner replacement policy is introduced

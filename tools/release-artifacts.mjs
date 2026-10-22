@@ -16,6 +16,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
+import { distributionChannel, distributionIdentity } from './distribution-channel.mjs'
 
 const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -289,10 +290,13 @@ export async function generate(args) {
   const { artifacts, staleArtifacts } = await listTopLevelArtifacts(releaseDir, packageJson.version)
   if (artifacts.length === 0) throw new Error(`No release artifacts found in ${args.releaseDir}`)
 
+  const channel = distributionChannel()
+  const identity = distributionIdentity(packageJson, channel)
   const manifest = {
     schemaVersion: 1,
-    appId: packageJson.build?.appId || packageJson.name,
-    productName: packageJson.build?.productName || packageJson.name,
+    appId: identity.appId,
+    productName: identity.productName,
+    distributionChannel: channel,
     version: packageJson.version,
     packageName: packageJson.name,
     buildMode: args.mode,
@@ -344,16 +348,20 @@ export async function verify(args) {
     manifest.artifacts.map((artifact) => [artifact.relativePath, artifact])
   )
   const issues = []
+  const channel = manifest.distributionChannel
+  const identity = distributionIdentity(packageJson, channel === 'test' ? 'test' : 'stable')
+  if (channel !== 'stable' && channel !== 'test')
+    issues.push('Manifest distribution channel is invalid')
 
   if (manifest.version !== packageJson.version) {
     issues.push(
       `Manifest version ${String(manifest.version)} does not match package version ${packageJson.version}`
     )
   }
-  if (manifest.appId !== (packageJson.build?.appId || packageJson.name)) {
+  if (manifest.appId !== identity.appId) {
     issues.push('Manifest appId does not match package identity')
   }
-  if (manifest.productName !== (packageJson.build?.productName || packageJson.name)) {
+  if (manifest.productName !== identity.productName) {
     issues.push('Manifest productName does not match package identity')
   }
   if (manifest.packageName !== packageJson.name) {
