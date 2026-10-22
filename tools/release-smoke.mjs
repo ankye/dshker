@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { fileURLToPath } from 'node:url'
 import { sha256NodeHeaders } from './node-runtime-integrity.mjs'
 import { NODE_HEADERS_ARTIFACT } from './prepare-runtime.mjs'
+import { scanPackagedContent, writePackagedContentEvidence } from './packaged-content.mjs'
 
 const execFileAsync = promisify(execFile)
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -439,8 +440,10 @@ async function main() {
   const manifest = await readJson(manifestPath)
   const checksumsExist = await exists(checksumsPath)
   const executable = await firstExisting(executableCandidates(releaseDir, manifest))
+  const productionContent = await scanPackagedContent(releaseDir, manifest)
+  await writePackagedContentEvidence(productionContent)
   const launch =
-    args.launch && executable
+    args.launch && executable && productionContent.ok
       ? await launchSmoke(executable, args.launchTimeoutMs, releaseDir)
       : undefined
   const launchPayload = parseLaunchPayload(launch)
@@ -454,6 +457,7 @@ async function main() {
     unpackedExecutable: Boolean(executable),
     peerHelperIntegrity: await peerHelperIntegrityHolds(releaseDir, manifest),
     bundledRuntime: await bundledRuntimeHolds(releaseDir, manifest),
+    productionContent: productionContent.ok,
     launchIdentityMatchesManifest: launchPayloadMatchesManifest(
       launchPayload,
       manifest,
@@ -475,6 +479,7 @@ async function main() {
     executable,
     checks,
     failureStages,
+    productionContent,
     launch,
     launchPayload
   }

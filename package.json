@@ -65,6 +65,7 @@
     "performance:check": "node tools/performance-check.mjs --mode release-dry-run --json",
     "release:metadata": "node tools/release-artifacts.mjs --release-dir release",
     "release:verify": "node tools/release-artifacts.mjs --release-dir release --verify",
+    "release:content": "node tools/packaged-content.mjs --release-dir release --json",
     "release:smoke": "node tools/release-smoke.mjs --release-dir release --launch --json",
     "release:readiness": "node tools/release-readiness.mjs --json",
     "release:dry-run": "npm run release:readiness"
@@ -84,6 +85,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron/asar": "3.4.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.3",
     "@types/yauzl": "^3.4.0",
@@ -121,7 +123,13 @@
     "files": [
       "out/**/*",
       "package.json",
-      "!**/*.map"
+      "!**/*.map",
+      "!**/*.test.*",
+      "!**/*.spec.*",
+      "!**/*.e2e.*",
+      "!**/{test,spec,e2e}.*",
+      "!**/{test,spec,e2e}[-_]*",
+      "!**/{test,tests,spec,specs,e2e,testing,__tests__,test-support,test_support,testsupport,test-utils,test_utils,test-helpers,test_helpers,test-data,test_data,mock,mocks,fixture,fixtures}/**"
     ],
     "extraResources": [
       {

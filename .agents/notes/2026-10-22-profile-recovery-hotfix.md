@@ -79,3 +79,35 @@ real-helper runs cover the new opt-in cases. One previous unrestricted parallel
 run exceeded the unchanged 30-second Git-operation test budget; its raw failure
 is retained. The rerun constrained worker concurrency without changing any
 test budget. The forbidden worktree-creating version-store file was excluded.
+
+The first packaged-content scan blocked the candidate: dependency collection
+had included sixteen foundation test source files in app.asar. No installer was
+applied. Explicit global archive exclusions removed them in a fresh real
+unpacked build; an executable archive gate must preserve this invariant for
+every native packaging target. Retain the failing scan instead of relabelling
+that candidate as an accepted formal package. An earlier official Node download
+failed because Node fetch did not use the configured proxy; enabling its
+per-process proxy support allowed verified pinned archives without changing
+runtime versions or hashes.
+
+The first branch CI was not a complete pass and was cancelled after preserving
+its native subset logs. Keychain namespace tests passed on both Mac architectures,
+Linux namespace tests passed, and all six runtime-owner refusal combinations
+passed. Real packaging exposed temporary-directory aliases in the shutdown test
+(`/var` versus `/private/var`, and Windows short versus long names); canonicalize
+the created fixture root while retaining exact owner-identity assertions.
+Linux's isolated headless normal-exit failure exposed a private lifetime path
+consulting publicly unsupported autostart status. Freeze isolation at admission
+and keep private retention policy independent of global registration. Real
+headless handoff and disconnect, owner/endpoint removal, state-lock release and
+same-root restart now pass twice per exit mode on Windows. The unchanged
+headless smoke protocol also passes locally. Native CI must rerun the final
+revision; the earlier successful subset does not certify the new full package.
+
+With the native helper rebuilt from the handoff repair, the final local suite
+passes 204 files and 1,995 tests; three existing platform cases remain skipped,
+and the worktree-creating file remains explicitly excluded. The first attempt
+had exercised the earlier staged helper and correctly failed its old headless
+exit behavior; retain that failure and the rebuilt-helper receipt. The final
+archive gate must run after unit tests because its CLI tests write fixture
+reports to the same fixed evidence location.

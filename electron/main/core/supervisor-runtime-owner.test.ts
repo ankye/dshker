@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { chmod, copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  writeFile
+} from 'node:fs/promises'
 import { createHash } from 'node:crypto'
 import { connect, type Socket } from 'node:net'
 import { get } from 'node:http'
@@ -40,7 +49,7 @@ describe.skipIf(!process.env.DSHKER_CORE_BINARY)('real core runtime-owner shutdo
   it('joins its runtime owner after the broker exhausts its existing graceful budget', async () => {
     const source = process.env.DSHKER_CORE_BINARY
     if (!source) throw new Error('DSHKER_CORE_BINARY required')
-    root = await mkdtemp(join(tmpdir(), 'core-owner-shutdown-'))
+    root = await realpath(await mkdtemp(join(tmpdir(), 'core-owner-shutdown-')))
     const target = `${process.platform}-${process.arch}`
     const directory = join(root, 'p2p', target)
     const name = process.platform === 'win32' ? 'dshkerd.exe' : 'dshkerd'

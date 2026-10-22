@@ -1,7 +1,7 @@
 {
   "change": "repair-open-workbench-reconnection: formal/test data isolation and runtime-owner failure containment",
   "risk": "data_critical",
-  "scope_note": "Preserve current formal accounts, device/network/pair/key identities and SSH records while preventing test/dev installations from opening the formal profile. A refused local runtime owner cannot disable catalog, SSH, account or P2P services; its strict refusal and record remain unchanged. This is a persistence/lifecycle hotfix without new UI interaction semantics or layout. Required real packaged and formal public-control checks remain pending until their actual receipts exist; this manifest does not certify native compositor-frame budgets or overnight P2P stability. Local full-suite execution explicitly excludes the pre-existing launcher-version-store.test.ts because it creates Git worktrees forbidden by the user. Publication assembly requires the tagged cross-platform workflow in addition to local source/Windows functional acceptance. Native credential namespacing also changes Keychain/Secret Service provider identities for explicitly isolated profiles; Windows default verify proves real DPAPI only. The platform_acceptance_commands describe additional native release gates and cannot be treated as executed merely because this local manifest validates. The package workflow now includes mandatory native_secrets provider steps on native Linux/macOS runners; those steps have no absent-provider skip. Actual workflow run logs and success remain necessary publication evidence. The real Windows integration command includes TestProductionCoreSecretProfileIsolation for both production core compositions.",
+  "scope_note": "Preserve current formal accounts, device/network/pair/key identities and SSH records while preventing test/dev installations from opening the formal profile. A refused local runtime owner cannot disable catalog, SSH, account or P2P services; its strict refusal and record remain unchanged. This is a persistence/lifecycle hotfix without new UI interaction semantics or layout. Required real packaged and formal public-control checks remain pending until their actual receipts exist; this manifest does not certify native compositor-frame budgets or overnight P2P stability. Local full-suite execution explicitly excludes the pre-existing launcher-version-store.test.ts because it creates Git worktrees forbidden by the user. Publication assembly requires the tagged cross-platform workflow in addition to local source/Windows functional acceptance. Native credential namespacing also changes Keychain/Secret Service provider identities for explicitly isolated profiles; Windows default verify proves real DPAPI only. The platform_acceptance_commands describe additional native release gates and cannot be treated as executed merely because this local manifest validates. The package workflow now includes mandatory native_secrets provider steps on native Linux/macOS runners; those steps have no absent-provider skip. Actual workflow run logs and success remain necessary publication evidence. The real Windows integration command includes TestProductionCoreSecretProfileIsolation for both production core compositions. An actual candidate archive scan found shipped dependency test files before installation; that failed candidate was not accepted. Production file filters and a mandatory per-native-architecture ASAR-content gate now refuse contaminated archives before launch. The fixed artifact receipt is required in addition to source architecture and renderer smoke. A native Linux workflow exposed an isolated private lifetime path that queried unsupported public OS autostart status. The private captured-profile policy now preserves public refusal while acknowledging normal desktop departure; actual same-state serve restart and owner/endpoint removal are mandatory real integration evidence.",
   "production_files": [
     "electron/main/launcher-profile.ts",
     "electron/main/launcher-profile-boundaries.ts",
@@ -36,7 +36,10 @@
     "networking/internal/secret/store_linux.go",
     "networking/internal/secret/secretservice.go",
     "networking/internal/secret/store_other.go",
-    "tools/headless-core-smoke.mjs"
+    "tools/headless-core-smoke.mjs",
+    "tools/packaged-content.mjs",
+    "package.json",
+    "networking/cmd/dshkerd/desktop_attach.go"
   ],
   "changed_metadata": [
     ".github/workflows/package.yml",
@@ -87,7 +90,10 @@
     "tools/headless-core-smoke.test.mjs",
     "networking/integration/secret_profile_isolation_test.go",
     "electron/main/core/catalog-core.test.ts",
-    "electron/main/core/secrets-core.test.ts"
+    "electron/main/core/secrets-core.test.ts",
+    "tools/packaged-content.test.mjs",
+    "networking/cmd/dshkerd/desktop_attach_isolation_test.go",
+    "networking/integration/isolated_headless_handoff_test.go"
   ],
   "live_test_files": [
     "networking/integration/runtime_owner_isolation_test.go",
@@ -103,7 +109,8 @@
     "networking/internal/secret/namespace_darwin_test.go",
     "networking/internal/secret/namespace_linux_test.go",
     "networking/integration/secret_profile_isolation_test.go",
-    "tools/headless-core-smoke.mjs"
+    "tools/headless-core-smoke.mjs",
+    "networking/integration/isolated_headless_handoff_test.go"
   ],
   "state_matrix": [
     {
@@ -150,6 +157,11 @@
       "state": "reset",
       "test": "TestProductionCoreSecretProfileIsolation",
       "asserts": "Real desktop and headless core private-channel reads, writes, overwrite and deletion preserve two independent native credential profile identities at the same data root."
+    },
+    {
+      "state": "reset",
+      "test": "TestIsolatedHeadlessDesktopExitJoinsOwnerAndRestarts",
+      "asserts": "Both handoff and unexpected attached desktop disconnect cause normal production serve exit, remove owner/endpoint, release the exact state lock and admit a fresh real owner on same-state restart."
     }
   ],
   "field_bindings": [
@@ -605,6 +617,102 @@
         "OSAutostartAuthority"
       ],
       "missing_semantics": "A missing/relative smoke state fails; same state produces same namespace, another state differs, inherited identity cannot address stable credentials or global autostart. The real --build smoke command proves the actual production entry."
+    },
+    {
+      "production_file": "tools/packaged-content.mjs",
+      "field": "every native ASAR member is free of test/support/fixture/mock content",
+      "source": "real ASAR member lists with Windows separators normalized and recursively inspected dependency directories",
+      "test": "rejects test, fixture, support and mock files at arbitrary dependency depths",
+      "assertion": "for (const member of forbidden) expect(rejected).toContain(member)",
+      "state": "rejected",
+      "identity_keys": [
+        "archive",
+        "member",
+        "sha256",
+        "distributionChannel",
+        "version",
+        "packageName"
+      ],
+      "missing_semantics": "Any forbidden member, test dependency or unsupported/missing archive/metadata rejects the complete package; another clean archive cannot override failure. Actual release archives must pass the no-mock content command and retain their digest receipt."
+    },
+    {
+      "production_file": "tools/packaged-content.mjs",
+      "field": "package identity is tied to release manifest before acceptance",
+      "source": "actual ASAR root package.json name/version/dshkerDistributionChannel compared with release manifest",
+      "test": "refuses package metadata that disagrees with the release manifest: %j",
+      "assertion": "expect.objectContaining({ code: 'production_content.identity_mismatch' })",
+      "state": "rejected",
+      "identity_keys": ["version", "packageName", "dshkerDistributionChannel", "archive.sha256"],
+      "missing_semantics": "Missing, malformed, differently named, differently versioned or differently channeled archive metadata is refused rather than assigned defaults."
+    },
+    {
+      "production_file": "tools/packaged-content.mjs",
+      "field": "archive header freshness after candidate rebuild",
+      "source": "asar.uncache before every list/read and after scanning the same archive path",
+      "test": "accepts an explicitly matching test channel and reopens an archive rebuilt at the same path",
+      "assertion": "member: 'node_modules/deep/fixture/only.json'",
+      "state": "stale_timeout",
+      "identity_keys": ["archivePath", "archive.sha256", "member"],
+      "missing_semantics": "A rebuilt archive at an identical pathname must be scanned afresh; cached headers cannot conceal newly introduced test content."
+    },
+    {
+      "production_file": "tools/release-smoke.mjs",
+      "field": "content isolation is mandatory before launching a package",
+      "source": "scanPackagedContent real ASAR receipt gates launchSmoke and productionContent output",
+      "test": "makes the release smoke fail productionContent before launching a contaminated package",
+      "assertion": "expect(output.launch).toBeUndefined()",
+      "state": "no_op",
+      "identity_keys": [
+        "archive.sha256",
+        "productionContent.ok",
+        "checks.productionContent",
+        "executable"
+      ],
+      "missing_semantics": "A contaminated package is rejected before execution even if an executable is present, and release smoke cannot report success from renderer checks alone."
+    },
+    {
+      "production_file": "package.json",
+      "field": "packaged production file filters and release content command",
+      "source": "electron-builder build.files excludes tests/fixtures/support and explicitly pinned @electron/asar scanner invoked by release:content",
+      "test": "reads real ASAR contents from every Windows, macOS and Linux unpacked layout",
+      "assertion": "sha256: expect.stringMatching(/^[a-f0-9]{64}$/u)",
+      "state": "success",
+      "identity_keys": [
+        "build.files",
+        "release:content",
+        "version",
+        "distributionChannel",
+        "archive.sha256"
+      ],
+      "missing_semantics": "Source exclusion patterns are verified again against the actual built archive by release:content; fixture-only scanner tests do not substitute for this real package receipt. Generated artifacts are never committed."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/desktop_attach.go",
+      "field": "isolated private process retention policy and authenticated desktop acknowledgement",
+      "source": "immutable isolated profile selection captured at newDesktopAttachment composition; private lifetime no longer consults unsupported public OS registration",
+      "test": "TestIsolatedDesktopLifetimeDoesNotInspectGlobalAutostart",
+      "assertion": "private isolated lifetime inspected global autostart",
+      "state": "no_op",
+      "identity_keys": ["attachment.peer", "attachment.isolated", "state", "stop", "handoff"],
+      "missing_semantics": "Unattached or malformed handoff remains refused. The exact attached peer receives acknowledgement before stop; isolated lifetime never inspects global OS autostart. Stable still uses actual OS status and keeps status errors."
+    },
+    {
+      "production_file": "networking/cmd/dshkerd/desktop_attach.go",
+      "field": "normal isolated serve exit, released endpoint/state ownership and fresh restart",
+      "source": "real authenticated production serve core in handoff and disconnected modes using the same explicit installation/state twice",
+      "test": "TestIsolatedHeadlessDesktopExitJoinsOwnerAndRestarts",
+      "assertion": "normal desktop exit left a stale runtime owner: %v",
+      "state": "reset",
+      "identity_keys": [
+        "state",
+        "catalogRoot",
+        "owner.config",
+        "ownerRecord.sha256",
+        "coreEndpoint",
+        "stateOwnerLock",
+        "generation"
+      ],
+      "missing_semantics": "Desktop exit must complete with zero status without a process signal, remove only its own owner/endpoint records and release its state lock. The same state must boot a newly admitted real owner; cached/dead owner records cannot count as recovery."
     }
   ],
   "real_commands": [
@@ -613,7 +721,7 @@
       "no_mock": true
     },
     {
-      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; Set-Location networking; & go test -json -race ./integration -run '^Test(RuntimeOwnerRefusalDoesNotDisableCoreServices|ProductionCoreSecretProfileIsolation)$' -count=1 -timeout=120s *> (Join-Path $r 'manifest-owner-isolation.jsonl'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-owner-isolation.jsonl') -Tail 8; exit $c\"",
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; Set-Location networking; & go test -json -race ./integration -run '^Test(RuntimeOwnerRefusalDoesNotDisableCoreServices|ProductionCoreSecretProfileIsolation|IsolatedHeadlessDesktopExitJoinsOwnerAndRestarts)$' -count=1 -timeout=120s *> (Join-Path $r 'manifest-owner-isolation.jsonl'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-owner-isolation.jsonl') -Tail 8; exit $c\"",
       "no_mock": true
     },
     {
@@ -625,7 +733,7 @@
       "no_mock": true
     },
     {
-      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; $env:DSHKER_DISTRIBUTION_CHANNEL='stable'; & node tools/release-artifacts.mjs --release-dir release --verify; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & node tools/release-smoke.mjs --release-dir release --launch --json *> (Join-Path $r 'manifest-package-smoke.log'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-package-smoke.log') -Tail 5; exit $c\"",
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; $env:DSHKER_DISTRIBUTION_CHANNEL='stable'; & node tools/release-artifacts.mjs --release-dir release --verify; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & npm run release:content; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & node tools/release-smoke.mjs --release-dir release --launch --json *> (Join-Path $r 'manifest-package-smoke.log'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'manifest-package-smoke.log') -Tail 5; exit $c\"",
       "no_mock": true
     },
     {
@@ -657,6 +765,9 @@
     },
     {
       "artifact": ".run/headless-core/latest.json"
+    },
+    {
+      "artifact": ".run/packaged-content/verification.json"
     }
   ],
   "platform_acceptance_commands": [

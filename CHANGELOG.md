@@ -8,14 +8,14 @@
 
 - **测试版与正式版数据隔离。** 测试包使用独立应用和安装器身份，启动必须指定独立测试目录；缺失或冲突时明确拒绝。正式版继续使用现有账号、网络、配对、SSH 电脑和已登记目录，不从测试版导入配置。
 - **运行时故障不再拖垮全部连接。** 本地 DSH 运行身份异常时单独报告真实原因，账户、配置、SSH 与设备网络服务继续工作；SSH 核心不可用也不再误报成“无法保存远程电脑记录”。
-- **正常退出完成核心清理。** Windows 退出会等待既有的代理和运行时清理流程完成，避免过早强停核心留下运行身份记录。
+- **正常退出完成核心清理。** Windows 退出会等待既有的代理和运行时清理流程完成，避免过早强停核心留下运行身份记录；安装器检测到运行进程时会等待正常退出，不再强杀进程。
 - **已知限制。** 安装包仍未签名，需手动确认安装；Mac↔Windows 双向八小时及最终原生界面逐帧验收仍未完成。无法验证的旧运行身份仍明确拒绝，不会静默删除或接管 DSH。
 
 ### English (en-US)
 
 - **Separate test and stable data.** Test packages have a distinct application and installer identity and require an explicit independent test directory. Missing or conflicting roots fail explicitly. Stable packages retain existing accounts, networks, pairings, SSH computers and registered roots without importing test configuration.
 - **Contain runtime failures.** A local DSH owner refusal reports its actual cause while account, configuration, SSH and device-network services remain available. An unavailable SSH core no longer appears as a failed computer-record save.
-- **Finish cleanup on normal exit.** Windows allows the existing broker and runtime cleanup to complete before terminating the core, avoiding premature termination that leaves ownership records behind.
+- **Finish cleanup on normal exit.** Windows allows the existing broker and runtime cleanup to complete before terminating the core, avoiding premature termination that leaves ownership records behind. The installer waits for normal Quit when processes are running instead of killing them.
 - **Known limitations.** Installers remain unsigned and require manual confirmation. Bidirectional eight-hour Mac↔Windows and final native pixel-frame acceptance remain incomplete. Unverified old ownership is still refused without silently deleting records or adopting DSH.
 
 ## 0.1.95 — 2026-10-21

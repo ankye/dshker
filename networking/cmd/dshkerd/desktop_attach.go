@@ -24,11 +24,30 @@ type desktopAttachment struct {
 	state     string
 	stop      context.CancelFunc
 	autostart core.Autostart
+	isolated  bool
 	handoff   bool
 }
 
 func newDesktopAttachment(host *helper.Host, fallback helper.Main, state string, stop context.CancelFunc, autostart core.Autostart) *desktopAttachment {
-	return &desktopAttachment{host: host, fallback: fallback, state: state, stop: stop, autostart: autostart}
+	return &desktopAttachment{
+		host: host, fallback: fallback, state: state, stop: stop,
+		autostart: autostart, isolated: isolatedProfile(),
+	}
+}
+
+// Retention is a private process-lifetime policy, distinct from the public OS
+// registration view. An isolated profile cannot install the shared system job,
+// so its core belongs to the attached desktop and must end when it leaves.
+// Stable still reads the actual registration and preserves every status error.
+func (attachment *desktopAttachment) retainedWithoutDesktop(ctx context.Context, authority core.Autostart) (bool, error) {
+	if attachment.isolated {
+		return false, nil
+	}
+	if authority == nil {
+		return false, errors.New("p2p.invalid_operation")
+	}
+	view, err := authority.Status(ctx)
+	return view.Installed, err
 }
 
 func (attachment *desktopAttachment) handlerFor(peer *localrpc.Peer, server *core.Serve) localrpc.Handler {
@@ -57,14 +76,14 @@ func (attachment *desktopAttachment) handlerFor(peer *localrpc.Peer, server *cor
 			}
 			attachment.mu.Lock()
 			defer attachment.mu.Unlock()
-			if attachment.peer != peer || !filepath.IsAbs(attachment.state) || attachment.stop == nil || server.Autostart == nil {
+			if attachment.peer != peer || !filepath.IsAbs(attachment.state) || attachment.stop == nil {
 				return nil, errors.New("p2p.invalid_operation")
 			}
-			view, err := server.Autostart.Status(ctx)
+			retained, err := attachment.retainedWithoutDesktop(ctx, server.Autostart)
 			if err != nil {
 				return nil, err
 			}
-			if view.Installed {
+			if retained {
 				return nil, errors.New("p2p.autostart_conflict")
 			}
 			// Closing the attached socket acknowledges the response and ends
@@ -89,11 +108,11 @@ func (attachment *desktopAttachment) disconnected(peer *localrpc.Peer) {
 		attachment.host.BindMain(attachment.fallback)
 	}
 	attachment.mu.Unlock()
-	if wasAttached && !stop && attachment.autostart != nil {
+	if wasAttached && !stop {
 		// A GUI can crash without sending desktop_handoff. With autostart off,
 		// retaining that detached headless owner would block the next GUI from
 		// acquiring the state, so exit when the last desktop disappears.
-		if status, err := attachment.autostart.Status(context.Background()); err == nil && !status.Installed {
+		if retained, err := attachment.retainedWithoutDesktop(context.Background(), attachment.autostart); err == nil && !retained {
 			stop = true
 		}
 	}

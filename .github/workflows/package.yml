@@ -103,7 +103,7 @@ jobs:
 
       - name: Verify real runtime-owner refusal compositions
         working-directory: networking
-        run: go test -race ./integration -run TestRuntimeOwnerRefusalDoesNotDisableCoreServices -count=1 -v
+        run: go test -race ./integration -run '^(TestRuntimeOwnerRefusalDoesNotDisableCoreServices|TestIsolatedHeadlessDesktopExitJoinsOwnerAndRestarts)$' -count=1 -v
 
   package:
     name: ${{ matrix.name }}
@@ -250,6 +250,9 @@ jobs:
       - name: Verify generated metadata
         run: npm run release:verify
 
+      - name: Verify packaged production content
+        run: npm run release:content
+
       - name: Verify packaged core profile admission and normal cleanup
         if: ${{ !matrix.smokeSkip }}
         shell: pwsh
@@ -284,6 +287,7 @@ jobs:
             release/ci-build.log
             release/release-smoke.log
             release/release-smoke-launch.trace
+            .run/packaged-content/verification.json
           if-no-files-found: warn
           retention-days: 14
 
