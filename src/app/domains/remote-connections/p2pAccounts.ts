@@ -45,6 +45,8 @@ export class P2PAccountsDomain {
   readonly #retryAfterSession = new Set<string>()
   /** Explicit logout is the only state that must not be reopened by a session event. */
   readonly #explicitSignOut = new Set<string>()
+  /** Teardown fences authentication replies as well as the reads they may start. */
+  #lifetimeRevision = 0
   constructor(private readonly management: P2PManagementDomain) {}
 
   state(serviceId: string): P2PAccountState {
@@ -149,8 +151,26 @@ export class P2PAccountsDomain {
 
   async login(serviceId: string, username: string, password: string): Promise<void> {
     if (this.management.busy(serviceId)) return
+    const lifetimeRevision = this.#lifetimeRevision
     const result = await this.management.run('login', { serviceId, username, password })
-    if (!result.ok) return
+    if (this.#lifetimeRevision !== lifetimeRevision) return
+    if (!result.ok) {
+      // A committed authentication can outlive its IPC reply. Main may then
+      // refuse a second credential submission because it already owns that
+      // session, while this view still has the prior signed-out projection.
+      // Neither refusal proves a user: confirm once through the ordinary
+      // server-backed read, fenced from every older read and later sign-out.
+      if (
+        result.code === 'p2p.user_already_logged_in' ||
+        p2pRefusalKind(result.code) === 'unconfirmed'
+      ) {
+        this.#invalidateSessionRead(serviceId)
+        this.#explicitSignOut.delete(serviceId)
+        this.#retryAfterSession.add(serviceId)
+        await this.currentUser(serviceId)
+      }
+      return
+    }
     this.#invalidateSessionRead(serviceId)
     this.#explicitSignOut.delete(serviceId)
     this.#retryAfterSession.delete(serviceId)
@@ -345,6 +365,7 @@ export class P2PAccountsDomain {
 
   /** Releases the subscription; used by tests and any future shell teardown. */
   stop(): void {
+    this.#lifetimeRevision += 1
     this.#unsubscribe?.()
     this.#unsubscribe = undefined
     this.#sessionUnsubscribe?.()

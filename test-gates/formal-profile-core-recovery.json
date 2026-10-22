@@ -1,7 +1,7 @@
 {
   "change": "repair-open-workbench-reconnection: formal/test data isolation and runtime-owner failure containment",
   "risk": "data_critical",
-  "scope_note": "Preserve current formal accounts, device/network/pair/key identities and SSH records while preventing test/dev installations from opening the formal profile. A refused local runtime owner cannot disable catalog, SSH, account or P2P services; its strict refusal and record remain unchanged. This is a persistence/lifecycle hotfix without new UI interaction semantics or layout. Required real packaged and formal public-control checks remain pending until their actual receipts exist; this manifest does not certify native compositor-frame budgets or overnight P2P stability. Local full-suite execution explicitly excludes the pre-existing launcher-version-store.test.ts because it creates Git worktrees forbidden by the user. Publication assembly requires the tagged cross-platform workflow in addition to local source/Windows functional acceptance. Native credential namespacing also changes Keychain/Secret Service provider identities for explicitly isolated profiles; Windows default verify proves real DPAPI only. The platform_acceptance_commands describe additional native release gates and cannot be treated as executed merely because this local manifest validates. The package workflow now includes mandatory native_secrets provider steps on native Linux/macOS runners; those steps have no absent-provider skip. Actual workflow run logs and success remain necessary publication evidence. The real Windows integration command includes TestProductionCoreSecretProfileIsolation for both production core compositions. An actual candidate archive scan found shipped dependency test files before installation; that failed candidate was not accepted. Production file filters and a mandatory per-native-architecture ASAR-content gate now refuse contaminated archives before launch. The fixed artifact receipt is required in addition to source architecture and renderer smoke. A native Linux workflow exposed an isolated private lifetime path that queried unsupported public OS autostart status. The private captured-profile policy now preserves public refusal while acknowledging normal desktop departure; actual same-state serve restart and owner/endpoint removal are mandatory real integration evidence.",
+  "scope_note": "Preserve current formal accounts, device/network/pair/key identities and SSH records while preventing test/dev installations from opening the formal profile. A refused local runtime owner cannot disable catalog, SSH, account or P2P services; its strict refusal and record remain unchanged. This is a persistence/lifecycle hotfix without new UI interaction semantics or layout. Required real packaged and formal public-control checks remain pending until their actual receipts exist; this manifest does not certify native compositor-frame budgets or overnight P2P stability. Local full-suite execution explicitly excludes the pre-existing launcher-version-store.test.ts because it creates Git worktrees forbidden by the user. Publication assembly requires the tagged cross-platform workflow in addition to local source/Windows functional acceptance. Native credential namespacing also changes Keychain/Secret Service provider identities for explicitly isolated profiles; Windows default verify proves real DPAPI only. The platform_acceptance_commands describe additional native release gates and cannot be treated as executed merely because this local manifest validates. The package workflow now includes mandatory native_secrets provider steps on native Linux/macOS runners; those steps have no absent-provider skip. Actual workflow run logs and success remain necessary publication evidence. The real Windows integration command includes TestProductionCoreSecretProfileIsolation for both production core compositions. An actual candidate archive scan found shipped dependency test files before installation; that failed candidate was not accepted. Production file filters and a mandatory per-native-architecture ASAR-content gate now refuse contaminated archives before launch. The fixed artifact receipt is required in addition to source architecture and renderer smoke. A native Linux workflow exposed an isolated private lifetime path that queried unsupported public OS autostart status. The private captured-profile policy now preserves public refusal while acknowledging normal desktop departure; actual same-state serve restart and owner/endpoint removal are mandatory real integration evidence. D41 closes the confirmed committed-login/readback gap: exact already-authenticated or unconfirmed results request fresh authority, never infer a user or retry passwords. Original reply loss is not claimed as causally proven. The user manually confirmed login, SSH and LAN all working and then requested Git publication; subsequent observation must preserve existing connections without GUI inputs.",
   "production_files": [
     "electron/main/launcher-profile.ts",
     "electron/main/launcher-profile-boundaries.ts",
@@ -39,7 +39,8 @@
     "tools/headless-core-smoke.mjs",
     "tools/packaged-content.mjs",
     "package.json",
-    "networking/cmd/dshkerd/desktop_attach.go"
+    "networking/cmd/dshkerd/desktop_attach.go",
+    "src/app/domains/remote-connections/p2pAccounts.ts"
   ],
   "changed_metadata": [
     ".github/workflows/package.yml",
@@ -93,7 +94,8 @@
     "electron/main/core/secrets-core.test.ts",
     "tools/packaged-content.test.mjs",
     "networking/cmd/dshkerd/desktop_attach_isolation_test.go",
-    "networking/integration/isolated_headless_handoff_test.go"
+    "networking/integration/isolated_headless_handoff_test.go",
+    "src/app/domains/remote-connections/p2pAccounts.login-recovery.test.ts"
   ],
   "live_test_files": [
     "networking/integration/runtime_owner_isolation_test.go",
@@ -713,6 +715,28 @@
         "generation"
       ],
       "missing_semantics": "Desktop exit must complete with zero status without a process signal, remove only its own owner/endpoint records and release its state lock. The same state must boot a newly admitted real owner; cached/dead owner records cannot count as recovery."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "user/sessionStatus and lifetime/session revision",
+      "source": "existing server-backed currentUser after committed but unconfirmed authentication",
+      "test": "reads the authenticated owner after a committed login loses its reply",
+      "assertion": "expect(f.accounts.sessionStatus(serviceId)).toBe('signedIn')",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "lifetimeRevision", "sessionRevision"],
+      "missing_semantics": "No identity is inferred from a refusal, submitted credentials or historical state. Authoritative refusal stays signed out; transient read stays unknown; teardown and late logout results cannot revive authority.",
+      "test_file": "src/app/domains/remote-connections/p2pAccounts.login-recovery.test.ts"
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "unknown session retains existing main authority",
+      "source": "transient currentUser failure after committed authentication",
+      "test": "keeps a lost write unknown when the subsequent read is transiently unavailable",
+      "assertion": "expect(f.owner.hasSession(serviceId)).toBe(true)",
+      "state": "stale_timeout",
+      "identity_keys": ["serviceId", "userId", "sessionStatus"],
+      "missing_semantics": "A read failure does not delete durable credentials or re-send the password.",
+      "test_file": "src/app/domains/remote-connections/p2pAccounts.login-recovery.test.ts"
     }
   ],
   "real_commands": [
@@ -737,7 +761,7 @@
       "no_mock": true
     },
     {
-      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; if(-not $env:DSHKER_FORMAL_UI_PORT -or -not $env:DSHKER_FORMAL_UI_ARTIFACT_ROOT){throw 'Explicit installed formal CDP port and existing private D-drive artifact root required'}; & node tools/tests/formal-recovery-ui.mjs *> (Join-Path $r 'formal-ui-summary.jsonl'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'formal-ui-summary.jsonl'); exit $c\"",
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/hotfix-0.1.96'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; if(-not $env:DSHKER_FORMAL_UI_PORT -or -not $env:DSHKER_FORMAL_UI_ARTIFACT_ROOT){throw 'Explicit installed formal CDP port and existing private D-drive artifact root required'}; & node tools/tests/formal-recovery-ui.mjs --observe-existing *> (Join-Path $r 'formal-ui-summary.jsonl'); $c=$LASTEXITCODE; Get-Content -LiteralPath (Join-Path $r 'formal-ui-summary.jsonl'); exit $c\"",
       "no_mock": true
     }
   ],

@@ -1560,3 +1560,20 @@ sign-in, its existing SSH computer and original LAN/P2P computer with loaded
 workbench content. Source gates, independent review, exact native package and
 same-source CI are required. Preserve earlier native frame and eight-hour
 limitations; this hotfix is not acceptance of those unrelated long-duration gates.
+
+### D41 — Reconcile a committed login whose reply was not confirmed
+
+Formal diagnosis established that the original session expired, then the user's
+new login succeeded and persisted a valid session for the original account.
+The renderer still offered sign-in; a repeated submission received the main
+owner's `p2p.user_already_logged_in`. The exact cause of the first unaccepted
+reply was not captured and is not inferred from that symptom.
+
+A login result classified as unconfirmed, or that exact already-signed-in
+refusal, must initiate one normal server-backed current-user read. Neither
+refusal itself proves an identity or successful authentication. A successful
+read updates the existing shared account projection; authoritative sign-out
+and transient/unknown results preserve their normal semantics. Do not resend
+passwords, delete credentials, log out, select networks or change pairings.
+Revision, stop, service-switch and explicit sign-out fences apply to the login
+reply and the recovery read so late work cannot restore abandoned authority.

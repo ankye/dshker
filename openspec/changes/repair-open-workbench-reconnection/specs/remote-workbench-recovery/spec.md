@@ -923,3 +923,27 @@ NOT be represented as an empty successful state or replaced by another owner.
 - **THEN** only that abandoned runtime record may be quarantined for this incident
 - **AND** restored sign-in, original pairing and SSH records are independently read back
 - **AND** no automatic abandoned-owner replacement policy is introduced
+
+### Requirement: Unconfirmed login results reconcile through current authority
+
+The shared account state MUST confirm an unconfirmed login result or an exact
+already-signed-in refusal through one fresh current-user read. It MUST NOT infer
+the signed-in user from a submitted username, local error or historical record.
+
+#### Scenario: Authentication committed before its reply was lost
+
+- **WHEN** main has persisted the original account's valid session but the login result is unconfirmed
+- **THEN** one fresh current-user read confirms the actual account for every shared status view
+- **AND** no password retry, credential deletion, network change or pairing change occurs
+
+#### Scenario: Repeat submission meets an existing valid session
+
+- **WHEN** main refuses the submission with `p2p.user_already_logged_in`
+- **THEN** the renderer reads current authority instead of leaving the signed-out projection stuck
+- **AND** only a successful read can publish a signed-in user
+
+#### Scenario: Recovery loses authority or becomes stale
+
+- **WHEN** the read is refused, unavailable, superseded by sign-out, stopped or switched away
+- **THEN** the normal signed-out, unknown or stale-result semantics remain in force
+- **AND** a late login or read cannot restore an abandoned account projection

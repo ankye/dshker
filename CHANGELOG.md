@@ -6,6 +6,7 @@
 
 ### 简体中文 (zh-CN)
 
+- **登录成功后自动同步状态。** 登录结果未确认或提示“已经登录”时，重新向服务器确认当前账号，再统一更新界面；不再要求反复输入密码，不改动原账号、配对和 SSH 记录。
 - **测试版与正式版数据隔离。** 测试包使用独立应用和安装器身份，启动必须指定独立测试目录；缺失或冲突时明确拒绝。正式版继续使用现有账号、网络、配对、SSH 电脑和已登记目录，不从测试版导入配置。
 - **运行时故障不再拖垮全部连接。** 本地 DSH 运行身份异常时单独报告真实原因，账户、配置、SSH 与设备网络服务继续工作；SSH 核心不可用也不再误报成“无法保存远程电脑记录”。
 - **正常退出完成核心清理。** Windows 退出会等待既有的代理和运行时清理流程完成，避免过早强停核心留下运行身份记录；安装器检测到运行进程时会等待正常退出，不再强杀进程。
@@ -13,6 +14,7 @@
 
 ### English (en-US)
 
+- **Reconcile a completed sign-in.** An unconfirmed login result or an already-signed-in refusal now reads the current account from the server before updating the shared UI. Repeated password entry is unnecessary, and existing accounts, pairings and SSH records remain intact.
 - **Separate test and stable data.** Test packages have a distinct application and installer identity and require an explicit independent test directory. Missing or conflicting roots fail explicitly. Stable packages retain existing accounts, networks, pairings, SSH computers and registered roots without importing test configuration.
 - **Contain runtime failures.** A local DSH owner refusal reports its actual cause while account, configuration, SSH and device-network services remain available. An unavailable SSH core no longer appears as a failed computer-record save.
 - **Finish cleanup on normal exit.** Windows allows the existing broker and runtime cleanup to complete before terminating the core, avoiding premature termination that leaves ownership records behind. The installer waits for normal Quit when processes are running instead of killing them.

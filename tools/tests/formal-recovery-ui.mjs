@@ -4,7 +4,7 @@
  * Raw DOM, URLs and screenshots stay under an explicitly private D-drive root.
  * This does not certify compositor frames, latency budgets or overnight P2P.
  */
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises'
 import path from 'node:path'
@@ -26,11 +26,12 @@ const selector = (id) => {
 async function inputs() {
   if (process.argv.includes('--help')) {
     console.log(
-      'Installed Windows functional recovery observer. Required: DSHKER_FORMAL_UI_PORT, DSHKER_FORMAL_UI_ARTIFACT_ROOT (existing private D-drive directory). Optional: DSHKER_FORMAL_UI_SSH_LABEL and DSHKER_FORMAL_UI_PEER_LABEL select exact visible titles when ambiguous. The app must be visible and already signed in. No credentials are entered. Public SSH connection/tab state changes are exercised. No compositor or latency acceptance is claimed.'
+      'Installed Windows functional recovery observer. Required: DSHKER_FORMAL_UI_PORT, DSHKER_FORMAL_UI_ARTIFACT_ROOT (existing private D-drive directory). Optional: DSHKER_FORMAL_UI_SSH_LABEL and DSHKER_FORMAL_UI_PEER_LABEL select exact visible titles when ambiguous. DSHKER_FORMAL_UI_REUSE_READY=1 preserves already-ready connections and verifies their actual guest content. The default interactive path requires a visible, signed-in app and exercises public SSH connection/tab controls. --observe-existing reads already-connected SSH and P2P tabs and their real guest DOM without input, focus, navigation or a visibility requirement. This is readback after separately recorded manual-control acceptance. No credentials are entered. No compositor or latency acceptance is claimed.'
     )
     return null
   }
-  if (process.argv.length !== 2) fail('unknown_argument')
+  const observeExisting = process.argv.length === 3 && process.argv[2] === '--observe-existing'
+  if (process.argv.length !== 2 && !observeExisting) fail('unknown_argument')
   if (process.platform !== 'win32') fail('native_windows_required')
   const port = Number(process.env.DSHKER_FORMAL_UI_PORT)
   if (!Number.isInteger(port) || port < 1024 || port > 65535) fail('explicit_port_required')
@@ -49,7 +50,9 @@ async function inputs() {
     output,
     version: pkg.version,
     sshLabel: process.env.DSHKER_FORMAL_UI_SSH_LABEL,
-    peerLabel: process.env.DSHKER_FORMAL_UI_PEER_LABEL
+    peerLabel: process.env.DSHKER_FORMAL_UI_PEER_LABEL,
+    reuseReady: process.env.DSHKER_FORMAL_UI_REUSE_READY === '1',
+    observeExisting
   }
 }
 
@@ -91,8 +94,12 @@ async function connectCdp(url) {
     if (!owner) return
     pending.delete(message.id)
     clearTimeout(owner.timer)
-    if (message.error) owner.reject(new Error(code('cdp_command_failed')))
-    else owner.resolve(message.result)
+    if (message.error) {
+      const error = new Error(code('cdp_command_failed'))
+      error.cdpMethod = owner.method
+      error.cdpCode = message.error.code
+      owner.reject(error)
+    } else owner.resolve(message.result)
   })
   socket.addEventListener('close', () => {
     for (const owner of pending.values()) {
@@ -108,9 +115,11 @@ async function connectCdp(url) {
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           pending.delete(id)
-          reject(new Error(code('cdp_command_timeout')))
+          const error = new Error(code('cdp_command_timeout'))
+          error.cdpMethod = method
+          reject(error)
         }, 45_000)
-        pending.set(id, { resolve, reject, timer })
+        pending.set(id, { resolve, reject, timer, method })
         socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }))
       })
     },
@@ -135,13 +144,15 @@ async function evaluate(client, fn, args = []) {
 }
 
 async function waitFor(client, predicate, args, timeout = 30_000) {
-  const result = await evaluate(
+  let deadline
+  const observation = evaluate(
     client,
     (source, values, budget) =>
       new Promise((resolve) => {
         const predicate = (0, eval)(`(${source})`)
         const deadline = performance.now() + budget
         function sample() {
+          if (document.visibilityState !== 'visible') return resolve({ failed: 'page_not_visible' })
           const result = predicate(...values)
           if (result) return resolve(result)
           if (performance.now() >= deadline) return resolve({ failed: 'condition_timeout' })
@@ -151,6 +162,12 @@ async function waitFor(client, predicate, args, timeout = 30_000) {
       }),
     [predicate.toString(), args, timeout]
   )
+  const result = await Promise.race([
+    observation,
+    new Promise((resolve) => {
+      deadline = setTimeout(() => resolve({ failed: 'condition_timeout' }), timeout)
+    })
+  ]).finally(() => clearTimeout(deadline))
   if (result?.failed) fail(result.failed)
   return result
 }
@@ -264,15 +281,17 @@ function accountState() {
   }
 }
 
-async function capture(client, directory, name, extra) {
+async function capture(client, directory, name, extra, screenshot = true) {
   const dom = await evaluate(client, () => ({
     readyState: document.readyState,
     visibility: document.visibilityState,
     html: document.documentElement.outerHTML
   }))
   await writeFile(path.join(directory, `${name}-dom.json`), JSON.stringify({ dom, extra }, null, 2))
-  const image = await client.send('Page.captureScreenshot', { format: 'png' })
-  await writeFile(path.join(directory, `${name}.png`), Buffer.from(image.data, 'base64'))
+  if (screenshot) {
+    const image = await client.send('Page.captureScreenshot', { format: 'png' })
+    await writeFile(path.join(directory, `${name}.png`), Buffer.from(image.data, 'base64'))
+  }
 }
 
 async function guestObserver(browser, shellId, src) {
@@ -324,6 +343,8 @@ async function guestObserver(browser, shellId, src) {
       flatten: true
     })
     return {
+      targetId: target.targetId,
+      exactUrlMatched: target.url === src,
       send: (method, params) => browser.send(method, params, sessionId),
       close: () => browser.send('Target.detachFromTarget', { sessionId })
     }
@@ -375,12 +396,162 @@ async function verifyWorkbench(shell, browser, shellId, tabId, directory, kind) 
           }
         : null
     }, [])
-    await capture(guest, directory, `${kind}-guest`, loaded)
+    // Electron webview targets do not own a separately capturable native surface.
+    // Preserve their real DOM and capture the visible shell containing the guest.
+    await capture(guest, directory, `${kind}-guest`, loaded, false)
     await capture(shell, directory, `${kind}-shell`, { activeReadyTab: true })
     return { ready: true, actualGuestLoaded: true, interactiveControls: loaded.interactiveControls }
   } finally {
     await guest.close()
   }
+}
+
+// This mode deliberately has no route to the interactive runner or its trace mutations.
+// It reads only DOM rendered by the user's existing real connections.
+async function observeExisting(input) {
+  const runId = randomUUID()
+  const directory = path.join(input.output, runId)
+  await mkdir(directory)
+  assertPrivateDirectory(directory)
+  const summary = {
+    runId,
+    expectedVersion: input.version,
+    kind: 'manual-public-control-readonly-readback',
+    stage: 'connect-cdp',
+    noInputSent: true,
+    publicControlsExercisedByObserver: false,
+    separateManualControlAcceptanceRequired: true,
+    compositorFrameAcceptance: false,
+    latencyAcceptance: false,
+    readbackPassed: false,
+    account: false,
+    ssh: false,
+    lan: false
+  }
+  let shell, browser
+  const guestIdentities = new Set()
+  try {
+    const response = await fetch(`http://127.0.0.1:${input.port}/json/list`)
+    requireCondition(response.ok, 'target_inventory_unavailable')
+    const pages = (await response.json()).filter(
+      (target) =>
+        target.type === 'page' &&
+        target.url?.startsWith('dsh-app://') &&
+        target.webSocketDebuggerUrl
+    )
+    requireCondition(pages.length === 1, 'exact_formal_shell_required')
+    const info = await (await fetch(`http://127.0.0.1:${input.port}/json/version`)).json()
+    requireCondition(info.webSocketDebuggerUrl, 'browser_observation_endpoint_required')
+    shell = await connectCdp(pages[0].webSocketDebuggerUrl)
+    browser = await connectCdp(info.webSocketDebuggerUrl)
+    summary.stage = 'shell-readback'
+    const observed = await evaluate(shell, () => {
+      const text = (s) => document.querySelector(s)?.textContent?.trim() ?? ''
+      return {
+        version: text('.statusbar-facts .statusbar-fact:first-child .statusbar-fact-value'),
+        footer: text('.statusbar-network .statusbar-fact-value'),
+        accountPanel: document.querySelector('[data-testid="p2p-account-panel"]')
+          ? {
+              session: text('[data-testid="p2p-account-session-status"]'),
+              network: text('[data-testid="p2p-network-status"]'),
+              identityPresent: !!text('.p2p-account-identity-name')
+            }
+          : null,
+        tabs: Array.from(
+          document.querySelectorAll(
+            '[data-testid^="runtime-tab-remote:"], [data-testid^="runtime-tab-peer:"]'
+          )
+        ).map((tab) => {
+          const id = tab.dataset.testid.slice('runtime-tab-'.length)
+          const view = document.querySelector(`[data-testid="runtime-webview-${id}"]`)
+          return {
+            id,
+            label: tab.querySelector('.browser-tab-title')?.textContent?.trim() ?? '',
+            ready: tab.closest('.browser-tab')?.dataset.state === 'ready',
+            src: view?.getAttribute('src') ?? null
+          }
+        })
+      }
+    })
+    await capture(shell, directory, 'existing-shell', observed, false)
+    requireCondition(observed.version === input.version, 'exact_version_required')
+    requireCondition(['已登录', 'Signed in'].includes(observed.footer), 'footer_not_signed_in')
+    summary.accountPanelObserved = observed.accountPanel !== null
+    if (observed.accountPanel)
+      requireCondition(
+        observed.accountPanel.session === observed.footer &&
+          observed.accountPanel.network === observed.footer &&
+          observed.accountPanel.identityPresent,
+        'observed_account_state_mismatch'
+      )
+    summary.account = true
+    for (const [kind, prefix, label] of [
+      ['ssh', 'remote:', input.sshLabel],
+      ['lan', 'peer:', input.peerLabel]
+    ]) {
+      summary.stage = `${kind}-existing-readback`
+      const candidates = observed.tabs.filter((tab) => tab.id.startsWith(prefix) && tab.ready)
+      requireCondition(candidates.length > 0, `${kind}_existing_ready_tab_missing`)
+      const tab = chooseObserved(candidates, label, `${kind}_existing`)
+      requireCondition(tab.src, `${kind}_existing_webview_missing`)
+      const guest = await guestObserver(browser, pages[0].id, tab.src)
+      try {
+        requireCondition(guest.exactUrlMatched, `${kind}_existing_guest_url_mismatch`)
+        requireCondition(!guestIdentities.has(guest.targetId), 'distinct_existing_guests_required')
+        guestIdentities.add(guest.targetId)
+        const loaded = await evaluate(guest, () => {
+          const root = document.querySelector('#root, #app')
+          return {
+            readyState: document.readyState,
+            rootPresent: !!root,
+            rootChildren: root?.childElementCount ?? 0,
+            bodyTextLength: document.body?.innerText.trim().length ?? 0,
+            interactiveControls: document.querySelectorAll(
+              'button, input, textarea, select, [role="button"]'
+            ).length,
+            passwordPresent: !!document.querySelector('input[type="password"]')
+          }
+        })
+        await capture(guest, directory, `${kind}-existing-guest`, { tab, loaded }, false)
+        requireCondition(
+          loaded.readyState === 'complete' &&
+            loaded.rootPresent &&
+            loaded.rootChildren > 0 &&
+            loaded.bodyTextLength > 0 &&
+            loaded.interactiveControls > 0 &&
+            !loaded.passwordPresent,
+          `${kind}_existing_guest_not_loaded`
+        )
+        summary[`${kind}Workbench`] = {
+          tabIdentitySha256: createHash('sha256').update(tab.id).digest('hex'),
+          guestIdentitySha256: createHash('sha256').update(guest.targetId).digest('hex'),
+          exactGuestUrlMatched: true,
+          ready: true,
+          actualGuestLoaded: true,
+          interactiveControls: loaded.interactiveControls
+        }
+        summary[kind] = true
+      } finally {
+        await guest.close()
+      }
+    }
+    summary.readbackPassed = true
+    summary.stage = 'complete'
+  } catch (error) {
+    if (typeof error.cdpMethod === 'string') {
+      summary.cdpMethod = error.cdpMethod
+      summary.cdpCode = error.cdpCode
+    }
+    summary.failure = /^test[.]formal_ui_[a-z_]+$/.test(error.message)
+      ? error.message
+      : code('unexpected_diagnostic_failure')
+  } finally {
+    shell?.close()
+    browser?.close()
+    await writeFile(path.join(directory, 'summary.json'), JSON.stringify(summary, null, 2))
+    console.log(JSON.stringify(summary))
+  }
+  if (!summary.readbackPassed) process.exitCode = 1
 }
 
 async function run(input) {
@@ -477,43 +648,48 @@ async function run(input) {
       [row]
     )
     if (current === 'connecting') fail('ssh_preexisting_operation_in_progress')
-    if (current === 'ready') {
-      await click(shell, `${row} .remote-row-actions > button:not([data-testid])`, row)
+    summary.sshReusedReady = input.reuseReady && current === 'ready'
+    let sshTestTrace = []
+    if (!summary.sshReusedReady) {
+      if (current === 'ready') {
+        await click(shell, `${row} .remote-row-actions > button:not([data-testid])`, row)
+        await waitFor(
+          shell,
+          (row) =>
+            document.querySelector(`${row} .remote-status`)?.dataset.state === 'disconnected',
+          [row]
+        )
+      }
+      await click(shell, `${row} ${selector('remote-test-connection')}`, row)
       await waitFor(
         shell,
-        (row) => document.querySelector(`${row} .remote-status`)?.dataset.state === 'disconnected',
+        (row) => {
+          const state = document.querySelector(`${row} .remote-test-status`)?.dataset.state
+          if (state === 'failed') return { failed: 'ssh_test_failed' }
+          return state === 'passed'
+        },
+        [row]
+      )
+      sshTestTrace = await readTrace(shell)
+      requireCondition(
+        sshTestTrace.some((event) => event.states.includes('testing')),
+        'ssh_test_cycle_unobserved'
+      )
+      await click(
+        shell,
+        `${row} .remote-row-actions > button.prototype-button--primary:not([data-testid])`,
+        row
+      )
+      await waitFor(
+        shell,
+        (row) => {
+          const state = document.querySelector(`${row} .remote-status`)?.dataset.state
+          if (state === 'failed') return { failed: 'ssh_connect_failed' }
+          return state === 'ready'
+        },
         [row]
       )
     }
-    await click(shell, `${row} ${selector('remote-test-connection')}`, row)
-    await waitFor(
-      shell,
-      (row) => {
-        const state = document.querySelector(`${row} .remote-test-status`)?.dataset.state
-        if (state === 'failed') return { failed: 'ssh_test_failed' }
-        return state === 'passed'
-      },
-      [row]
-    )
-    const sshTestTrace = await readTrace(shell)
-    requireCondition(
-      sshTestTrace.some((event) => event.states.includes('testing')),
-      'ssh_test_cycle_unobserved'
-    )
-    await click(
-      shell,
-      `${row} .remote-row-actions > button.prototype-button--primary:not([data-testid])`,
-      row
-    )
-    await waitFor(
-      shell,
-      (row) => {
-        const state = document.querySelector(`${row} .remote-status`)?.dataset.state
-        if (state === 'failed') return { failed: 'ssh_connect_failed' }
-        return state === 'ready'
-      },
-      [row]
-    )
     await capture(shell, directory, 'ssh-ready', {
       testTrace: sshTestTrace,
       trace: await readTrace(shell)
@@ -534,27 +710,37 @@ async function run(input) {
     const existing = await evaluate(shell, () =>
       Array.from(document.querySelectorAll('[data-testid^="runtime-tab-peer:"]')).map((node) => ({
         id: node.dataset.testid,
-        label: node.querySelector('.browser-tab-title')?.textContent?.trim() ?? ''
+        label: node.querySelector('.browser-tab-title')?.textContent?.trim() ?? '',
+        ready: node.closest('.browser-tab')?.dataset.state === 'ready'
       }))
     )
-    if (existing.length > 0) {
-      const tab = chooseObserved(existing, input.peerLabel, 'existing_lan')
-      await click(shell, selector(tab.id.replace('runtime-tab-', 'runtime-tab-close-')))
+    const reusable = input.reuseReady ? existing.filter((tab) => tab.ready) : []
+    let peerId
+    summary.lanReusedReady = reusable.length > 0
+    if (summary.lanReusedReady) {
+      const tab = chooseObserved(reusable, input.peerLabel, 'existing_lan')
+      peerId = tab.id.slice('runtime-tab-peer:'.length)
+      await click(shell, selector(tab.id))
+    } else {
+      if (existing.length > 0) {
+        const tab = chooseObserved(existing, input.peerLabel, 'existing_lan')
+        await click(shell, selector(tab.id.replace('runtime-tab-', 'runtime-tab-close-')))
+      }
+      await click(shell, selector('runtime-add-tab'))
+      const peerOptions = await waitFor(shell, () => {
+        const options = Array.from(document.querySelectorAll('[data-testid^="runtime-add-peer-"]'))
+          .filter((node) => !node.disabled)
+          .map((node) => ({
+            id: node.dataset.testid,
+            label: node.querySelector('strong')?.textContent?.trim() ?? ''
+          }))
+        return options.length > 0 ? options : null
+      }, [])
+      const peer = chooseObserved(peerOptions, input.peerLabel, 'lan')
+      peerId = peer.id.slice('runtime-add-peer-'.length)
+      await capture(shell, directory, 'lan-selection', { selected: peer.id })
+      await click(shell, selector(peer.id))
     }
-    await click(shell, selector('runtime-add-tab'))
-    const peerOptions = await waitFor(shell, () => {
-      const options = Array.from(document.querySelectorAll('[data-testid^="runtime-add-peer-"]'))
-        .filter((node) => !node.disabled)
-        .map((node) => ({
-          id: node.dataset.testid,
-          label: node.querySelector('strong')?.textContent?.trim() ?? ''
-        }))
-      return options.length > 0 ? options : null
-    }, [])
-    const peer = chooseObserved(peerOptions, input.peerLabel, 'lan')
-    const peerId = peer.id.slice('runtime-add-peer-'.length)
-    await capture(shell, directory, 'lan-selection', { selected: peer.id })
-    await click(shell, selector(peer.id))
     summary.lanWorkbench = await verifyWorkbench(
       shell,
       browser,
@@ -586,6 +772,10 @@ async function run(input) {
     summary.functionalPassed = true
     summary.stage = 'complete'
   } catch (error) {
+    if (typeof error.cdpMethod === 'string') {
+      summary.cdpMethod = error.cdpMethod
+      summary.cdpCode = error.cdpCode
+    }
     summary.failure = /^test[.]formal_ui_[a-z_]+$/.test(error.message)
       ? error.message
       : code('unexpected_diagnostic_failure')
@@ -607,7 +797,7 @@ async function run(input) {
 
 try {
   const input = await inputs()
-  if (input) await run(input)
+  if (input) await (input.observeExisting ? observeExisting(input) : run(input))
 } catch (error) {
   console.error(
     /^test[.]formal_ui_[a-z_]+$/.test(error.message) ? error.message : code('startup_failed')
