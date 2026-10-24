@@ -26,8 +26,9 @@ type Client struct {
 	close   sync.Once
 }
 
-// Open creates only the first empty owner or reconnects to the exact existing
-// one. A record that is corrupt, incompatible or unreachable is never replaced.
+// Open creates an empty owner or reconnects to the exact existing one. Proven
+// dead, quiescent ownership is archived under both leases before replacement;
+// corrupt, incompatible, active or unconfirmed ownership is never replaced.
 func Open(ctx context.Context, config Config) (*Client, error) {
 	expected, err := configRecord(config)
 	if err != nil {
@@ -53,18 +54,26 @@ func Open(ctx context.Context, config Config) (*Client, error) {
 	path := filepath.Join(directory, recordFileName)
 	record, err := readRecord(path)
 	created := false
+	if err == nil {
+		if !sameConfiguration(record, expected) {
+			return nil, ErrOwnerIdentityMismatch
+		}
+		if record.Process.PID > 0 {
+			recovered, recoveryErr := recoverExitedOwner(startup, directory, expected, record)
+			if recoveryErr != nil {
+				return nil, recoveryErr
+			}
+			if recovered {
+				err = os.ErrNotExist
+			}
+		}
+	}
 	if errors.Is(err, os.ErrNotExist) {
-		record = expected
-		if record.Instance, err = randomHex(16); err != nil {
+		if err := recoverOrphanJournal(startup, directory, expected); err != nil {
 			return nil, err
 		}
-		if record.Token, err = randomHex(32); err != nil {
-			return nil, err
-		}
-		if record.Socket, record.SocketDirectory, err = ownerSocket(directory); err != nil {
-			return nil, err
-		}
-		if err := writeRecord(path, record); err != nil {
+		record, err = createPendingOwner(startup, directory, expected)
+		if err != nil {
 			return nil, err
 		}
 		// The pending record precedes spawn: a creator crash cannot let the next

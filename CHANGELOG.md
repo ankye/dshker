@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.1.97 — 2026-10-25
+
+### 简体中文 (zh-CN)
+
+- **安全恢复失效的本地运行记录。** 新版本为运行所有者持久记录启动与清理证据；确认旧进程已退出且没有未确认的受管运行，或确认操作系统已经重启时，自动保留原始记录并恢复启动。无需反复手动清理已证实失效的记录，原账号、网络、配对和 SSH 电脑保持原样。
+- **退出时结束完整本地运行。** Windows 将本地 DSH 及其后代纳入私有内核作业；正常退出会等待全部清理，所有者异常退出时也由内核结束受管进程树。确证整树已退出后可自动恢复。活跃进程、未知身份、损坏或缺少证据的旧记录仍明确拒绝，不会只凭 PID 消失就接管；旧版记录首次恢复需要明确授权的安全归档。
+- **验证范围。** 本次不代表 Mac↔Windows 八小时连接或原生界面逐帧验收完成；安装包仍未签名。
+
+### English (en-US)
+
+- **Recover provably abandoned local runtime records.** New owners persist launch and cleanup evidence. When the exact owner has exited and no managed runtime remains unconfirmed, or a verified operating-system reboot proves the old processes ended, preserve the original evidence and restore startup automatically. Existing accounts, networks, pairings and SSH computers remain intact.
+- **Finish the entire local runtime on exit.** Windows contains DSH and its descendants in a private kernel job. Normal Quit joins cleanup, and an owner crash also causes kernel termination of that managed tree. Verified whole-tree death permits automatic recovery. Live/unknown processes and corrupt or legacy records without evidence remain refusals; a missing PID alone never permits takeover. First recovery of a legacy record requires explicitly authorized safe archival.
+- **Verification scope.** This does not complete bidirectional eight-hour Mac↔Windows or native pixel-frame acceptance. Installers remain unsigned.
+
 ## 0.1.96 — 2026-10-22
 
 ### 简体中文 (zh-CN)

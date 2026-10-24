@@ -102,3 +102,12 @@ Release. The scope contains runtime-owner failure without weakening owner or
 registered-root admission, preserves the formal profile, and makes test build
 identity/profile selection explicit before state access. Previous eight-hour and
 native-frame acceptance remains incomplete and is not relabeled by this hotfix.
+
+## Authorized abandoned-runtime recovery
+
+The user's 2026-10-25 instruction authorizes secure archival of the verified
+abandoned formal runtime record, restoration of local startup and automatic
+recovery when durable evidence proves the previous runtime tree is gone.
+D42 adds private recovery evidence without borrowing account, pairing or SSH
+authority. Legacy records without that evidence still require explicit incident
+recovery. A live or unproven runtime remains protected.

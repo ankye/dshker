@@ -3,6 +3,7 @@
 package runtimeowner
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -24,11 +25,18 @@ func ownerSocket(string) (string, string, error) {
 }
 
 func validateOwnerEndpoint(record ownerRecord) error {
+	return validateRecoveryEndpoint(record, false)
+}
+
+func validateRecoveryEndpoint(record ownerRecord, allowMissing bool) error {
 	base, err := filepath.EvalSymlinks("/tmp")
 	if err != nil || record.SocketDirectory == "" || filepath.Dir(record.SocketDirectory) != base || !strings.HasPrefix(filepath.Base(record.SocketDirectory), "dshker-runtime-") || record.Socket != filepath.Join(record.SocketDirectory, "peer.sock") {
 		return ErrOwnerRecordInvalid
 	}
 	if err := checkPrivatePath(record.SocketDirectory, true); err != nil {
+		if allowMissing && errors.Is(err, os.ErrNotExist) {
+			return nil // A different kernel boot can remove the old /tmp endpoint.
+		}
 		return ErrOwnerRecordInvalid
 	}
 	return nil

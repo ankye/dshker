@@ -34,7 +34,7 @@ func TestRuntimeOwnerRefusalDoesNotDisableCoreServices(t *testing.T) {
 	must(t, err)
 	must(t, os.WriteFile(other, content, 0o755))
 	for _, mode := range []string{"desktop", "headless"} {
-		for _, failure := range []string{"different-installation", "dead-owner", "corrupt-owner"} {
+		for _, failure := range []string{"different-installation", "legacy-dead-owner", "corrupt-owner"} {
 			t.Run(mode+"/"+failure, func(t *testing.T) {
 				state := stateDirectoryForCLI(t)
 				catalogRoot := filepath.Join(t.TempDir(), "dsh-launcher")
@@ -63,7 +63,7 @@ func TestRuntimeOwnerRefusalDoesNotDisableCoreServices(t *testing.T) {
 						defer cancel()
 						must(t, owner.Shutdown(ctx))
 					})
-				case "dead-owner":
+				case "legacy-dead-owner":
 					raw, err := os.ReadFile(ownerPath)
 					must(t, err)
 					var endpoint struct {
@@ -102,6 +102,11 @@ func TestRuntimeOwnerRefusalDoesNotDisableCoreServices(t *testing.T) {
 						time.Sleep(time.Millisecond)
 					}
 					must(t, owner.Close())
+					// The previous release had no durable child/boot safety journal.
+					// A missing owner PID alone must never authorize its takeover.
+					if err := os.Remove(filepath.Join(state, "runtime-owner", "recovery.json")); err != nil && !os.IsNotExist(err) {
+						t.Fatal(err)
+					}
 				case "corrupt-owner":
 					ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 					must(t, owner.Shutdown(ctx))

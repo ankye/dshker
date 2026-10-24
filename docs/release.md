@@ -41,6 +41,16 @@ and joining its core cleanup. Retained, unverified runtime-owner records are not
 automatically deleted. An explicitly authorized incident recovery must preserve
 a secure backup and prove the old owner and managed child are absent before
 quarantining that record; account, network, pairing and SSH records remain intact.
+New runtime owners also write private durable recovery journals. Automatic
+archival requires exact owner/configuration identity, both ownership leases and
+unchanged records, plus confirmed idle cleanup or a verified changed native OS
+boot identity. New Windows owners additionally use a private non-breakaway
+kill-on-close Global Job Object: verified job-tree death permits same-boot
+recovery, and normal Quit joins every verified job member before record cleanup.
+Unproven same-boot pending/active children, unknown process/boot identity,
+invalid private metadata and legacy records without a journal remain refused.
+The archive retains original bytes without overwriting earlier evidence; no
+account, pairing or SSH store participates in this operation.
 
 `package.json` is the only Launcher version source. Application metadata,
 installer names, release manifests, update comparisons, and the tag gate read

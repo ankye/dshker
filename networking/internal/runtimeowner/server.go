@@ -21,9 +21,10 @@ type ownerServer struct {
 }
 
 type shutdownAttempt struct {
-	pending      int
-	disconnected bool
-	succeeded    bool
+	pending          int
+	disconnected     bool
+	succeeded        bool
+	containedFailure bool
 }
 
 // Run is the private same-binary mode. It owns no account/secret store and has
@@ -68,6 +69,12 @@ func Run(ctx context.Context, config Config) error {
 	if record.Process, err = processIdentityAt(os.Getpid()); err != nil {
 		return err
 	}
+	containment, err := newProcessContainment(record)
+	if err != nil {
+		return err
+	}
+	clean := false
+	defer func() { containment.close(clean) }()
 	listener, err := localrpc.Listen(record.Socket)
 	if err != nil {
 		return ErrOwnerUnavailable
@@ -79,6 +86,11 @@ func Run(ctx context.Context, config Config) error {
 	lifetime, stop := context.WithCancel(ctx)
 	defer stop()
 	local := NewLocal()
+	local.containment = containment
+	local.recovery, err = newActivityJournal(directory, record)
+	if err != nil {
+		return err
+	}
 	server := &ownerServer{local: local, record: record, stop: stop}
 	go func() { <-lifetime.Done(); listener.Close() }()
 	serveErr := localrpc.ServeEndpointWithPeers(lifetime, listener, record.Token, server.handlerFor, server.disconnected)
@@ -94,6 +106,10 @@ func Run(ctx context.Context, config Config) error {
 	if err := removeOwnedRecord(path, record); err != nil {
 		return err
 	}
+	if err := removeRecoveryJournal(filepath.Join(directory, recoveryFileName), local.recovery.value); err != nil {
+		return err
+	}
+	clean = true
 	return serveErr
 }
 
@@ -151,6 +167,11 @@ func (server *ownerServer) handlerFor(peer *localrpc.Peer) localrpc.Handler {
 			}
 			attempt := server.shutdownStarted(peer)
 			if err := server.local.Shutdown(ctx); err != nil {
+				if server.local.containment != nil && server.local.containment.containedExit() {
+					server.mu.Lock()
+					attempt.containedFailure = true
+					server.mu.Unlock()
+				}
 				server.shutdownFinished(peer, attempt, false)
 				return nil, err
 			}
@@ -168,7 +189,7 @@ func (server *ownerServer) disconnected(peer *localrpc.Peer) {
 	closing := false
 	if attempt != nil {
 		attempt.disconnected = true
-		closing = attempt.succeeded
+		closing = attempt.succeeded || attempt.containedFailure
 	}
 	server.mu.Unlock()
 	if closing {
@@ -202,8 +223,8 @@ func (server *ownerServer) shutdownFinished(peer *localrpc.Peer, attempt *shutdo
 	server.mu.Lock()
 	attempt.pending--
 	attempt.succeeded = attempt.succeeded || success
-	closing := attempt.succeeded && attempt.disconnected
-	if attempt.pending == 0 && !attempt.succeeded {
+	closing := (attempt.succeeded || attempt.containedFailure) && attempt.disconnected
+	if attempt.pending == 0 && !attempt.succeeded && !attempt.containedFailure {
 		delete(server.shutdowns, peer)
 	}
 	server.mu.Unlock()

@@ -64,7 +64,7 @@ func TestAttachExistingRequiresExactCapturedContextAndIdentity(t *testing.T) {
 	}
 }
 
-func TestOwnerDeathRefusesReplacementAndRetainsEvidence(t *testing.T) {
+func TestLegacyOwnerDeathRefusesReplacementAndRetainsEvidence(t *testing.T) {
 	config := ownerTestConfig(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -73,6 +73,11 @@ func TestOwnerDeathRefusesReplacementAndRetainsEvidence(t *testing.T) {
 		t.Fatal(err)
 	}
 	identity := client.Identity()
+	// This reproduces an older installation that never published child-death
+	// evidence. Its missing journal must not be interpreted as an empty runtime.
+	if err := os.Remove(filepath.Join(config.StateRoot, ownerDirectory, recoveryFileName)); err != nil {
+		t.Fatal(err)
+	}
 	current, err := processIdentityAt(identity.PID)
 	if err != nil || current.Creation != identity.Creation {
 		t.Fatal("owned test process birth changed before the explicit death case")

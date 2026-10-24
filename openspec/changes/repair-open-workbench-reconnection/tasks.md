@@ -339,3 +339,11 @@ desktop automation. Read-only formal observation and the user's manual control
 acceptance are recorded separately. Publication does not complete the previous
 native-frame, latency or eight-hour acceptance tasks. The Mac installation is
 unchanged.
+
+## 13. Safely recover abandoned runtime ownership
+
+- [x] 13.1 Root/architecture: record D42 and explicit legacy incident authorization; define durable idle/boot evidence, two-lease archival, child uncertainty and unchanged account/pair/SSH boundaries.
+- [x] 13.2 Runtime owner: implement private recovery journal and exact native boot/process evidence, pre-spawn fencing, confirmed cleanup and non-overwriting archival; retain typed refusals for live/unknown/legacy records.
+- [ ] 13.3 QA/reviewer: prove real idle-owner crash/restart, concurrent/no-op/refusal and archival identity, active descendant protection, failed publication and exact account/pair/SSH preservation; pass relevant races and independent review.
+- [x] 13.4 Root: securely back up and quarantine the current legacy record under both leases after normal Quit and independent absence/hash checks, restore real DSH Web readiness and preserve registered records.
+- [ ] 13.5 Root: update bilingual change/user guidance, Agent Note and committed integrity manifest; pass strict OpenSpec/default integrity, relevant full source/build/package checks; install and verify the corrected formal Windows payload. Keep Mac unchanged and publication separate.

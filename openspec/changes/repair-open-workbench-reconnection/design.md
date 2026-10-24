@@ -1577,3 +1577,56 @@ and transient/unknown results preserve their normal semantics. Do not resend
 passwords, delete credentials, log out, select networks or change pairings.
 Revision, stop, service-switch and explicit sign-out fences apply to the login
 reply and the recovery read so late work cannot restore abandoned authority.
+
+### D42 — Archive a provably abandoned local runtime automatically
+
+The formal Windows record from October 24 still names an owner process that no
+longer exists. The installed core correctly refuses that record, but D12/D40's
+unconditional dead-record refusal prevents subsequent local starts. The user now
+authorizes evidence-based automatic archival, superseding that unconditional
+refusal only for the cases defined here. Account, credential, pairing, network,
+registered-root and SSH stores are outside this operation.
+
+An additional private, versioned recovery journal binds the complete owner,
+configuration, binary/root/home identities and an exact operating-system boot
+identity. The owner writes idle evidence before accepting launches, durably marks
+pending before any child spawn, and retains pending/active evidence until actual
+supervised cleanup proves every admitted subject has joined. A failed write or
+uncertain child/descendant cleanup cannot publish idle or remove the fencing
+evidence. A root PID disappearing alone is not proof that PNPM's descendants
+exited. Missing owner.json cannot bypass a retained recovery journal.
+
+Automatic recovery holds the creation lease and the owner lifetime lease,
+validates private paths/ACLs and exact configuration, proves the recorded owner
+has exited without treating process-query errors as absence, then rereads both
+records before mutation. Only confirmed idle evidence in the same boot, or an
+exact changed boot identity proving all old processes ended, admits archival.
+On Windows, each new independent owner joins its own private Global named Job
+Object before accepting any launch. The job binds the exact user/owner instance,
+forbids breakaway and has kill-on-last-close enabled on a non-inherited handle.
+The recovery journal explicitly records this containment contract. Normal Quit
+terminates only native handles still verified as members of that exact job,
+joins until the owner is its sole survivor, and completes record cleanup before
+releasing containment. An owner crash causes kernel termination of the contained
+tree. Only exact object absence or zero active members after owner death admits
+same-boot recovery; unknown/permission errors remain refusals. Ordinary Stop may
+not terminate another runtime subject. Unix cleanup verifies every retained
+managed process group is empty, without claiming containment of arbitrary
+processes that deliberately leave their managed group.
+
+An active/unreachable owner, unproven same-boot pending/active tree, legacy missing journal,
+corrupt/linked/incompatible data or unknown boot/process identity fails closed.
+
+Archive the exact original bytes into a fresh private, non-overwriting archive
+entry before creating the replacement owner. Concurrent recovery cannot create
+two owners. Archival/publication failure preserves evidence and prevents a start;
+it cannot turn into an empty successful runtime. No account store, remote
+connection, credential or application content belongs in a recovery journal or
+public diagnostics. Keep authenticated hello and renderer capabilities unchanged.
+
+The current legacy record has no durable child journal, so this incident uses
+the user's explicit operator authorization: private D-drive backup, normal Quit,
+both actual ownership locks, independent owner/managed-process/port absence,
+binary and record-hash checks, then exact-byte quarantine on D. Subsequent
+records use the new automated evidence contract. Verification distinguishes this
+one-time legacy recovery from automatic crash/restart tests on isolated profiles.

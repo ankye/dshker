@@ -905,7 +905,7 @@ NOT be represented as an empty successful state or replaced by another owner.
 
 #### Scenario: Existing ownership cannot be admitted
 
-- **WHEN** a runtime-owner record is incompatible, corrupt, unreachable or dead
+- **WHEN** a runtime-owner record is incompatible, corrupt, unreachable or dead without sufficient safe-recovery evidence
 - **THEN** core version, registered-root, catalog and remote-computer operations remain usable
 - **AND** runtime start, stop, status, console and binding return the original typed refusal
 - **AND** the refused record and any existing owner remain unchanged
@@ -922,7 +922,54 @@ NOT be represented as an empty successful state or replaced by another owner.
   verified the old owner is absent and verified no managed DSH child remains
 - **THEN** only that abandoned runtime record may be quarantined for this incident
 - **AND** restored sign-in, original pairing and SSH records are independently read back
-- **AND** no automatic abandoned-owner replacement policy is introduced
+- **AND** this legacy incident recovery is separate from the evidence-based automatic recovery below
+
+### Requirement: Safely archive a provably abandoned runtime owner
+
+A new owner MUST persist a private versioned recovery journal bound to its exact
+owner, configuration, native home, binary, registered-root and OS boot identities. Pending child
+creation MUST be durable before spawn; idle MUST require confirmed cleanup of
+every admitted subject. Missing or uncertain evidence MUST NOT imply idle.
+Account, pairing, network and SSH records MUST remain unchanged by recovery.
+
+#### Scenario: An idle owner exits without removing its record
+
+- **WHEN** both ownership leases are acquired, exact private identity and unchanged record bytes are validated, and the recorded owner is confirmed exited
+- **AND** its same-boot journal proves idle with no unresolved managed runtime
+- **THEN** the exact owner and journal bytes are retained in a fresh non-overwriting private archive
+- **AND** a single replacement owner admits local startup without manual cleanup
+
+#### Scenario: The operating system restarted with an active journal
+
+- **WHEN** the same strict checks pass and exact OS boot identity proves the previous boot ended
+- **THEN** the old runtime tree is treated as exited and exact evidence is archived before replacement
+- **AND** a missing or unreadable boot identity remains a typed refusal
+
+#### Scenario: A live or uncertain runtime remains protected
+
+- **WHEN** the owner is alive or unreachable, a same-boot child launch is pending/active without kernel containment death proof, process identity is unknown, or a legacy journal is absent
+- **THEN** recovery refuses without replacing records, adopting processes, killing children or editing account/SSH data
+- **AND** PID reuse, a free port or missing root child PID alone does not authorize recovery
+
+#### Scenario: Windows owner exits with a contained runtime tree
+
+- **WHEN** the journal proves the exact private non-breakaway kill-on-close job and the exact owner is confirmed exited
+- **AND** native inspection proves that Global job no longer exists or has zero active members
+- **THEN** same-boot archival may proceed under both leases and exact-byte revalidation
+- **AND** access errors or live job members remain refusals
+
+#### Scenario: Explicit Quit ends the entire local runtime
+
+- **WHEN** the user explicitly exits the Launcher while local DSH is running
+- **THEN** the admitted owner closes new runtime admission and stops all verified members of its private Windows job
+- **AND** it confirms no DSH descendants remain, closes the local listener and removes its exact runtime records before completing normal exit
+- **AND** no account, pairing, SSH data or unrelated process is terminated or deleted
+
+#### Scenario: Interrupted archival or concurrent recovery
+
+- **WHEN** records change, archive publication fails, or another core attempts recovery concurrently
+- **THEN** exact identity and both leases prevent duplicate authorities and overwritten evidence
+- **AND** a leftover journal cannot be bypassed by a missing owner.json
 
 ### Requirement: Unconfirmed login results reconcile through current authority
 
