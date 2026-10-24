@@ -408,7 +408,7 @@
       "no_mock": true
     },
     {
-      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/owner-recovery-2026-10-25'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; $env:GOMAXPROCS='4'; $env:GOFLAGS='-p=2'; $env:DSHKER_DISTRIBUTION_CHANNEL='stable'; & npm run release:verify; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & npm run release:content; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & npm run release:smoke *> (Join-Path $r 'manifest-package-smoke.log'); $c=$LASTEXITCODE; Get-Content (Join-Path $r 'manifest-package-smoke.log') -Tail 5; exit $c\"",
+      "command": "powershell -NoProfile -NonInteractive -Command \"$ErrorActionPreference='Stop'; $r=[IO.Path]::GetFullPath('.run/owner-recovery-2026-10-25'); New-Item -ItemType Directory -Force $r,(Join-Path $r 'tmp'),(Join-Path $r 'gocache') | Out-Null; $env:TEMP=Join-Path $r 'tmp'; $env:TMP=$env:TEMP; $env:GOTMPDIR=$env:TEMP; $env:GOCACHE=Join-Path $r 'gocache'; $env:GOMAXPROCS='4'; $env:GOFLAGS='-p=2'; $env:DSHKER_DISTRIBUTION_CHANNEL='stable'; & node tools/release-artifacts.mjs --release-dir release --verify; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & node tools/packaged-content.mjs --release-dir release --json; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; & node tools/release-smoke.mjs --release-dir release --launch --json *> (Join-Path $r 'manifest-package-smoke.log'); $c=$LASTEXITCODE; Get-Content (Join-Path $r 'manifest-package-smoke.log') -Tail 5; exit $c\"",
       "no_mock": true
     },
     {

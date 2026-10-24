@@ -87,7 +87,31 @@ const identity = (v) => ({
 for (const item of baseline) {
   if (item.relative === 'core-state/runtime-owner/owner.json') continue
   const file = path.join(formal, item.relative)
-  if (item.relative === 'settings/dsh-launcher/p2p-devices.json') {
+  if (item.relative === 'remote-peer.json') {
+    // This is a per-run broker descriptor, not an account or saved SSH record.
+    // Broker.Start generates a new instance/secret; Broker.Shutdown removes it.
+    if (mode === '--after-quit') {
+      if (fs.existsSync(file)) throw new Error('Quit retained its private broker descriptor')
+    } else {
+      const current = json(file)
+      const previous = json(path.join(evidence, 'profile', item.relative))
+      if (
+        Object.keys(current).sort().join(',') !== 'format,instanceId,port,secret,version' ||
+        current.format !== 'dsh-launcher.remote-peer' ||
+        current.version !== 1 ||
+        !Number.isInteger(current.port) ||
+        current.port < 1 ||
+        current.port > 65535 ||
+        !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/.test(
+          current.instanceId
+        ) ||
+        !/^[A-Za-z0-9_-]{43}$/.test(current.secret) ||
+        current.instanceId === previous.instanceId ||
+        current.secret === previous.secret
+      )
+        throw new Error('Broker did not publish fresh exact per-run authority')
+    }
+  } else if (item.relative === 'settings/dsh-launcher/p2p-devices.json') {
     if (
       JSON.stringify(identity(json(file))) !==
       JSON.stringify(identity(json(path.join(evidence, 'profile', item.relative))))
@@ -108,7 +132,7 @@ for (const item of baseline) {
 }
 const processes = JSON.parse(
   powershell(
-    "$ErrorActionPreference='Stop'; @(Get-CimInstance Win32_Process | Select-Object Name,ProcessId,ParentProcessId,ExecutablePath,@{Name='Birth';Expression={if($_.CreationDate){$_.CreationDate.ToUniversalTime().ToFileTimeUtc().ToString()}}}) | ConvertTo-Json -Compress"
+    "$ErrorActionPreference='Stop'; @(Get-CimInstance Win32_Process | Select-Object Name,ProcessId,ParentProcessId,ExecutablePath,@{Name='Birth';Expression={try{(Get-Process -Id $_.ProcessId -ErrorAction Stop).StartTime.ToUniversalTime().ToFileTimeUtc().ToString()}catch{$null}}}) | ConvertTo-Json -Compress"
   )
 )
 const ownerPath = path.join(formal, 'core-state/runtime-owner/owner.json')

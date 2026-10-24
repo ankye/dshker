@@ -62,3 +62,26 @@ real core integration, headless and artifact startup, actual formal application
 HTTP readback and complete Quit against the installed fixed payload. Package
 identity, final installation and default verification remain pending their real
 receipts. This does not complete earlier overnight/native-frame gates.
+
+The installed fixed payload is stable 0.1.97 from production source d736d36.
+Installed ASAR/core hashes match the verified candidate. Its actual DSH entry
+returned HTTP 200 with the application root; login restored automatically
+without another password submission. A normal File > Exit then removed every
+one of the 14 observed process identities, closed the configured port and
+removed both owner/recovery records. Saved data and the newer encrypted-session
+snapshot passed readback. These are functional checks, not compositor frames.
+
+Retain the first acceptance-oracle failures. remote-peer.json is a per-run
+broker descriptor whose instance, secret and port intentionally rotate; its
+source contract requires a fresh strict descriptor while running and its
+removal on Quit, not byte preservation. Saved SSH computers are independently
+kept byte-identical. Windows CIM CreationDate truncates FILETIME precision;
+the process oracle now obtains exact native StartTime rather than accepting an
+approximate birth identity. Neither correction changes shipped production code.
+
+The first default integrity attempt passed native races, real integration and
+headless checks, then Windows PowerShell's npm.ps1 wrapper promoted a harmless
+configuration warning to NativeCommandError on the package-smoke redirection.
+That raw attempt is retained. The manifest now calls the exact same verifier,
+content scan and startup scripts directly with Node, preserving exit-code gates
+and all diagnostic output. Final default verification is pending that rerun.
