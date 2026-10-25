@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,20 @@ func killOwnedTestOwner(t *testing.T, client *Client) {
 	}
 	client.Close()
 	waitOwner(t, "exact test owner did not exit", func() bool {
+		if runtime.GOOS == "linux" {
+			// A zombie thread-group leader can precede the final thread's
+			// shared-file cleanup. Wait for reap or exact PID reuse before
+			// preparing the next lease holder; do not retry its lock assertion.
+			_, err := os.Stat(filepath.Join("/proc", strconv.Itoa(expected.PID)))
+			if errors.Is(err, os.ErrNotExist) {
+				return true
+			}
+			if err != nil {
+				return false
+			}
+			actual, err := processIdentityAt(expected.PID)
+			return err == nil && actual != expected
+		}
 		exited, err := recordedProcessExited(expected)
 		return err == nil && exited
 	})

@@ -368,3 +368,4 @@ overnight/native-frame and prior remote-connection acceptance remains separate.
 - [ ] 14.3 Release/root: require tag CI to rebuild and verify every desktop and standalone CLI target from the tagged revision, then publish through the existing immutable GitHub Release workflow.
 - [ ] 14.4 Release/root: read back the public latest release, exact tag revision, all required assets, platform identities/checksums and matching bilingual notes; record the actual run and release receipts.
 - [x] 14.5 Release/root: keep the user's Mac installation unchanged; publishing macOS artifacts does not authorize installing them. Preserve the earlier unsigned, overnight and native-frame limitations.
+- [ ] 14.6 QA/root: retain the first Linux package-source failure, correct only the crash fixture's exact process-exit preparation without weakening the held-lease assertion or budget, and pass current native CI and default integrity before tagging.
