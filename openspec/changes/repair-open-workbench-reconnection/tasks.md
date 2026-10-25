@@ -356,6 +356,15 @@ closed and owner/journal records were removed. The committed default integrity
 gate passed 18 test files, five real commands and nine raw artifacts. Retain its
 first npm.ps1 warning-as-error attempt and the corrected readback-oracle evidence.
 The desktop run passed 2,007 tests with three existing platform skips, explicitly
-excluding the forbidden worktree-creating fixture. No tag/push/new public Release
-was performed for this local fix, and the Mac remains unchanged. Historical
+excluding the forbidden worktree-creating fixture. At local verification closure,
+no tag/push/new public Release had been performed; section 14 records the later
+authorized publication. The Mac remains unchanged. Historical
 overnight/native-frame and prior remote-connection acceptance remains separate.
+
+## 14. Authorized 0.1.97 tag and GitHub publication
+
+- [x] 14.1 Release/root: confirm the unused version/tag, the clean main history, unchanged production source since the installed candidate, matching local artifact digest and existing native recovery evidence; retain the exact bilingual CHANGELOG entry as the release body.
+- [ ] 14.2 Release/root: commit only publication records, push main without rewriting history, and pass current remote Quality and package source checks before creating and pushing the exact annotated v0.1.97 tag.
+- [ ] 14.3 Release/root: require tag CI to rebuild and verify every desktop and standalone CLI target from the tagged revision, then publish through the existing immutable GitHub Release workflow.
+- [ ] 14.4 Release/root: read back the public latest release, exact tag revision, all required assets, platform identities/checksums and matching bilingual notes; record the actual run and release receipts.
+- [x] 14.5 Release/root: keep the user's Mac installation unchanged; publishing macOS artifacts does not authorize installing them. Preserve the earlier unsigned, overnight and native-frame limitations.
