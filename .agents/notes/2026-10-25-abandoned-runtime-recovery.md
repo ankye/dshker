@@ -84,4 +84,22 @@ headless checks, then Windows PowerShell's npm.ps1 wrapper promoted a harmless
 configuration warning to NativeCommandError on the package-smoke redirection.
 That raw attempt is retained. The manifest now calls the exact same verifier,
 content scan and startup scripts directly with Node, preserving exit-code gates
-and all diagnostic output. Final default verification is pending that rerun.
+and all diagnostic output. Final default verification passed on the unchanged
+production source: 18 test files, five real commands and nine raw artifacts.
+The original failed attempt remains under the ignored attempt archive.
+
+Closure receipts: native runtime/core races, real integration and headless checks
+passed; the actual ASAR contains 605 members / 31 production packages without
+forbidden test content. Candidate packaged startup passed. The desktop run
+passed 205 files / 2,007 tests with three existing platform skips; the pre-existing
+worktree-creating version-store test was explicitly excluded. Environment, types,
+format, architecture, source-size, strict OpenSpec and the parent desktop app
+validator passed. Final test-only oracle corrections do not change the shipped
+production source d736d3635fad4da2c149a5e831429ea53a5f3fc0.
+
+Installed ASAR SHA-256 is
+271ebe1566a806f3f2bd9a98d7c274dbde970417c152d0bd5111521f0b989c17;
+core SHA-256 is
+704c1823f15ee8b4fcc3a1572ea369f65a8d89733ed968711b7037b37fba0494.
+The final formal app remains fully quit, with no retained DSH process or listener.
+No tag, push or new public Release was performed; Mac installation was not changed.
