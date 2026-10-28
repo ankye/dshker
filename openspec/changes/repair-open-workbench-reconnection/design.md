@@ -1267,6 +1267,37 @@ Freeze distinct helper/operator/build identities and independently review before
 one new physical diagnostic. It cannot pass the production, eight-hour or native
 gates. A failed diagnostic ends and is sealed; no automatic repeat-to-green.
 
+### D34 — Exact overlay/build identity before physical diagnosis
+
+D33's physical aggregate is preserved as FAIL. Its first Windows-hosted cross-
+test failed the unchanged initial-transport barrier before fault injection; the
+peer log reports `test.initial_setup_failed` with Mac's last-observed state
+unknown. The accompanying socket files use the legacy `getsockopt_queue`
+schema, not D33's declared `queueProbe` schema. Candidate inspection also found
+that D33's build admission accepted an inherited `GOFLAGS` overlay without
+checking the exact path or proving the requested schema was linked into each
+artifact. This invalidates D33 as D33 queue-boundary evidence, but it does not
+explain or dismiss the observed physical ICE establishment failure.
+
+Preserve all D33 sources, candidate hashes, failed logs and captures. D34 uses
+its own ignored observer/operator directories, marker, environment variables,
+virtual overlay paths, JSONL name, output directory and fresh artifacts. Before
+any physical operation, verify the exact runtime/test overlay JSON and its
+metadata against current application source, pinned `go.mod`, helper/test hashes
+and absolute overlay paths. Build under an explicitly assigned
+`GOFLAGS=-mod=readonly -overlay=<D34 overlay>` and inspect each candidate's
+embedded marker/schema plus `go version -m` module identity. A present
+`-overlay=` flag, package versions alone, a source manifest, or generated log
+filename is insufficient. Any mismatch fails locally before capture or SSH.
+
+The physical runner must consume a fresh exact D34 pure-test receipt and refuse
+stale D33 receipts. D34 is still one diagnostic-only program-pause run, not a
+production, UDP-loss, eight-hour or installed-app acceptance. Keep the existing
+25-second recovery criterion and user-approved pause scope unchanged. Preserve
+the first failure; do not retry to green or infer privacy/netpoll cause from one
+queue sample. Independent review and exact identity validation precede the
+single physical diagnostic.
+
 ## Risks / Trade-offs
 
 - Runtime refusal could cause repeated workbench requests → keep existing backoff
