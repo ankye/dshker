@@ -25,7 +25,7 @@ Windows renders a spawned process's command line with every argument quoted, so
 the actual holder read:
 
 ```
-node --import tsx/esm apps/cli/src/bin.ts "web" "--patch" "C:\...\resources\verbose.patch.yml" "--no-open" "--port" "31888"
+node --import tsx/esm apps/cli/src/bin.ts "web" "--patch" "<launcher-resources>\verbose.patch.yml" "--no-open" "--port" "31888"
 ```
 
 `bin.ts "web"` does not match `bin\.(?:j|t)s web`, so the Launcher's own leftover

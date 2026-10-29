@@ -2,6 +2,66 @@
 
 ## Unreleased
 
+## 0.1.97 — 2026-10-25
+
+### 简体中文 (zh-CN)
+
+- **安全恢复失效的本地运行记录。** 新版本为运行所有者持久记录启动与清理证据；确认旧进程已退出且没有未确认的受管运行，或确认操作系统已经重启时，自动保留原始记录并恢复启动。无需反复手动清理已证实失效的记录，原账号、网络、配对和 SSH 电脑保持原样。
+- **退出时结束完整本地运行。** Windows 将本地 DSH 及其后代纳入私有内核作业；正常退出会等待全部清理，所有者异常退出时也由内核结束受管进程树。确证整树已退出后可自动恢复。活跃进程、未知身份、损坏或缺少证据的旧记录仍明确拒绝，不会只凭 PID 消失就接管；旧版记录首次恢复需要明确授权的安全归档。
+- **验证范围。** 本次不代表 Mac↔Windows 八小时连接或原生界面逐帧验收完成；安装包仍未签名。
+
+### English (en-US)
+
+- **Recover provably abandoned local runtime records.** New owners persist launch and cleanup evidence. When the exact owner has exited and no managed runtime remains unconfirmed, or a verified operating-system reboot proves the old processes ended, preserve the original evidence and restore startup automatically. Existing accounts, networks, pairings and SSH computers remain intact.
+- **Finish the entire local runtime on exit.** Windows contains DSH and its descendants in a private kernel job. Normal Quit joins cleanup, and an owner crash also causes kernel termination of that managed tree. Verified whole-tree death permits automatic recovery. Live/unknown processes and corrupt or legacy records without evidence remain refusals; a missing PID alone never permits takeover. First recovery of a legacy record requires explicitly authorized safe archival.
+- **Verification scope.** This does not complete bidirectional eight-hour Mac↔Windows or native pixel-frame acceptance. Installers remain unsigned.
+
+## 0.1.96 — 2026-10-22
+
+### 简体中文 (zh-CN)
+
+- **登录成功后自动同步状态。** 登录结果未确认或提示“已经登录”时，重新向服务器确认当前账号，再统一更新界面；不再要求反复输入密码，不改动原账号、配对和 SSH 记录。
+- **测试版与正式版数据隔离。** 测试包使用独立应用和安装器身份，启动必须指定独立测试目录；缺失或冲突时明确拒绝。正式版继续使用现有账号、网络、配对、SSH 电脑和已登记目录，不从测试版导入配置。
+- **运行时故障不再拖垮全部连接。** 本地 DSH 运行身份异常时单独报告真实原因，账户、配置、SSH 与设备网络服务继续工作；SSH 核心不可用也不再误报成“无法保存远程电脑记录”。
+- **正常退出完成核心清理。** Windows 退出会等待既有的代理和运行时清理流程完成，避免过早强停核心留下运行身份记录；安装器检测到运行进程时会等待正常退出，不再强杀进程。
+- **已知限制。** 安装包仍未签名，需手动确认安装；Mac↔Windows 双向八小时及最终原生界面逐帧验收仍未完成。无法验证的旧运行身份仍明确拒绝，不会静默删除或接管 DSH。
+
+### English (en-US)
+
+- **Reconcile a completed sign-in.** An unconfirmed login result or an already-signed-in refusal now reads the current account from the server before updating the shared UI. Repeated password entry is unnecessary, and existing accounts, pairings and SSH records remain intact.
+- **Separate test and stable data.** Test packages have a distinct application and installer identity and require an explicit independent test directory. Missing or conflicting roots fail explicitly. Stable packages retain existing accounts, networks, pairings, SSH computers and registered roots without importing test configuration.
+- **Contain runtime failures.** A local DSH owner refusal reports its actual cause while account, configuration, SSH and device-network services remain available. An unavailable SSH core no longer appears as a failed computer-record save.
+- **Finish cleanup on normal exit.** Windows allows the existing broker and runtime cleanup to complete before terminating the core, avoiding premature termination that leaves ownership records behind. The installer waits for normal Quit when processes are running instead of killing them.
+- **Known limitations.** Installers remain unsigned and require manual confirmation. Bidirectional eight-hour Mac↔Windows and final native pixel-frame acceptance remain incomplete. Unverified old ownership is still refused without silently deleting records or adopting DSH.
+
+## 0.1.95 — 2026-10-21
+
+### 简体中文 (zh-CN)
+
+- **登录状态统一显示。** 状态栏与“账户和网络”使用同一份当前账户状态；无有效会话时显示未登录，恢复期间显示待确认，不再用网络核心在线代替用户登录。登录、退出和会话失效同步更新，迟到的旧结果不会覆盖新会话。
+- **运行页连接不再被后台握手长期占住。** 点击连接时，等待同一配对正在进行的后台握手安全交接，再建立本次工作台连接；取消、断开或授权变化会终止等待。页面及时显示真实连接进度，旧的忙碌提示不会影响其他电脑或掩盖当前结果。
+- **已知限制。** 安装包仍未签名，需手动确认安装；Mac↔Windows 双向八小时及最终跨平台原生界面验收仍未完成。
+
+### English (en-US)
+
+- **Show one consistent account state.** The footer and Account and Network use the same current-account state. Missing sessions show signed out and restoration stays pending; an online network core no longer implies user login. Login, logout and session invalidation update both surfaces, and old replies cannot overwrite a newer session.
+- **Keep Run-page connections moving behind background handshakes.** An explicit connection waits for the same pair's background handshake to hand over safely, then starts its own workbench attempt. Cancellation, disconnect and authorization changes stop that wait. The page reads back actual progress, and an old busy refusal cannot affect another computer or mask the current result.
+- **Known limitations.** Installers remain unsigned and require manual confirmation. Bidirectional eight-hour Mac↔Windows and final cross-platform native-UI acceptance remain incomplete.
+
+## 0.1.94 — 2026-10-21
+
+### 简体中文 (zh-CN)
+
+- **自动修复本地网络状态不同步。** 服务器确认原账号、原网络及两台设备的配对仍有效时，自动恢复本地误标为失效的连接，无需重新选择网络。真实撤权、身份变化或读取失败仍明确拒绝，不会自动换网。
+- **Windows 本地启动不再弹出控制台。** DSH 及其端口检查、进程清理工具在后台运行，真实输出仍保留在 Launcher 控制台和日志中，启动与停止行为不变。
+- **已知限制。** 安装包仍未签名，需手动确认安装。Mac↔Windows 偶发 ICE 建连/恢复及双向八小时、最终原生界面验收仍未完成；本次修复不代表长时连接问题全部解决。
+
+### English (en-US)
+
+- **Repair stale local network state automatically.** When fresh server authority confirms the original account, network and both device identities remain authorized, restore a locally revoked connection without asking for network reselection. Real revocation, identity changes and failed reads remain explicit; no other network is selected automatically.
+- **Keep Windows local startup in the background.** DSH, port checks and process cleanup no longer open console windows. Real output remains in Launcher Console and logs, with the same launch and stop behavior.
+- **Known limitations.** Installers remain unsigned and require manual confirmation. Intermittent Mac↔Windows ICE establishment/recovery, bidirectional eight-hour and final native-UI acceptance remain incomplete; these fixes do not establish long-duration connection stability.
+
 ## 0.1.93 — 2026-10-21
 
 ### 简体中文 (zh-CN)

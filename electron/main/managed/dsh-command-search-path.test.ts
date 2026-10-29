@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   createManagedDshCommandSearchPathResolver,
@@ -5,6 +6,11 @@ import {
   parseLoginShellPath,
   readInheritedPath
 } from './dsh-command-search-path'
+
+// Construct a synthetic Windows root on every host without depending on local directories.
+function windowsPath(...segments: string[]): string {
+  return path.win32.join('X:', path.win32.sep, ...segments)
+}
 
 function markedPath(command: string, value: string): string {
   const begin = command.match(/__DSHKER_PATH_BEGIN_[0-9a-f-]+__/u)?.[0]
@@ -74,45 +80,46 @@ describe('managed DSH command search path', () => {
 
   it('does not start a shell on Windows and preserves the case-insensitive inherited PATH', async () => {
     const executeLoginShell = vi.fn()
+    const runtime = windowsPath('DSHKer', 'runtime', 'bin')
+    const system = windowsPath('Windows', 'System32')
+    const npm = windowsPath('profiles', 'test', 'AppData', 'Roaming', 'npm')
     const resolver = createManagedDshCommandSearchPathResolver({
       platform: 'win32',
       environment: {
-        Path: 'c:\\dshker\\runtime\\bin;C:\\Windows\\System32;C:\\Home\\dev\\AppData\\Roaming\\npm'
+        Path: `${runtime.toLowerCase()};${system};${npm}`
       },
-      bundledRuntimeBin: 'C:\\DSHKer\\runtime\\bin',
+      bundledRuntimeBin: runtime,
       executeLoginShell
     })
 
-    await expect(resolver()).resolves.toBe(
-      'C:\\DSHKer\\runtime\\bin;C:\\Windows\\System32;C:\\Home\\dev\\AppData\\Roaming\\npm'
-    )
+    await expect(resolver()).resolves.toBe(`${runtime};${system};${npm}`)
     expect(executeLoginShell).not.toHaveBeenCalled()
-    expect(readInheritedPath({ pAtH: 'C:\\tools' }, 'win32')).toBe('C:\\tools')
+    expect(readInheritedPath({ pAtH: windowsPath('tools') }, 'win32')).toBe(windowsPath('tools'))
   })
 
   it('accepts one terminal Windows PATH delimiter without adding an empty search entry', async () => {
+    const runtime = windowsPath('DSHKer', 'runtime', 'bin')
+    const inheritedPath = `${windowsPath('Windows', 'System32')};${windowsPath('profiles', 'test', 'scoop', 'shims')}`
     const resolver = createManagedDshCommandSearchPathResolver({
       platform: 'win32',
-      environment: { Path: 'C:\\Windows\\System32;C:\\Home\\dev\\scoop\\shims;' },
-      bundledRuntimeBin: 'C:\\DSHKer\\runtime\\bin'
+      environment: { Path: `${inheritedPath};` },
+      bundledRuntimeBin: runtime
     })
 
-    await expect(resolver()).resolves.toBe(
-      'C:\\DSHKer\\runtime\\bin;C:\\Windows\\System32;C:\\Home\\dev\\scoop\\shims'
-    )
+    await expect(resolver()).resolves.toBe(`${runtime};${inheritedPath}`)
   })
 
   it('continues to reject interior, leading, and repeated terminal Windows PATH delimiters', async () => {
     for (const inheritedPath of [
-      ';C:\\Windows\\System32',
-      'C:\\first;;C:\\second',
-      'C:\\Windows\\System32;;',
+      `;${windowsPath('Windows', 'System32')}`,
+      `${windowsPath('first')};;${windowsPath('second')}`,
+      `${windowsPath('Windows', 'System32')};;`,
       ';'
     ]) {
       const resolver = createManagedDshCommandSearchPathResolver({
         platform: 'win32',
         environment: { Path: inheritedPath },
-        bundledRuntimeBin: 'C:\\DSHKer\\runtime\\bin'
+        bundledRuntimeBin: windowsPath('DSHKer', 'runtime', 'bin')
       })
 
       await expect(resolver()).rejects.toMatchObject({
@@ -125,7 +132,7 @@ describe('managed DSH command search path', () => {
   it('rejects conflicting Windows PATH spellings instead of choosing one', async () => {
     const resolver = createManagedDshCommandSearchPathResolver({
       platform: 'win32',
-      environment: { PATH: 'C:\\first', Path: 'C:\\second' }
+      environment: { PATH: windowsPath('first'), Path: windowsPath('second') }
     })
 
     await expect(resolver()).rejects.toMatchObject({
@@ -138,7 +145,7 @@ describe('managed DSH command search path', () => {
     const resolver = createManagedDshCommandSearchPathResolver({
       platform: 'win32',
       environment: {},
-      bundledRuntimeBin: 'C:\\DSHKer\\runtime\\bin'
+      bundledRuntimeBin: windowsPath('DSHKer', 'runtime', 'bin')
     })
 
     await expect(resolver()).rejects.toMatchObject({

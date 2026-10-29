@@ -1,6 +1,6 @@
 {
   "name": "@ankye/dshker-launcher",
-  "version": "0.1.93",
+  "version": "0.1.97",
   "description": "Managed desktop shell for DeepSeek Harness.",
   "author": "ankye <shengxiehua@gmail.com>",
   "homepage": "https://github.com/ankye/dshker",
@@ -54,17 +54,18 @@
     "bundled-source:verify": "npm run seed:verify",
     "runtime:prepare": "node tools/prepare-runtime.mjs",
     "runtime:verify": "node tools/prepare-runtime.mjs --verify",
-    "package": "npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --dir --publish never && npm run release:metadata -- --mode package",
-    "dist": "npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --publish never && npm run release:metadata -- --mode dist",
-    "dist:mac-arm64": "node tools/build-peer-helper.mjs --platform darwin --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform darwin --arch arm64 && electron-vite build && electron-builder --mac --arm64 --publish never && npm run release:metadata -- --mode dist-mac-arm64",
-    "dist:mac-x64": "node tools/build-peer-helper.mjs --platform darwin --arch x64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform darwin --arch x64 && electron-vite build && electron-builder --mac --x64 --publish never && npm run release:metadata -- --mode dist-mac-x64",
-    "dist:win-x64": "node tools/build-peer-helper.mjs --platform win32 --arch x64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform win32 --arch x64 && electron-vite build && electron-builder --win --x64 --publish never && npm run release:metadata -- --mode dist-win-x64",
-    "dist:win-arm64": "node tools/build-peer-helper.mjs --platform win32 --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform win32 --arch arm64 && electron-vite build && electron-builder --win --arm64 --publish never && npm run release:metadata -- --mode dist-win-arm64",
-    "dist:linux-x64": "node tools/build-peer-helper.mjs --platform linux --arch x64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform linux --arch x64 && electron-vite build && electron-builder --linux --x64 --publish never && npm run release:metadata -- --mode dist-linux-x64",
-    "dist:linux-arm64": "node tools/build-peer-helper.mjs --platform linux --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform linux --arch arm64 && electron-vite build && electron-builder --linux --arm64 --publish never && npm run release:metadata -- --mode dist-linux-arm64",
+    "package": "npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --dir --publish never && npm run release:metadata -- --mode package",
+    "dist": "npm run bundled-source:verify && npm run runtime:prepare && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --publish never && npm run release:metadata -- --mode dist",
+    "dist:mac-arm64": "node tools/build-peer-helper.mjs --platform darwin --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform darwin --arch arm64 && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --mac --arm64 --publish never && npm run release:metadata -- --mode dist-mac-arm64",
+    "dist:mac-x64": "node tools/build-peer-helper.mjs --platform darwin --arch x64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform darwin --arch x64 && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --mac --x64 --publish never && npm run release:metadata -- --mode dist-mac-x64",
+    "dist:win-x64": "node tools/build-peer-helper.mjs --platform win32 --arch x64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform win32 --arch x64 && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --win --x64 --publish never && npm run release:metadata -- --mode dist-win-x64",
+    "dist:win-arm64": "node tools/build-peer-helper.mjs --platform win32 --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform win32 --arch arm64 && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --win --arm64 --publish never && npm run release:metadata -- --mode dist-win-arm64",
+    "dist:linux-x64": "node tools/build-peer-helper.mjs --platform linux --arch x64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform linux --arch x64 && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --linux --x64 --publish never && npm run release:metadata -- --mode dist-linux-x64",
+    "dist:linux-arm64": "node tools/build-peer-helper.mjs --platform linux --arch arm64 && npm run bundled-source:verify && npm run runtime:prepare -- --platform linux --arch arm64 && electron-vite build && electron-builder --config tools/electron-builder.config.mjs --linux --arm64 --publish never && npm run release:metadata -- --mode dist-linux-arm64",
     "performance:check": "node tools/performance-check.mjs --mode release-dry-run --json",
     "release:metadata": "node tools/release-artifacts.mjs --release-dir release",
     "release:verify": "node tools/release-artifacts.mjs --release-dir release --verify",
+    "release:content": "node tools/packaged-content.mjs --release-dir release --json",
     "release:smoke": "node tools/release-smoke.mjs --release-dir release --launch --json",
     "release:readiness": "node tools/release-readiness.mjs --json",
     "release:dry-run": "npm run release:readiness"
@@ -84,6 +85,7 @@
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
+    "@electron/asar": "3.4.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.15.3",
     "@types/yauzl": "^3.4.0",
@@ -121,7 +123,13 @@
     "files": [
       "out/**/*",
       "package.json",
-      "!**/*.map"
+      "!**/*.map",
+      "!**/*.test.*",
+      "!**/*.spec.*",
+      "!**/*.e2e.*",
+      "!**/{test,spec,e2e}.*",
+      "!**/{test,spec,e2e}[-_]*",
+      "!**/{test,tests,spec,specs,e2e,testing,__tests__,test-support,test_support,testsupport,test-utils,test_utils,test-helpers,test_helpers,test-data,test_data,mock,mocks,fixture,fixtures}/**"
     ],
     "extraResources": [
       {

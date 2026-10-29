@@ -27,22 +27,22 @@ import (
 // reports ErrMissing even if a crashed Set left chunks behind. Chunk payloads
 // stay well under the reader limit.
 const (
-	keychainService = "dshkerd"
+	keychainService = legacyService
 	keychainTool    = "security"
 	chunkSize       = 96
 	maxChunks       = 4096
 )
 
-// Open returns the macOS Keychain provider. The data root is not used on
-// macOS: the Keychain keeps the items.
-func Open(dataRoot string) (Store, error) {
-	return keychainStore{}, nil
+// openStore returns the macOS Keychain provider with an explicit service
+// identity. The data root is not used: the Keychain keeps the items.
+func openStore(dataRoot, service string) (Store, error) {
+	return keychainStore{service: service}, nil
 }
 
-type keychainStore struct{}
+type keychainStore struct{ service string }
 
-func (keychainStore) Get(key string) ([]byte, error) {
-	header, err := keychainRead(key)
+func (store keychainStore) Get(key string) ([]byte, error) {
+	header, err := keychainRead(store.service, key)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (keychainStore) Get(key string) ([]byte, error) {
 	}
 	encoded := make([]byte, 0, count*chunkSize)
 	for index := 0; index < count; index++ {
-		chunk, err := keychainRead(chunkKey(key, index))
+		chunk, err := keychainRead(store.service, chunkKey(key, index))
 		if err != nil {
 			return nil, err
 		}
@@ -68,7 +68,7 @@ func (keychainStore) Get(key string) ([]byte, error) {
 	return value, nil
 }
 
-func (keychainStore) Set(key string, value []byte) error {
+func (store keychainStore) Set(key string, value []byte) error {
 	encoded := []byte(base64.StdEncoding.EncodeToString(value))
 	count := (len(encoded) + chunkSize - 1) / chunkSize
 	if count < 1 {
@@ -82,35 +82,35 @@ func (keychainStore) Set(key string, value []byte) error {
 		if end > len(encoded) {
 			end = len(encoded)
 		}
-		if err := keychainWrite(chunkKey(key, index), encoded[index*chunkSize:end]); err != nil {
+		if err := keychainWrite(store.service, chunkKey(key, index), encoded[index*chunkSize:end]); err != nil {
 			return err
 		}
 	}
 	// The header commits the value: until it exists, Get reports the key as
 	// missing and a later Set overwrites every chunk it names.
-	return keychainWrite(key, []byte(strconv.Itoa(count)))
+	return keychainWrite(store.service, key, []byte(strconv.Itoa(count)))
 }
 
-func (keychainStore) Delete(key string) error {
-	header, err := keychainRead(key)
+func (store keychainStore) Delete(key string) error {
+	header, err := keychainRead(store.service, key)
 	if err == nil {
 		if count, conv := strconv.Atoi(string(header)); conv == nil && count >= 0 && count <= maxChunks {
 			for index := 0; index < count; index++ {
-				_ = keychainDelete(chunkKey(key, index))
+				_ = keychainDelete(store.service, chunkKey(key, index))
 			}
 		}
 	} else if !errors.Is(err, ErrMissing) {
 		return err
 	}
-	return keychainDelete(key)
+	return keychainDelete(store.service, key)
 }
 
 func chunkKey(key string, index int) string {
 	return key + "#" + strconv.Itoa(index)
 }
 
-func keychainRead(key string) ([]byte, error) {
-	output, err := exec.Command(keychainTool, "find-generic-password", "-a", key, "-s", keychainService, "-w").Output()
+func keychainRead(service, key string) ([]byte, error) {
+	output, err := exec.Command(keychainTool, "find-generic-password", "-a", key, "-s", service, "-w").Output()
 	if err != nil {
 		if notFound(err) {
 			return nil, ErrMissing
@@ -120,13 +120,13 @@ func keychainRead(key string) ([]byte, error) {
 	return bytes.TrimSuffix(output, []byte("\n")), nil
 }
 
-func keychainWrite(key string, value []byte) error {
+func keychainWrite(service, key string, value []byte) error {
 	input := make([]byte, 0, 2*len(value)+2)
 	input = append(input, value...)
 	input = append(input, '\n')
 	input = append(input, value...)
 	input = append(input, '\n')
-	command := exec.Command(keychainTool, "add-generic-password", "-a", key, "-s", keychainService, "-U", "-w")
+	command := exec.Command(keychainTool, "add-generic-password", "-a", key, "-s", service, "-U", "-w")
 	// `security -w` reads the value from its controlling terminal when one is
 	// inherited. dshkerd is launched by Electron with a terminal descriptor
 	// still available, so the child otherwise ignores this pipe forever and
@@ -141,8 +141,8 @@ func keychainWrite(key string, value []byte) error {
 	return nil
 }
 
-func keychainDelete(key string) error {
-	err := exec.Command(keychainTool, "delete-generic-password", "-a", key, "-s", keychainService).Run()
+func keychainDelete(service, key string) error {
+	err := exec.Command(keychainTool, "delete-generic-password", "-a", key, "-s", service).Run()
 	if err != nil && !notFound(err) {
 		return ErrDelete
 	}

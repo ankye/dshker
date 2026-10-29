@@ -12,10 +12,12 @@ import P2PAccountAuthForm from './P2PAccountAuthForm.vue'
 import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
 import { P2P_NETWORK_DEVICE_LIMITS, type P2PNetworkView } from '@/shared/p2p-management'
 import { p2pRefusalKind } from '@/shared/p2p-refusal'
+import { useP2PAccountSession } from '../useP2PAccountSession'
 
 const props = defineProps<{ serviceId: string; displayName: string }>()
 const t = useTranslator()
 const state = accounts.state(props.serviceId)
+const { labelKey: accountSessionKey } = useP2PAccountSession(computed(() => props.serviceId))
 
 const selectedNetwork = computed(() =>
   state.networks?.find((network) => network.networkId === state.selectedNetworkId)
@@ -73,18 +75,13 @@ const networkPending = computed(
     (operation.value?.method === 'networks' || operation.value?.method === 'accountSelection')
 )
 const accountTitleKey = computed<MessageKey>(() => {
-  if (state.user === null) return 'p2p.account.loginTitle'
-  if (state.user) return 'p2p.account.manageTitle'
+  if (state.sessionStatus === 'signedOut') return 'p2p.account.loginTitle'
+  if (state.sessionStatus === 'signedIn') return 'p2p.account.manageTitle'
   return 'p2p.account.stateTitle'
 })
-const restoringAccount = computed(
-  () =>
-    state.user === undefined &&
-    operation.value?.method === 'currentUser' &&
-    (operation.value.phase === 'pending' || operation.value.phase === 'cancelling')
-)
 const uncertain = computed(
   () =>
+    (Boolean(state.user) && state.sessionStatus !== 'signedIn') ||
     state.networkWriteUnconfirmed ||
     operation.value?.error === 'unconfirmed' ||
     operation.value?.error === 'p2p.management_result_unconfirmed' ||
@@ -155,7 +152,7 @@ const failureMessage = computed<MessageKey | undefined>(() => {
 })
 const removing = ref('')
 /** Only a signed-in owner may remove a device: the server has no login-free removal. */
-const canRemoveDevice = computed(() => Boolean(state.user))
+const canRemoveDevice = computed(() => state.sessionStatus === 'signedIn')
 
 const deletion = ref<P2PNetworkView>()
 const confirmButton = ref<HTMLButtonElement>()
@@ -323,7 +320,7 @@ async function closeManage(): Promise<void> {
              to act on and no form to sign in with, so the panel could not recover
              without restarting the app. -->
         <button
-          v-if="state.user !== null"
+          v-if="state.sessionStatus !== 'signedOut'"
           type="button"
           class="prototype-button"
           :disabled="pending"
@@ -394,13 +391,13 @@ async function closeManage(): Promise<void> {
     <p v-if="operation?.cancelError" class="remote-error" role="alert">
       {{ t('p2p.management.cancelFailed') }} <code>{{ operation.cancelError }}</code>
     </p>
-    <p v-if="state.user === undefined" role="status" aria-live="polite">
-      {{ restoringAccount ? t('p2p.account.restoring') : t('p2p.account.unknown') }}
+    <p role="status" aria-live="polite" data-testid="p2p-account-session-status">
+      {{ t(accountSessionKey) }}
     </p>
     <!-- Only a confirmed sign-out offers the credential forms. An unknown state
          is not a sign-out: showing a password field there asked for a secret the
          app could not yet use, and did it while claiming the state was unknown. -->
-    <template v-if="state.user === null">
+    <template v-if="state.sessionStatus === 'signedOut'">
       <!-- Only a confirmed sign-out offers the credential forms. An unknown
            state is not a sign-out, and the form owns its drafts: signing in
            unmounts it, which destroys them rather than clearing them by hand. -->

@@ -22,12 +22,62 @@ function relativeToApp(filePath) {
 }
 
 afterEach(async () => {
+  vi.unstubAllEnvs()
   await Promise.all(
     temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true }))
   )
 })
 
 describe('release artifact identity', () => {
+  it.each(['stable', 'test'])(
+    'round-trips the %s distribution identity independently of the current build environment',
+    async (channel) => {
+      const releaseDirectory = await createReleaseDirectory()
+      await writeFile(
+        path.join(releaseDirectory, `dshker-launcher-${currentVersion}-win-x64.exe`),
+        'candidate'
+      )
+      vi.stubEnv('DSHKER_DISTRIBUTION_CHANNEL', channel)
+      const { manifest } = await generate({
+        releaseDir: relativeToApp(releaseDirectory),
+        mode: 'test'
+      })
+      expect(manifest.distributionChannel).toBe(channel)
+      expect(manifest.appId).toBe(packageJson.build.appId + (channel === 'test' ? '.test' : ''))
+      expect(manifest.productName).toBe(
+        packageJson.build.productName + (channel === 'test' ? ' Test' : '')
+      )
+      vi.stubEnv('DSHKER_DISTRIBUTION_CHANNEL', channel === 'stable' ? 'test' : 'stable')
+      expect(await verify({ releaseDir: relativeToApp(releaseDirectory) })).toMatchObject({
+        ok: true
+      })
+    }
+  )
+
+  it('rejects missing or invalid distribution markers and identities inconsistent with their channel', async () => {
+    const releaseDirectory = await createReleaseDirectory()
+    await writeFile(
+      path.join(releaseDirectory, `dshker-launcher-${currentVersion}-win-x64.exe`),
+      'candidate'
+    )
+    vi.stubEnv('DSHKER_DISTRIBUTION_CHANNEL', 'test')
+    const { manifest } = await generate({
+      releaseDir: relativeToApp(releaseDirectory),
+      mode: 'test'
+    })
+    const filePath = path.join(releaseDirectory, 'release-manifest.json')
+    for (const distributionChannel of [undefined, 'production']) {
+      await writeFile(filePath, JSON.stringify({ ...manifest, distributionChannel }))
+      expect((await verify({ releaseDir: relativeToApp(releaseDirectory) })).issues).toContain(
+        'Manifest distribution channel is invalid'
+      )
+    }
+    await writeFile(filePath, JSON.stringify({ ...manifest, distributionChannel: 'stable' }))
+    const result = await verify({ releaseDir: relativeToApp(releaseDirectory) })
+    expect(result.ok).toBe(false)
+    expect(result.issues).toContain('Manifest appId does not match package identity')
+    expect(result.issues).toContain('Manifest productName does not match package identity')
+  })
   it('classifies explicit older versions without accepting missing or mixed identities', () => {
     expect(
       classifyReleaseEntry(`DSHKer Launcher-${currentVersion}-arm64.dmg`, 'file', currentVersion)

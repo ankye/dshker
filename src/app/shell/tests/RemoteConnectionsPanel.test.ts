@@ -91,6 +91,20 @@ describe('RemoteConnectionsPanel', () => {
     window.dshLauncher = undefined
   })
 
+  it('distinguishes an unavailable core from a failed record write', async () => {
+    const { api } = installApi()
+    vi.mocked(api.getState).mockResolvedValue({
+      ok: false,
+      code: 'remote.core_unavailable',
+      message: 'private core diagnostics'
+    })
+    const wrapper = mount(RemoteConnectionsPanel)
+    await flushPromises()
+    expect(wrapper.text()).toContain('连接核心尚未就绪')
+    expect(wrapper.text()).not.toContain('无法保存远程电脑记录')
+    expect(wrapper.text()).not.toContain('private core diagnostics')
+  })
+
   it('submits all explicit fields and renders the resulting durable row', async () => {
     const { api } = installApi()
     const wrapper = mount(RemoteConnectionsPanel)

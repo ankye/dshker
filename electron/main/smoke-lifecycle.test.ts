@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const controls = vi.hoisted(() => ({
   outputPath: '',
+  userData: '',
   onDestroy: () => undefined as unknown,
   beforeEvidenceWrite: async (_payload: string) => undefined as unknown,
   events: [] as string[]
@@ -28,6 +29,7 @@ vi.mock('node:fs/promises', async (importOriginal) => {
 })
 
 vi.mock('electron', () => ({
+  app: { isPackaged: false, getAppPath: () => '', getPath: () => controls.userData },
   BrowserWindow: class {
     webContents = { on: vi.fn() }
     destroy() {
@@ -168,6 +170,19 @@ async function fixture(
   await configureOutput?.(controls.outputPath)
   vi.stubEnv('DESKTOP_APP_SMOKE_OUTPUT', controls.outputPath)
   vi.stubEnv('DESKTOP_APP_SMOKE_SHOTS', '')
+  const profile = {
+    distribution: 'test' as const,
+    isolated: true,
+    testRoot: directory,
+    launcherRoot: path.join(directory, 'launcher'),
+    userData: path.join(directory, 'electron'),
+    dshHome: path.join(directory, 'dsh-home'),
+    nativeHome: path.join(directory, 'native-home')
+  }
+  controls.userData = profile.userData
+  vi.stubEnv('DSH_HOME', profile.dshHome)
+  vi.stubEnv('HOME', profile.nativeHome)
+  vi.stubEnv('USERPROFILE', profile.nativeHome)
   const exited = deferred<number>()
   const app = Object.assign(new EventEmitter(), {
     quit: vi.fn(() => controls.events.push('app-quit')),
@@ -184,7 +199,7 @@ async function fixture(
     app,
     { platform },
     () => trayActive,
-    () => runSmokeTest(directory),
+    () => runSmokeTest(directory, profile),
     () => new Promise(() => undefined),
     writeSmokeFailure,
     { error: reportError }
@@ -217,7 +232,11 @@ describe('packaged smoke exit ownership', () => {
         'evidence-written',
         'app-exit:0'
       ])
-      expect(JSON.parse(await readFile(controls.outputPath, 'utf8')).ok).toBe(true)
+      expect(JSON.parse(await readFile(controls.outputPath, 'utf8'))).toMatchObject({
+        ok: true,
+        checks: { profileIsolation: true },
+        profile: { isolated: true, distribution: 'test' }
+      })
     }
   )
 

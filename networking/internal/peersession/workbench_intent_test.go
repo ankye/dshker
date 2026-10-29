@@ -33,6 +33,7 @@ func intentManager(t *testing.T) (*Manager, string, func() []bool) {
 		json.NewEncoder(writer).Encode(map[string]string{"code": "p2p.peer_offline"})
 	}))
 	manager.ctx, manager.cancel = context.WithCancel(context.Background())
+	manager.emit = func(State) {}
 	manager.sessions = make(map[string]*session)
 	manager.config.CoreInstanceID = protocol.NewNonce()
 	active := candidateSubscriptionFor(manager.config.CoreInstanceID)

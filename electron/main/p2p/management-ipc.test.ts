@@ -409,7 +409,7 @@ describe('P2P named management admission', () => {
     const { owner, invoke, user, network, registration, directory } = fixture()
     const { event } = page()
     let sequence = 0
-    // resumeConnectivity is an internal helper the connect route calls first; it
+    // resumeConnectivity is an internal maintenance helper, rather than a route; it
     // is not a dispatched operation, so it is excluded from the routing sweep.
     type RoutedOperation = Exclude<
       P2PManagementOperation,
@@ -441,7 +441,7 @@ describe('P2P named management admission', () => {
     expect(owner.registerDevice).toHaveBeenCalledWith(serviceId, networkId, 'Mac', signal)
     expect(owner.submitEnrollment).toHaveBeenCalledWith(serviceId, revision, signal)
     expect(owner.recoverEnrollment).toHaveBeenCalledWith(serviceId, revision, signal)
-    expect(owner.resumeConnectivity).toHaveBeenCalledTimes(1)
+    expect(owner.resumeConnectivity).not.toHaveBeenCalled()
     expect(owner.addService).toHaveBeenCalledWith(
       revision,
       {

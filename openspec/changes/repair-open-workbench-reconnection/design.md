@@ -555,8 +555,10 @@ registration. A choice is never a caller-supplied pin. Selection must revalidate
 current user, exact catalog revision and fresh active membership before pinning
 and committing the exact network. An unchanged valid choice is idempotent; a
 different still-valid saved selection is an explicit conflict, not silent switching.
-Re-selecting after revoked authority must first revoke/retire the exact old row
-and release only its old live authority before a fresh selected row is committed.
+Re-selecting after genuinely revoked authority must first revoke/retire the exact
+old row and release only its old live authority before a fresh selected row is
+committed. D36 separately permits automatic recovery of a locally revoked row
+whose exact original scope and keys remain freshly authorized by the server.
 These are legal logical transitions, not three separately published files. Add
 the internal-only owning catalog operation `CommitTransitions(expectedRevision,
 steps)`: under the same store/CAS lock validate each bounded nonempty transition
@@ -578,8 +580,9 @@ The existing add-tab floating dialog owns selection. It lists each computer once
 an ambiguous or stale record opens an inline network-choice view within that same
 floating layer, never nested modals or a permanent page expansion. Show network
 name plus ID, no preselected network, a clear back/close action and visible pending
-or error feedback. Prevent duplicate submission. Only an authoritative successful
-selection may refresh the catalog and open/connect one tab. Closing/navigating
+or error feedback. Prevent duplicate submission. An authoritative successful
+selection may refresh the catalog and open/connect one tab; D36's automatic
+original-scope recovery does not itself open a tab. Closing/navigating
 while work is in flight must not open a late tab; preserve the committed choice,
 resolve an unknown result by readback, and never submit another network as retry.
 Mouse/Enter/Space activation, Tab/Shift+Tab containment, Esc/back and focus return
@@ -1073,8 +1076,9 @@ Remove this global reset operation from the unreleased table-2 shell contract,
 Host dispatch, Engine and shell port rather than adding a compatibility alias.
 An old request receives the existing unknown-method refusal. A catalog revision
 only reconciles; ordinary resume may clear transient waits through RetryNow but
-must preserve terminal refusals. Only the existing exact durable network-choice
-publication may call Reauthorize for its service/pair and advance its epoch.
+must preserve terminal refusals. Only an exact durable network-choice publication,
+including D36's freshly authorized original-scope recovery, may call Reauthorize
+or the atomic RecoverAuthorization owner for its service/pair and advance its epoch.
 Account/manager replacement retains its existing independent lifecycle semantics.
 No renderer capability, server wire, fallback, timeout or quota change is added.
 
@@ -1348,3 +1352,312 @@ remains an explicit error. The client never silently chooses another network,
 deletes a pair, rewrites credentials, or reports a current directory from a
 failed read. Existing device identity, network membership and pair rows are
 preserved.
+
+### D36 — Fresh original authority repairs a locally revoked saved choice
+
+The installed Windows client retained a revoked Mac catalog row while the
+coordinator still reported the original network and pair active and both devices
+online. The peer's authenticated candidate reached Windows, but the absent live
+pin produced `p2p.pair_unauthorized`. D35's membership synchronization could not
+repair this row because D18 treated its local revoked flag as a permanent demand
+for manual reselection, even after the original authority was freshly confirmed.
+
+The current server authority owns authorization. On the existing automatic
+catalog synchronization path, admit the saved original network when a fresh
+selected-account network/pair/identity read proves active authority with the same
+service, user, local and remote device IDs, and both public keys. A local revoked
+flag alone cannot require user selection. Do not select a different network,
+adopt a changed device/key, or substitute cached authorization. An actually
+revoked/missing original network or pair, foreign account, identity mismatch,
+failed read, or superseded selected session remains refused or stale; first-time
+multiple-network ambiguity still requires explicit selection.
+
+Use the existing catalog owner and atomic `CommitTransitions` CAS to retire the
+revoked row and publish the newly confirmed active row without exposing an
+intermediate deletion. Preserve selected-session and registration fences before
+publication and candidate activation. Only after durable exact recovery may its
+own engine intent be reauthorized; repeated synchronization of an already active
+choice without a recoverable authorization refusal is idempotent and cannot reset
+unrelated terminal refusals or in-flight epochs. The same fresh exact scope may
+also repair an authorization refusal left by missing old local admission; this
+is limited to `p2p.pair_unauthorized`, `p2p.pair_revoked`, `p2p.pair_not_found`
+and `p2p.network_revoked`. Identity/trust/lease/device authorization, runtime,
+transport and unrelated terminal failures are not cleared. The engine checks and
+resets its current exact intent under one lock, so a newer non-authorization
+failure cannot be cleared by an earlier qualifying observation.
+Use the existing production reconciliation owner to resume connection,
+not a parallel Connect, runtime-start request, new IPC operation, schema, timeout,
+quota or server-side pair mutation.
+
+The existing named `pairs.network_choices` boundary must not expose a recovered
+`selected` projection ahead of its authority. Every successful choice read first
+passes the fresh catalog CAS and live-pin publication, then returns `selected`
+with the resulting catalog revision. An unchanged record is a no-op CAS without
+a file write or revision change; it still reinstalls a missing live pin after a
+lost publication reply, even when there is no terminal refusal to trigger repair.
+If publication fails, preserve the explicit refusal instead of a selected
+projection backed only by memory. An ordinary unchanged choice read does not
+switch networks or reset engine epochs.
+
+Prove the regression from revoked durable row to active readback without
+`pairs.select_network`, repeat and restart behavior, failed publication/read and
+scope-change refusal, unchanged alternate-network ambiguity, and exact terminal
+isolation with focused races and a real isolated coordinator/helper integration.
+Source validation does not update installed clients or complete physical
+Mac/Windows, eight-hour, native UI or release acceptance.
+
+### D37 — Keep Windows local runtime commands in the background
+
+The user reported a Windows console window appearing when starting local DSH.
+The Go runtime owner started the supervised console program without explicit
+window suppression, and port inspection and process-tree termination also
+launched console tools through their own command constructors. These commands
+are background implementation work; the Launcher Console owns their visible
+process output and an additional native console window is not a product action.
+
+On Windows, the supervised runtime child uses `HideWindow` together with
+`CREATE_NO_WINDOW`. A shared platform-owned `backgroundCommand` constructor
+applies the same attributes to the port inspection commands and `taskkill`.
+Keep the original executable/arguments, command results and typed errors. Do not
+add a shell wrapper, change the user's terminal or hide an explicitly requested
+interactive application. On non-Windows platforms this constructor remains
+ordinary `exec.Command`; the supervised runtime still leads its existing POSIX
+process group.
+
+Window suppression must retain stdout/stderr pipes, URL readiness announcement,
+exit/wait receipts, Console/log output and existing launch/Stop behavior. The
+independent runtime owner's authenticated attachment, detachment and survival
+contracts remain unchanged. Preserve the current Windows tree-termination flags
+and POSIX process-group signaling. This is limited to local harnessruntime
+process construction; SSH commands and other product domains are out of scope.
+
+Verify Windows process attributes and actual background command execution with
+output/exit readback, the real native no-console child path, port inspection and
+Stop behavior, plus the existing owner/pipe lifecycle checks. Cross-build the
+non-Windows implementation without changing its process-group contract. Record
+source/native proof separately from installed-app verification; do not relabel
+section 6.4's retained broad failures or the physical ICE gates.
+
+### D38 — Preserve explicit workbench intent behind background preparation
+
+The installed 0.1.94 Run page can report `p2p.connection_busy` while the original
+network is active. Electron first wakes background retries twice, then dispatches
+the explicit connection. A background bind-only candidate can already own the
+only outbound slot; rejection occurs before accepting the user's cold-start
+intent. Its pre-ticket reservation has no public State until transport creation.
+The renderer also retains one global refusal after successful reads, so a past
+busy code can outlive the request and appear on another computer.
+
+Remove both Electron pre-connect retry wakes. The existing Go `peer.connect`
+boundary already repairs the exact account's signal subscription. Keep one
+explicit dispatch and retain strict reply pair/generation validation. Normal
+maintenance continues to own background retries.
+
+When an explicit workbench request meets a background bind/resume candidate,
+the Go manager may register one exact waiting owner for that pair. It preserves
+the existing candidate, ticket, negotiation and prepare-resolution lifetime.
+Waiting does not upgrade that candidate's permissions or cancel it when the
+caller leaves. A successful borrowed candidate must be promoted out of the slot;
+a failed candidate must finish its exact cleanup. Never wait for a healthy
+promoted primary's lifetime `done`. Only then reserve a new candidate with the
+explicit request's own generation and cold-start intent. An existing explicit
+candidate remains single-flight; no second explicit waiter or fabricated old
+generation response is admitted.
+
+Capture and revalidate the manager, selected account, exact pin/device/key scope,
+signal owner/subscription and registration fence. The waiting owner's per-pair
+cancellation epoch and new reservation share the manager lock. Disconnect clears
+that ownership atomically before cleanup; a late waiter cannot restore the
+cancelled intent. Revocation, account/fence changes, stale generation and shutdown
+remain typed refusals. The waiting owner has priority over a new background
+reservation but cannot displace an already admitted candidate.
+
+Initialize a pre-ticket candidate's public in-flight state from its actual
+Prepare attempt ID and generation. Current-state ownership must recognize that
+reservation without claiming a ticket, workbench, path or Ready. Preserve an
+existing primary's projection until authoritative promotion. Preparation
+diagnostics record only bounded phase, identity/fence, classified error and
+ownership fields; no tokens, keys, tickets, payloads or arbitrary error text.
+
+Unknown prepare replies retain the exact immutable attempt. A new, explicit
+rate-limit refusal followed by same-scope authoritative absence may return to
+the engine's existing backoff only when this attempt has never had an ambiguous
+dispatch result. Earlier lost, decoder or transport results remain sticky:
+a later 429 plus temporary absence cannot erase them. No caller timeout,
+counter reset or new arbitrary deadline proves server non-admission.
+
+Renderer refusals belong to an exact service/pair operation. A current peer
+readback replaces a historical busy hint with its actual stage/error, while
+unrelated computer and real refusal records remain isolated. Close the accepted
+reply/late-callback readback gap using the existing typed state ownership; do not
+invent Ready from dispatch, poll indefinitely without an in-flight owner, replay
+renderer IPC IDs or add a parallel connection controller.
+
+Verify duplicate wake removal, delayed state publication, per-pair refusal
+isolation, background/manual interleavings, caller cancellation, disconnect's
+reservation barrier, stale scope/generation, exact unknown prepare retention,
+safe rate-limit backoff and no implicit runtime start from background recovery.
+Exercise a real coordinator and the actual public Run control separately from
+unit cases; retain source, installed artifact, native interaction and physical
+cross-machine outcomes as distinct evidence.
+
+### D39 — One account authority for the footer and account panel
+
+The user observed the Mac footer reporting online while Account and Network
+reported signed out, then explicitly requested one consistent state, including
+signed out when no valid account session exists. A running core, reachable
+coordinator, device certificate or transport is not proof of a signed-in user.
+
+The footer and Account and Network panel consume the same selected service's
+account-domain session state. An unread/restoring session stays pending; an
+authoritatively absent/expired session is signed out on both surfaces. Only a
+confirmed current user grants signed-in presentation. Signing in, registration,
+logout and session invalidation update that shared state; a late old read cannot
+replace a newer login/logout outcome or another service's identity. Preserve
+explicit failed/unknown reads rather than substituting connectivity as authority.
+
+A later non-authentication refresh failure does not revoke an already confirmed
+signed-in session in the same revision. Retain that exact accepted state through
+rate limiting, helper admission refusal or network-read failure. This cannot
+promote an initially unknown state or a historical identity into signed-in
+authority; explicit no-session replies, logout and epoch changes retain their
+existing invalidation rules.
+
+Keep network transport reachability separate from account authentication. If
+reachability is still presented, label it explicitly without allowing an online
+transport to override signed-out or pending authentication. Reuse existing typed
+account readback and locale dictionaries; no new credential exposure or arbitrary
+renderer capability is needed. Do not relogin, reset credentials, change networks
+or restart processes to manufacture consistent presentation.
+
+Verify selected-service isolation, startup restore, missing session, successful
+login, logout, failed reads and stale asynchronous results. Compare the footer
+and account card from the same live domain through public UI controls, and keep
+this visual/account-state evidence separate from physical transport readiness.
+
+
+### D40 — Isolate test distribution and contain runtime-owner failure
+
+The user explicitly authorizes a hotfix after the formal 0.1.95 installation was
+blocked by a test installation's owner record. The test copy had reused the
+formal profile. Stable distributions preserve the existing formal profile and
+credential/catalog identities. Development and non-tag test distributions have
+a distinct application/installer identity and require an explicit absolute test
+profile root, disjoint from the formal profile. Selection happens before the
+single-instance lock, logs, bootstrap, credential access and core creation.
+Unknown distribution metadata, missing/relative/linked/conflicting test roots
+fail explicitly; they never fall back to the formal home. An explicit test root
+may also isolate a stable artifact for validation. Test native DSH home, Electron
+user/session data, bootstrap, managed roots, catalogs and runtime state all stay
+inside that isolated profile. Test installation cannot terminate or replace the
+formal installation through the shared installer identity.
+
+Admission also reads the formal bootstrap locator and validated root registry
+without writing them. A test root must not overlap any registered external
+settings, managed root or workspace; unreadable registration fails closed for
+test admission. Native credentials use a stable explicit namespace derived from
+the canonical test root on all platforms. Stable uses its original native key
+identity and ignores an inherited test namespace. Test missing secrets never
+read, migrate or delete stable entries. Isolated profiles cannot query, enable
+or disable the global stable autostart registration, and their core startup is
+independent of that registration. Real macOS Keychain and Linux Secret Service
+namespace read/write/delete checks are required in the native packaging gates.
+
+D12's strict owner record and authentication contract remains. A failed owner
+Open is a real unavailable runtime authority, not a replacement supervisor or an
+empty successful runtime. Both desktop and headless compositions continue to
+serve unrelated catalog, root, credential, SSH and device/account/P2P operations;
+all local runtime operations preserve the original typed owner refusal. Only a
+successfully opened owner participates in cleanup. Orderly desktop shutdown
+allows the already documented sequential broker and owner cleanup budgets before
+forced termination; normal closure must join its actual owner and remove its
+record. Corrupt, incompatible and unreachable ownership is never silently
+replaced, and retained owner evidence remains unchanged.
+
+The current abandoned Windows record has a separately authorized operator
+recovery: securely back up existing formal records on the data drive, normally
+close the formal application, verify the exact old owner is absent and no managed
+local DSH process remains, and quarantine only that stale runtime-owner record.
+This is explicit incident recovery, not an automatic product takeover policy.
+Account credentials, registered roots, server/network/device/key/pair identities
+and SSH computer records are preserved and read back after recovery. Retire the
+old unisolated test installation so it cannot write formal state again.
+
+Verification covers fresh/same-root/no-op, rejected root/channel, partial boot,
+identity mismatch, dead/corrupt owner, repeated/restarted core and graceful
+cleanup using real production compositions and disposable test roots. Before
+publication, exercise the formal application's public controls for restored
+sign-in, its existing SSH computer and original LAN/P2P computer with loaded
+workbench content. Source gates, independent review, exact native package and
+same-source CI are required. Preserve earlier native frame and eight-hour
+limitations; this hotfix is not acceptance of those unrelated long-duration gates.
+
+### D41 — Reconcile a committed login whose reply was not confirmed
+
+Formal diagnosis established that the original session expired, then the user's
+new login succeeded and persisted a valid session for the original account.
+The renderer still offered sign-in; a repeated submission received the main
+owner's `p2p.user_already_logged_in`. The exact cause of the first unaccepted
+reply was not captured and is not inferred from that symptom.
+
+A login result classified as unconfirmed, or that exact already-signed-in
+refusal, must initiate one normal server-backed current-user read. Neither
+refusal itself proves an identity or successful authentication. A successful
+read updates the existing shared account projection; authoritative sign-out
+and transient/unknown results preserve their normal semantics. Do not resend
+passwords, delete credentials, log out, select networks or change pairings.
+Revision, stop, service-switch and explicit sign-out fences apply to the login
+reply and the recovery read so late work cannot restore abandoned authority.
+
+### D42 — Archive a provably abandoned local runtime automatically
+
+The formal Windows record from October 24 still names an owner process that no
+longer exists. The installed core correctly refuses that record, but D12/D40's
+unconditional dead-record refusal prevents subsequent local starts. The user now
+authorizes evidence-based automatic archival, superseding that unconditional
+refusal only for the cases defined here. Account, credential, pairing, network,
+registered-root and SSH stores are outside this operation.
+
+An additional private, versioned recovery journal binds the complete owner,
+configuration, binary/root/home identities and an exact operating-system boot
+identity. The owner writes idle evidence before accepting launches, durably marks
+pending before any child spawn, and retains pending/active evidence until actual
+supervised cleanup proves every admitted subject has joined. A failed write or
+uncertain child/descendant cleanup cannot publish idle or remove the fencing
+evidence. A root PID disappearing alone is not proof that PNPM's descendants
+exited. Missing owner.json cannot bypass a retained recovery journal.
+
+Automatic recovery holds the creation lease and the owner lifetime lease,
+validates private paths/ACLs and exact configuration, proves the recorded owner
+has exited without treating process-query errors as absence, then rereads both
+records before mutation. Only confirmed idle evidence in the same boot, or an
+exact changed boot identity proving all old processes ended, admits archival.
+On Windows, each new independent owner joins its own private Global named Job
+Object before accepting any launch. The job binds the exact user/owner instance,
+forbids breakaway and has kill-on-last-close enabled on a non-inherited handle.
+The recovery journal explicitly records this containment contract. Normal Quit
+terminates only native handles still verified as members of that exact job,
+joins until the owner is its sole survivor, and completes record cleanup before
+releasing containment. An owner crash causes kernel termination of the contained
+tree. Only exact object absence or zero active members after owner death admits
+same-boot recovery; unknown/permission errors remain refusals. Ordinary Stop may
+not terminate another runtime subject. Unix cleanup verifies every retained
+managed process group is empty, without claiming containment of arbitrary
+processes that deliberately leave their managed group.
+
+An active/unreachable owner, unproven same-boot pending/active tree, legacy missing journal,
+corrupt/linked/incompatible data or unknown boot/process identity fails closed.
+
+Archive the exact original bytes into a fresh private, non-overwriting archive
+entry before creating the replacement owner. Concurrent recovery cannot create
+two owners. Archival/publication failure preserves evidence and prevents a start;
+it cannot turn into an empty successful runtime. No account store, remote
+connection, credential or application content belongs in a recovery journal or
+public diagnostics. Keep authenticated hello and renderer capabilities unchanged.
+
+The current legacy record has no durable child journal, so this incident uses
+the user's explicit operator authorization: private D-drive backup, normal Quit,
+both actual ownership locks, independent owner/managed-process/port absence,
+binary and record-hash checks, then exact-byte quarantine on D. Subsequent
+records use the new automated evidence contract. Verification distinguishes this
+one-time legacy recovery from automatic crash/restart tests on isolated profiles.

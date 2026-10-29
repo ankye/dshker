@@ -24,6 +24,9 @@ import (
 // A real separate test process uses the same Run entry as the production
 // private mode. No account, secret provider, or networking core is constructed.
 func TestMain(tests *testing.M) {
+	if runContainmentTestChild(os.Args[1:]) {
+		os.Exit(0)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--runtime-owner" {
 		flags := flag.NewFlagSet("runtime-owner-test", flag.ContinueOnError)
 		var config Config

@@ -82,6 +82,7 @@ type Manager struct {
 	// of its own to load.
 	inbound              map[string]*session
 	candidates           map[string]*session
+	manualWaiters        map[string]*manualCandidateWait
 	inboundCandidates    map[string]*session
 	inboundAdmissions    map[string]*inboundAdmission
 	inboundAdmissionWait sync.WaitGroup
@@ -202,6 +203,7 @@ func (manager *Manager) Pin(pin controlplane.PairIdentity) error {
 		return err
 	}
 	manager.cancelChangedAdmissionLocked(pin.Pair.PairID)
+	manager.cancelChangedManualWaitLocked(pin.Pair.PairID)
 	return nil
 }
 

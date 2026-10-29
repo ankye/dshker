@@ -6,6 +6,38 @@ between background transport connections and a user-requested workbench.
 
 ## ADDED Requirements
 
+### Requirement: Footer and account panel share selected-account authentication
+
+The Launcher SHALL derive both footer and Account and Network authentication
+presentation from the same selected service's current account session. Transport
+availability SHALL NOT establish or retain signed-in presentation.
+
+#### Scenario: Core is reachable without a user session
+
+- **WHEN** the core or coordinator is online but the selected service has no valid user session
+- **THEN** both surfaces show signed out and neither reports account online from transport state
+
+#### Scenario: Account restoration has not settled
+
+- **WHEN** the selected service's current account is still unread or restoring
+- **THEN** both surfaces retain a pending state without inventing a signed-in or signed-out result
+
+#### Scenario: Login or logout overtakes an older read
+
+- **WHEN** a confirmed login, logout or session invalidation supersedes an older current-user read
+- **THEN** both surfaces reflect the current operation's account state and the late read cannot restore old authority
+
+#### Scenario: A different service is selected
+
+- **WHEN** the selected service changes while another service's account request is pending
+- **THEN** footer and account panel both reflect only the newly selected service's authentication
+
+#### Scenario: Refresh fails after a confirmed login
+
+- **WHEN** a current-user refresh in the same session revision is rate limited or fails without an authoritative no-session result
+- **THEN** an already confirmed signed-in state remains consistent on both surfaces
+- **AND** an initially unknown state or historical identity cannot become signed in from that failure
+
 ### Requirement: Retain explicit account transport ownership during recovery
 
 Ordinary Bearer management and directory operations SHALL use the exact existing
@@ -138,11 +170,11 @@ one-use result, without caching current-active authority or changing deadlines.
 
 ### Requirement: Carry selected-session denial through every authority tail
 
-Authentication activation, restore, local catalog/pins, directory publication and
-named recovery authorization SHALL carry the exact captured selected-session
-scope across awaits. Locally revoked authority SHALL NOT be reacquired from a
-still-valid remote/durable token. The scope SHALL NOT cache remote authorization
-or replace ordinary explicit caller-Bearer data-read semantics.
+Authentication activation SHALL carry the exact captured selected-session scope,
+as SHALL restore, local catalog/pins, directory publication and named recovery
+authorization across awaits. Locally revoked selected-session authority SHALL NOT
+be reacquired from a still-valid remote/durable token. The scope SHALL NOT cache
+remote authorization or replace ordinary explicit caller-Bearer data-read semantics.
 
 #### Scenario: Logout wins before a pending authority read publishes
 
@@ -535,7 +567,8 @@ Catalog updates and ordinary system resume SHALL NOT clear terminal refusals or
 grant fresh authorization. Catalog updates SHALL reconcile existing intent, and
 resume MAY cancel transient backoff while preserving terminal intent. Only the
 existing exact service/pair's freshly authorized durable publication may reset
-its terminal state through the epoch-fenced Reauthorize owner.
+its terminal state through the epoch-fenced engine owner, using explicit
+Reauthorize or D36's atomic RecoverAuthorization admission.
 
 #### Scenario: Another service changes or the system resumes
 
@@ -577,8 +610,9 @@ registration and fresh selected membership; renderer input SHALL NOT supply pins
 - **WHEN** the user/account, catalog revision or network authority changes during
   selection, or the committed result is unknown
 - **THEN** the old request cannot authorize a different scope or open a late tab
-- **AND** revoked saved authority is not replaced automatically; a fresh explicit
-  choice uses the owning revoke/retire transition before recording new authority
+- **AND** genuinely revoked original authority is not replaced automatically;
+  choosing a different scope uses the owning revoke/retire transition before
+  recording new authority
 - **AND** unknown outcomes are read back, never retried under another network
 
 #### Scenario: Explicit reselection cannot persist an intermediate missing identity
@@ -589,6 +623,71 @@ registration and fresh selected membership; renderer input SHALL NOT supply pins
   bytes and revision remain intact and its strict identity guards are unchanged
 - **AND** repeated complete empty discovery retains stale selection lineage, so
   a later sole alternative still requires the user's explicit choice
+
+### Requirement: Fresh original authorization repairs local revoked state
+
+Automatic catalog synchronization SHALL restore a saved connection whose local
+state is revoked when fresh current-account network, pair and scoped identity
+reads confirm active authority for the same service, user, original network,
+local and remote device IDs, and both original public keys. The local revoked
+flag SHALL NOT require manual network reselection in that case. Recovery SHALL
+use the owning atomic catalog transition and current selected-session and
+registration fences; cached state or discovery order SHALL NOT grant authority.
+
+#### Scenario: Original network and pair remain active
+
+- **WHEN** a saved local revoked connection has freshly confirmed active server
+  authority for its exact original scope and device keys
+- **THEN** automatic synchronization atomically retires the revoked row and
+  records active authority without a user selection or intermediate deletion
+- **AND** only that durably recovered service/pair is reauthorized through its
+  existing automatic connection owner, without opening a tab or starting DSH
+
+#### Scenario: Repeated synchronization and restart
+
+- **WHEN** the same original authority is synchronized again or read after restart
+- **THEN** the connection remains one active record with its original network,
+  device identities and keys, without creating a duplicate or requiring selection
+- **AND** an already active unchanged record without a recoverable authorization
+  refusal does not reset engine terminal state or in-flight epochs
+
+#### Scenario: Network choices read encounters recoverable stale authority
+
+- **WHEN** `pairs.network_choices` freshly confirms exact original authority,
+  including a revoked record, a recoverable authorization refusal, or a durable
+  active record whose live pin was lost with an earlier publication reply
+- **THEN** it commits the exact catalog/live pin before returning `selected` and
+  the resulting catalog revision, or returns the owning explicit refusal
+- **AND** an unchanged record uses a no-op CAS without a file write or revision
+  change, while ordinary active reads do not reset engine terminal state
+- **AND** recoverable refusals are limited to `p2p.pair_unauthorized`,
+  `p2p.pair_revoked`, `p2p.pair_not_found` and `p2p.network_revoked`
+- **AND** recovery cannot clear identity, trust, lease, device-authorization,
+  unrelated or runtime/transport terminal failures
+
+#### Scenario: A different terminal failure wins during recovery
+
+- **WHEN** the exact engine intent acquires a non-authorization terminal refusal
+  after an earlier recovery check but before its stop can be reset
+- **THEN** the recovery owner atomically rechecks that current stop and preserves
+  its error, epoch and connection owner instead of clearing the newer failure
+
+#### Scenario: Original authority is absent or identity changes
+
+- **WHEN** the original network or pair is revoked or absent, the selected account
+  changes, or either original device ID or public key differs from fresh authority
+- **THEN** automatic synchronization grants no replacement authority
+- **AND** another authorized network, even a sole alternative, is not selected
+  without the user's explicit choice
+
+#### Scenario: Fresh read or publication cannot complete
+
+- **WHEN** an authoritative read, catalog validation, CAS or pre-publication write
+  fails, or the selected session or registration changes before publication
+- **THEN** recovery grants no live pin and cannot publish a late active record
+- **AND** original durable bytes and revision remain intact before publication;
+  an unknown publication outcome is resolved by authoritative readback
+- **AND** recovery does not clear another service/pair's terminal refusal
 
 ### Requirement: Running DSH survives a network-core crash
 
@@ -658,8 +757,8 @@ credential-free typed admission decisions with exact scope and owner identity.
 
 ### Requirement: Grace recovery cannot prematurely retire the original workbench
 
-For an exact suspended predecessor with an existing usable workbench, each
-endpoint SHALL retain that predecessor's original recovery authority before
+Each endpoint SHALL retain an exact suspended predecessor's original recovery
+authority while its existing usable workbench remains in recovery before
 publishing candidate Ready. The candidate SHALL wait for actual predecessor
 termination or cancel itself if the original transport recovers. Scope mismatch
 and expiry SHALL fail explicitly. Waiting SHALL NOT extend the original grace,
@@ -683,3 +782,215 @@ roll back a dispatched or verified committed coordinator decision.
 - **AND** explicit remote-core replacement and transport-only workbench upgrade
   keep their distinct existing behavior rather than waiting for an unrelated
   healthy transport to terminate
+
+### Requirement: Windows local runtime commands stay in the background
+
+Windows local runtime commands SHALL suppress console-window creation for launch,
+port inspection and process-tree termination while preserving their existing
+stdout/stderr pipes, output, errors, readiness and process ownership. The shared
+platform command constructor SHALL apply `HideWindow` and `CREATE_NO_WINDOW`
+on Windows. Non-Windows helper commands and supervised process-group behavior
+SHALL retain their existing contracts. This change SHALL NOT alter SSH flows,
+runtime-owner lifetime, launch/Stop meaning, logging or renderer capabilities.
+
+#### Scenario: Start local DSH on Windows
+
+- **WHEN** the runtime owner starts the local supervised DSH console program
+- **THEN** its process has no new console window and its standard output/error
+  still reach the existing Launcher Console/log and URL readiness owners
+- **AND** exit receipts and independent runtime-owner survival remain unchanged
+
+#### Scenario: Inspect the local port or stop its process tree
+
+- **WHEN** the Windows runtime invokes its existing port-inspection tools or
+  `taskkill` for the owned process tree
+- **THEN** the helper runs without a new console window and returns its actual
+  output and exit/error result to the existing caller
+- **AND** the existing termination arguments and cleanup ownership are preserved
+
+#### Scenario: Execute on a non-Windows platform
+
+- **WHEN** the runtime starts a helper command or its supervised DSH process on
+  a non-Windows platform
+- **THEN** helper construction adds no Windows attributes and the supervised
+  child retains its existing process-group and stop-signal behavior
+
+### Requirement: Explicit workbench requests share the unique connection owner
+
+An explicit Run-page connection SHALL dispatch once without first starting
+background retries. When a bind-only or resume candidate owns the outbound slot,
+one exact waiting explicit request MAY retain its own generation and intent until
+that candidate safely promotes or finishes cleanup. The request SHALL revalidate
+account, pin/device/key, subscription, registration and cancellation ownership
+atomically with its new reservation. It SHALL NOT upgrade the borrowed
+candidate's negotiation or return its old generation as the new request's result.
+
+#### Scenario: A user connects while background preparation is in flight
+
+- **WHEN** the exact authorized pair has a background candidate and the user
+  requests its workbench
+- **THEN** the existing candidate remains the unique owner until its actual
+  outcome, and at most one explicit waiter is registered
+- **AND** after safe promotion or cleanup, the waiting request reserves its own
+  current generation and explicit workbench permission
+- **AND** a healthy promoted primary does not have to terminate for the request
+
+#### Scenario: A pending explicit request is cancelled or loses authority
+
+- **WHEN** its caller leaves, Disconnect occurs, or its account, pin/key,
+  subscription, registration or manager lifetime changes while waiting
+- **THEN** the request cannot reserve a late replacement or revive old intent
+- **AND** caller cancellation does not cancel the borrowed background owner
+- **AND** a stale explicit generation remains a typed refusal
+
+### Requirement: In-flight preparation and refusal readback remain truthful
+
+A pre-ticket reservation SHALL expose its actual preparation attempt and
+generation as in-flight without claiming server admission or Ready. It SHALL NOT
+replace an existing primary's public projection. Renderer busy hints SHALL be
+scoped by service and pair and yield to that pair's subsequent actual state.
+An accepted reply and a delayed main callback SHALL NOT leave the Run page
+permanently showing an empty snapshot and a historical busy hint.
+
+#### Scenario: Preparation has not yet returned a ticket
+
+- **WHEN** a current candidate owns an initial pair's outbound slot
+- **THEN** its actual attempt and generation are observable as in-flight
+- **AND** neither a workbench URL nor Ready is fabricated
+- **AND** a different computer's busy record is not displayed for this pair
+
+#### Scenario: Rate limiting follows an ambiguous prepare reply
+
+- **WHEN** an attempt previously had a lost, malformed or transport-ambiguous
+  prepare result and a later replay is rate-limited with a temporary missing read
+- **THEN** the same attempt remains owned for authoritative resolution
+- **AND** only an attempt with no ambiguous dispatch history may return a fresh
+  explicit rate-limit plus same-scope absence to the existing retry backoff
+
+#### Scenario: A late connection callback follows an accepted reply
+
+- **WHEN** the current connection reply precedes its renderer-visible callback
+- **THEN** readback continues under the exact accepted identity until actual state
+  is known or authority ends, without dispatching another connection
+- **AND** historical busy is cleared only for the matching pair and actual state
+
+
+### Requirement: Test distributions cannot use formal user state
+
+A test or development Launcher SHALL use a distinct application identity and an
+explicit absolute profile root disjoint from formal user state. Profile
+selection SHALL precede the single-instance lock, bootstrap, credential access
+and core startup. Stable distributions SHALL preserve existing formal account,
+network, device, pairing, registered-root and SSH identities.
+
+#### Scenario: Start a test build without a safe profile
+
+- **WHEN** a test build has no explicit root, or the root is relative, linked or
+  conflicts with formal state
+- **THEN** startup fails explicitly before accessing formal configuration
+- **AND** no formal owner, bootstrap, credentials or records are created or changed
+
+#### Scenario: Run test and formal applications together
+
+- **WHEN** a test build has a valid independent profile and a formal build runs
+- **THEN** their locks, native homes, settings, catalogs and runtime owners are independent
+- **AND** test installation and shutdown cannot replace or terminate the formal application
+
+### Requirement: Runtime-owner refusal does not disable unrelated core services
+
+Both desktop and headless cores SHALL retain the exact runtime-owner refusal for
+runtime operations while continuing to serve unrelated catalog, account,
+credential, SSH and device transport operations. An unavailable runtime SHALL
+NOT be represented as an empty successful state or replaced by another owner.
+
+#### Scenario: Existing ownership cannot be admitted
+
+- **WHEN** a runtime-owner record is incompatible, corrupt, unreachable or dead without sufficient safe-recovery evidence
+- **THEN** core version, registered-root, catalog and remote-computer operations remain usable
+- **AND** runtime start, stop, status, console and binding return the original typed refusal
+- **AND** the refused record and any existing owner remain unchanged
+
+#### Scenario: Close the formal application normally
+
+- **WHEN** its actual core is completing the documented broker and owner cleanup
+- **THEN** the shell allows that bounded cleanup before forced termination
+- **AND** successful normal shutdown joins its owner and removes its own record
+
+#### Scenario: Recover this explicitly authorized abandoned record
+
+- **WHEN** the operator has securely backed up formal records, closed the application,
+  verified the old owner is absent and verified no managed DSH child remains
+- **THEN** only that abandoned runtime record may be quarantined for this incident
+- **AND** restored sign-in, original pairing and SSH records are independently read back
+- **AND** this legacy incident recovery is separate from the evidence-based automatic recovery below
+
+### Requirement: Safely archive a provably abandoned runtime owner
+
+A new owner MUST persist a private versioned recovery journal bound to its exact
+owner, configuration, native home, binary, registered-root and OS boot identities. Pending child
+creation MUST be durable before spawn; idle MUST require confirmed cleanup of
+every admitted subject. Missing or uncertain evidence MUST NOT imply idle.
+Account, pairing, network and SSH records MUST remain unchanged by recovery.
+
+#### Scenario: An idle owner exits without removing its record
+
+- **WHEN** both ownership leases are acquired, exact private identity and unchanged record bytes are validated, and the recorded owner is confirmed exited
+- **AND** its same-boot journal proves idle with no unresolved managed runtime
+- **THEN** the exact owner and journal bytes are retained in a fresh non-overwriting private archive
+- **AND** a single replacement owner admits local startup without manual cleanup
+
+#### Scenario: The operating system restarted with an active journal
+
+- **WHEN** the same strict checks pass and exact OS boot identity proves the previous boot ended
+- **THEN** the old runtime tree is treated as exited and exact evidence is archived before replacement
+- **AND** a missing or unreadable boot identity remains a typed refusal
+
+#### Scenario: A live or uncertain runtime remains protected
+
+- **WHEN** the owner is alive or unreachable, a same-boot child launch is pending/active without kernel containment death proof, process identity is unknown, or a legacy journal is absent
+- **THEN** recovery refuses without replacing records, adopting processes, killing children or editing account/SSH data
+- **AND** PID reuse, a free port or missing root child PID alone does not authorize recovery
+
+#### Scenario: Windows owner exits with a contained runtime tree
+
+- **WHEN** the journal proves the exact private non-breakaway kill-on-close job and the exact owner is confirmed exited
+- **AND** native inspection proves that Global job no longer exists or has zero active members
+- **THEN** same-boot archival may proceed under both leases and exact-byte revalidation
+- **AND** access errors or live job members remain refusals
+
+#### Scenario: Explicit Quit ends the entire local runtime
+
+- **WHEN** the user explicitly exits the Launcher while local DSH is running
+- **THEN** the admitted owner closes new runtime admission and stops all verified members of its private Windows job
+- **AND** it confirms no DSH descendants remain, closes the local listener and removes its exact runtime records before completing normal exit
+- **AND** no account, pairing, SSH data or unrelated process is terminated or deleted
+
+#### Scenario: Interrupted archival or concurrent recovery
+
+- **WHEN** records change, archive publication fails, or another core attempts recovery concurrently
+- **THEN** exact identity and both leases prevent duplicate authorities and overwritten evidence
+- **AND** a leftover journal cannot be bypassed by a missing owner.json
+
+### Requirement: Unconfirmed login results reconcile through current authority
+
+The shared account state MUST confirm an unconfirmed login result or an exact
+already-signed-in refusal through one fresh current-user read. It MUST NOT infer
+the signed-in user from a submitted username, local error or historical record.
+
+#### Scenario: Authentication committed before its reply was lost
+
+- **WHEN** main has persisted the original account's valid session but the login result is unconfirmed
+- **THEN** one fresh current-user read confirms the actual account for every shared status view
+- **AND** no password retry, credential deletion, network change or pairing change occurs
+
+#### Scenario: Repeat submission meets an existing valid session
+
+- **WHEN** main refuses the submission with `p2p.user_already_logged_in`
+- **THEN** the renderer reads current authority instead of leaving the signed-out projection stuck
+- **AND** only a successful read can publish a signed-in user
+
+#### Scenario: Recovery loses authority or becomes stale
+
+- **WHEN** the read is refused, unavailable, superseded by sign-out, stopped or switched away
+- **THEN** the normal signed-out, unknown or stale-result semantics remain in force
+- **AND** a late login or read cannot restore an abandoned account projection

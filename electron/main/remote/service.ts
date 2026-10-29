@@ -283,7 +283,7 @@ export class RemoteConnectionService {
     const port = this.route()
     if (port === undefined) {
       throw new RemoteConnectionError(
-        'remote.persistence_failed',
+        'remote.core_unavailable',
         'The headless core is required to read or write remote connections.'
       )
     }

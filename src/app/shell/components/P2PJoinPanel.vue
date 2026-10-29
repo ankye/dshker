@@ -10,6 +10,7 @@ import { useTranslator } from '@/app/shared/i18n/useLocale'
 import type { MessageKey } from '@/app/shared/i18n/i18n'
 import { refusalKeyForCode } from '@/app/shared/i18n/i18n.refusals'
 import CopyPathButton from '@/app/shared/controls/CopyPathButton.vue'
+import { useP2PAccountSession } from '../useP2PAccountSession'
 
 /**
  * 「我的网络」 card (Network & account tab).
@@ -29,6 +30,7 @@ const t = useTranslator()
 
 const catalog = management.catalog
 const serviceId = computed(() => management.selectedServiceId.value)
+const { labelKey: statusLabelKey, indicator: networkStatus } = useP2PAccountSession(serviceId)
 const service = computed(() =>
   serviceId.value === undefined
     ? undefined
@@ -126,11 +128,7 @@ const joinedNetworkId = computed(() => {
  */
 const signedIn = computed(() => {
   const id = serviceId.value
-  return id ? !!accounts.state(id).user : false
-})
-const accountSignedOut = computed(() => {
-  const id = serviceId.value
-  return id ? accounts.state(id).user === null : false
+  return id ? accounts.sessionStatus(id) === 'signedIn' : false
 })
 
 /**
@@ -161,43 +159,15 @@ const leaveError = computed(() =>
     ? operation.value.error
     : undefined
 )
-const banned = computed(() => {
-  const code = leaveError.value
-  return code === 'p2p.network_revoked' || code === 'p2p.pair_revoked'
-})
 /** The shared network-layer session, never a pair connection stage. */
 const sessionOnline = computed(() => {
   const id = serviceId.value
   return id ? p2pNetwork.isOnline(id) : undefined
 })
-type NetworkStatus = 'online' | 'offline' | 'banned' | 'unknown'
-const STATUS_KEYS: Readonly<Record<NetworkStatus, MessageKey>> = {
-  online: 'p2p.myNetwork.online',
-  offline: 'p2p.myNetwork.offline',
-  banned: 'p2p.myNetwork.banned',
-  unknown: 'p2p.myNetwork.statusUnknown'
-}
-const networkStatus = computed<NetworkStatus>(() => {
-  if (registration.value?.kind !== 'registered') return 'offline'
-  if (banned.value) return 'banned'
-  // An unread session is not evidence of being offline, so it is stated as
-  // unknown rather than resolved into a claim in either direction.
-  if (sessionOnline.value === undefined) return 'unknown'
-  return sessionOnline.value ? 'online' : 'offline'
-})
 /** The refusal behind a down session, so "offline" is never unexplained. */
 const sessionRefusal = computed(() => {
   const id = serviceId.value
   return id ? p2pNetwork.refusal(id) : ''
-})
-const statusLabelKey = computed<MessageKey>(() => {
-  if (accountSignedOut.value && registration.value?.kind === 'registered') {
-    return 'p2p.myNetwork.joinedSignedOut'
-  }
-  if (networkStatus.value === 'online') return 'p2p.myNetwork.serviceOnline'
-  if (networkStatus.value === 'offline') return 'p2p.myNetwork.serviceOffline'
-  if (networkStatus.value === 'unknown') return 'p2p.myNetwork.serviceStatusUnknown'
-  return STATUS_KEYS[networkStatus.value]
 })
 
 const JOIN_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
@@ -432,7 +402,7 @@ async function leave(): Promise<void> {
         data-testid="p2p-joined-state"
       >
         <p
-          v-if="networkStatus === 'offline' && sessionRefusal"
+          v-if="sessionOnline === false && sessionRefusal"
           class="p2p-network-reason"
           data-testid="p2p-network-reason"
         >

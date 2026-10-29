@@ -117,6 +117,7 @@ describe.skipIf(binary === undefined)('catalog ownership against a real dshkerd'
         resourcesRoot: meta.resourcesRoot,
         dataRoot: meta.dataRoot,
         stateRoot: join(meta.dataRoot, 'state'),
+        isolatedProfileRoot: meta.dataRoot,
         catalogRoot: meta.catalogRoot,
         onUnavailable: () => undefined
       },

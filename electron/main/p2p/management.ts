@@ -783,12 +783,17 @@ export class PeerManagement {
   }
   async connect(serviceId: string, pairId: string, signal: AbortSignal) {
     const session = await this.#readyAsDevice(serviceId, signal)
-    // A coordinator socket can have been displaced while the helper process
-    // stayed alive. Ask the core to repair that subscription before dispatching
-    // the user-visible connect; otherwise the pair attempt would fail instantly
-    // with p2p.server_unavailable even though the coordinator is reachable.
-    await session.autoConnect.retryNow(serviceId, signal)
-    return session.connections.connect(serviceId, pairId, this.#signal(signal))
+    // peer.connect owns signal repair and candidate admission in the core.
+    // Starting an automatic candidate first would compete with this request.
+    const acceptReply = this.#host.prepareConnectReply(serviceId, pairId)
+    const requestSignal = this.#signal(signal)
+    return session.connections.connect(serviceId, pairId, requestSignal, (state, assertCurrent) =>
+      acceptReply(state, requestSignal, () => {
+        this.#admit()
+        if (this.#session !== session) throw new PeerHelperError('p2p.helper_unavailable')
+        assertCurrent()
+      })
+    )
   }
   async disconnect(serviceId: string, pairId: string, signal: AbortSignal) {
     const session = await this.#readyAsDevice(serviceId, signal)

@@ -1,0 +1,572 @@
+{
+  "change": "explicit-run-connect-busy",
+  "risk": "interactive",
+  "scope_note": "Keep explicit workbench intent and current account/pair ownership through background-candidate handoff and canonical actual-reply readback. Real production coordinator plus two production Host compositions and real isolated DSH processes prove integration; this does not claim physical Mac/Windows native UI or overnight acceptance. Existing installed 0.1.94 connectivity after user login is a separate observation.",
+  "production_files": [
+    "electron/main/p2p/connections.ts",
+    "electron/main/p2p/management-ipc.ts",
+    "electron/main/p2p/management.ts",
+    "electron/main/p2p/runtime-host.ts",
+    "src/app/domains/remote-connections/p2pConnections.ts",
+    "src/app/shell/components/P2PRunActions.vue",
+    "networking/internal/controlplane/client.go",
+    "networking/internal/controlplane/http_refusal.go",
+    "networking/internal/peersession/candidate_connect.go",
+    "networking/internal/peersession/candidate_manual_wait.go",
+    "networking/internal/peersession/candidate_prepare_diagnostics.go",
+    "networking/internal/peersession/manager.go",
+    "networking/internal/peersession/manager_admission.go",
+    "networking/internal/peersession/manager_attachment.go",
+    "networking/internal/peersession/manager_lifecycle.go",
+    "networking/internal/peersession/manager_signals.go",
+    "networking/internal/peersession/network_revocation.go",
+    "src/app/domains/remote-connections/index.ts",
+    "src/app/domains/remote-connections/p2pAccounts.ts",
+    "src/app/shell/useP2PAccountSession.ts",
+    "src/app/shell/AppShell.vue",
+    "src/app/shell/components/P2PAccountPanel.vue",
+    "src/app/shell/components/P2PJoinPanel.vue",
+    "src/app/shell/components/P2PNetworkAccountPanel.vue",
+    "src/app/shell/components/ShellStatusbar.vue",
+    "src/app/shared/i18n/i18n.p2p.ts",
+    "src/app/shared/i18n/messages.zh-CN.ts",
+    "src/app/shared/i18n/messages.en-US.ts"
+  ],
+  "test_files": [
+    "electron/main/p2p/management-ipc.test.ts",
+    "electron/main/p2p/management.test.ts",
+    "electron/main/p2p/management-connect-reply.test.ts",
+    "electron/main/p2p/management-explicit-connect.test.ts",
+    "electron/main/p2p/tests/connection-reply-fixture.ts",
+    "src/app/domains/remote-connections/p2pConnections.test.ts",
+    "src/app/domains/remote-connections/p2pConnections.readback.test.ts",
+    "src/app/shell/tests/P2PRunActions.test.ts",
+    "src/app/shell/tests/runtimeTabClosing.test.ts",
+    "networking/internal/controlplane/http_refusal_test.go",
+    "networking/internal/peersession/candidate_manual_wait_test.go",
+    "networking/internal/peersession/candidate_preparation_recovery_test.go",
+    "networking/internal/peersession/candidate_prepare_diagnostics_test.go",
+    "networking/internal/peersession/workbench_intent_test.go",
+    "networking/integration/host_cold_bootstrap_test.go",
+    "electron/main/p2p/management-account-readback.test.ts",
+    "src/app/domains/remote-connections/p2pAccounts.session.test.ts",
+    "src/app/shell/tests/accountSessionStatus.test.ts",
+    "src/app/shell/tests/P2PAccountPanel.test.ts",
+    "src/app/shell/tests/P2PJoinPanel.test.ts",
+    "src/app/shell/tests/P2PNetworkAccountPanel.test.ts",
+    "tools/tests/account-session-ui.mjs",
+    "networking/integration/certificate_legacy_cli_linux_test.go"
+  ],
+  "live_test_files": [
+    "networking/integration/host_cold_bootstrap_test.go",
+    "tools/tests/account-session-ui.mjs"
+  ],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestManualWorkbenchCreatesItsOwnCandidateAfterBackgroundPromotion"
+    },
+    {
+      "state": "no_op",
+      "test": "TestManualWorkbenchDoesNotJoinAnotherExplicitOwnerOrWaitingClick"
+    },
+    {
+      "state": "partial",
+      "test": "TestCandidateUnknownPrepareCannotBeErasedByLaterRateLimitAndAbsence"
+    },
+    {
+      "state": "recovery",
+      "test": "TestManualWorkbenchWaitsForFailedCleanupAndKeepsReservationPriority"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestManualWorkbenchDisconnectCannotResurrectWaitingIntent"
+    },
+    {
+      "state": "reset",
+      "test": "TestHostsSameNATColdRestoreDirectoryAndCandidatesRealDSH"
+    },
+    {
+      "state": "superseded",
+      "test": "refuses a delayed reply after a different actual attempt supersedes it"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/p2p/connections.ts",
+      "field": "actual reply pairId/generation and operation revision",
+      "source": "strict peer.connect response plus caller AbortSignal",
+      "test": "refuses a delayed reply after a different actual attempt supersedes it",
+      "assertion": "expect(f.owner.connections().peers).toEqual([{ serviceId, state: current }])",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "electron/main/p2p/management-ipc.ts",
+      "field": "single explicit dispatch",
+      "source": "one admitted connect IPC",
+      "test": "does not start an automatic candidate ahead of the one explicit request",
+      "assertion": "expect(f.call.mock.calls.some(([method]) => method.startsWith('peer.autoconnect_'))).toBe(false)",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "electron/main/p2p/management.ts",
+      "field": "session and lifetime admission",
+      "source": "current ready device session and core reply",
+      "test": "cannot publish from a session whose core channel became unavailable",
+      "assertion": "expect(f.owner.connections().error).toBe('p2p.helper_unavailable')",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "electron/main/p2p/runtime-host.ts",
+      "field": "canonical connection state and authorization revision",
+      "source": "actual helper reply and latest callback under current catalog revision",
+      "test": "fences catalog removal even when publication authorization already read the old record",
+      "assertion": "const refused = expect(pending).rejects.toMatchObject({ code: 'p2p.stale_generation' })",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pConnections.ts",
+      "field": "exact service/pair refusal and immediate snapshot",
+      "source": "connections readback after accepted actual reply",
+      "test": "reads a late callback after main publishes the actual accepted reply into the immediate snapshot",
+      "assertion": "expect(connections.find(serviceId, pairId)).toEqual(projectPeerConnection(serviceId, ready))",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PRunActions.vue",
+      "field": "visible refusalCode",
+      "source": "refusalFor selected computer serviceId/pairId",
+      "test": "shows only the operation refusal owned by this computer",
+      "assertion": "expect(other.find('[data-testid=\"p2p-run-refusal\"]').exists()).toBe(false)",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/controlplane/client.go",
+      "field": "authenticated refusal HTTP status and code",
+      "source": "real HTTP response decoder",
+      "test": "TestHTTPRefusalPreservesActualStatusAndUnchangedNamedCode",
+      "assertion": "HTTP status or the original named refusal was lost",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/controlplane/http_refusal.go",
+      "field": "HTTP refusal identity",
+      "source": "actual response status plus code",
+      "test": "TestHTTPRefusalPreservesActualStatusAndUnchangedNamedCode",
+      "assertion": "unproven local code was promoted to an authoritative HTTP refusal",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_connect.go",
+      "field": "original prepare attempt and explicit generation",
+      "source": "reserved candidate, signed ticket and exact same-fence HTTP429/404",
+      "test": "TestCandidateErrorCodeAloneCannotProvePrepareNonAdmission",
+      "assertion": "HTTP status was replaced by its same-named error body",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_manual_wait.go",
+      "field": "one fenced explicit waiting owner",
+      "source": "background candidate ready/done and exact deep pin account registration snapshot",
+      "test": "TestManualWorkbenchDisconnectCannotResurrectWaitingIntent",
+      "assertion": "cancelled click restored intent during disconnect cleanup",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/candidate_prepare_diagnostics.go",
+      "field": "bounded prepare phase fields",
+      "source": "current prepare identity and classified result",
+      "test": "TestPrepareDiagnosticExactRequestSnapshotAndRedaction",
+      "assertion": "diagnostic leaked forbidden content",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager.go",
+      "field": "manualWaiters ownership",
+      "source": "current manager candidate lifecycle",
+      "test": "TestManualWorkbenchCreatesItsOwnCandidateAfterBackgroundPromotion",
+      "assertion": "handoff changed the borrowed negotiation or lost explicit identity",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_admission.go",
+      "field": "account cancellation barrier",
+      "source": "current account retirement under manager mutex",
+      "test": "TestManualWorkbenchWaitingRejectsChangedScopeAndOriginalGeneration",
+      "assertion": "stale waiter admitted a new explicit candidate",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_attachment.go",
+      "field": "real pre-ticket projection",
+      "source": "current primary or candidate result state",
+      "test": "TestCandidatePreparationCannotReplaceExistingPrimaryProjection",
+      "assertion": "preparation replaced an unpromoted primary's live truth",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_lifecycle.go",
+      "field": "Disconnect and Close cancellation barrier",
+      "source": "exact pair waiting owner under manager mutex",
+      "test": "TestManualWorkbenchDisconnectCannotResurrectWaitingIntent",
+      "assertion": "cancelled click restored intent during disconnect cleanup",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/manager_signals.go",
+      "field": "registration and account wait ownership",
+      "source": "current signaling owner and restored credential",
+      "test": "TestManualWorkbenchWaitingRejectsChangedScopeAndOriginalGeneration",
+      "assertion": "stale waiter admitted a new explicit candidate",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "networking/internal/peersession/network_revocation.go",
+      "field": "revoked wait ownership",
+      "source": "fresh revocation of the exact pair",
+      "test": "TestManualWorkbenchWaitingRejectsChangedScopeAndOriginalGeneration",
+      "assertion": "stale waiter admitted a new explicit candidate",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "pairId",
+        "attemptId",
+        "generation",
+        "registrationFence",
+        "operationRevision"
+      ],
+      "missing_semantics": "Absent or stale authorization and unknown prepare outcomes remain explicit. Never infer ready, change network, borrow another owner generation, or restart remote DSH."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/index.ts",
+      "field": "public account session projection export",
+      "source": "the public domain entry used by the real shared shell adapter",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "follows only the selected service while another account read completes",
+      "assertion": "expect(domain.p2pAccounts.state(serviceId).user).toEqual(user)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "confirmed current session revision and follow-up read",
+      "source": "real main currentUser readback after a confirmed new main login",
+      "test_file": "electron/main/p2p/management-account-readback.test.ts",
+      "test": "reads the new real session after an older missing-session reply crossed a service event",
+      "assertion": "expect(currentUser).toHaveBeenCalledTimes(2)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shell/useP2PAccountSession.ts",
+      "field": "exact service account status and visual indicator",
+      "source": "canonical account sessionStatus rather than device transport",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "does not turn an online device transport into a signed-in account",
+      "assertion": "expectBoth(ui, zhCN['p2p.accountSession.signedOut'], 'offline')",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shell/AppShell.vue",
+      "field": "actual shell shared-status wiring",
+      "source": "selectedServiceId and the production account adapter",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "wires the actual AppShell account status to the shared adapter",
+      "assertion": "expect(appShell).toContain(':network-state=\"accountIndicator\"')",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PAccountPanel.vue",
+      "field": "credential form visibility and recovery when cached sign-out is no longer current",
+      "source": "canonical sessionStatus, not historical user=null",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "offers refresh rather than credentials when a signed-out cache becomes unconfirmed",
+      "assertion": "expectBoth(ui, zhCN['p2p.accountSession.unknown'], 'unknown')",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PJoinPanel.vue",
+      "field": "joined-device account status cannot infer login from transport",
+      "source": "the same confirmed account-session projection as the status bar",
+      "test_file": "src/app/shell/tests/P2PJoinPanel.test.ts",
+      "test": "requires confirmed login even when the coordinator transport is online without peers",
+      "assertion": "expect(ui.get('[data-testid=\"p2p-network-status\"]').text()).toContain('已登录')",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PNetworkAccountPanel.vue",
+      "field": "joined signed-out gate excludes unconfirmed current session",
+      "source": "confirmed signedOut sessionStatus and the retained registration",
+      "test_file": "src/app/shell/tests/P2PNetworkAccountPanel.test.ts",
+      "test": "shows the joined sign-out gate only after the current session actually confirms sign-out",
+      "assertion": "expect(ui.find('[data-testid=\"p2p-account-mesh-gate\"]').exists()).toBe(false)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shell/components/ShellStatusbar.vue",
+      "field": "account label and state presentation",
+      "source": "production shared account-session adapter props",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "keeps restoration, login, logout and session expiry consistent through public controls",
+      "assertion": "expect(ui.get('.statusbar-network').attributes('data-state')).toBe(indicator)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.p2p.ts",
+      "field": "four typed account-session states in Chinese and English",
+      "source": "production locale switch while the real status bar and account panel are mounted",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "keeps restoration, login, logout and session expiry consistent through public controls",
+      "assertion": "expectBoth(ui, enUS[key], indicator)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shared/i18n/messages.zh-CN.ts",
+      "field": "Chinese account status-bar heading",
+      "source": "typed footer.account locale key",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "keeps restoration, login, logout and session expiry consistent through public controls",
+      "assertion": "expect(ui.get('.statusbar-network .statusbar-fact-label').text()).toBe(zhCN['footer.account'])",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/shared/i18n/messages.en-US.ts",
+      "field": "English account status-bar heading",
+      "source": "typed footer.account locale key after actual locale switch",
+      "test_file": "src/app/shell/tests/accountSessionStatus.test.ts",
+      "test": "keeps restoration, login, logout and session expiry consistent through public controls",
+      "assertion": "expect(ui.get('.statusbar-network .statusbar-fact-label').text()).toBe(enUS['footer.account'])",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "sessionStatus"],
+      "missing_semantics": "No current-session authority stays signed out or unknown. Transport availability cannot supply account authority and stale readback cannot replace current login/logout."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "same-revision confirmed login survives a non-authentication refresh refusal",
+      "source": "the account sessionStatus at currentUser dispatch under the unchanged session revision",
+      "test": "preserves the same confirmed login when currentUser refresh reports %s",
+      "assertion": "expect(f.accounts.sessionStatus('a')).toBe('signedIn')",
+      "state": "partial",
+      "identity_keys": ["serviceId", "userId", "sessionRevision", "priorConfirmedSessionStatus"],
+      "missing_semantics": "Only an already confirmed same-revision login survives refresh failure. Initial unknown and historical identity cannot grant login; explicit no-session replies and logout invalidate it."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "powershell -NoProfile -Command \"if (-not $env:DSHKER_SERVER_BINARY -or -not $env:DSHKER_TEST_HARNESS_ROOT) { throw 'Explicit coordinator and real Harness inputs required' }; Set-Location networking; go test -json -race ./integration -run '^TestHostsSameNATColdRestoreDirectoryAndCandidatesRealDSH$' -count=1 -timeout=180s | Set-Content -Encoding UTF8 ../.run/connection-busy/real-coordinator-gate.jsonl; exit $LASTEXITCODE\"",
+      "no_mock": true
+    },
+    {
+      "command": "powershell -NoProfile -Command \"node tools/tests/account-session-ui.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; $proof = Get-Content .run/connection-busy/account-ui/latest-run.json -Raw | ConvertFrom-Json; Copy-Item -LiteralPath (Join-Path $proof.artifactDirectory 'ledger.jsonl') -Destination .run/connection-busy/account-ui/ledger.jsonl\"",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/connection-busy/real-coordinator-gate.jsonl"
+    },
+    {
+      "artifact": ".run/connection-busy/account-ui/latest-run.json"
+    }
+  ],
+  "interaction_gate": {
+    "contract": "test-gates/account-session-interaction.json",
+    "ledger": ".run/connection-busy/account-ui/ledger.jsonl"
+  }
+}

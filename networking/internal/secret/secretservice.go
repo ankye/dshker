@@ -21,7 +21,7 @@ import (
 // tool has no provider at all.
 const (
 	secretServiceTool         = "secret-tool"
-	secretServiceSchema       = "dshkerd"
+	secretServiceSchema       = legacyService
 	secretServiceAttribute    = "service"
 	secretServiceKeyAttribute = "key"
 )
@@ -31,8 +31,8 @@ const (
 // names the item. Passing a bare schema name is refused by the tool itself
 // ("must specify attributes and values in pairs"), which is how the live Linux
 // run caught this the first time it was exercised.
-func secretServiceAttributes(key string) []string {
-	return []string{secretServiceAttribute, secretServiceSchema, secretServiceKeyAttribute, key}
+func secretServiceAttributes(service, key string) []string {
+	return []string{secretServiceAttribute, service, secretServiceKeyAttribute, key}
 }
 
 // secretServiceRunner runs one tool invocation and returns its streams. It is a
@@ -40,14 +40,15 @@ func secretServiceAttributes(key string) []string {
 type secretServiceRunner func(stdin string, arguments ...string) (string, string, error)
 
 type secretServiceStore struct {
-	run secretServiceRunner
+	run     secretServiceRunner
+	service string
 }
 
 // Get reads one item back. The tool prints the secret as text, so the value is
 // stored base64-encoded — a text channel would otherwise mangle binary key
 // material — and the trailing newline the tool may add is trimmed.
 func (store secretServiceStore) Get(key string) ([]byte, error) {
-	stdout, stderr, err := store.run("", append([]string{"lookup"}, secretServiceAttributes(key)...)...)
+	stdout, stderr, err := store.run("", append([]string{"lookup"}, secretServiceAttributes(store.service, key)...)...)
 	if err != nil {
 		return nil, classifySecretServiceFailure(stderr, err)
 	}
@@ -63,7 +64,7 @@ func (store secretServiceStore) Get(key string) ([]byte, error) {
 // commit is the store itself: a failed write leaves the previous value in place.
 func (store secretServiceStore) Set(key string, value []byte) error {
 	encoded := base64.StdEncoding.EncodeToString(value)
-	storeArguments := append([]string{"store", "--label", secretServiceLabel(key)}, secretServiceAttributes(key)...)
+	storeArguments := append([]string{"store", "--label", secretServiceLabel(store.service, key)}, secretServiceAttributes(store.service, key)...)
 	_, stderr, err := store.run(encoded, storeArguments...)
 	if err != nil {
 		if classified := classifySecretServiceFailure(stderr, err); errors.Is(classified, ErrUnavailable) {
@@ -77,7 +78,7 @@ func (store secretServiceStore) Set(key string, value []byte) error {
 // Delete removes one item, and deleting an absent key succeeds: the tool reports
 // "no such item" as a failure, which is the state the caller asked for.
 func (store secretServiceStore) Delete(key string) error {
-	_, stderr, err := store.run("", append([]string{"clear"}, secretServiceAttributes(key)...)...)
+	_, stderr, err := store.run("", append([]string{"clear"}, secretServiceAttributes(store.service, key)...)...)
 	if err != nil {
 		if classified := classifySecretServiceFailure(stderr, err); errors.Is(classified, ErrMissing) {
 			return nil
@@ -87,8 +88,8 @@ func (store secretServiceStore) Delete(key string) error {
 	return nil
 }
 
-func secretServiceLabel(key string) string {
-	return secretServiceSchema + " " + key
+func secretServiceLabel(service, key string) string {
+	return service + " " + key
 }
 
 // exitCoder is the part of a process failure the classifier reads. os/exec's

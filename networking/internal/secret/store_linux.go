@@ -13,11 +13,11 @@ import (
 // core carries no D-Bus client of its own, so this refuses rather than storing
 // anything privately. The refusal is the same code the shell and the CLI already
 // map for a platform with no provider.
-func Open(dataRoot string) (Store, error) {
+func openStore(dataRoot, service string) (Store, error) {
 	if _, err := exec.LookPath(secretServiceTool); err != nil {
 		return nil, ErrUnavailable
 	}
-	return secretServiceStore{run: runSecretServiceTool}, nil
+	return secretServiceStore{run: runSecretServiceTool, service: service}, nil
 }
 
 // runSecretServiceTool runs one invocation with the secret on stdin and the two

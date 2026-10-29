@@ -1,6 +1,7 @@
 import type { LauncherHarnessService } from '../managed/launcher-harness-service'
 import type { LauncherHarnessLaunchView } from '../../../src/shared/contracts'
 import { PeerHelperError } from './wire'
+import { runtimeOwnerError } from '../managed/runtime-errors'
 
 export interface PeerRuntimeBinding {
   generation: number
@@ -56,7 +57,10 @@ export class PeerRuntimeOwner {
             if (settled.kind === 'stopped' || settled.kind === 'failed')
               this.#reject(new PeerHelperError('p2p.runtime_unavailable'))
           },
-          (error: unknown) => this.#reject(error)
+          (error: unknown) => {
+            const ownerError = runtimeOwnerError(error)
+            this.#reject(ownerError === undefined ? error : new PeerHelperError(ownerError.code))
+          }
         )
         .finally(() => {
           this.#starting = undefined

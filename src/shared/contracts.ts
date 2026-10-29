@@ -227,6 +227,7 @@ export type RemoteConnectionErrorCode =
   | 'remote.invalid_record'
   | 'remote.unsupported_version'
   | 'remote.persistence_failed'
+  | 'remote.core_unavailable'
   | 'remote.connection_not_found'
   | 'remote.connection_exists'
   | 'remote.connection_busy'

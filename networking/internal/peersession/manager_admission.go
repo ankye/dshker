@@ -62,6 +62,9 @@ func (manager *Manager) CommitScopedPins(fence protocol.RegistrationFence, userI
 		for pairID := range manager.inboundAdmissions {
 			manager.cancelChangedAdmissionLocked(pairID)
 		}
+		for pairID := range manager.manualWaiters {
+			manager.cancelChangedManualWaitLocked(pairID)
+		}
 		return nil
 	})
 }
@@ -133,6 +136,7 @@ func (manager *Manager) PinScopedIdentity(ctx context.Context, userID, networkID
 			return err
 		}
 		manager.cancelChangedAdmissionLocked(pin.Pair.PairID)
+		manager.cancelChangedManualWaitLocked(pin.Pair.PairID)
 		return nil
 	})
 	return identity, err

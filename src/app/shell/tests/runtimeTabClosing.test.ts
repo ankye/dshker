@@ -210,7 +210,7 @@ beforeEach(async () => {
   }
   p2pConnections.state.peers = []
   p2pConnections.state.helperError = ''
-  p2pConnections.state.lastRefusal = ''
+  p2pConnections.state.refusals = {}
   p2pConnections.state.resultUnconfirmed = false
   vi.spyOn(p2pManagement, 'ensureBuiltinService').mockResolvedValue()
   vi.spyOn(p2pConnections, 'read').mockResolvedValue()

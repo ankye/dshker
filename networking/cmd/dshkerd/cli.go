@@ -261,7 +261,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) (exitCode int) 
 	// Register this before owner.Release so shutdown closes runtime/host and
 	// releases the state lease before retiring a disabled launchd job.
 	defer func() {
-		if err := retireDisabledAutostart(directory); err != nil {
+		if err := retireAutostartForProfile(directory); err != nil {
 			log.Printf("autostart retirement: %v", err)
 		}
 	}()
@@ -286,7 +286,7 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) (exitCode int) 
 	server := core.Serve{}
 	var secrets secret.Store
 	if effectiveData != "" {
-		store, err := secretStoreFor(secret.Open, effectiveData)
+		store, err := secretStoreFor(openProfileSecretStore, effectiveData)
 		if err != nil {
 			return fail(stderr, err)
 		}
@@ -300,27 +300,29 @@ func runServe(args []string, stdout io.Writer, stderr io.Writer) (exitCode int) 
 		}
 		server.Catalog = store
 	}
-	runtimeOwner, err := openRuntimeOwner(ctx, options{
+	runtimeAuthority, runtimeOwner, ownerErr := admitRuntimeAuthority(ctx, options{
 		stateRoot: directory, dataRoot: effectiveData,
 		catalogRoot: effectiveCatalog, rootsPath: effectiveRoots,
 	})
-	if err != nil {
-		return fail(stderr, err)
+	if ownerErr != nil {
+		log.Printf("local runtime admission: %v", ownerErr)
 	}
 	runtimeReady := false
-	defer func() {
-		if err := finishRuntimeOwner(runtimeOwner, runtimeReady); err != nil {
-			exitCode = fail(stderr, err)
-		}
-	}()
-	server.Runtime = runtimeOwner
+	if runtimeOwner != nil {
+		defer func() {
+			if err := finishRuntimeOwner(runtimeOwner, runtimeReady); err != nil {
+				exitCode = fail(stderr, err)
+			}
+		}()
+	}
+	server.Runtime = runtimeAuthority
 	// Reattachment reads the surviving authority, not a new empty supervisor.
-	binding := &core.RuntimeBinding{Runtime: runtimeOwner, Subject: HeadlessSubject}
+	binding := &core.RuntimeBinding{Runtime: runtimeAuthority, Subject: HeadlessSubject}
 	server.RuntimeBinding = binding
 	// The desktop shell reads and writes start-at-boot over this channel, so the
 	// toggle in its settings panel and the `autostart` subcommand are two clients
 	// of the same registration rather than two competing ones.
-	server.Autostart = headlessAutostart{daemonAutostart{state: directory}}
+	server.Autostart = autostartForProfile(headlessAutostart{daemonAutostart{state: directory}})
 	remoteRoute := remoteroute.NewRoute()
 	defer remoteRoute.Shutdown()
 	server.Remote = remoteRoute
@@ -471,10 +473,18 @@ func runStatus(args []string, stdout io.Writer, stderr io.Writer) int {
 		SubjectID string `json:"subjectId"`
 	}{HeadlessSubject})
 	if *asJSON {
-		return printJSON(stdout, stderr, map[string]json.RawMessage{
+		result := map[string]json.RawMessage{
 			"version": version,
 			"launch":  launch,
-		})
+		}
+		if launchErr != nil {
+			encoded, err := json.Marshal(launchErr.Error())
+			if err != nil {
+				return fail(stderr, err)
+			}
+			result["launchError"] = encoded
+		}
+		return printJSON(stdout, stderr, result)
 	}
 	var table struct {
 		Version int      `json:"version"`

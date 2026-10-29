@@ -3,7 +3,7 @@ import { chmod, copyFile, lstat, mkdir, mkdtemp, readFile, rm, writeFile } from 
 import { createHash } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CoreSupervisor } from './supervisor'
+import { CoreSupervisor, type CoreSupervisorOptions } from './supervisor'
 import { PeerHelperError } from '../p2p/wire'
 
 const target = process.platform + '-' + process.arch
@@ -22,6 +22,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
   () => {
     const supervisors: CoreSupervisor[] = []
     const resources: string[] = []
+    const launches: CoreSupervisorOptions[] = []
 
     afterEach(async () => {
       delete process.env.FAKE_CORE_ARGV_OUT
@@ -30,6 +31,18 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       await Promise.all(
         supervisors.splice(0).map((supervisor) => supervisor.close().catch(() => undefined))
       )
+      for (const options of launches.splice(0)) {
+        const retained = await readFile(
+          join(options.stateRoot, 'runtime-owner', 'owner.json')
+        ).catch(() => undefined)
+        if (retained) {
+          // Crash cases intentionally leave the independent runtime authority
+          // alive. Join that exact test-owned authority through its unchanged
+          // production configuration before deleting the executable it uses.
+          const recovered = await CoreSupervisor.start(options, AbortSignal.timeout(30_000))
+          await recovered.close()
+        }
+      }
       await Promise.all(
         resources.splice(0).map((entry) => rm(entry, { recursive: true, force: true }))
       )
@@ -39,6 +52,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       const resourcesRoot = await mkdtemp(join(tmpdir(), 'core-res-'))
       const dataRoot = await mkdtemp(join(tmpdir(), 'core-data-'))
       resources.push(resourcesRoot)
+      resources.push(dataRoot)
       const directory = join(resourcesRoot, 'p2p', target)
       await mkdir(directory, { recursive: true })
       const name = coreName()
@@ -78,16 +92,16 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
       const unavailable = new Promise<PeerHelperError>((resolve) => {
         capture = resolve
       })
-      const supervisor = CoreSupervisor.start(
-        {
-          resourcesRoot: meta.resourcesRoot,
-          dataRoot: meta.dataRoot,
-          catalogRoot,
-          stateRoot,
-          onUnavailable: capture
-        },
-        AbortSignal.timeout(30_000)
-      )
+      const options: CoreSupervisorOptions = {
+        resourcesRoot: meta.resourcesRoot,
+        dataRoot: meta.dataRoot,
+        catalogRoot,
+        stateRoot,
+        isolatedProfileRoot: meta.dataRoot,
+        onUnavailable: capture
+      }
+      launches.push(options)
+      const supervisor = CoreSupervisor.start(options, AbortSignal.timeout(30_000))
       return { supervisor, unavailable }
     }
 
@@ -284,6 +298,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
             resourcesRoot: join(dataRoot, 'absent'),
             dataRoot,
             stateRoot: join(dataRoot, 'state'),
+            isolatedProfileRoot: dataRoot,
             onUnavailable: () => undefined
           },
           AbortSignal.timeout(10_000)
@@ -302,6 +317,7 @@ describe.skipIf(process.platform === 'win32' && !process.env.DSHKER_CORE_BINARY)
             resourcesRoot: meta.resourcesRoot,
             dataRoot: blocker,
             stateRoot: meta.stateRoot,
+            isolatedProfileRoot: meta.dataRoot,
             onUnavailable: () => undefined
           },
           AbortSignal.timeout(10_000)

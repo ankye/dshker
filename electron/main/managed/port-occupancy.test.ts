@@ -1,3 +1,4 @@
+import path from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import {
   findPortOccupant,
@@ -8,6 +9,10 @@ import {
   preparePortForLaunch,
   terminatePortOccupant
 } from './port-occupancy'
+
+function windowsPath(...segments: string[]): string {
+  return path.win32.join('X:', path.win32.sep, ...segments)
+}
 
 describe('parseLsofListenPid', () => {
   it('reads the pid from the LISTEN line', () => {
@@ -73,13 +78,13 @@ describe('isResidualDshWebCommand', () => {
   it('recognizes the quoted forms the platform renders', () => {
     expect(
       isResidualDshWebCommand(
-        'node  --import tsx/esm apps/cli/src/bin.ts "web" "--patch" "C:\\Program Files\\DSHKer Launcher\\resources\\verbose.patch.yml" "--no-open" "--port" "31888"'
+        `node  --import tsx/esm apps/cli/src/bin.ts "web" "--patch" "${windowsPath('Program Files', 'DSHKer Launcher', 'resources', 'verbose.patch.yml')}" "--no-open" "--port" "31888"`
       )
     ).toBe(true)
     expect(isResidualDshWebCommand('node  --import tsx/esm apps/cli/src/bin.ts "web"')).toBe(true)
     expect(
       isResidualDshWebCommand(
-        'node "C:\\pnpm\\bin\\pnpm.mjs" "dsh" "web" "--patch" "C:\\verbose.patch.yml"'
+        `node "${windowsPath('pnpm', 'bin', 'pnpm.mjs')}" "dsh" "web" "--patch" "${windowsPath('verbose.patch.yml')}"`
       )
     ).toBe(true)
   })

@@ -12,6 +12,46 @@ identities and certificates remain outside this repository.
 
 ## Version and distribution identity
 
+Local and non-tag packages default to the `test` distribution. They use the
+distinct DSHKer Launcher Test application/installer identity and require an
+explicit absolute `DSHKER_TEST_PROFILE_ROOT` or `--dshker-test-root <path>` at
+startup. The root must be independent of stable user state; all test bootstrap,
+Electron/session data, native DSH home, catalogs and runtime state stay inside
+it. A missing, linked or conflicting root fails before user-state access.
+
+Admission protects external roots and workspaces registered by the formal
+profile as well. Test native credentials use an explicit separate namespace;
+stable retains its legacy Keychain/Secret Service/DPAPI identity. Isolated
+profiles cannot alter the formal system autostart registration. Native package
+gates must prove independent credential Get/Set/Delete on macOS and Linux.
+The Windows installer observes running processes and refuses an update until
+normal Quit completes; it does not force termination. Its supported installer
+languages match the product's English and Simplified Chinese dictionaries.
+
+Stable tag jobs explicitly select `DSHKER_DISTRIBUTION_CHANNEL=stable`. For an
+authorized local stable candidate, set that variable on the build process only.
+Stable packages retain the existing profile by default. They may also be
+launched with an explicit test root for isolated artifact checks. Never validate
+a test installation by pointing it at the user's formal profile or copying
+formal credential references into it. Smoke runners supply fresh isolated roots
+under the workspace runtime-artifact directory.
+
+Update the formal application only after normally closing that exact instance
+and joining its core cleanup. Retained, unverified runtime-owner records are not
+automatically deleted. An explicitly authorized incident recovery must preserve
+a secure backup and prove the old owner and managed child are absent before
+quarantining that record; account, network, pairing and SSH records remain intact.
+New runtime owners also write private durable recovery journals. Automatic
+archival requires exact owner/configuration identity, both ownership leases and
+unchanged records, plus confirmed idle cleanup or a verified changed native OS
+boot identity. New Windows owners additionally use a private non-breakaway
+kill-on-close Global Job Object: verified job-tree death permits same-boot
+recovery, and normal Quit joins every verified job member before record cleanup.
+Unproven same-boot pending/active children, unknown process/boot identity,
+invalid private metadata and legacy records without a journal remain refused.
+The archive retains original bytes without overwriting earlier evidence; no
+account, pairing or SSH store participates in this operation.
+
 `package.json` is the only Launcher version source. Application metadata,
 installer names, release manifests, update comparisons, and the tag gate read
 that value instead of maintaining another version constant. A release tag must

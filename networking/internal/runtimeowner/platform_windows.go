@@ -27,6 +27,10 @@ func validateOwnerEndpoint(record ownerRecord) error {
 	return nil
 }
 
+func validateRecoveryEndpoint(record ownerRecord, _ bool) error {
+	return validateOwnerEndpoint(record)
+}
+
 func cleanupOwnerEndpoint(record ownerRecord) error { return validateOwnerEndpoint(record) }
 
 func detachedAttributes() *syscall.SysProcAttr {

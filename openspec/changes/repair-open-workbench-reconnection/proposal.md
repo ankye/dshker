@@ -1,5 +1,9 @@
 ## Why
 
+The Mac can also show an online footer while Account and Network is signed out.
+Both surfaces must use one authoritative selected-account session state, as
+requested by the user; transport presence cannot substitute for user login.
+
 For users keeping a remote DSH workbench open overnight, a recovered P2P link can
 report connected while its original browser gateway remains detached and returns
 HTTP 502. Restore the explicitly requested workbench, not just device transport,
@@ -49,8 +53,17 @@ without requiring a restart, login, or another click.
 - Use current authenticated peer registrations and event-driven recovery rather
   than waiting for the periodic sweep after grace expiry. Keep ICE/grace and
   physical recovery deadlines unchanged. Never claim cached ready as live ready.
+- Automatically repair a locally revoked saved connection when fresh server
+  authority confirms the same account, original network and both original
+  device identities and keys. Preserve explicit selection for a different scope
+  and fail closed on real revocation or an unavailable authoritative read.
 
 ## Capabilities
+
+The Run-page continuation also repairs explicit-connect ownership: a user click
+must not start competing background retries, lose its workbench intent behind a
+bind-only candidate, or retain another computer's historical busy message. Keep
+unknown durable prepare authority intact while exposing its actual progress.
 
 The joint implementation also requires an explicit current-account v2 pair
 identity read and read-only-registration/fresh-pin/candidate-capability bootstrap.
@@ -78,3 +91,23 @@ The user approved local joint integration followed by production server
 replacement preserving port 8443, then physical bidirectional long tests and
 stable publication only after the gates pass. Preserve original installed
 client/DSH processes and credentials; build isolated candidates for validation.
+
+
+## Authorized formal-profile hotfix
+
+D40 records the user's 2026-10-22 instruction to isolate test/formal data,
+retain existing accounts, pairings and SSH computers, recover actual login/SSH/LAN
+behavior, then update the formal Windows installation and publish a new tag and
+Release. The scope contains runtime-owner failure without weakening owner or
+registered-root admission, preserves the formal profile, and makes test build
+identity/profile selection explicit before state access. Previous eight-hour and
+native-frame acceptance remains incomplete and is not relabeled by this hotfix.
+
+## Authorized abandoned-runtime recovery
+
+The user's 2026-10-25 instruction authorizes secure archival of the verified
+abandoned formal runtime record, restoration of local startup and automatic
+recovery when durable evidence proves the previous runtime tree is gone.
+D42 adds private recovery evidence without borrowing account, pairing or SSH
+authority. Legacy records without that evidence still require explicit incident
+recovery. A live or unproven runtime remains protected.

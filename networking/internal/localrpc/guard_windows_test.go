@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"testing"
+	"unsafe"
 
 	"github.com/Microsoft/go-winio"
 	"golang.org/x/sys/windows"
@@ -13,16 +14,17 @@ import (
 
 // encodeSID renders a *SID in its on-wire byte form so it can be compared with
 // the SID embedded in a parsed security descriptor.
-func encodeSID(sid *windows.SID) []byte {
-	count := sid.SubAuthorityCount()
-	buffer := make([]byte, 0, 8+4*int(count))
-	buffer = append(buffer, 1, count)
-	authority := sid.IdentifierAuthority()
-	buffer = append(buffer, authority.Value[:]...)
-	for i := uint32(0); i < uint32(count); i++ {
-		var value [4]byte
-		binary.LittleEndian.PutUint32(value[:], sid.SubAuthority(i))
-		buffer = append(buffer, value[:]...)
+func encodeSID(t *testing.T, sid *windows.SID) []byte {
+	t.Helper()
+	if sid == nil || !sid.IsValid() {
+		t.Fatal("token user SID is invalid")
+	}
+	// Copy the whole validated SID into owned storage. SubAuthorityCount and
+	// SubAuthority return interior pointers through uintptr-based Win32 calls,
+	// which lose the provenance of the token's Go allocation under checkptr.
+	buffer := make([]byte, sid.Len())
+	if err := windows.CopySid(uint32(len(buffer)), (*windows.SID)(unsafe.Pointer(&buffer[0])), sid); err != nil {
+		t.Fatalf("copy token user SID: %v", err)
 	}
 	return buffer
 }
@@ -74,7 +76,7 @@ func TestEndpointGuardWindowsDescriptor(t *testing.T) {
 	if mask := binary.LittleEndian.Uint32(ace[4:8]); mask != windows.GENERIC_ALL {
 		t.Fatalf("ACE mask = %#x, want GENERIC_ALL", mask)
 	}
-	want := encodeSID(user.User.Sid)
+	want := encodeSID(t, user.User.Sid)
 	if got := ace[8:aceSize]; !bytes.Equal(got, want) {
 		t.Fatalf("ACE SID = %x, want %x", got, want)
 	}

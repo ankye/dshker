@@ -27,6 +27,14 @@ order only: no failed or incomplete task below becomes passed, and the full
 recovery objective remains open. Do not ship the ignored D32/D33 overlays or
 claim the diagnostic build is a production fix.
 
+Publication/install continuation (2026-10-21): the user explicitly authorized
+packaging these two scoped fixes, updating the local Windows installation, and
+committing/pushing/tagging/publishing version 0.1.94 after the remote tag was
+confirmed unused. Preserve device/account/network/pair data and record the exact
+installed artifact and readback. Keep the prior incomplete broad and physical
+gates visible; this authorization does not turn them into passes or waive the
+tag workflow's own quality, native-package and asset validation.
+
 - [ ] 3.1 QA owner, after 1/2: run isolated real coordinator/core/DSH auto-recovery with original session/workspace readback, HTTP cookie and WebSocket traffic; record generations, attempts and stable gateway through repeated loss without a second explicit connect.
 - [ ] 3.2 QA/root, after 3.1: run isolated macOS and Windows candidate evidence without touching installed credentials or active DSH; report exactly what cross-machine/runtime tier was exercised and any missing physical UI acceptance.
 - [ ] 3.3 Root: add CHANGELOG, correct both READMEs, Agent Note and a complete test-integrity manifest; pass strict OpenSpec validation, source-size, relevant full tests, source builds, architecture, desktop validator and default test-integrity verify.
@@ -264,3 +272,100 @@ the actual candidate rather than substituted from headless or smoke results.
 - [x] After adoption, have the independent coordinator publish the source device's authenticated registration to currently online devices authorized on a shared network.
 - [x] On recipients, validate the account/session, refresh the peer catalog and device directory, and notify active renderer network-choice views without changing saved selections.
 - [x] Verify client, server, and renderer state transitions with focused and full local test gates; keep failures explicit and retain prior device/network/pair state. Vitest 1,896/1,896, Go client helper/peer-session race suites, the real local Gin/WSS/SQLite coordinator push integration, full independent server `go test -race ./...`, server vet, client/server source-size gates, app test-integrity default verify, OpenSpec strict validation, desktop-app validation and renderer/Electron builds passed. Physical Mac↔Windows and overnight ICE acceptance remain separate and are not claimed here.
+
+## 6. Restore freshly authorized original network state
+
+- [x] 6.1 Root/product: reconcile D18/D27/D35 with D36 and specify automatic recovery only for freshly active original service/account/network/device/key authority; update bilingual release/user guidance and Agent Note, then pass strict OpenSpec validation.
+- [x] 6.2 Client: restore a locally revoked original choice through legal atomic catalog transitions under selected-session/registration fences, then recover only its durably authorized engine intent through the atomic current-stop whitelist. Every choice read publishes fresh pins through a CAS, including a no-op record after a lost reply; it does not select another network, change identity, mutate server pairs or start DSH.
+- [x] 6.3 QA/reviewer: prove the revoked-row regression, repeat/restart readback, real revocation/alternate network/account/key refusal, failed reads/publication and terminal isolation with focused races and an isolated real coordinator/helper case. Final scoped races passed 89 named tests/subtests with zero failures/skips; real integration retained old-source failure and current-source success, default test-integrity passed for two production/five test files, six affected desktop suites passed 28 tests, and source-size/scoped formatting checks passed. Keep the broad checks in 6.4, installed-app, physical Mac↔Windows, overnight and release evidence separate.
+- [x] 6.4 Root/QA: retain the original failures and resolve their causes before release. Short-lived certificates are now issued after fixture setup, preserving real expiry; the full helper race package passed in 188.444 seconds, beyond the old 180-second cutoff. Formatting now excludes the per-machine configuration; portable fixtures/examples clear all three parent-validator findings. Local desktop coverage passed 1,876 cases with the version-worktree fixture explicitly excluded; a prior npm forwarding mistake ran and cleaned that fixture and was disclosed. Complete Go coverage is one first run plus successful whole-package repairs for two existing Windows fixtures, not a single all-green invocation. Remote full CI and installed-app evidence remain separate release gates.
+
+## 7. Keep Windows local startup in the background
+
+- [x] 7.1 Root/product: add D37, its native-background-process contract, bilingual release/user guidance and Agent Note; pass strict OpenSpec validation while preserving the prior network recovery work and section 6.4's broad-check status.
+- [x] 7.2 Runtime owner: apply Windows HideWindow/CREATE_NO_WINDOW to the supervised child and shared background command constructor used by port inspection and taskkill; preserve non-Windows exec/process-group behavior, pipes, logs, readiness, Stop and independent-owner lifetime without changing SSH flows.
+- [x] 7.3 QA/reviewer: the complete harnessruntime race suite passed 56 named tests/subtests, native root/grandchild and standalone command probes produced five zero-console-HWND receipts with preserved output/exit/Stop behavior, and combined default test-integrity passed for seven declared test files. The original mistaken zero-process-count assertion remains failed evidence. Vet, five code-file size checks, native build and same-SHA five-observation headless smoke passed; the production dependency/binary probe-isolation scan and independent review passed. Darwin ARM64 test compilation passed without claiming a Mac runtime result. Installed-app, section 6.4's broad failures and physical ICE/release proof remain separate.
+
+## 8. Authorized 0.1.94 packaging, local update and publication
+
+- [x] 8.1 Release/docs: after confirming the remote version is unused, synchronize package and root lockfile versions to 0.1.94, record both fixes and known limitations in its bilingual CHANGELOG entry, and use that exact entry as the Release body. Root version identity, body extraction and bilingual-limit checks, scoped formatting, diff checks and strict OpenSpec validation passed.
+- [x] 8.2 Release/root: the native Windows 0.1.94 package and installed application smoke pass. The authorized update moved the program to the selected D-drive Applications directory, with registry/shortcuts updated and the old program removed. Original roots, installation catalog and account/network/device/key identity are unchanged; normal startup restored the Mac record from revoked to active without reselection. A bounded 30-second observation found no new console windows; separate real CUI kernel probes remain the direct console-creation evidence. Five installed payload hashes match extraction from the verified public Release installer.
+- [x] 8.3 Root: scoped source/tests/docs/version commit d5c767a4b83654d08bdc9deedfc70dd96e5e9446 was pushed to main; annotated v0.1.94 was created and pushed at that exact source. Generated outputs, credentials and local roots were excluded. Post-release evidence updates are documentation-only and do not move the immutable source tag.
+- [x] 8.4 Release/root: same-source Quality 39573955095 and main Package 39573954959 passed; tag Package 39575392266 attempt two passed all six desktop and six CLI targets and publication. The first tag attempt's existing heartbeat-count fixture race is retained and independently explained, with no assertion/skip/gate/tag change. Public stable Release 419392063 carries 25 uploaded assets; eight desktop and six CLI binary digests, seven manifests, the downloaded Windows installer and the exact bilingual CHANGELOG body were verified. Release/local readback is recorded in the release Agent Note. Section 6.4's earlier failures remain historical; physical ICE, overnight, final cross-platform native-UI and signing limitations are not claimed complete.
+
+## 9. Preserve an explicit Run-page connection behind background preparation
+
+- [x] 9.1 Root/architecture: record D38 and its cancellation, scope, immutable-attempt and truthful projection contracts; add Agent Note and pass strict OpenSpec validation.
+- [x] 9.2 Desktop owner: remove the two pre-connect background retry wakes; isolate refusal records per service/pair and close the accepted-reply/late-readback gap without another connect or invented Ready. Main publication rechecks operation/session/caller ownership and catalog revision at commit. Focused main/renderer regressions and independent review passed.
+- [x] 9.3 Go owner: retain one fenced explicit waiting request behind a background candidate, revalidate and reserve its own generation after safe handoff, and reject cancellation/Disconnect/scope races. Initialize truthful pre-ticket state and bounded diagnostics; preserve sticky unknown prepare results while allowing only actual HTTP 429 and exact same-fence HTTP 404 non-admission to back off. Full internal/cmd race coverage and independent review passed.
+- [ ] 9.4 QA/root: retain regression failures, pass race/state-identity tests and a real coordinator flow, verify source/artifact isolation, source-size, typed admission, formatting/types/build and default test-integrity. Exercise the actual public Run control and distinguish installed/physical outcomes from source tests.
+
+## 10. Unify footer and account authentication
+
+- [x] 10.1 Root/product: record D39, shared authentication semantics and current Mac observations; update user guidance and Agent Note, then pass strict validation.
+- [x] 10.2 Desktop owner: use one selected-service account state for footer and account panel, including pending, signed out, signed in, invalidation and stale result fences. Keep transport status separate and visible copy typed. Historical identity does not grant write authority while current state is unknown; only confirmed sign-out offers credentials. Late reads cannot replace a newer login/logout. Independent review and regressions passed.
+- [ ] 10.3 QA/root: verify shared presentation and account lifetime/service isolation, complete relevant source/build and default integrity gates, then exercise both surfaces in the real application. Preserve current successful installed 0.1.94 connectivity as an independent observation.
+
+Source/Windows candidate evidence for 9.4 and 10.3: 5cd505d passed the final local
+1,933-test desktop run and both exact-source CI workflows, including six native
+and six CLI packages. Installed D-drive payloads match the staged candidate and
+original identity/root records are unchanged. Public controls passed three shared
+account-label observations and opened the original Mac workbench with loaded
+guest content. Full default interactive verification still fails because actual
+display refresh and pixel-frame coverage are unproven; retain these tasks as
+incomplete. The user explicitly deferred updating the Mac installation; keep its
+current installed version and processes unchanged.
+
+## 11. Explicitly authorized 0.1.95 tag publication
+
+- [x] 11.1 Root/release: following the user's explicit publication request, create and push annotated v0.1.95 at the exact validated and installed production source 5cd505dd41efa49f82fcf7ca0a3a29c3a12fb66a. Remote annotated object 60c32ce39eeb1c342ea3e9ec4fc675cca2e0a475 resolves to that source. Subsequent fd9d8db only changes diagnostic tests and evidence. Retain the failed native-frame gate and incomplete eight-hour verification; publication does not complete 9.4 or 10.3.
+- [x] 11.2 Root/release: independently confirm public stable/latest Release 419657247 for v0.1.95 with all 25 assets uploaded. The annotated tag resolves to 5cd505d, its bilingual body exactly matches the tagged CHANGELOG, six desktop manifests retain the exact source/version, and GitHub's 14 binary SHA-256 digests match both checksum files and manifests. All target build/smoke/upload steps succeeded. The Actions API initially lagged behind publication; final readback confirms Package run 39614812762 completed successfully at 2026-10-21T14:30:31Z and its Publish job succeeded at 14:27:01Z. No installer was changed; the Mac remains on its existing version. Native-frame and eight-hour acceptance remain incomplete.
+
+
+## 12. Formal-profile recovery and isolated test distributions
+
+- [x] 12.1 Root: record D40, the user's explicit preservation/recovery/release authorization, the real released-binary reproduction and the separate current Mac evidence; keep older acceptance limitations unchanged.
+- [x] 12.2 Desktop/build: implement fail-closed test/stable profile selection before state access, distinct test installer/application identity, explicit independent test roots and complete native-home/bootstrap/catalog isolation; verify production-path exclusion and preserved formal defaults.
+- [x] 12.3 Core: contain owner admission refusal in both production compositions, preserve exact runtime errors and old owner evidence, and align graceful shutdown with its existing cleanup budgets; prove with real isolated compositions and focused races.
+- [ ] 12.4 Root/QA: securely back up existing formal records, retire the unisolated test copy, perform the explicitly authorized abandoned-owner recovery and prove identity/catalog preservation. Through formal public controls verify login, existing SSH and original LAN/P2P workbench restoration and normal restart.
+- [x] 12.5 QA/reviewer: complete state/identity matrix, source-size/isolation, strict OpenSpec/default test-integrity, relevant full source/build gates and independent review. Preserve original failures and distinguish functional physical evidence from prior incomplete frame/eight-hour acceptance.
+- [ ] 12.6 Root/release: freeze unused 0.1.96 source, build and update the formal Windows installation with verified package identity, verify the installed recovery again, push exact source/tag and publish verified native/CLI assets with bilingual notes. Mac installation is not updated unless separately authorized.
+- [x] 12.7 Root/release: following the user's explicit confirmation that login, SSH and LAN work and request to publish Git, push source 8b1b8f7185ca3af4598e5aec6dd5880e293e96d4 and annotated v0.1.96 (object e1f59931073e782d4fa6d6c876353b842c83040b). Verify public latest Release 420393449, all 25 uploaded assets, six stable desktop manifests, 14 binary digests and the bilingual body against the tagged CHANGELOG. Package 39735271916 passed all 14 jobs; Quality 39734279699 passed. Main Package 39734279629 attempt 2 passed after the original Windows x64 staging EPERM failure was retained.
+
+12.4/12.6 remain incomplete for final-source formal replacement/restart. The
+current working C-drive installation retains source 19b41eb; it was not replaced
+or restarted during this Git-only publication step after physical Esc stopped
+desktop automation. Read-only formal observation and the user's manual control
+acceptance are recorded separately. Publication does not complete the previous
+native-frame, latency or eight-hour acceptance tasks. The Mac installation is
+unchanged.
+
+## 13. Safely recover abandoned runtime ownership
+
+- [x] 13.1 Root/architecture: record D42 and explicit legacy incident authorization; define durable idle/boot evidence, two-lease archival, child uncertainty and unchanged account/pair/SSH boundaries.
+- [x] 13.2 Runtime owner: implement private recovery journal and exact native boot/process evidence, pre-spawn fencing, confirmed cleanup and non-overwriting archival; retain typed refusals for live/unknown/legacy records.
+- [x] 13.3 QA/reviewer: prove real idle-owner crash/restart, concurrent/no-op/refusal and archival identity, active descendant protection, failed publication and exact account/pair/SSH preservation; pass relevant races and independent review.
+- [x] 13.4 Root: securely back up and quarantine the current legacy record under both leases after normal Quit and independent absence/hash checks, restore real DSH Web readiness and preserve registered records.
+- [x] 13.5 Root: update bilingual change/user guidance, Agent Note and committed integrity manifest; pass strict OpenSpec/default integrity, relevant full source/build/package checks; install and verify the corrected formal Windows payload. Keep Mac unchanged and publication separate.
+
+Section 13 closure: the Windows formal installation is 0.1.97, production source
+d736d3635fad4da2c149a5e831429ea53a5f3fc0. Installed ASAR/core match the verified
+stable candidate. Actual DSH HTTP/root, automatic account restoration and normal
+Quit passed; all 14 observed process identities exited, the configured listener
+closed and owner/journal records were removed. The committed default integrity
+gate passed 18 test files, five real commands and nine raw artifacts. Retain its
+first npm.ps1 warning-as-error attempt and the corrected readback-oracle evidence.
+The desktop run passed 2,007 tests with three existing platform skips, explicitly
+excluding the forbidden worktree-creating fixture. At local verification closure,
+no tag/push/new public Release had been performed; section 14 records the later
+authorized publication. The Mac remains unchanged. Historical
+overnight/native-frame and prior remote-connection acceptance remains separate.
+
+## 14. Authorized 0.1.97 tag and GitHub publication
+
+- [x] 14.1 Release/root: confirm the unused version/tag, the clean main history, unchanged production source since the installed candidate, matching local artifact digest and existing native recovery evidence; retain the exact bilingual CHANGELOG entry as the release body.
+- [x] 14.2 Release/root: commit only publication records, push main without rewriting history, and pass current remote Quality and package source checks before creating and pushing the exact annotated v0.1.97 tag. Tag v0.1.97 resolves to bea509c018b951c4f877704aac63bd77fc60151f.
+- [x] 14.3 Release/root: tag Package 40198582948 rebuilt the exact bea509c source and passed all 14 jobs: source verification, six native desktop targets, six CLI targets and publication. Native packaged smokes and remote assembly identity/checksum gates passed before publication.
+- [x] 14.4 Release/root: public Release 423437022 is latest v0.1.97 with 25 fully uploaded assets. Remote readback confirms the expected source/tag identity and exact bilingual tagged CHANGELOG body; CI verified platform manifests and checksums. Record the receipt under the ignored release evidence directory without another local application check.
+- [x] 14.5 Release/root: keep the user's Mac installation unchanged; publishing macOS artifacts does not authorize installing them. Preserve the earlier unsigned, overnight and native-frame limitations.
+- [x] 14.6 QA/root: retain the first Linux package-source failure and correct only the crash fixture's exact process-exit preparation without weakening its held-lease assertion or budget. Current Quality and package-source CI passed. The user explicitly cancelled further local verification while the formal application was running; its repeat after-Quit check and a new complete default-integrity pass are not claimed. Continue publication with remote CI, retaining the earlier installed-payload acceptance and successful first four local rerun commands as separate evidence.

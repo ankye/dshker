@@ -1,0 +1,100 @@
+{
+  "change": "authorized-network-recovery",
+  "risk": "data_critical",
+  "scope_note": "Fresh coordinator authority can restore a locally revoked record only for the same selected service, account, network, device IDs and public keys. Real revocation, changed identity, another network and failed reads remain explicit. The Windows integration uses the production DPAPI provider under an isolated temporary root and an independently built production coordinator; it does not touch installed credentials or start DSH. This is source-level authorization recovery evidence, not physical Mac-Windows or overnight ICE acceptance.",
+  "production_files": [
+    "networking/internal/helper/network_selection.go",
+    "networking/internal/autoconnect/engine.go"
+  ],
+  "test_files": [
+    "networking/internal/helper/network_selection_recovery_test.go",
+    "networking/internal/helper/network_selection_test.go",
+    "networking/internal/helper/selected_session_scope_test.go",
+    "networking/internal/autoconnect/reauthorize_recovery_test.go",
+    "networking/integration/authorized_network_recovery_windows_test.go"
+  ],
+  "live_test_files": ["networking/integration/authorized_network_recovery_windows_test.go"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "TestAuthorizedNetworkRecoveryRealCoordinatorRestoresRevokedOriginalScope"
+    },
+    {
+      "state": "no_op",
+      "test": "TestNetworkSelectionAutomaticallyRecoversExactAuthorizedRevokedNetwork"
+    },
+    {
+      "state": "partial",
+      "test": "TestNetworkSelectionRecoveryLostReplyWithoutTerminalRestoresLivePin"
+    },
+    {
+      "state": "recovery",
+      "test": "TestNetworkSelectionRecoveryFreshReadFailureKeepsRevokedAuthority"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestNetworkSelectionRecoveryFreshReplyRejectsActualLogout"
+    },
+    {
+      "state": "reset",
+      "test": "TestAuthorizedNetworkRecoveryRealCoordinatorRestoresRevokedOriginalScope"
+    },
+    {
+      "state": "rejected",
+      "test": "TestNetworkSelectionRecoveryRequiresExactOriginalIdentity"
+    },
+    {
+      "state": "conflict",
+      "test": "TestNetworkSelectionRecoveryCatalogConflictPreservesConcurrentRecord"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "networking/internal/helper/network_selection.go",
+      "field": "automatic restoration of the original authorized network choice and durable active record",
+      "source": "fresh selected-account network membership, active pair identity, current registration and session fences plus the original persisted computer scope",
+      "test": "TestAuthorizedNetworkRecoveryRealCoordinatorRestoresRevokedOriginalScope",
+      "assertion": "automatic recovery changed original authorization scope instead of restoring its active state",
+      "state": "success",
+      "identity_keys": [
+        "serviceId",
+        "userId",
+        "networkId",
+        "localDeviceId",
+        "remoteDeviceId",
+        "localPublicKey",
+        "remotePublicKey",
+        "pairRevision",
+        "catalogRevision"
+      ],
+      "missing_semantics": "Missing, revoked, foreign, stale or unreadable coordinator authority does not restore a cached pin or choose another network. Failed persistence does not authorize the unpublished pin."
+    },
+    {
+      "production_file": "networking/internal/helper/network_selection.go",
+      "field": "terminal automatic-connect refusal ownership after exact durable authorization recovery",
+      "source": "the freshly verified same-scope recovery and successful catalog publication for the exact service and remote device",
+      "test": "TestNetworkSelectionRecoveryReauthorizesOnlyExactEngineIntent",
+      "assertion": "recovery woke an unrelated service or duplicated the exact attempt",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "pairId", "networkId", "catalogRevision"],
+      "missing_semantics": "Unrelated service intents and transport or identity failures retain their original refusal; failed or unconfirmed publication cannot clear another connection's stop."
+    },
+    {
+      "production_file": "networking/internal/autoconnect/engine.go",
+      "field": "atomic exact-intent authorization refusal recovery with a bounded refusal whitelist",
+      "source": "the engine's existing refusal for the exact service and pair after fresh same-scope durable catalog publication",
+      "test": "TestRecoverAuthorizationAtomicallyPreservesNewNonAuthorizationStop",
+      "assertion": "rejected recovery changed the current stop, epoch or connect owner",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "pairId", "terminalCode", "attemptCount"],
+      "missing_semantics": "Identity, trust, lease, device and generic account authorization failures remain owned by their original terminal state. Recovery stays scoped to one intent and never reports transport readiness from catalog authority alone."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "powershell -NoProfile -Command \"if (-not $env:DSHKER_SERVER_BINARY) { throw 'Set DSHKER_SERVER_BINARY to the explicitly selected production coordinator binary' }; New-Item -ItemType Directory -Force .run/authorized-network-recovery | Out-Null; Set-Location networking; go test -json -race ./integration -run '^TestAuthorizedNetworkRecoveryRealCoordinatorRestoresRevokedOriginalScope$' -count=1 -timeout=90s | Set-Content -Encoding UTF8 ../.run/authorized-network-recovery/real-coordinator.jsonl; exit $LASTEXITCODE\"",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [{ "artifact": ".run/authorized-network-recovery/real-coordinator.jsonl" }]
+}

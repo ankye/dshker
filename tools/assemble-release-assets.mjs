@@ -58,6 +58,9 @@ async function readPlatformManifest(root, platform, architecture) {
     platform + '/' + architecture + ' checksums.txt'
   )
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  if (manifest.distributionChannel !== 'stable') {
+    throw new Error(platform + '/' + architecture + ' is not a stable distribution')
+  }
   if (manifest.version !== packageJson.version) {
     throw new Error(platform + '/' + architecture + ' manifest version does not match package.json')
   }

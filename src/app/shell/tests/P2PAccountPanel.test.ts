@@ -416,7 +416,7 @@ describe('P2P account public controls (component diagnostics)', () => {
           })
       )
       const ui = await render({ currentUser })
-      expect(ui.text()).toContain(zhCN['p2p.account.restoring'])
+      expect(ui.text()).toContain(zhCN['p2p.accountSession.restoring'])
       expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
       release({ ok: false, code: 'p2p.user_login_required', message: 'none' })
       await flushPromises()
@@ -489,7 +489,7 @@ describe('P2P account public controls (component diagnostics)', () => {
           message: 'no helper'
         })
       })
-      expect(ui.text()).toContain(zhCN['p2p.account.unknown'])
+      expect(ui.text()).toContain(zhCN['p2p.accountSession.unknown'])
       expect(ui.find('[data-testid="p2p-login-form"]').exists()).toBe(false)
       expect(ui.find('input[type="password"]').exists()).toBe(false)
     })

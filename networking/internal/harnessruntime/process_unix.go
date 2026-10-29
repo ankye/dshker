@@ -3,8 +3,13 @@
 package harnessruntime
 
 import (
+	"os/exec"
 	"syscall"
 )
+
+func backgroundCommand(executable string, arguments ...string) *exec.Cmd {
+	return exec.Command(executable, arguments...)
+}
 
 // signalTerminatePort asks one leftover process to stop.
 func signalTerminatePort(pid int) error { return syscall.Kill(pid, syscall.SIGTERM) }

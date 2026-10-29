@@ -1,7 +1,8 @@
 import { execFile, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { appendFile, chmod, lstat, mkdir, readFile } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
+import type { Socket } from 'node:net'
 import { promisify } from 'node:util'
 import { authenticatePeer, readPeerLine } from '../p2p/bootstrap'
 import { createPeerChannel, removePeerChannel } from '../p2p/private-channel'
@@ -11,6 +12,12 @@ import { exactPeerObject, PeerHelperError } from '../p2p/wire'
 import { assertCoreVersion } from './version-contract'
 
 const execFileAsync = promisify(execFile)
+
+// Closing the parent RPC is the core's cross-platform graceful quit request.
+// Its sequential cleanup allows 5s for the published broker and 15s to join the
+// independent runtime owner. In particular, Windows SIGTERM terminates the core
+// immediately, so escalation cannot precede these existing cleanup budgets.
+const CORE_GRACEFUL_SHUTDOWN_MILLISECONDS = 20_000
 
 /** Registration and endpoint discovery are exact-state operations, not path guesses. */
 async function registeredHeadlessCore(
@@ -24,7 +31,8 @@ async function registeredHeadlessCore(
       {
         windowsHide: true,
         timeout: 10_000,
-        maxBuffer: 4096
+        maxBuffer: 4096,
+        env: coreProcessEnvironment(options, process.env)
       }
     )
     const state: unknown = JSON.parse(stdout)
@@ -134,6 +142,8 @@ export interface CoreSupervisorOptions {
   catalogRoot?: string
   /** Explicit state directory for this Launcher's core/autostart registration. */
   stateRoot: string
+  /** Explicit canonical test profile root; isolated cores never inspect system autostart. */
+  isolatedProfileRoot?: string
   onUnavailable(error: PeerHelperError): void
 }
 
@@ -215,6 +225,8 @@ export class CoreSupervisor {
     if (options.catalogRoot !== undefined && !isAbsolute(options.catalogRoot))
       throw new PeerHelperError('p2p.invalid_arguments')
     if (!isAbsolute(options.stateRoot)) throw new PeerHelperError('p2p.invalid_arguments')
+    if (options.isolatedProfileRoot !== undefined && !isAbsolute(options.isolatedProfileRoot))
+      throw new PeerHelperError('p2p.invalid_arguments')
     try {
       await mkdir(options.dataRoot, { recursive: true })
       if (options.catalogRoot !== undefined) await mkdir(options.catalogRoot, { recursive: true })
@@ -242,14 +254,18 @@ export class CoreSupervisor {
 
     const executable = await verifyCoreExecutable(options.resourcesRoot)
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
-    if (await registeredHeadlessCore(executable, options)) return this.#attach(options, signal)
+    if (
+      options.isolatedProfileRoot === undefined &&
+      (await registeredHeadlessCore(executable, options))
+    )
+      return this.#attach(options, signal)
     const { directory, path: socketPath } = await createPeerChannel()
     const child = spawn(executable, coreArguments(options), {
       stdio: 'pipe',
       windowsHide: true,
       // DSH's bundled standalone Node owns child execution. Never leak a parent
       // Electron Node-mode flag into the core or its supervised processes.
-      env: withoutElectronRunAsNode(process.env)
+      env: coreProcessEnvironment(options, process.env)
     })
     // A handshake that fails on one platform and not another cannot be argued
     // about from the outside: keep the exact bytes the core sent, and where the
@@ -299,6 +315,7 @@ export class CoreSupervisor {
     })
     const budget = AbortSignal.any([signal, AbortSignal.timeout(30_000)])
     let rpc: PeerRpc | undefined
+    let parentSocket: Socket | undefined
     try {
       const secret = randomBytes(32).toString('hex')
       const ready = readPeerLine(child.stdout, budget)
@@ -321,10 +338,12 @@ export class CoreSupervisor {
         console.error('[p2p] core handshake rejected:', JSON.stringify(announcement))
         throw new PeerHelperError('p2p.protocol_mismatch')
       }
-      const socket = await authenticatePeer(socketPath, secret, budget).catch((error: unknown) => {
-        diagnose(`authenticate-failed socket=${socketPath} ${String(error)}`)
-        throw error
-      })
+      const socket = (parentSocket = await authenticatePeer(socketPath, secret, budget).catch(
+        (error: unknown) => {
+          diagnose(`authenticate-failed socket=${socketPath} ${String(error)}`)
+          throw error
+        }
+      ))
       // The core calls back once a device is restored: runtime.connect for the
       // runtime owner, peer.state for every connection stage, and
       // directory.changed for every new directory revision. Until the peer
@@ -370,8 +389,8 @@ export class CoreSupervisor {
       return new CoreSupervisor(child, exit, directory, rpc, dispatch, options.onUnavailable, false)
     } catch (error) {
       rpc?.close()
-      child.kill()
-      await stopChild(child, exit)
+      parentSocket?.destroy()
+      await stopChild(child, exit, CORE_GRACEFUL_SHUTDOWN_MILLISECONDS)
       if (directory) await removePeerChannel(directory)
       throw error
     }
@@ -427,7 +446,8 @@ export class CoreSupervisor {
   async #stop(): Promise<void> {
     if (this.#attached) await this.#handoff()
     this.rpc.close()
-    if (this.#child && this.#exit) await stopChild(this.#child, this.#exit)
+    if (this.#child && this.#exit)
+      await stopChild(this.#child, this.#exit, CORE_GRACEFUL_SHUTDOWN_MILLISECONDS)
     if (this.#directory) await removePeerChannel(this.#directory)
   }
 
@@ -458,8 +478,19 @@ export class CoreSupervisor {
   }
 }
 
-function withoutElectronRunAsNode(environment: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+/** The main-owned profile decides native credential identity; inherited variables cannot override it. */
+export function coreProcessEnvironment(
+  options: Pick<CoreSupervisorOptions, 'isolatedProfileRoot'>,
+  environment: NodeJS.ProcessEnv
+): NodeJS.ProcessEnv {
   const sanitized = { ...environment }
   delete sanitized.ELECTRON_RUN_AS_NODE
+  delete sanitized.DSHKER_SECRET_NAMESPACE
+  if (options.isolatedProfileRoot !== undefined) {
+    if (!isAbsolute(options.isolatedProfileRoot)) throw new PeerHelperError('p2p.invalid_arguments')
+    sanitized.DSHKER_SECRET_NAMESPACE = `profile-${createHash('sha256')
+      .update(options.isolatedProfileRoot)
+      .digest('hex')}`
+  }
   return sanitized
 }

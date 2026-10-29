@@ -69,6 +69,9 @@ const autostartLabel = "com.ankye.dshkerd"
 
 // runAutostart installs, removes, or reports the registration.
 func runAutostart(args []string, stdout io.Writer, stderr io.Writer) int {
+	if isolatedProfile() {
+		return fail(stderr, errors.New("p2p.autostart_unsupported"))
+	}
 	if len(args) == 0 {
 		return fail(stderr, errors.New("p2p.invalid_arguments"))
 	}

@@ -191,6 +191,9 @@ func readRecord(path string) (ownerRecord, error) {
 	if !hexValue(record.Instance, 32) || !hexValue(record.Token, 64) || !hexValue(record.ExecutableHash, 64) || !hexValue(record.Home.Digest, 64) || (record.RootsHash != "" && !hexValue(record.RootsHash, 64)) || record.Socket == "" || record.Process.PID < 0 || (record.Process.PID == 0) != (record.Process.Creation == "") {
 		return ownerRecord{}, ErrOwnerRecordInvalid
 	}
+	if record.Process.PID > 0 && !validRecordedProcess(record.Process) {
+		return ownerRecord{}, ErrOwnerRecordInvalid
+	}
 	return record, nil
 }
 
@@ -233,7 +236,11 @@ func recordFailure(stage string, cause error) error {
 }
 
 func writeRecord(path string, record ownerRecord) error {
-	encoded, err := json.Marshal(record)
+	return writePrivateDocument(path, record)
+}
+
+func writePrivateDocument(path string, value any) error {
+	encoded, err := json.Marshal(value)
 	if err != nil || len(encoded) > maxRecordBytes {
 		return recordFailure("encode", err)
 	}

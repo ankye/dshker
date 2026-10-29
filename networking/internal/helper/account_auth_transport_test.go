@@ -151,6 +151,9 @@ func TestAccountAuthTransportSelectedTLSExpiryRaceNeverReselectsBase(t *testing.
 	timer := time.NewTimer(time.Until(leaf.NotAfter) + 25*time.Millisecond)
 	defer timer.Stop()
 	<-timer.C
+	if time.Now().Before(leaf.NotAfter) {
+		t.Fatal("selected TLS request did not reach its original signed certificate deadline")
+	}
 	_, err = client.CurrentUser(context.Background(), session.Token)
 	if err == nil || err.Error() != "p2p.server_unavailable" {
 		t.Fatal("selected request did not preserve its actual TLS expiry refusal", err)
@@ -161,4 +164,5 @@ func TestAccountAuthTransportSelectedTLSExpiryRaceNeverReselectsBase(t *testing.
 	if requests != 0 || f.account.activationPending != nil {
 		t.Fatal("expiry after selection replayed through public auth or established pending", requests)
 	}
+	t.Logf("selected original mTLS certificate crossed signed NotAfter=%s; fresh TLS refused without HTTP replay", leaf.NotAfter.Format(time.RFC3339Nano))
 }

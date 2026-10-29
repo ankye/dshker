@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { LauncherHarnessLaunchView, LauncherHarnessState } from '../../../src/shared/contracts'
 import { PeerRuntimeOwner } from './runtime-owner'
+import { PeerHelperError } from './wire'
+import {
+  ManagedHarnessRuntimeError,
+  RUNTIME_OWNER_ERROR_MESSAGES,
+  type RuntimeOwnerErrorCode
+} from '../managed/runtime-errors'
 
 const url = 'http://127.0.0.1:31991/?token=test-only-first'
 const owners: PeerRuntimeOwner[] = []
@@ -45,6 +51,28 @@ function fixture(initial: LauncherHarnessLaunchView = { kind: 'stopped' }) {
 }
 
 describe('P2P owned DSH lifecycle', () => {
+  it.each(Object.keys(RUNTIME_OWNER_ERROR_MESSAGES) as RuntimeOwnerErrorCode[])(
+    'preserves %s across the typed parent callback without private details',
+    async (code) => {
+      const f = fixture()
+      f.start.mockRejectedValueOnce(
+        new ManagedHarnessRuntimeError(code, 'private diagnostic detail', { private: 'not sent' })
+      )
+      const error = await f.owner.connect(new AbortController().signal).catch((value) => value)
+      expect(error).toBeInstanceOf(PeerHelperError)
+      expect(error).toMatchObject({ code, message: code })
+      expect(error).not.toHaveProperty('details')
+      expect(f.start).toHaveBeenCalledOnce()
+    }
+  )
+
+  it('does not promote an untyped lookalike into a trusted runtime refusal', async () => {
+    const f = fixture()
+    const untrusted = { code: 'runtime.owner_identity_mismatch', message: 'untrusted detail' }
+    f.start.mockRejectedValueOnce(untrusted)
+    await expect(f.owner.connect(new AbortController().signal)).rejects.toBe(untrusted)
+  })
+
   it('resumes only the exact already-running binding without starting DSH', async () => {
     const f = fixture({ kind: 'running', url })
     const first = await f.owner.resume(new AbortController().signal)

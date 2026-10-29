@@ -30,6 +30,9 @@ const live = computed(() =>
 )
 /** A prior failure means retry rather than a first connect. */
 const failed = computed(() => live.value?.stage === 'failed')
+const refusalCode = computed(() =>
+  computer.value ? connections.refusalFor(computer.value.serviceId, computer.value.pairId) : ''
+)
 const needsReconcile = computed(() =>
   computer.value ? work.needsAttention(computer.value.serviceId, computer.value.pairId) : false
 )
@@ -96,9 +99,9 @@ async function connect(): Promise<void> {
     </p>
     <!-- A refusal that proved nothing happened keeps the stage clean, so without
          this line the press would leave no trace at all on this page. -->
-    <p v-if="connections.state.lastRefusal" role="status" data-testid="p2p-run-refusal">
-      {{ t(refusalKeyForCode(connections.state.lastRefusal)) }}
-      <code>{{ connections.state.lastRefusal }}</code>
+    <p v-if="refusalCode" role="status" data-testid="p2p-run-refusal">
+      {{ t(refusalKeyForCode(refusalCode)) }}
+      <code>{{ refusalCode }}</code>
     </p>
   </div>
 </template>

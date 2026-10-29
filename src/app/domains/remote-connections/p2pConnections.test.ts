@@ -187,6 +187,62 @@ describe('renderer P2P connections domain', () => {
     expect(connections.state.resultUnconfirmed).toBe(false)
   })
 
+  it('keeps refusals scoped to the exact service and pair', async () => {
+    const { api, connections } = setup([])
+    api.connect.mockResolvedValue({ ok: false, code: 'p2p.connection_busy', message: 'busy' })
+    await connections.connect(serviceId, pairId)
+    expect(connections.refusalFor(serviceId, pairId)).toBe('p2p.connection_busy')
+    expect(connections.refusalFor(serviceId, other)).toBe('')
+    expect(connections.refusalFor('other-service', pairId)).toBe('')
+    await connections.connect(serviceId, other)
+    expect(connections.refusalFor(serviceId, pairId)).toBe('p2p.connection_busy')
+    expect(connections.refusalFor(serviceId, other)).toBe('p2p.connection_busy')
+  })
+
+  it.each(['punching', 'connected', 'ready', 'failed', 'disconnected'] as const)(
+    'replaces a prior busy refusal with the named peer actual %s readback',
+    async (stage) => {
+      const { api, connections } = setup([])
+      api.connect.mockResolvedValue({ ok: false, code: 'p2p.connection_busy', message: 'busy' })
+      await connections.connect(serviceId, pairId)
+      await connections.connect(serviceId, other)
+      api.connections.mockResolvedValue({ ok: true, data: { error: '', peers: [peer(stage)] } })
+      await connections.read()
+      expect(connections.refusalFor(serviceId, pairId)).toBe('')
+      expect(connections.refusalFor(serviceId, other)).toBe('p2p.connection_busy')
+      expect(connections.find(serviceId, pairId)?.stage).toBe(stage)
+      expect(connections.isReady(serviceId, pairId)).toBe(stage === 'ready')
+    }
+  )
+
+  it('retains a real non-busy refusal and an unconfirmed busy readback', async () => {
+    const { api, connections } = setup([])
+    api.connect.mockResolvedValue({
+      ok: false,
+      code: 'p2p.pair_unauthorized',
+      message: 'unauthorized'
+    })
+    await connections.connect(serviceId, pairId)
+    api.connections.mockResolvedValue({
+      ok: true,
+      data: { error: '', peers: [peer('disconnected')] }
+    })
+    await connections.read()
+    expect(connections.refusalFor(serviceId, pairId)).toBe('p2p.pair_unauthorized')
+
+    api.connect.mockResolvedValue({ ok: false, code: 'p2p.connection_busy', message: 'busy' })
+    api.connections.mockResolvedValue({ ok: true, data: { error: '', peers: [] } })
+    await connections.connect(serviceId, pairId)
+    api.connections.mockResolvedValue({
+      ok: false,
+      code: 'p2p.helper_unavailable',
+      message: 'unavailable'
+    })
+    await connections.read()
+    expect(connections.refusalFor(serviceId, pairId)).toBe('p2p.connection_busy')
+    expect(connections.isReady(serviceId, pairId)).toBe(false)
+  })
+
   it('surfaces a helper-level error separately from a connection failure', async () => {
     const { api, connections } = setup([])
     api.connections.mockResolvedValue({

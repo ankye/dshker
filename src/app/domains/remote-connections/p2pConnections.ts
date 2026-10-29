@@ -15,13 +15,13 @@ export interface P2PConnectionsState {
   helperError: string
   resultUnconfirmed: boolean
   /**
-   * The code of the last refused connect or disconnect, or an empty string.
+   * The last refused operation for each exact service and pair.
    *
    * A refusal that proves nothing happened is not a failure of the connection, so
    * it does not become one — but discarding it entirely left a button that answered
    * with nothing at all, which is indistinguishable from a broken one.
    */
-  lastRefusal: string
+  refusals: Record<string, string>
 }
 
 /**
@@ -37,7 +37,7 @@ export class P2PConnectionsDomain {
     peers: undefined,
     helperError: '',
     resultUnconfirmed: false,
-    lastRefusal: ''
+    refusals: {}
   })
   #polling: ReturnType<typeof setTimeout> | undefined
   constructor(private readonly management: P2PManagementDomain) {}
@@ -70,6 +70,12 @@ export class P2PConnectionsDomain {
       this.#state.peers = result.data.peers
       this.#state.helperError = result.data.error
       this.#state.resultUnconfirmed = false
+      // A concrete current stage replaces a prior busy admission result. The
+      // refusal never owned that attempt and must not mask its actual outcome.
+      for (const peer of result.data.peers) {
+        const key = this.#key(peer.serviceId, peer.pairId)
+        if (this.#state.refusals[key] === 'p2p.connection_busy') delete this.#state.refusals[key]
+      }
       this.#scheduleFollowUp()
     }
   }
@@ -77,6 +83,11 @@ export class P2PConnectionsDomain {
   /** The live stage for one pair, or undefined when it has never connected. */
   find(serviceId: string, pairId: string): P2PConnectionView | undefined {
     return this.#state.peers?.find((peer) => peer.serviceId === serviceId && peer.pairId === pairId)
+  }
+
+  /** A computer never displays another service or pair's operation refusal. */
+  refusalFor(serviceId: string, pairId: string): string {
+    return this.#state.refusals[this.#key(serviceId, pairId)] ?? ''
   }
 
   /** True only for a fully established workbench. */
@@ -103,8 +114,10 @@ export class P2PConnectionsDomain {
 
   async connect(serviceId: string, pairId: string): Promise<void> {
     if (!this.#canWrite(serviceId) || this.isConnecting(serviceId, pairId)) return
+    const key = this.#key(serviceId, pairId)
+    delete this.#state.refusals[key]
     const result = await this.management.run('connect', { serviceId, pairId })
-    this.#state.lastRefusal = result.ok ? '' : result.code
+    if (!result.ok) this.#state.refusals[key] = result.code
     if (!result.ok) this.#recordWriteOutcome(result.code)
     // Dispatch only starts an attempt, so the stage arrives through a readback.
     // A refusal is read back the same way, and that is the whole point: reading is
@@ -116,8 +129,10 @@ export class P2PConnectionsDomain {
 
   async disconnect(serviceId: string, pairId: string): Promise<void> {
     if (!this.#canWrite(serviceId)) return
+    const key = this.#key(serviceId, pairId)
+    delete this.#state.refusals[key]
     const result = await this.management.run('disconnect', { serviceId, pairId })
-    this.#state.lastRefusal = result.ok ? '' : result.code
+    if (!result.ok) this.#state.refusals[key] = result.code
     if (!result.ok) this.#recordWriteOutcome(result.code)
     await this.read()
   }
@@ -142,6 +157,10 @@ export class P2PConnectionsDomain {
 
   #canWrite(serviceId: string): boolean {
     return !this.management.busy(serviceId) && !this.#state.resultUnconfirmed
+  }
+
+  #key(serviceId: string, pairId: string): string {
+    return `${serviceId}:${pairId}`
   }
 
   /**

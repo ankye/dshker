@@ -24,7 +24,8 @@ const mocks = vi.hoisted(() => ({
   readContent: undefined as string | undefined,
   windowBounds: { x: 0, y: 0, width: 1240, height: 820 },
   minimized: false,
-  fullScreen: false
+  fullScreen: false,
+  appName: '@ankye/dshker-launcher'
 }))
 
 vi.mock('electron', () => {
@@ -87,6 +88,7 @@ vi.mock('electron', () => {
   return {
     BrowserWindow: FakeBrowserWindow,
     app: {
+      getName: vi.fn(() => mocks.appName),
       getPath: vi.fn(() => '/user-data'),
       getAppPath: vi.fn(() => '/app'),
       isPackaged: true,
@@ -155,6 +157,7 @@ beforeEach(async () => {
   vi.resetModules()
   screenListeners.clear()
   mocks.displays = [laptop, externalRight]
+  mocks.appName = '@ankye/dshker-launcher'
   mocks.readContent = undefined
   mocks.savedContent = undefined
   mocks.windowBounds = { x: 0, y: 0, width: 1240, height: 820 }
@@ -169,6 +172,13 @@ beforeEach(async () => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('launcher window display wiring', () => {
+  it('labels test windows with their independent application name and keeps the stable product title', async () => {
+    mocks.appName = 'DSHKer Launcher Test'
+    expect((await build()).options.title).toBe('DSHKer Launcher Test')
+    mocks.appName = '@ankye/dshker-launcher'
+    expect((await build()).options.title).toBe('DSHKer Launcher')
+  })
+
   /**
    * The reported bug, as an event-level assertion. Subscribing only to
    * `display-metrics-changed` is what left an unplugged monitor unhandled.

@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "change": "Shared account-session presentation through the public account tab",
+  "acceptance_stage": "diagnostic",
+  "implementation_complete": true,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "scope_note": "This contract observes the already signed-in Windows application's public account-tab entry and DOM/rAF readback. It does not log out, enter credentials, change a network, prove signed-out physical behavior, prove Mac native presentation, or assert complete compositor pixel coverage. DOM observations cannot establish absence of every white or flashing screen frame. The runner must retain releaseAccepted=false and refuse a release stage without independent pixel coverage.",
+  "prerequisites": [
+    {
+      "name": "architecture",
+      "artifact": ".run/connection-busy/architecture.log",
+      "passed": true
+    },
+    {
+      "name": "dependency_isolation",
+      "artifact": ".run/connection-busy/dependency-isolation.json",
+      "passed": true
+    },
+    {
+      "name": "required_deletion",
+      "artifact": ".run/connection-busy/required-deletion.json",
+      "passed": true
+    },
+    {
+      "name": "source_file_size",
+      "artifact": ".run/connection-busy/source-size.log",
+      "passed": true
+    },
+    {
+      "name": "focused_tests",
+      "artifact": ".run/connection-busy/vitest-retention-final.log",
+      "passed": true
+    },
+    {
+      "name": "build",
+      "artifact": ".run/connection-busy/build-electron-retention-final.log",
+      "passed": true
+    },
+    {
+      "name": "strict_specification",
+      "artifact": ".run/connection-busy/openspec-retention-final.log",
+      "passed": true
+    }
+  ],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "expected_labels": {
+    "zh-CN": {
+      "account": "账户",
+      "signedIn": "已登录"
+    },
+    "en-US": {
+      "account": "Account",
+      "signedIn": "Signed in"
+    }
+  },
+  "workflows": [
+    {
+      "id": "open-account-session",
+      "kind": "control",
+      "minimum_attempts": 3,
+      "profiles": ["signed-in-windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid=\"remote-tab-account\"]",
+      "expected_state": {
+        "version": "0.1.95",
+        "labels_equal": true,
+        "signed_in": true
+      },
+      "expected_native_event": "trusted-public-account-tab-click",
+      "requires_persistence": false,
+      "invariants": ["version", "footer_text"],
+      "required_content_checks": [
+        "shared_account_label",
+        "footer_account_caption",
+        "device_identity_present"
+      ]
+    }
+  ]
+}

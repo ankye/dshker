@@ -195,8 +195,8 @@ func savedNetworkGroups(saved catalog.Snapshot, serviceID, localDeviceID string,
 func setNetworkGroupState(group *networkGroup, userID string) {
 	if previous := group.previous; previous != nil {
 		group.view.SelectedNetworkID = previous.NetworkID
-		_, authorized := group.identities[previous.NetworkID]
-		if previous.PairState == "active" && previous.UserID == userID && authorized {
+		identity, authorized := group.identities[previous.NetworkID]
+		if previous.UserID == userID && authorized && (previous.PairState == "active" || previous.PairState == "revoked" && matchesSavedNetwork(*previous, identity, userID)) {
 			group.view.State = "selected"
 		} else {
 			group.view.State = "stale"
@@ -210,6 +210,36 @@ func setNetworkGroupState(group *networkGroup, userID string) {
 	}
 }
 
+// A locally revoked row is not fresh authority, but it is the user's original
+// choice. Recover only that exact identity after the coordinator authorizes it
+// again; another network, account, device or key still requires an explicit choice.
+func matchesSavedNetwork(previous catalog.Computer, identity controlplane.PairIdentity, userID string) bool {
+	remote, local, ok := remoteSide(identity, previous.LocalDeviceID)
+	return ok && previous.UserID == userID &&
+		identity.Pair.State == "active" && identity.Pair.NetworkID == previous.NetworkID &&
+		local.UserID == userID && remote.UserID == userID &&
+		local.DeviceID == previous.LocalDeviceID && remote.DeviceID == previous.RemoteDeviceID &&
+		previous.LocalPublicKey == encodeKey(local.PublicKey) && previous.RemotePublicKey == encodeKey(remote.PublicKey)
+}
+
+func (account *account) recoversNetworkGroup(group *networkGroup, userID string) bool {
+	if group.view.State != "selected" || group.previous == nil || !matchesSavedNetwork(*group.previous, group.identities[group.view.SelectedNetworkID], userID) {
+		return false
+	}
+	if group.previous.PairState == "revoked" {
+		return true
+	}
+	// A lost store reply can leave a durable active row while its old admission
+	// remains refused. Fresh exact authority can recover only authorization stops;
+	// transport, identity and unrelated terminal failures keep their owners.
+	code, blocked := account.host.AutoConnectEngine().Refusal(account.identity.ServiceID, group.view.PairID)
+	return blocked && networkAuthorizationRefusal(code)
+}
+
+func networkAuthorizationRefusal(code string) bool {
+	return code == "p2p.pair_unauthorized" || code == "p2p.pair_revoked" || code == "p2p.pair_not_found" || code == "p2p.network_revoked"
+}
+
 func (account *account) commitNetworkSelection(ctx context.Context, selection *networkSelection, reselect string) (string, error) {
 	ctx = selection.scope.Context(ctx)
 	if err := checkBootstrapContext(ctx); err != nil {
@@ -217,10 +247,14 @@ func (account *account) commitNetworkSelection(ctx context.Context, selection *n
 	}
 	var members []controlplane.PairIdentity
 	var livePins []string
+	var recovered []string
 	for _, group := range selection.groups {
 		if group.view.State == "selected" {
 			members = append(members, group.identities[group.view.SelectedNetworkID])
 			livePins = append(livePins, group.view.PairID)
+			if account.recoversNetworkGroup(group, selection.userID) {
+				recovered = append(recovered, group.view.PairID)
+			}
 		} else if group.previous != nil {
 			if err := account.manager.RetireScopedPin(group.view.PairID, group.previous.NetworkID); err != nil {
 				return "", err
@@ -280,6 +314,22 @@ func (account *account) commitNetworkSelection(ctx context.Context, selection *n
 		return "", err
 	}
 	account.manager.RetainPins(livePins)
+	// Publish recovery before activation: a failed WSS upgrade must not leave the
+	// now-active durable row carrying its former terminal refusal forever.
+	for _, pairID := range recovered {
+		if err := checkBootstrapContext(ctx); err != nil {
+			return "", err
+		}
+		engine := account.host.AutoConnectEngine()
+		if code := account.refusals[pairID]; code != "" && !networkAuthorizationRefusal(code) {
+			continue
+		}
+		if !engine.RecoverAuthorization(autoconnect.Intent{ServiceID: account.identity.ServiceID, PairID: pairID}) {
+			continue
+		}
+		delete(account.stages, pairID)
+		delete(account.refusals, pairID)
+	}
 	if selection.userID != "" {
 		if err := checkBootstrapContext(ctx); err != nil {
 			return "", err
@@ -327,6 +377,20 @@ func (account *account) networkSelectionOperation(ctx context.Context, method st
 	}
 	ctx = fresh.scope.Context(ctx)
 	if method == "pairs.network_choices" {
+		// Publish fresh pins even when a prior store reply was lost after its
+		// durable write. An unchanged catalog is a no-op CAS, never a new choice.
+		revision, err := account.commitNetworkSelection(ctx, fresh, "")
+		if err != nil {
+			return nil, err
+		}
+		previousRevision := fresh.saved.Revision
+		fresh.saved.Revision = revision
+		if previousRevision != revision {
+			if err := fresh.scope.Publish(ctx, func() error { account.catalogRevision = revision; return nil }); err != nil {
+				return nil, err
+			}
+			account.host.announceCatalog(account.identity.ServiceID, revision)
+		}
 		return fresh.project(ctx)
 	}
 	var selected *networkGroup
