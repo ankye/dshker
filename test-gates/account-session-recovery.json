@@ -1,0 +1,330 @@
+{
+  "change": "add-account-session-renewal-and-recovery",
+  "risk": "interactive",
+  "scope_note": "Source implementation and real independent-coordinator/native-store evidence only. No production account password, installed application or deployment is modified. The interaction contract is diagnostic and no raw frame ledger exists yet; default verify must not be reported as accepted until that evidence is produced. Unit/component tests use isolated test-side adapters and cannot replace the declared live integration or native interactive acceptance.",
+  "production_files": [
+    "electron/main/p2p/accounts.ts",
+    "electron/main/p2p/management-admission.ts",
+    "electron/main/p2p/management-ipc.ts",
+    "electron/main/p2p/management.ts",
+    "electron/p2p-management-preload.ts",
+    "networking/internal/controlplane/account_recovery.go",
+    "networking/internal/helper/account_password_reset.go",
+    "networking/internal/helper/account_session_renewal.go",
+    "networking/internal/helper/host.go",
+    "networking/internal/helper/selected_session_scope.go",
+    "networking/internal/localrpc/methods.go",
+    "src/app/domains/remote-connections/p2pAccounts.ts",
+    "src/app/shared/i18n/i18n.p2p.ts",
+    "src/app/shell/components/P2PAccountAuthForm.vue",
+    "src/app/shell/components/P2PAccountPanel.vue",
+    "src/app/shell/components/P2PPasswordResetForm.vue",
+    "src/shared/p2p-management.ts",
+    "src/shared/p2p-refusal.ts",
+    "src/app/shared/i18n/i18n.refusals.ts",
+    "electron/main/p2p/session-registry.ts"
+  ],
+  "test_files": [
+    "electron/main/p2p/accounts-renewal.test.ts",
+    "electron/main/p2p/management-ipc.test.ts",
+    "electron/main/p2p/management.test.ts",
+    "electron/p2p-management-preload.test.ts",
+    "electron/preload-surface.test.ts",
+    "networking/internal/helper/account_recovery_test.go",
+    "networking/internal/helper/account_password_reset_test.go",
+    "networking/internal/localrpc/methods_test.go",
+    "networking/integration/account_session_recovery_test.go",
+    "src/app/domains/remote-connections/p2pAccounts.password-reset.test.ts",
+    "src/app/shell/tests/P2PPasswordResetForm.test.ts",
+    "src/app/shell/tests/P2PPasswordResetPanel.test.ts",
+    "src/app/shared/i18n/i18n.test.ts",
+    "src/app/shell/tests/p2pRefusal.test.ts",
+    "src/app/shared/i18n/i18n.refusals.test.ts",
+    "src/shared/p2p-management.test.ts",
+    "electron/main/p2p/session-registry.test.ts",
+    "electron/main/p2p/accounts.test.ts",
+    "src/app/shell/tests/P2PAccountPanel.test.ts"
+  ],
+  "live_test_files": ["networking/integration/account_session_recovery_test.go"],
+  "state_matrix": [
+    {
+      "state": "success",
+      "test": "renews near expiry once and retains the original account and token"
+    },
+    {
+      "state": "no_op",
+      "test": "does not renew a session outside the seven-day window or invent a missing session"
+    },
+    {
+      "state": "partial",
+      "test": "does not resubmit an unconfirmed reset or report it as a confirmed sign-out"
+    },
+    {
+      "state": "recovery",
+      "test": "TestUserRenewReconcilesLocallyExpiredRecordOnlyWhenServerStillAuthorizesIt"
+    },
+    {
+      "state": "stale_timeout",
+      "test": "TestUserRenewCannotRepublishAfterActualLogoutAdmission"
+    },
+    {
+      "state": "reset",
+      "test": "TestAccountSessionRecoveryRealCoordinatorAndNativeStore"
+    },
+    {
+      "state": "superseded",
+      "test": "does not replace a newer account projection when its captured revision changes"
+    },
+    {
+      "state": "rejected",
+      "test": "rejects incomplete, malformed and extra reset fields before dispatching any owner"
+    }
+  ],
+  "field_bindings": [
+    {
+      "production_file": "electron/main/p2p/accounts.ts",
+      "field": "canonical renewal expiry and selected authentication",
+      "source": "user.renew reply after Go canonical protected readback",
+      "test": "renews near expiry once and retains the original account and token",
+      "assertion": "expect(f.accounts.sessionToken(serviceId)).toBe(token)",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId", "token", "expiresAt"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "electron/main/p2p/management-admission.ts",
+      "field": "exact reset fields, lowercase code and Unicode password bounds",
+      "source": "versioned resetPassword request admitted before owner access",
+      "test": "rejects incomplete, malformed and extra reset fields before dispatching any owner",
+      "assertion": "for (const handler of Object.values(owner)) expect(handler).not.toHaveBeenCalled()",
+      "state": "rejected",
+      "identity_keys": ["serviceId", "requestId", "email"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "electron/main/p2p/management-ipc.ts",
+      "field": "allowlisted reset failure without secrets in response or logs",
+      "source": "main failure boundary, regardless of arbitrary exception contents",
+      "test": "never echoes or logs a reset code or password from an unexpected exception",
+      "assertion": "expect(JSON.stringify(log.mock.calls)).not.toContain(password)",
+      "state": "partial",
+      "identity_keys": ["serviceId", "requestId"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "electron/main/p2p/management.ts",
+      "field": "startup and account-read single flight",
+      "source": "one saved session and the same pinned coordinator service",
+      "test": "shares one persisted-account restore with the first account read",
+      "assertion": "await expect(current).resolves.toEqual(user)",
+      "state": "success",
+      "identity_keys": ["serviceId", "userId", "token"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "electron/p2p-management-preload.ts",
+      "field": "frozen named resetPassword capability",
+      "source": "shared channel map and production contextBridge surface",
+      "test": "exposes exactly the frozen named methods from the production preload",
+      "assertion": "expect(desktop.p2pManagement).not.toHaveProperty('rpc')",
+      "state": "success",
+      "identity_keys": ["channel", "requestId", "serviceId"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "networking/internal/controlplane/account_recovery.go",
+      "field": "HTTPS renewal and one-time password reset response",
+      "source": "independent production coordinator with pinned TLS identity",
+      "test": "TestAccountSessionRecoveryRealCoordinatorAndNativeStore",
+      "assertion": "reset session regained authority through renewal",
+      "state": "reset",
+      "identity_keys": ["serviceId", "userId", "token", "deviceId", "networkId", "pairId"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "networking/internal/helper/account_password_reset.go",
+      "field": "matched selected-account invalidation only",
+      "source": "fresh current-user check and explicit administrator code for that email",
+      "test": "TestPasswordResetClearsOnlyFreshlyMatchedSelectedAccount",
+      "assertion": "password reset retained the matched login",
+      "state": "reset",
+      "identity_keys": ["serviceId", "userId", "email", "token"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "networking/internal/helper/account_session_renewal.go",
+      "field": "durable canonical expiry before publishing renewal",
+      "source": "server-renewed session persisted through the native secret owner",
+      "test": "TestUserRenewProtectedWriteFailureDoesNotPublishSuccess",
+      "assertion": "renewal hid the failed protected write",
+      "state": "partial",
+      "identity_keys": ["serviceId", "userId", "token", "expiresAt"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "networking/internal/helper/host.go",
+      "field": "private renewal/reset dispatch preserving original identity",
+      "source": "production Core.Serve -> Host.Handle -> authenticated HTTPS",
+      "test": "TestAccountSessionRecoveryRealCoordinatorAndNativeStore",
+      "assertion": "password recovery changed the original network, devices or pair records",
+      "state": "reset",
+      "identity_keys": ["serviceId", "userId", "deviceId", "publicKey", "networkId", "pairId"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "networking/internal/helper/selected_session_scope.go",
+      "field": "renewal publication fenced from admitted logout",
+      "source": "immutable token/expiry owner and independent revocation fence",
+      "test": "TestUserRenewCannotRepublishAfterActualLogoutAdmission",
+      "assertion": "late renewal restored a logged-out session",
+      "state": "stale_timeout",
+      "identity_keys": ["serviceId", "userId", "token", "expiresAt"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "networking/internal/localrpc/methods.go",
+      "field": "shell-only named methods",
+      "source": "additive method-table version 2 role admission",
+      "test": "TestAccountRecoveryMethodsArePrivateShellOperations",
+      "assertion": "account recovery is not an additive table-2 shell operation",
+      "state": "success",
+      "identity_keys": ["method", "role", "methodTableVersion"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/app/domains/remote-connections/p2pAccounts.ts",
+      "field": "confirmed sign-out scoped to reset service",
+      "source": "named reset result accepted only by matching lifecycle and session revision",
+      "test": "signs out only the confirmed original service and retains its username without secrets",
+      "assertion": "expect(other).toMatchObject({",
+      "state": "reset",
+      "identity_keys": ["serviceId", "userId", "lifetimeRevision", "sessionRevision"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.p2p.ts",
+      "field": "complete bilingual recovery copy",
+      "source": "typed zh-CN and en-US locale dictionaries",
+      "test": "defines the same message keys in every catalog",
+      "assertion": "expect([...zh.keys()].sort()).toStrictEqual(englishKeys.sort())",
+      "state": "success",
+      "identity_keys": ["locale", "messageKey"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PAccountAuthForm.vue",
+      "field": "mutually exclusive recovery and manual sign-in",
+      "source": "public Forgot password action and confirmed completion nonce",
+      "test": "opens recovery from sign-in with an explicit administrator instruction",
+      "assertion": "expect(wrapper.find('[data-testid=\"p2p-login-form\"]').exists()).toBe(false)",
+      "state": "success",
+      "identity_keys": ["serviceId", "mode"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PAccountPanel.vue",
+      "field": "unknown reset result remains unknown and does not repeat code",
+      "source": "typed operation uncertainty and original login draft",
+      "test": "keeps an unconfirmed reset blocked and offers manual new-password sign-in without resubmission",
+      "assertion": "expect(resetPassword).toHaveBeenCalledTimes(1)",
+      "state": "partial",
+      "identity_keys": ["serviceId", "requestId", "usernameDraft"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PPasswordResetForm.vue",
+      "field": "local code/password drafts and mandatory confirmation",
+      "source": "explicit local form values; code and password clear before emit",
+      "test": "submits once with the original email and clears every secret before publishing the event",
+      "assertion": "expect(wrapper.emitted('resetPassword')).toHaveLength(1)",
+      "state": "success",
+      "identity_keys": ["serviceId", "email"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/shared/p2p-management.ts",
+      "field": "typed reset fields and void public result",
+      "source": "named versioned IPC request with no credential projection",
+      "test": "dispatches reset with the exact Unicode password and returns no credential or code",
+      "assertion": "expect(result).toEqual({ ok: true, data: undefined })",
+      "state": "success",
+      "identity_keys": ["serviceId", "requestId", "email"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/shared/p2p-refusal.ts",
+      "field": "invalid recovery input classification",
+      "source": "p2p.password_reset_invalid refusal vocabulary",
+      "test": "treats a rejected value as the user's to fix",
+      "assertion": "expect(p2pRefusalKind('p2p.password_reset_invalid')).toBe('input')",
+      "state": "rejected",
+      "identity_keys": ["refusalCode", "category"],
+      "missing_semantics": "Required scope, records and server fields fail explicitly; no identity is inferred or replaced."
+    },
+    {
+      "production_file": "src/app/shared/i18n/i18n.refusals.ts",
+      "field": "actionable protected-storage failure copy without deleting original identity",
+      "source": "exact native-provider/read/write/delete typed refusal and locale dictionary",
+      "test": "explains protected-storage failure %s while preserving original identities",
+      "assertion": "expect(zhCNRefusals[key]).toContain('原账号、设备、网络和配对会保留')",
+      "state": "partial",
+      "identity_keys": ["refusalCode", "locale", "messageKey"],
+      "missing_semantics": "An unavailable provider or failed read is not an absent session. Failed write/cleanup remains explicit and never authorizes identity deletion or invented persistence success."
+    },
+    {
+      "production_file": "src/shared/p2p-management.ts",
+      "field": "four OS protected-storage refusal codes remain distinguishable across IPC",
+      "source": "Go canonical native-secret owner error codes",
+      "test": "preserves protected-storage refusal %s without echoing reset secrets",
+      "assertion": "expect(result).toEqual({ ok: false, code, message: code })",
+      "state": "partial",
+      "identity_keys": ["serviceId", "requestId", "refusalCode"],
+      "missing_semantics": "secret_missing remains internal to the secret adapter; provider/read/write/delete failures cannot be swallowed as no-session or reduced to unknown internal_error."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PAccountPanel.vue",
+      "field": "failed cleanup prevents code replay and permits manual new-password sign-in",
+      "source": "typed p2p.secret_delete_failed after explicit password reset",
+      "test": "explains failed protected cleanup and permits manual new-password login without resubmitting recovery",
+      "assertion": "zhCN['p2p.refusal.secretDeleteFailed']",
+      "state": "partial",
+      "identity_keys": ["serviceId", "requestId", "email"],
+      "missing_semantics": "Local cleanup failure does not prove password reset failed. The result is checked through manual sign-in and the one-time code is not resubmitted."
+    },
+    {
+      "production_file": "electron/main/p2p/session-registry.ts",
+      "field": "typed cleanup refusal and explicit later restore",
+      "source": "canonical exact-token local revocation and protected removeUserSession readback",
+      "test": "reports protected cleanup failure and retries cleanup only on the next explicit restore",
+      "assertion": "expect(f.removeUserSession).toHaveBeenCalledTimes(2)",
+      "state": "recovery",
+      "identity_keys": ["serviceId", "token", "localRevocationOwner"],
+      "missing_semantics": "Deletion failure is reported unchanged; another explicit operation may retry cleanup but never password reset or authentication fallback."
+    },
+    {
+      "production_file": "src/app/shell/components/P2PAccountAuthForm.vue",
+      "field": "registration and reset share twelve Unicode-character minimum",
+      "source": "P2P_ACCOUNT_PASSWORD_MIN and coordinator validPassword Unicode rule",
+      "test": "states the password requirement and refuses a short one before any request",
+      "assertion": "expect(register).not.toHaveBeenCalled()",
+      "state": "no_op",
+      "identity_keys": ["serviceId", "email"],
+      "missing_semantics": "Six astral Unicode characters are not twelve characters even though UTF-16 length is twelve; invalid registration remains local."
+    }
+  ],
+  "real_commands": [
+    {
+      "command": "node --input-type=module -e 'import {spawnSync} from \"node:child_process\"; import {resolve} from \"node:path\"; import {mkdirSync,writeFileSync} from \"node:fs\"; mkdirSync(\".run/account-session-recovery\",{recursive:true}); const result=spawnSync(\"go\",[\"test\",\"-tags\",\"native_secrets\",\"-race\",\"./integration\",\"-run\",\"^TestAccountSessionRecoveryRealCoordinatorAndNativeStore$\",\"-count=1\"],{cwd:\"networking\",env:{...process.env,DSHKER_SERVER_BINARY:resolve(\"../../../go_workspace/dshker-server/bin/darwin_arm64/dshker-server\")},encoding:\"utf8\"}); if(result.error) throw result.error; if(!Number.isInteger(result.status)) throw new Error(\"missing_go_exit_status\"); const output=result.stdout+result.stderr; writeFileSync(\".run/account-session-recovery/live-integration.log\",output); process.stdout.write(output); process.exit(result.status);'",
+      "no_mock": true
+    }
+  ],
+  "runtime_evidence": [
+    {
+      "artifact": ".run/account-session-recovery/live-integration.log"
+    }
+  ],
+  "interaction_gate": {
+    "contract": "test-gates/account-session-recovery-interaction.json",
+    "ledger": ".run/account-session-recovery/interaction-ledger.jsonl"
+  }
+}

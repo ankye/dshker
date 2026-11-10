@@ -119,7 +119,17 @@ export function fixture() {
   const call = vi.fn(
     async (method: string, _payload: unknown, _signal: AbortSignal): Promise<unknown> => {
       if (method === 'user.login')
-        return { user, token: '8'.repeat(64), expiresAt: Math.floor(Date.now() / 1000) + 3600 }
+        return {
+          user,
+          token: '8'.repeat(64),
+          expiresAt: Math.floor(Date.now() / 1000) + 30 * 86400
+        }
+      if (method === 'user.renew')
+        return {
+          user,
+          token: (_payload as { data: { token: string } }).data.token,
+          expiresAt: Math.floor(Date.now() / 1000) + 30 * 86400
+        }
       if (method === 'user.current') return user
       if (method === 'networks.list') return structuredClone(networks)
       if (method === 'networks.delete') {

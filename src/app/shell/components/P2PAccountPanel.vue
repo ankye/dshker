@@ -87,6 +87,13 @@ const uncertain = computed(
     operation.value?.error === 'p2p.management_result_unconfirmed' ||
     operation.value?.error === 'p2p.authorization_cleanup_failed'
 )
+const resetCompleted = ref(0)
+const resetUnconfirmed = computed(
+  () =>
+    operation.value?.method === 'resetPassword' &&
+    (uncertain.value || operation.value?.error === 'p2p.secret_delete_failed')
+)
+const authUncertain = computed(() => uncertain.value && !resetUnconfirmed.value)
 const transientBusy = computed(() => {
   const error = operation.value?.error
   return (
@@ -99,6 +106,11 @@ const transientBusy = computed(() => {
 const ACCOUNT_ERROR_KEYS: Readonly<Record<string, MessageKey>> = {
   'p2p.network_limit_reached': 'p2p.account.networkLimit',
   'p2p.user_conflict': 'p2p.account.userConflict',
+  'p2p.password_reset_invalid': 'p2p.account.resetInvalid',
+  'p2p.secret_provider_unavailable': 'p2p.refusal.secretProviderUnavailable',
+  'p2p.secret_read_failed': 'p2p.refusal.secretReadFailed',
+  'p2p.secret_write_failed': 'p2p.refusal.secretWriteFailed',
+  'p2p.secret_delete_failed': 'p2p.refusal.secretDeleteFailed',
   'p2p.invalid_user_credentials': 'p2p.account.invalidCredentials',
   // A refused input is the user's to fix, not a configuration fault. Falling
   // through to the generic message told them to check a configuration that was
@@ -145,6 +157,7 @@ const failureMessage = computed<MessageKey | undefined>(() => {
   if (!error) return undefined
   const specific = ACCOUNT_ERROR_KEYS[error]
   if (specific) return specific
+  if (resetUnconfirmed.value) return 'p2p.account.resetUnconfirmed'
   if (uncertain.value) return 'p2p.management.unconfirmed'
   const kind = p2pRefusalKind(error)
   if (kind === 'unconfirmed') return 'p2p.management.unconfirmed'
@@ -197,6 +210,10 @@ async function login(username: string, password: string) {
 }
 async function register(email: string, password: string) {
   await accounts.register(props.serviceId, email, password)
+}
+async function resetPassword(email: string, code: string, password: string) {
+  if (await accounts.resetPassword(props.serviceId, email, code, password))
+    resetCompleted.value += 1
 }
 
 async function askDelete(network: P2PNetworkView, event: Event) {
@@ -405,9 +422,12 @@ async function closeManage(): Promise<void> {
         :service-id="serviceId"
         :username="state.usernameDraft"
         :busy="pending"
-        :uncertain="uncertain"
+        :uncertain="authUncertain"
+        :reset-completed="resetCompleted"
+        :reset-unconfirmed="resetUnconfirmed"
         @login="login"
         @register="register"
+        @reset-password="resetPassword"
         @update:username="state.usernameDraft = $event"
       />
     </template>

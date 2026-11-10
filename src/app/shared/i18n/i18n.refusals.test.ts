@@ -153,6 +153,29 @@ describe('connection refusal copy', () => {
     }
   })
 
+  it.each([
+    ['p2p.secret_provider_unavailable', 'p2p.refusal.secretProviderUnavailable'],
+    ['p2p.secret_read_failed', 'p2p.refusal.secretReadFailed'],
+    ['p2p.secret_write_failed', 'p2p.refusal.secretWriteFailed'],
+    ['p2p.secret_delete_failed', 'p2p.refusal.secretDeleteFailed']
+  ] as const)(
+    'explains protected-storage failure %s while preserving original identities',
+    (code, key) => {
+      expect(refusalKeyForCode(code)).toBe(key)
+      expect(zhCNRefusals[key]).toContain('原账号、设备、网络和配对会保留')
+      expect(enUSRefusals[key]).toContain(
+        'The original account, devices, networks and pairs are retained.'
+      )
+      if (code === 'p2p.secret_delete_failed') {
+        expect(zhCNRefusals[key]).toContain('不要重复提交重设码')
+        expect(enUSRefusals[key]).toContain('do not submit the reset code again')
+      } else {
+        expect(zhCNRefusals[key]).toContain('重试')
+        expect(enUSRefusals[key]).toContain('retry')
+      }
+    }
+  )
+
   it('distinguishes certificate synchronization from system credential persistence failures', () => {
     const sync = refusalKeyForCode('p2p.certificate_sync_failed')
     const persist = refusalKeyForCode('p2p.certificate_persist_failed')

@@ -18,6 +18,33 @@ async function loggedIn() {
 }
 
 describe('bringing enrolled services online at startup', () => {
+  it('resets a password without attempting to restore unreadable saved login credentials', async () => {
+    const f = fixture()
+    const load = vi
+      .spyOn(PeerCredentialStore.prototype, 'loadUserSession')
+      .mockRejectedValue(new PeerHelperError('p2p.secret_read_failed'))
+    f.call.mockResolvedValueOnce({ reset: true })
+    await expect(
+      f.owner.resetPassword(
+        serviceId,
+        'owner@example.com',
+        'a'.repeat(64),
+        'replacement-password',
+        new AbortController().signal
+      )
+    ).resolves.toBeUndefined()
+    expect(load).not.toHaveBeenCalled()
+    expect(f.activate).toHaveBeenCalled()
+    expect(f.call).toHaveBeenCalledWith(
+      'user.resetPassword',
+      {
+        serviceId,
+        data: { email: 'owner@example.com', code: 'a'.repeat(64), password: 'replacement-password' }
+      },
+      expect.any(AbortSignal)
+    )
+  })
+
   const deviceId = '3'.repeat(12)
   const publicKey = Buffer.alloc(32, 1).toString('base64')
   /** A second account the same machine can be bound to. */
@@ -90,7 +117,7 @@ describe('bringing enrolled services online at startup', () => {
     if (!original) throw new Error('test fixture call implementation missing')
     let held = false
     f.call.mockImplementation(async (method, payload, signal) => {
-      if (method === 'user.current' && !held) {
+      if (method === 'user.renew' && !held) {
         held = true
         restoreStarted()
         const result = await original(method, payload, signal)
@@ -241,7 +268,7 @@ describe('bringing enrolled services online at startup', () => {
   }
 
   function futureExpiry(): number {
-    return Math.floor(Date.now() / 1000) + 3600
+    return Math.floor(Date.now() / 1000) + 30 * 86400
   }
 
   it('retains why a session is down so the surface can explain it', async () => {

@@ -76,6 +76,20 @@ export const zhCNP2P = {
     '注册会用邮箱和密码在此服务器创建账号。密码提交后立即清空，不保留到草稿或页面状态。',
   'p2p.account.passwordRule': '密码至少 12 位，最长 72 字节。',
   'p2p.account.passwordTooShort': '密码至少需要 12 位，请补足后重新提交。',
+  'p2p.account.passwordTooLong': '密码不能超过 72 个 UTF-8 字节，请缩短后重新提交。',
+  'p2p.account.forgotPassword': '忘记密码',
+  'p2p.account.resetPassword': '重设密码',
+  'p2p.account.resetHint':
+    '联系此服务器的管理员，核对原账号后获取一次性重设码。重设码 15 分钟内有效；重设会退出该账号的所有登录，账号、设备、网络和配对保留。',
+  'p2p.account.resetCode': '一次性重设码',
+  'p2p.account.newPassword': '新密码',
+  'p2p.account.resetConfirm': '确认新密码',
+  'p2p.account.resetMismatch': '两次输入的新密码不一致。',
+  'p2p.account.backToLogin': '返回登录',
+  'p2p.account.resetSucceeded': '密码已更新，请用新密码登录。原账号、设备、网络和配对已保留。',
+  'p2p.account.resetInvalid': '邮箱或重设码不正确，或重设码已过期、已使用。请联系管理员核对。',
+  'p2p.account.resetUnconfirmed':
+    '密码重设结果尚未确认。请返回登录，使用新密码核对，不要重复提交重设码。',
   'p2p.account.invalidCredentials':
     '服务器拒绝了这组邮箱或密码：邮箱需为有效地址，密码至少 12 位。',
   'p2p.account.networkLimit': '每个账号最多创建 2 个网络',
@@ -431,6 +445,23 @@ export const enUSP2P: Record<keyof typeof zhCNP2P, string> = {
   'p2p.account.passwordRule': 'Use at least 12 characters, up to 72 bytes.',
   'p2p.account.passwordTooShort':
     'The password needs at least 12 characters. Complete it and submit again.',
+  'p2p.account.passwordTooLong':
+    'The password cannot exceed 72 UTF-8 bytes. Shorten it before submitting.',
+  'p2p.account.forgotPassword': 'Forgot password',
+  'p2p.account.resetPassword': 'Reset password',
+  'p2p.account.resetHint':
+    'Contact this server’s administrator to verify your original account and obtain a one-time reset code. The code expires in 15 minutes. Resetting signs out all sessions for that account; the account, devices, networks and pairs are retained.',
+  'p2p.account.resetCode': 'One-time reset code',
+  'p2p.account.newPassword': 'New password',
+  'p2p.account.resetConfirm': 'Confirm new password',
+  'p2p.account.resetMismatch': 'The new passwords do not match.',
+  'p2p.account.backToLogin': 'Back to sign in',
+  'p2p.account.resetSucceeded':
+    'Password updated. Sign in with the new password. Your original account, devices, networks and pairs are retained.',
+  'p2p.account.resetInvalid':
+    'The email or reset code is incorrect, or the code has expired or was used. Ask the administrator to check.',
+  'p2p.account.resetUnconfirmed':
+    'The password reset result is unconfirmed. Return to sign in and check with the new password. Do not submit the reset code again.',
   'p2p.account.invalidCredentials':
     'The server refused this email or password: the email must be a valid address and the password at least 12 characters.',
   'p2p.account.networkLimit': 'Each account can create at most 2 networks on this server.',

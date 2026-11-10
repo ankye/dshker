@@ -201,6 +201,27 @@ export class P2PAccountsDomain {
     void this.currentUser(serviceId)
   }
 
+  /** Consumes an administrator-issued code once; signing in remains explicit. */
+  async resetPassword(
+    serviceId: string,
+    email: string,
+    code: string,
+    password: string
+  ): Promise<boolean> {
+    if (this.management.busy(serviceId)) return false
+    const lifetimeRevision = this.#lifetimeRevision
+    const revision = this.#revision(serviceId)
+    const result = await this.management.run('resetPassword', { serviceId, email, code, password })
+    if (this.#lifetimeRevision !== lifetimeRevision || this.#revision(serviceId) !== revision)
+      return false
+    if (!result.ok) return false
+    this.#invalidateSessionRead(serviceId)
+    this.#explicitSignOut.add(serviceId)
+    this.#retryAfterSession.delete(serviceId)
+    this.#signedOut(this.state(serviceId))
+    return true
+  }
+
   async logout(serviceId: string): Promise<void> {
     if (this.management.busy(serviceId)) return
     const wasExplicitSignOut = this.#explicitSignOut.has(serviceId)

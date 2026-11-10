@@ -4,7 +4,12 @@ import {
   type P2PManagementOperation,
   type P2PManagementRequest
 } from '../../../src/shared/p2p-management'
-import { assertAccountId, assertAccountText, assertAccountUsername } from './account-records'
+import {
+  assertAccountEmail,
+  assertAccountId,
+  assertAccountText,
+  assertAccountUsername
+} from './account-records'
 import { assertPeerEndpoints } from './catalog-schema'
 import { exactPeerObject, PeerHelperError } from './wire'
 
@@ -15,6 +20,7 @@ const fields: Record<P2PManagementOperation, readonly string[]> = {
   addService: ['revision', 'displayName', 'httpsOrigin', 'wssUrl', 'stunAddress'],
   login: ['serviceId', 'username', 'password'],
   register: ['serviceId', 'email', 'password'],
+  resetPassword: ['serviceId', 'email', 'code', 'password'],
   currentUser: ['serviceId'],
   logout: ['serviceId'],
   networks: ['serviceId'],
@@ -68,7 +74,17 @@ export function parseManagementRequest<K extends P2PManagementOperation>(
   const record = exactPeerObject(value, ['version', 'requestId', ...fields[method]])
   if (record.version !== P2P_MANAGEMENT_VERSION) throw new PeerHelperError('p2p.protocol_mismatch')
   assertRequestId(record.requestId)
-  for (const field of fields[method]) validateField(field, record[field])
+  for (const field of fields[method]) {
+    if (method === 'resetPassword' && field === 'code') continue
+    validateField(field, record[field])
+  }
+  if (method === 'resetPassword') {
+    assertAccountEmail(record.email)
+    if (typeof record.code !== 'string' || !/^[a-f0-9]{64}$/.test(record.code))
+      throw new PeerHelperError('p2p.password_reset_invalid')
+    if (Array.from(record.password as string).length < 12)
+      throw new PeerHelperError('p2p.invalid_user_credentials')
+  }
   if (method === 'addService' || method === 'updateServiceConfig') {
     assertPeerEndpoints(
       record.httpsOrigin as string,

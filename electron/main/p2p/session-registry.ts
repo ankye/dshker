@@ -111,7 +111,7 @@ export async function restoreUserSession(
     // next startup/read can retry instead of turning a temporary race into a
     // visible login form.
     if (isAuthoritativeSessionRefusal(error)) {
-      await credentials.removeUserSession(serviceId).catch(() => undefined)
+      await credentials.removeUserSession(serviceId)
       return
     }
     throw error

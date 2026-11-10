@@ -31,6 +31,20 @@ The otter logo and workbench artwork above are the assets used by the current so
 
 ## Remote connections
 
+With a coordinator supporting account recovery, Launcher restores and renews
+the saved sign-in automatically. Sessions last 30 days and renew at startup or
+within seven days of expiry while Launcher runs. Expired, signed-out or revoked
+sessions require authentication again; passwords are never saved.
+
+Forgot your password? Choose **Forgot password** on the sign-in form and ask the
+server administrator for a one-time reset code. Enter your original email, that
+code and a new password (at least 12 Unicode characters, up to 72 UTF-8 bytes).
+Codes expire after 15 minutes and can be used once. Reset keeps your original
+account, enrolled devices, certificates, networks and pairs, and revokes the
+account's old sign-in sessions. Sign in manually with the new password afterward.
+Deploy the matching DSHKer Server update first; no email delivery service is
+implied. Existing expired sessions cannot be upgraded into valid authentication.
+
 Once device credentials are restored, ordinary account and directory requests
 carry that device's certificate as well as the actual signed-in account session.
 Same-NAT computers receive separate unchanged device request budgets; this does

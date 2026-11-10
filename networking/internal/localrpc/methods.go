@@ -147,6 +147,8 @@ var Methods = []Method{
 	{"user.login", RoleShell},
 	{"user.logout", RoleShell},
 	{"user.register", RoleShell},
+	{"user.renew", RoleShell},
+	{"user.resetPassword", RoleShell},
 	{"peer.state", RoleParent},
 	{"runtime.connect", RoleParent},
 	{"runtime.resume", RoleParent},

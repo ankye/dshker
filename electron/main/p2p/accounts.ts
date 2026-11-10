@@ -27,6 +27,7 @@ export class PeerAccounts {
   readonly #sessions = new Map<string, PeerUserSession>()
   /** Repeated startup reads share one server read instead of returning busy. */
   readonly #currentUserInFlight = new Map<string, Promise<PeerUser>>()
+  readonly #renewInFlight = new Map<string, Promise<void>>()
   readonly #busy = new Set<string>()
   #closed = false
 
@@ -45,6 +46,7 @@ export class PeerAccounts {
     this.#closed = true
     this.#sessions.clear()
     this.#currentUserInFlight.clear()
+    this.#renewInFlight.clear()
   }
 
   login(
@@ -84,7 +86,7 @@ export class PeerAccounts {
   #assertPassword(password: unknown, minimum = 1): asserts password is string {
     if (
       typeof password !== 'string' ||
-      password.length < minimum ||
+      Array.from(password).length < minimum ||
       Buffer.byteLength(password) > 72
     )
       throw new PeerHelperError('p2p.invalid_request')
@@ -151,13 +153,84 @@ export class PeerAccounts {
     signal: AbortSignal
   ): Promise<PeerUser> {
     return this.#operation(serviceId, signal, async () => {
-      const current = peerUser(await this.#call(serviceId, 'user.current', { token }, signal))
-      this.#sessions.set(serviceId, {
-        user: current,
-        token,
-        expiresAt
-      })
-      return { ...current }
+      const renewed = await this.#renewSession(serviceId, token, expiresAt, signal)
+      this.#sessions.set(serviceId, renewed)
+      return { ...renewed.user }
+    })
+  }
+
+  /** The core owns persistence; main must never write a captured older expiry back. */
+  renewIfDue(serviceId: string, signal: AbortSignal): Promise<void> {
+    const existing = this.#renewInFlight.get(serviceId)
+    if (existing) return existing
+    const session = this.#sessions.get(serviceId)
+    if (!session || session.expiresAt * 1000 - Date.now() > 7 * 86_400_000) return Promise.resolve()
+    const pending = this.#readOperation(serviceId, signal, async () => {
+      const renewed = await this.#renewSession(serviceId, session.token, session.expiresAt, signal)
+      if (this.#sessions.get(serviceId) !== session)
+        throw new PeerHelperError('p2p.request_cancelled')
+      if (
+        renewed.user.userId !== session.user.userId ||
+        renewed.user.username !== session.user.username
+      )
+        throw new PeerHelperError('p2p.user_scope_mismatch')
+      this.#sessions.set(serviceId, renewed)
+    }).finally(() => {
+      if (this.#renewInFlight.get(serviceId) === pending) this.#renewInFlight.delete(serviceId)
+    })
+    this.#renewInFlight.set(serviceId, pending)
+    return pending
+  }
+
+  async #renewSession(
+    serviceId: string,
+    token: string,
+    expiresAt: number,
+    signal: AbortSignal
+  ): Promise<PeerUserSession> {
+    const renewed = peerUserSession(await this.#call(serviceId, 'user.renew', { token }, signal))
+    if (renewed.token !== token || renewed.expiresAt < expiresAt)
+      throw new PeerHelperError('p2p.user_scope_mismatch')
+    this.#checkExpiry(renewed)
+    return renewed
+  }
+
+  resetPassword(
+    serviceId: string,
+    email: string,
+    code: string,
+    password: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    assertAccountEmail(email)
+    this.#assertPassword(password)
+    if (Array.from(password).length < 12) throw new PeerHelperError('p2p.invalid_user_credentials')
+    if (!/^[a-f0-9]{64}$/.test(code)) throw new PeerHelperError('p2p.password_reset_invalid')
+    return this.#operation(serviceId, signal, async () => {
+      const session = this.#sessions.get(serviceId)
+      const clearMatchedSession = () => {
+        const current = this.#sessions.get(serviceId)
+        if (
+          session?.user.username === email &&
+          current?.token === session.token &&
+          current.user.userId === session.user.userId
+        )
+          this.#sessions.delete(serviceId)
+      }
+      try {
+        const result = exactPeerObject(
+          await this.#call(serviceId, 'user.resetPassword', { email, code, password }, signal),
+          ['reset']
+        )
+        if (result.reset !== true) throw new PeerHelperError('p2p.invalid_server_response')
+      } catch (error) {
+        // This reset-only cleanup error follows the server's confirmed reset.
+        // Retaining the revoked in-memory session would block fresh sign-in.
+        if (error instanceof PeerHelperError && error.code === 'p2p.secret_delete_failed')
+          clearMatchedSession()
+        throw error
+      }
+      clearMatchedSession()
     })
   }
 
@@ -535,14 +608,17 @@ export class PeerAccounts {
   ): Promise<unknown> {
     this.#assertOpen()
     if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
+    const session = this.#sessions.get(serviceId)
     try {
       const result = await this.rpc.call(method, { serviceId, data }, signal)
       this.#assertOpen()
+      if (signal.aborted) throw new PeerHelperError('p2p.request_cancelled')
       return result
     } catch (error) {
       if (
         error instanceof PeerHelperError &&
-        (error.code === 'p2p.user_unauthorized' || error.code === 'p2p.user_session_expired')
+        (error.code === 'p2p.user_unauthorized' || error.code === 'p2p.user_session_expired') &&
+        this.#sessions.get(serviceId) === session
       ) {
         this.#sessions.delete(serviceId)
       }

@@ -1,5 +1,25 @@
 # Self-hosted P2P workbench (in development)
 
+## Password recovery
+
+`p2p.password_reset_invalid` means the administrator-issued reset code expired,
+was consumed or replaced, or does not belong to that enabled email account.
+Ask the administrator to verify the original account and issue a new code.
+Codes last 15 minutes and can be used once. Reset changes the original password
+and revokes that account's login sessions while preserving devices, certificates,
+networks and pairs. Sign in with the new password afterward. A lost reset response
+must not trigger automatic resubmission.
+
+Protected-storage failures stay distinguishable: `p2p.secret_provider_unavailable`
+means the OS provider is unavailable; `p2p.secret_read_failed` means the saved login
+cannot be read; `p2p.secret_write_failed` means the renewed expiry could not be
+saved and confirmed; `p2p.secret_delete_failed` means local old-login cleanup is
+unconfirmed. Unlock or check the OS credential store and its permissions, then
+retry the failed read or renewal. Keep the original account, devices, networks
+and pairs. After a password reset with failed cleanup, sign in with the new
+password to check the result; do not submit the recovery code again. A provider
+failure does not authorize deleting identities or treating a login as absent.
+
 Connect two of your own computers directly, so one can open the other's DSH
 workbench without exposing DSH Web to the network and without an SSH tunnel.
 

@@ -117,6 +117,7 @@ type fixture struct {
 	server             *process
 	ctx                context.Context
 	userSession        controlplane.UserSession
+	password           string
 }
 
 // realCoordinator names the existing production-process harness for live gates.
@@ -171,7 +172,7 @@ func newFixture(t *testing.T) *fixture {
 	client, err := controlplane.New(endpoints, roots)
 	must(t, err)
 	t.Cleanup(client.Close)
-	f := &fixture{binary: binary, configPath: configPath, root: der, endpoints: endpoints, client: client, ctx: ctx}
+	f := &fixture{binary: binary, configPath: configPath, root: der, endpoints: endpoints, client: client, ctx: ctx, password: password}
 	f.startServer(t)
 	session, err := client.Login(ctx, "process@test.local", password)
 	must(t, err)

@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "change": "Password recovery public controls and manual new-password sign-in",
+  "acceptance_stage": "diagnostic",
+  "implementation_complete": false,
+  "threshold_baseline": "initial",
+  "experience_profile": "generic",
+  "scope_note": "Defines the required public-control observations; it does not claim they were all performed. The observed isolated macOS source-app diagnostic only opened Remote Connections, Account, then Forgot password, with no password/code input or reset submission. No raw timing/frame ledger or physical Windows proof has been collected. Candidate/release acceptance remains false. Server/native-store functional proofs are separate from UI-frame acceptance.",
+  "prerequisites": [],
+  "budgets": {
+    "visible_p95_ms": 500,
+    "settled_p99_ms": 1000,
+    "white_frames": 0,
+    "missing_visible_pages": 0,
+    "gap_px": 0,
+    "overlap_px": 0,
+    "reverse_px": 0,
+    "content_errors": 0,
+    "flash_frames": 0,
+    "text_order_errors": 0,
+    "unexpected_jump_px": 0,
+    "max_frame_interval_ratio": 1.5
+  },
+  "workflows": [
+    {
+      "id": "open-password-recovery",
+      "kind": "control",
+      "minimum_attempts": 3,
+      "profiles": ["signed-out-macos", "signed-out-windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid=\"p2p-account-switch-reset\"]",
+      "expected_state": {
+        "reset_form_visible": true,
+        "login_form_visible": false,
+        "register_form_visible": false
+      },
+      "expected_native_event": "trusted-forgot-password-click",
+      "requires_persistence": false,
+      "invariants": ["serviceId", "originalUserId", "deviceId", "networkIds", "pairIds"],
+      "required_content_checks": [
+        "administrator_instruction",
+        "email_label",
+        "code_label",
+        "new_password_label",
+        "confirmation_label"
+      ]
+    },
+    {
+      "id": "return-to-sign-in",
+      "kind": "control",
+      "minimum_attempts": 3,
+      "profiles": ["signed-out-macos", "signed-out-windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid=\"p2p-account-switch-login\"]",
+      "expected_state": {
+        "reset_form_visible": false,
+        "login_form_visible": true,
+        "secret_drafts_empty": true
+      },
+      "expected_native_event": "trusted-back-to-sign-in-click",
+      "requires_persistence": false,
+      "invariants": ["serviceId", "originalUserId", "deviceId", "networkIds", "pairIds"],
+      "required_content_checks": ["original_login_name", "cleared_secret_drafts"]
+    },
+    {
+      "id": "confirm-password-reset",
+      "kind": "control",
+      "minimum_attempts": 3,
+      "profiles": ["valid-recovery-macos", "valid-recovery-windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid=\"p2p-reset-submit\"]",
+      "expected_state": {
+        "confirmed_success_visible": true,
+        "login_form_visible": true,
+        "secret_drafts_empty": true
+      },
+      "expected_native_event": "trusted-reset-submit",
+      "requires_persistence": false,
+      "invariants": ["serviceId", "originalUserId", "deviceId", "networkIds", "pairIds"],
+      "required_content_checks": [
+        "confirmed_result_only",
+        "original_account_preserved",
+        "manual_sign_in_required"
+      ]
+    },
+    {
+      "id": "reject-invalid-reset",
+      "kind": "control",
+      "minimum_attempts": 3,
+      "profiles": ["invalid-recovery-macos", "invalid-recovery-windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid=\"p2p-reset-submit\"]",
+      "expected_state": {
+        "invalid_code_visible": true,
+        "confirmed_success_visible": false,
+        "secret_drafts_empty": true
+      },
+      "expected_native_event": "trusted-invalid-reset-submit",
+      "requires_persistence": false,
+      "invariants": ["serviceId", "originalUserId", "deviceId", "networkIds", "pairIds"],
+      "required_content_checks": ["exact_refusal_copy", "no_success_claim", "no_automatic_repeat"]
+    },
+    {
+      "id": "manual-new-password-sign-in",
+      "kind": "control",
+      "minimum_attempts": 3,
+      "profiles": ["new-password-macos", "new-password-windows"],
+      "requires_public_ui": true,
+      "selector": "[data-testid=\"p2p-login-form\"] button[type=\"submit\"]",
+      "expected_state": {
+        "same_account_signed_in": true,
+        "password_draft_empty": true
+      },
+      "expected_native_event": "trusted-manual-sign-in-submit",
+      "requires_persistence": false,
+      "invariants": ["serviceId", "originalUserId", "deviceId", "networkIds", "pairIds"],
+      "required_content_checks": [
+        "original_account_identity",
+        "network_device_pair_identity_unchanged"
+      ]
+    }
+  ]
+}

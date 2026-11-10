@@ -68,6 +68,26 @@ decision never requires WSS/candidate activation or substitutes certificate owne
 A for selected Bearer B. Login, original-key certificate query/recovery and the
 narrow legacy recovery-scope owner retain their explicit public contracts.
 
+`user.renew` accepts `{serviceId,data:{token}}` and returns the existing
+`{user,token,expiresAt}` session after pinned HTTPS authentication and canonical
+protected-storage readback. It preserves the token and account. Its isolated
+renewal scope tolerates a stale local expiry only to ask the server whether the
+same session remains valid after a lost response; exact record, revocation,
+owner and lifetime fences still apply. Other selected-account scopes continue
+to enforce their expiry. The shell adopts the returned expiry without writing
+an older captured expiry back. Startup renews the saved session; desktop-owned
+maintenance renews within seven days of expiry. No headless renewal timer is
+implied by this RPC.
+
+`user.resetPassword` accepts `{serviceId,data:{email,code,password}}` and returns
+`{reset:true}` only after the pinned public reset endpoint confirms the one-time
+administrator grant. It requires no prior login and never issues reset codes.
+The code is 64 lowercase hexadecimal characters and lasts 15 minutes. The new
+password requires 12 Unicode characters and at most 72 UTF-8 bytes. No request
+secret is logged or projected to the renderer. Only a freshly confirmed matching
+selected account is cleared locally; the server revokes every session for that
+original account, retaining its device certificates, networks and pairs.
+
 `user.current` and `user.logout` are named authentication confirmation and
 revocation operations, not ordinary device-directory transport requests. When an
 exact validated original device is expired, confirmed authentication is distinct
@@ -273,7 +293,7 @@ dispatch by `internal/localrpc/methods_test.go`. Roles name the sender:
 | remote    | `remote.connect`, `remote.directory`, `remote.disconnect`, `remote.roots`, `remote.status`                                                                                                                                                                                                                        | shell  |
 | runtime   | `runtime.console`, `runtime.invalidate`, `runtime.port_get`, `runtime.port_set`, `runtime.start`, `runtime.status`, `runtime.stop`                                                                                                                                                                                | shell  |
 | service   | `service.configure`                                                                                                                                                                                                                                                                                               | shell  |
-| user      | `user.current`, `user.login`, `user.logout`, `user.register`                                                                                                                                                                                                                                                      | shell  |
+| user      | `user.current`, `user.login`, `user.logout`, `user.register`, `user.renew`, `user.resetPassword`                                                                                                                                                                                                                  | shell  |
 | callback  | `runtime.connect`, `runtime.resume`, `peer.state`, `directory.changed`, `catalog.changed`                                                                                                                                                                                                                         | parent |
 
 `peer.connect` carries `{ "pairId": "...", "generation": N, "requestWorkbench": B }`.

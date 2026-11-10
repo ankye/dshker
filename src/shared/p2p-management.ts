@@ -9,6 +9,7 @@ export const P2P_MANAGEMENT_CHANNELS = {
   addService: 'dsh-launcher:p2p:add-service',
   login: 'dsh-launcher:p2p:login',
   register: 'dsh-launcher:p2p:register',
+  resetPassword: 'dsh-launcher:p2p:reset-password',
   currentUser: 'dsh-launcher:p2p:current-user',
   logout: 'dsh-launcher:p2p:logout',
   networks: 'dsh-launcher:p2p:networks',
@@ -365,6 +366,7 @@ export interface P2PManagementInputs {
   addService: P2PServiceInput & { revision: string }
   login: ServiceRequest & { username: string; password: string }
   register: ServiceRequest & { email: string; password: string }
+  resetPassword: ServiceRequest & { email: string; code: string; password: string }
   currentUser: ServiceRequest
   logout: ServiceRequest
   networks: ServiceRequest
@@ -478,6 +480,7 @@ export interface P2PManagementResults {
   addService: P2PCatalogView
   login: P2PUserView
   register: P2PUserView
+  resetPassword: void
   currentUser: P2PUserView
   logout: void
   networks: P2PNetworkView[]
@@ -682,6 +685,10 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.request_cancelled',
   'p2p.request_timeout',
   'p2p.secure_storage_unavailable',
+  'p2p.secret_provider_unavailable',
+  'p2p.secret_read_failed',
+  'p2p.secret_write_failed',
+  'p2p.secret_delete_failed',
   'p2p.server_unavailable',
   'p2p.signalling_not_ready',
   'p2p.service_busy',
@@ -774,6 +781,7 @@ export const P2P_MANAGEMENT_ERROR_CODES = [
   'p2p.invalid_user_credentials',
   'p2p.invalid_wss_endpoint',
   'p2p.login_failed',
+  'p2p.password_reset_invalid',
   'p2p.network_unauthorized',
   'p2p.pair_revoked',
   'p2p.pair_state_conflict',

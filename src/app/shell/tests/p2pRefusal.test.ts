@@ -14,6 +14,7 @@ describe('P2P refusal classification', () => {
   it("treats a rejected value as the user's to fix", () => {
     expect(p2pRefusalKind('p2p.invalid_request')).toBe('input')
     expect(p2pRefusalKind('p2p.invalid_user_credentials')).toBe('input')
+    expect(p2pRefusalKind('p2p.password_reset_invalid')).toBe('input')
     expect(p2pRefusalKind('p2p.password_too_short')).toBe('input')
   })
 

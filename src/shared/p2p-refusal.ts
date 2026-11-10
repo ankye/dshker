@@ -37,6 +37,7 @@ const OVERRIDES: Readonly<Record<string, P2PRefusalKind>> = {
   // A wrong password is input the user retypes, despite naming credentials.
   'p2p.invalid_user_credentials': 'input',
   'p2p.login_failed': 'input',
+  'p2p.password_reset_invalid': 'input',
   // Already logged in is not a fault and not an absence: retrying after the
   // existing session is read succeeds.
   'p2p.user_already_logged_in': 'retry'

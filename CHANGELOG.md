@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### 简体中文 (zh-CN)
+
+- **自动维持登录。** 协调服务器支持 30 天登录有效期，Launcher 在启动和临近到期时自动续期，安全保存服务器确认的期限；断网等临时故障保留原凭据。已过期或撤销的登录仍需重新认证。
+- **忘记密码后恢复原账号。** 登录页新增密码重设：联系服务器管理员获取 15 分钟内有效的一次性重设码，提交原邮箱和新密码。重设撤销该账号的旧登录会话，保留原账号标识、设备证书、网络和配对。需配套升级 DSHKer Server；不提供自动邮件投递。
+
+### English (en-US)
+
+- **Keep sign-in active automatically.** The coordinator supports 30-day sessions. Launcher renews at startup and near expiry using the server-confirmed expiry in protected storage. Temporary failures retain existing credentials; expired or revoked sessions require authentication again.
+- **Recover the original account after forgetting a password.** The sign-in page accepts the original email, a new password and a one-time reset code issued by the server administrator, valid for 15 minutes. Reset revokes that account's old login sessions while retaining its account ID, device certificates, networks and pairs. Requires the matching DSHKer Server update; email delivery is not configured automatically.
+
 ## 0.1.97 — 2026-10-25
 
 ### 简体中文 (zh-CN)

@@ -106,6 +106,9 @@ export function registerPeerManagementIpc(
   register('register', true, async (r, s) =>
     projectPeerUser(await owner.register(r.serviceId, r.email, r.password, s))
   )
+  register('resetPassword', true, (r, s) =>
+    owner.resetPassword(r.serviceId, r.email, r.code, r.password, s)
+  )
   register('currentUser', false, async (r, s) =>
     projectPeerUser(await owner.currentUser(r.serviceId, s))
   )
@@ -258,12 +261,8 @@ function failure(error: unknown) {
     (P2P_MANAGEMENT_ERROR_CODES as readonly string[]).includes(error.code)
       ? (error.code as P2PManagementErrorCode)
       : 'p2p.internal_error'
-  // Surface an unexpected (non-PeerHelperError, or unknown-code) failure to the
-  // main-process console so the real cause is visible instead of a bare
-  // internal_error. Only sentinel codes and stack are logged, never secrets.
-  if (code === 'p2p.internal_error') {
-    if (error instanceof Error) console.error('[p2p] internal_error:', error.message, error.stack)
-    else console.error('[p2p] internal_error (non-Error):', String(error))
-  }
+  // An arbitrary exception can contain a password or reset code. Log only the
+  // admitted sentinel, never an exception message, stack or request payload.
+  if (code === 'p2p.internal_error') console.error('[p2p] internal_error')
   return apiFail(code, code)
 }

@@ -48,6 +48,12 @@ const inputs: Record<P2PManagementOperation, Record<string, unknown>> = {
   },
   login: { serviceId, username: 'alice', password: 'secret-login-password' },
   register: { serviceId, email: 'alice@example.com', password: 'secret-register-password' },
+  resetPassword: {
+    serviceId,
+    email: 'alice@example.com',
+    code: 'a'.repeat(64),
+    password: 'new-secret-password'
+  },
   currentUser: { serviceId },
   logout: { serviceId },
   networks: { serviceId },
@@ -208,6 +214,7 @@ function fixture() {
     addService: vi.fn(async () => snapshot),
     login: vi.fn(async () => user),
     register: vi.fn(async () => user),
+    resetPassword: vi.fn(async () => undefined),
     currentUser: vi.fn(async () => user),
     logout: vi.fn(async () => undefined),
     networks: vi.fn(async () => [network]),
@@ -515,6 +522,123 @@ describe('P2P named management admission', () => {
     )
     // The reply carries the user projection only: no token, no credential.
     expect(JSON.stringify(result)).not.toContain(inputs.register.password)
+  })
+
+  it('rejects incomplete, malformed and extra reset fields before dispatching any owner', async () => {
+    const { owner, invoke } = fixture()
+    const valid = request('resetPassword')
+    for (const field of ['serviceId', 'email', 'code', 'password']) {
+      const missing = { ...valid }
+      delete (missing as Record<string, unknown>)[field]
+      expect((await invoke('resetPassword', page().event, missing)).code).toBe(
+        'p2p.protocol_mismatch'
+      )
+    }
+    for (const code of ['', 'a'.repeat(63), 'a'.repeat(65), 'A'.repeat(64), 'z'.repeat(64), null])
+      expect((await invoke('resetPassword', page().event, { ...valid, code })).code).toBe(
+        'p2p.password_reset_invalid'
+      )
+    for (const password of ['short', '😀'.repeat(6), '界'.repeat(25), 'a'.repeat(73), null])
+      expect((await invoke('resetPassword', page().event, { ...valid, password })).ok).toBe(false)
+    for (const email of ['not-an-email', ' owner@example.com ', null])
+      expect((await invoke('resetPassword', page().event, { ...valid, email })).ok).toBe(false)
+    expect(
+      (await invoke('resetPassword', page().event, { ...valid, confirmPassword: 'unadmitted' }))
+        .code
+    ).toBe('p2p.protocol_mismatch')
+    for (const handler of Object.values(owner)) expect(handler).not.toHaveBeenCalled()
+  })
+
+  it('dispatches reset with the exact Unicode password and returns no credential or code', async () => {
+    const { owner, invoke } = fixture()
+    const password = '😀'.repeat(12)
+    const result = await invoke('resetPassword', page().event, {
+      ...request('resetPassword'),
+      password
+    })
+    expect(result).toEqual({ ok: true, data: undefined })
+    expect(owner.resetPassword).toHaveBeenCalledExactlyOnceWith(
+      serviceId,
+      inputs.resetPassword.email,
+      inputs.resetPassword.code,
+      password,
+      expect.any(AbortSignal)
+    )
+    expect(JSON.stringify(result)).not.toContain(password)
+    expect(JSON.stringify(result)).not.toContain(inputs.resetPassword.code)
+  })
+
+  it('never echoes or logs a reset code or password from an unexpected exception', async () => {
+    const { owner, invoke } = fixture()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const password = 'reset-test-secret-password'
+    const code = 'f'.repeat(64)
+    owner.resetPassword.mockRejectedValueOnce(new Error(`failed ${code} ${password}`))
+    const result = await invoke('resetPassword', page().event, {
+      ...request('resetPassword'),
+      code,
+      password
+    })
+    expect(result).toEqual({
+      ok: false,
+      code: 'p2p.internal_error',
+      message: 'p2p.internal_error'
+    })
+    expect(JSON.stringify(result)).not.toContain(code)
+    expect(JSON.stringify(result)).not.toContain(password)
+    expect(JSON.stringify(log.mock.calls)).not.toContain(code)
+    expect(JSON.stringify(log.mock.calls)).not.toContain(password)
+  })
+
+  it('marks a cancelled reset unconfirmed without dispatching the code a second time', async () => {
+    const { owner, invoke } = fixture()
+    let finish!: () => void
+    let active!: AbortSignal
+    Object.assign(owner, {
+      resetPassword: vi.fn(
+        async (
+          _serviceId: string,
+          _email: string,
+          _code: string,
+          _password: string,
+          signal: AbortSignal
+        ) => {
+          active = signal
+          await new Promise<void>((resolve) => (finish = resolve))
+        }
+      )
+    })
+    const renderer = page()
+    const resetting = invoke('resetPassword', renderer.event, request('resetPassword'))
+    expect(await invoke('cancel', renderer.event, request('cancel', 2))).toEqual({
+      ok: true,
+      data: { accepted: true }
+    })
+    expect(active.aborted).toBe(true)
+    finish()
+    expect(await resetting).toEqual({
+      ok: false,
+      code: 'p2p.management_result_unconfirmed',
+      message: 'p2p.management_result_unconfirmed'
+    })
+    expect(owner.resetPassword).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    'p2p.secret_provider_unavailable',
+    'p2p.secret_read_failed',
+    'p2p.secret_write_failed',
+    'p2p.secret_delete_failed'
+  ])('preserves protected-storage refusal %s without echoing reset secrets', async (code) => {
+    const { owner, invoke } = fixture()
+    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    log.mockClear()
+    owner.resetPassword.mockRejectedValueOnce(new PeerHelperError(code))
+    const result = await invoke('resetPassword', page().event, request('resetPassword'))
+    expect(result).toEqual({ ok: false, code, message: code })
+    expect(JSON.stringify(result)).not.toContain(inputs.resetPassword.password)
+    expect(JSON.stringify(result)).not.toContain(inputs.resetPassword.code)
+    expect(log).not.toHaveBeenCalled()
   })
 
   it('dispatches the network capacity raise and returns the confirmed network', async () => {

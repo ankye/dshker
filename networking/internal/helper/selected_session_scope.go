@@ -35,9 +35,12 @@ type selectedSessionScope struct {
 	tokenHash  [32]byte
 	expiresAt  int64
 	hasSession bool
-	owner      *bootstrapSessionOwner
-	localFence *bootstrapLocalFence
-	priorGuard func() error
+	// Only the named renewal owner may ask the server whether a locally stale
+	// expiry was extended by an earlier request whose reply was lost.
+	allowExpired bool
+	owner        *bootstrapSessionOwner
+	localFence   *bootstrapLocalFence
+	priorGuard   func() error
 }
 
 func selectedSessionScopeFromContext(ctx context.Context) (*selectedSessionScope, bool) {
@@ -52,7 +55,7 @@ func (account *account) captureSelectedSessionScopeLocked(ctx context.Context, e
 		return nil, errors.New("p2p.invalid_user_session")
 	}
 	if scope, exists := selectedSessionScopeFromContext(ctx); exists {
-		if scope.account != account || !scope.matches(expected, true) {
+		if scope.account != account || scope.allowExpired || !scope.matches(expected, true) {
 			return nil, errors.New("p2p.user_scope_mismatch")
 		}
 		return scope, scope.checkWithPrior(ctx)
@@ -92,11 +95,25 @@ func (account *account) captureSignedOutRestoreScopeLocked(ctx context.Context, 
 }
 
 func (account *account) captureSessionScopeLocked(ctx context.Context, expected persistedAccountSession, hasSession bool) (*selectedSessionScope, error) {
+	return account.captureSessionScopeWithExpiryLocked(ctx, expected, hasSession, false)
+}
+
+func (account *account) captureRenewalSessionScopeLocked(ctx context.Context, expected persistedAccountSession) (*selectedSessionScope, error) {
+	if !validSession(expected) {
+		return nil, errors.New("p2p.invalid_user_session")
+	}
+	if _, exists := selectedSessionScopeFromContext(ctx); exists {
+		return nil, errors.New("p2p.user_scope_mismatch")
+	}
+	return account.captureSessionScopeWithExpiryLocked(ctx, expected, true, true)
+}
+
+func (account *account) captureSessionScopeWithExpiryLocked(ctx context.Context, expected persistedAccountSession, hasSession, allowExpired bool) (*selectedSessionScope, error) {
 	if account.host == nil || account.closed {
 		return nil, errors.New("p2p.service_unconfigured")
 	}
 	scope := &selectedSessionScope{host: account.host, account: account, serviceID: account.identity.ServiceID,
-		lifetime: account.lifetime, hasSession: hasSession, expiresAt: expected.ExpiresAt, tokenHash: sha256.Sum256([]byte(expected.Token))}
+		lifetime: account.lifetime, hasSession: hasSession, allowExpired: allowExpired, expiresAt: expected.ExpiresAt, tokenHash: sha256.Sum256([]byte(expected.Token))}
 	scope.priorGuard, _ = ctx.Value(bootstrapGuardKey{}).(func() error)
 	if fence, exists := ctx.Value(bootstrapLocalFenceKey{}).(bootstrapLocalFence); exists {
 		if fence.serviceID != scope.serviceID {
@@ -124,12 +141,12 @@ func (account *account) captureSessionScopeLocked(ctx context.Context, expected 
 		if !exists || !scope.matches(current, true) {
 			return nil, errors.New("p2p.user_scope_mismatch")
 		}
-		if current.ExpiresAt <= time.Now().Unix() {
+		if !scope.allowExpired && current.ExpiresAt <= time.Now().Unix() {
 			return nil, errors.New("p2p.user_session_expired")
 		}
 		scope.owner = host.bootstrapSessionOwnerLocked(scope.serviceID, current)
 	}
-	if err := scope.checkLocked(ctx); err != nil {
+	if err := scope.checkSessionLocked(ctx, allowExpired); err != nil {
 		return nil, err
 	}
 	return scope, nil
@@ -148,6 +165,10 @@ func (scope *selectedSessionScope) Check(ctx context.Context) error {
 }
 
 func (scope *selectedSessionScope) checkLocked(ctx context.Context) error {
+	return scope.checkSessionLocked(ctx, false)
+}
+
+func (scope *selectedSessionScope) checkSessionLocked(ctx context.Context, renewalEntry bool) error {
 	if ctx.Err() != nil || scope.host.ctx.Err() != nil || scope.lifetime != nil && scope.lifetime.Err() != nil {
 		return errors.New("p2p.request_cancelled")
 	}
@@ -163,6 +184,18 @@ func (scope *selectedSessionScope) checkLocked(ctx context.Context) error {
 		}
 	}
 	if scope.hasSession && (scope.owner == nil || scope.owner.revoked || scope.host.bootstrapSessionOwners[scope.serviceID] != scope.owner) {
+		if renewalEntry && scope.allowExpired && scope.owner != nil && scope.owner.revoked && scope.host.bootstrapSessionOwners[scope.serviceID] == scope.owner {
+			// This classification belongs only to a new renewal entry. In-flight
+			// scopes keep their original mismatch, and stale/foreign records never
+			// acquire permission to remove a replacement login.
+			session, exists, err := scope.host.readAccountSession(scope.serviceID)
+			if err != nil {
+				return err
+			}
+			if scope.matches(session, exists) {
+				return errors.New("p2p.user_login_required")
+			}
+		}
 		return errors.New("p2p.user_scope_mismatch")
 	}
 	session, exists, err := scope.host.readAccountSession(scope.serviceID)
@@ -172,7 +205,7 @@ func (scope *selectedSessionScope) checkLocked(ctx context.Context) error {
 	if !scope.matches(session, exists) {
 		return errors.New("p2p.user_scope_mismatch")
 	}
-	if exists && session.ExpiresAt <= time.Now().Unix() {
+	if exists && !scope.allowExpired && session.ExpiresAt <= time.Now().Unix() {
 		return errors.New("p2p.user_session_expired")
 	}
 	return nil

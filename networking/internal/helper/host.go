@@ -281,6 +281,12 @@ func (host *Host) Handle(ctx context.Context, method string, payload json.RawMes
 		stopAccount := context.AfterFunc(account.lifetime, cancel)
 		defer stopAccount()
 	}
+	if method == "user.renew" {
+		return account.renewUserSession(ctx, request.Data)
+	}
+	if method == "user.resetPassword" {
+		return account.resetUserPassword(ctx, request.Data)
+	}
 	if method == "user.current" || method == "device.restore" {
 		if err := host.admitSelectedSessionRead(request.ServiceID, method, request.Data); err != nil {
 			return nil, err

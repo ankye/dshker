@@ -589,6 +589,8 @@ describe('P2P account public controls (component diagnostics)', () => {
       await form.get('input[autocomplete="email"]').setValue('alice@example.com')
       await form.get('[data-testid="p2p-register-password"]').setValue('too-short')
       expect(ui.find('[data-testid="p2p-register-too-short"]').exists()).toBe(true)
+      await form.get('[data-testid="p2p-register-password"]').setValue('😀'.repeat(6))
+      expect(ui.find('[data-testid="p2p-register-too-short"]').exists()).toBe(true)
       await form.trigger('submit')
       await flushPromises()
       // A password the coordinator would refuse never leaves the renderer.

@@ -27,6 +27,17 @@ function fixture(failure?: Error) {
 }
 
 describe('restoreUserSession', () => {
+  it('reports protected cleanup failure and retries cleanup only on the next explicit restore', async () => {
+    const f = fixture(new PeerHelperError('p2p.user_login_required'))
+    f.removeUserSession.mockRejectedValueOnce(new PeerHelperError('p2p.secret_delete_failed'))
+    await expect(
+      restoreUserSession(f.credentials, f.session, serviceId, new AbortController().signal)
+    ).rejects.toMatchObject({ code: 'p2p.secret_delete_failed' })
+    expect(f.removeUserSession).toHaveBeenCalledTimes(1)
+    await restoreUserSession(f.credentials, f.session, serviceId, new AbortController().signal)
+    expect(f.removeUserSession).toHaveBeenCalledTimes(2)
+  })
+
   it('keeps a persisted session when the helper is temporarily busy', async () => {
     const f = fixture(new PeerHelperError('p2p.service_busy'))
 

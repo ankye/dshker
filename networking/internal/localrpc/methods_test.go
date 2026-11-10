@@ -17,6 +17,15 @@ func TestCertificateMethodIsMainOnly(t *testing.T) {
 	}
 }
 
+func TestAccountRecoveryMethodsArePrivateShellOperations(t *testing.T) {
+	for _, name := range []string{"user.renew", "user.resetPassword"} {
+		method, exists := Lookup(name)
+		if !exists || method.Role != RoleShell || MethodTableVersion != 2 {
+			t.Fatal("account recovery is not an additive table-2 shell operation", name, method)
+		}
+	}
+}
+
 func TestCachedPairPinIsNotAPublishedAuthority(t *testing.T) {
 	if _, exists := Lookup("pairs.pin"); exists {
 		t.Fatal("caller-provided pair identities still grant live pin authority")

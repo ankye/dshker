@@ -154,6 +154,7 @@ describe('main-owned P2P accounts', () => {
     for (const [address, password] of [
       ['not-an-email', 'a-long-password'],
       ['alice@example.com', 'short'],
+      ['alice@example.com', '😀'.repeat(6)],
       ['', 'a-long-password']
     ] as const)
       expect(() => f.accounts.register(serviceId, address, password, signal())).toThrow(

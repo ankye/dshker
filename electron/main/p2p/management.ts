@@ -469,6 +469,18 @@ export class PeerManagement {
       accounts.register(serviceId, email, password, active)
     )
   }
+  async resetPassword(
+    serviceId: string,
+    email: string,
+    code: string,
+    password: string,
+    signal: AbortSignal
+  ): Promise<void> {
+    const session = await this.#ready(signal)
+    const active = this.#signal(signal)
+    await session.services.activate(serviceId, active)
+    await session.accounts.resetPassword(serviceId, email, code, password, active)
+  }
   currentUser(serviceId: string, signal: AbortSignal) {
     return this.#account(serviceId, signal, (accounts, active) =>
       accounts.currentUser(serviceId, active)
@@ -650,12 +662,12 @@ export class PeerManagement {
   ): Promise<void> {
     const existing = this.#restoreInFlight.get(serviceId)
     if (existing) return existing
-    const pending = restoreUserSession(this.#credentials, session, serviceId, signal).finally(
-      () => {
+    const pending = restoreUserSession(this.#credentials, session, serviceId, signal)
+      .then(() => session.accounts.renewIfDue(serviceId, signal))
+      .finally(() => {
         if (this.#restoreInFlight.get(serviceId) === pending)
           this.#restoreInFlight.delete(serviceId)
-      }
-    )
+      })
     this.#restoreInFlight.set(serviceId, pending)
     return pending
   }

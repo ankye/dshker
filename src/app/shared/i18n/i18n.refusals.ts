@@ -57,6 +57,14 @@ export const zhCNRefusals = {
     '这台电脑的设备证书未通过验证。请联系管理员核对协调服务器与原设备凭据。',
   'p2p.refusal.credentialReadFailed':
     '无法读取这台电脑已保存的设备凭据。请检查系统凭据存储与本机设置目录后重试；原设备和配对会保留。',
+  'p2p.refusal.secretProviderUnavailable':
+    '系统安全存储不可用，无法读取或保存登录状态。请解锁钥匙串或凭据存储并检查权限后重试；原账号、设备、网络和配对会保留。',
+  'p2p.refusal.secretReadFailed':
+    '无法读取已保存的登录状态。请解锁或检查系统安全存储后重试；原账号、设备、网络和配对会保留。',
+  'p2p.refusal.secretWriteFailed':
+    '系统安全存储写入失败，无法确认新的登录期限已保存。请解锁或检查权限后重试；原账号、设备、网络和配对会保留。',
+  'p2p.refusal.secretDeleteFailed':
+    '旧登录凭据的清除结果未确认。请解锁或检查系统安全存储后重新读取登录状态；若刚重设密码，请用新密码登录核对，不要重复提交重设码。原账号、设备、网络和配对会保留。',
   'p2p.refusal.connecting': '正在建立连接，稍等片刻即可。'
 } as const
 
@@ -117,6 +125,14 @@ export const enUSRefusals: Record<keyof typeof zhCNRefusals, string> = {
     'This computer’s device certificate failed verification. Ask the administrator to check the coordinator and the original device credential.',
   'p2p.refusal.credentialReadFailed':
     'This computer’s saved device credential could not be read. Check the system credential store and local settings directory, then retry. The device and pairs are retained.',
+  'p2p.refusal.secretProviderUnavailable':
+    'System protected storage is unavailable, so sign-in state cannot be read or saved. Unlock the Keychain or credential store, check its permissions and retry. The original account, devices, networks and pairs are retained.',
+  'p2p.refusal.secretReadFailed':
+    'Saved sign-in state could not be read. Unlock or check system protected storage and retry. The original account, devices, networks and pairs are retained.',
+  'p2p.refusal.secretWriteFailed':
+    'The system protected-storage write failed, so the new sign-in expiry is not confirmed as saved. Unlock or check its permissions and retry. The original account, devices, networks and pairs are retained.',
+  'p2p.refusal.secretDeleteFailed':
+    'Removal of the old local sign-in credential is unconfirmed. Unlock or check system protected storage and read sign-in state again. If you just reset the password, check by signing in with the new password; do not submit the reset code again. The original account, devices, networks and pairs are retained.',
   'p2p.refusal.connecting': 'The connection is still being established.'
 }
 
@@ -199,6 +215,14 @@ export function refusalKeyForCode(code: string): keyof typeof zhCNRefusals {
       return 'p2p.refusal.invalidDeviceCertificate'
     case 'p2p.credential_read_failed':
       return 'p2p.refusal.credentialReadFailed'
+    case 'p2p.secret_provider_unavailable':
+      return 'p2p.refusal.secretProviderUnavailable'
+    case 'p2p.secret_read_failed':
+      return 'p2p.refusal.secretReadFailed'
+    case 'p2p.secret_write_failed':
+      return 'p2p.refusal.secretWriteFailed'
+    case 'p2p.secret_delete_failed':
+      return 'p2p.refusal.secretDeleteFailed'
     case 'p2p.peer_offline':
       return 'p2p.refusal.peerOffline'
     // Refused because this computer has no such connection or session — or

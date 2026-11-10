@@ -79,6 +79,7 @@
     "p2pManagement.removeService()",
     "p2pManagement.renameNetwork()",
     "p2pManagement.resetCatalog()",
+    "p2pManagement.resetPassword()",
     "p2pManagement.revokePair()",
     "p2pManagement.selectNetwork()",
     "p2pManagement.serviceSessions()",

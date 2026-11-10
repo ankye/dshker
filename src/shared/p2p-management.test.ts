@@ -28,6 +28,10 @@ describe('P2P failure vocabulary', () => {
       'p2p.certificate_sync_failed',
       'p2p.certificate_persist_failed',
       'p2p.credential_read_failed',
+      'p2p.secret_provider_unavailable',
+      'p2p.secret_read_failed',
+      'p2p.secret_write_failed',
+      'p2p.secret_delete_failed',
       'p2p.remote_path_forbidden',
       'p2p.operation_failed'
     ]) {

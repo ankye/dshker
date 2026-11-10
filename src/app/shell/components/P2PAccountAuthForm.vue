@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { P2P_ACCOUNT_PASSWORD_MIN } from '@/shared/p2p-management'
 import { useTranslator } from '@/app/shared/i18n/useLocale'
+import P2PPasswordResetForm from './P2PPasswordResetForm.vue'
 
 /**
  * The credential forms, owned by the component that holds the secrets.
@@ -19,10 +20,13 @@ const props = defineProps<{
   busy: boolean
   uncertain: boolean
   disabled?: boolean
+  resetCompleted?: number
+  resetUnconfirmed?: boolean
 }>()
 const emit = defineEmits<{
   login: [username: string, password: string]
   register: [email: string, password: string]
+  resetPassword: [email: string, code: string, password: string]
   'update:username': [value: string]
 }>()
 const t = useTranslator()
@@ -33,7 +37,8 @@ const password = ref('')
 const registerEmail = ref('')
 const registerPassword = ref('')
 const registerConfirm = ref('')
-const mode = ref<'login' | 'register'>('login')
+const mode = ref<'login' | 'register' | 'reset'>('login')
+const showResetSuccess = ref(false)
 
 /** Optional confirmation must match before a register submit is allowed. */
 const registerMismatch = computed(
@@ -45,13 +50,15 @@ const registerMismatch = computed(
  * stays authoritative: this only avoids a round trip that must fail.
  */
 const registerTooShort = computed(
-  () => registerPassword.value !== '' && registerPassword.value.length < P2P_ACCOUNT_PASSWORD_MIN
+  () =>
+    registerPassword.value !== '' &&
+    Array.from(registerPassword.value).length < P2P_ACCOUNT_PASSWORD_MIN
 )
 const registerBlocked = computed(
   () =>
     registerMismatch.value ||
     registerTooShort.value ||
-    registerPassword.value.length < P2P_ACCOUNT_PASSWORD_MIN
+    Array.from(registerPassword.value).length < P2P_ACCOUNT_PASSWORD_MIN
 )
 const fieldsDisabled = computed(() => props.disabled === true || props.busy || props.uncertain)
 
@@ -69,15 +76,31 @@ function submitRegister(): void {
   emit('register', email, supplied)
 }
 /** Switching forms discards only the secrets typed into the abandoned one. */
-function switchMode(next: 'login' | 'register'): void {
-  mode.value = next
+function clearSecrets(): void {
   password.value = ''
   registerPassword.value = ''
   registerConfirm.value = ''
 }
+function switchMode(next: 'login' | 'register' | 'reset'): void {
+  clearSecrets()
+  showResetSuccess.value = false
+  mode.value = next
+}
+watch(() => props.serviceId, clearSecrets)
+watch(
+  () => props.resetCompleted,
+  () => {
+    switchMode('login')
+    showResetSuccess.value = true
+  }
+)
+onBeforeUnmount(clearSecrets)
 </script>
 
 <template>
+  <p v-if="showResetSuccess" role="status" data-testid="p2p-reset-success">
+    {{ t('p2p.account.resetSucceeded') }}
+  </p>
   <form v-if="mode === 'login'" data-testid="p2p-login-form" @submit.prevent="submitLogin">
     <fieldset :disabled="fieldsDisabled" class="p2p-account-fields p2p-account-fields--stacked">
       <legend>{{ t('p2p.account.login') }}</legend>
@@ -102,6 +125,17 @@ function switchMode(next: 'login' | 'register'): void {
     </fieldset>
     <p>{{ t('p2p.account.passwordHint') }}</p>
     <p class="p2p-account-switch">
+      <button
+        type="button"
+        class="p2p-account-switch-link"
+        data-testid="p2p-account-switch-reset"
+        :disabled="busy"
+        @click="switchMode('reset')"
+      >
+        {{ t('p2p.account.forgotPassword') }}
+      </button>
+    </p>
+    <p class="p2p-account-switch">
       <span>{{ t('p2p.account.noAccount') }}</span>
       <button
         type="button"
@@ -113,7 +147,11 @@ function switchMode(next: 'login' | 'register'): void {
       </button>
     </p>
   </form>
-  <form v-else data-testid="p2p-register-form" @submit.prevent="submitRegister">
+  <form
+    v-else-if="mode === 'register'"
+    data-testid="p2p-register-form"
+    @submit.prevent="submitRegister"
+  >
     <fieldset :disabled="fieldsDisabled" class="p2p-account-fields p2p-account-fields--stacked">
       <legend>{{ t('p2p.account.register') }}</legend>
       <label
@@ -178,6 +216,25 @@ function switchMode(next: 'login' | 'register'): void {
       </button>
     </p>
   </form>
+  <template v-else>
+    <P2PPasswordResetForm
+      :service-id="serviceId"
+      :username="username"
+      :disabled="fieldsDisabled || resetUnconfirmed === true"
+      @submit="(email, code, supplied) => emit('resetPassword', email, code, supplied)"
+    />
+    <p class="p2p-account-switch">
+      <button
+        type="button"
+        class="p2p-account-switch-link"
+        data-testid="p2p-account-switch-login"
+        :disabled="busy"
+        @click="switchMode('login')"
+      >
+        {{ t('p2p.account.backToLogin') }}
+      </button>
+    </p>
+  </template>
 </template>
 
 <style scoped>

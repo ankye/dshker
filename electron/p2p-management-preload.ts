@@ -17,6 +17,7 @@ export const p2pManagement: P2PManagementApi = Object.freeze({
   addService: (request) => ipcRenderer.invoke(channels.addService, request),
   login: (request) => ipcRenderer.invoke(channels.login, request),
   register: (request) => ipcRenderer.invoke(channels.register, request),
+  resetPassword: (request) => ipcRenderer.invoke(channels.resetPassword, request),
   currentUser: (request) => ipcRenderer.invoke(channels.currentUser, request),
   logout: (request) => ipcRenderer.invoke(channels.logout, request),
   networks: (request) => ipcRenderer.invoke(channels.networks, request),
