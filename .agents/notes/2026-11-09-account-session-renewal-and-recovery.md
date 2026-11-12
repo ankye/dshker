@@ -14,6 +14,10 @@
 
 源码验证和真实服务链路结果见下文；当前不宣称 Windows/macOS 原生逐帧或生产部署验收。
 
+## 生产服务端部署（2026-11-12）
+
+用户授权更新 `my.ffkey.com:8443`，允许丢弃数据、保留端口。实际采用原位迁移，没有丢弃数据：停止服务后用 SQLite backup API 备份 state.db、identity.key、config.json 和原二进制到 `/var/lib/dshker-server/backups/20261112-1025-63bdd46`（integrity ok，schema 7），安装 `63bdd46` 构建的 linux/amd64 二进制（sha256 `a8858579…534d6d`）后启动。schema 迁移到 8，4 个用户保留，config 和 8443 TCP/UDP 不变。外部读回：`/health/https` 200（serviceId `245e9f53bfde` 不变），`/v1/session/renew` 无效 token 401 `p2p.user_unauthorized`，`/v1/password/reset` 无效码 401 `p2p.password_reset_invalid`。本机已有配对会话重启后健康检查 `failure:null`。回滚需同时恢复备份中的二进制和 state.db。Launcher 续期客户端尚未发布。
+
 ## 主代理集成验证
 
 桌面全量 Vitest 最近完整运行通过 209 个文件、2046 项测试，另有1文件/2项既有平台跳过。之后安全存储错误展示和清理恢复的新增改动执行相关用例回归，不将重叠次数相加。环境、类型、格式、架构、service/visual smoke、renderer/Electron build、父 workspace 应用验证、源码大小和两侧 OpenSpec strict 均通过。构建输出扫描未发现测试路径或测试实现标记，记录于 ignored `.run/account-session-recovery/build-isolation.json`；此证据针对 source production build，不代表已构建或安装发行包。

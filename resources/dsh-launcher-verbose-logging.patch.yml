@@ -8,3 +8,16 @@
         levels:
           default: 3
         showDiff: true
+
+# Pin the in-page directory picker. The bundle's `-auto` row resolves to the
+# native OS chooser on a loopback, non-SSH macOS/Windows boot, which opens on
+# this computer's screen. A paired computer reaching this DSH over P2P cannot
+# see or answer that chooser, so its pick waits until the proxy returns 502.
+# The browse picker renders inside whichever page asked, local or remote.
+- id: directory-picker
+  disabled: true
+- insert:
+    - id: dsh-launcher-directory-picker-browse
+      name: '@deepseek-ai/dsh-host-directory-picker-browse'
+    - id: dsh-launcher-ui-directory-picker-browse
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'
