@@ -376,6 +376,37 @@ export async function verifyStagedRuntime(
 // the gate tested without re-staging the app's own runtime as an import effect.
 const isMain =
   process.argv[1] !== undefined && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+
+/** Windows lock codes a scanner or a just-exited image can briefly cause. */
+const TRANSIENT_RENAME_CODES = new Set(['EPERM', 'EACCES', 'EBUSY'])
+
+/**
+ * Rename a directory, waiting out a transient Windows lock.
+ *
+ * The stage has just been written and its node.exe executed for the smoke
+ * tests. On Windows, antivirus scanning or a lingering image handle can hold
+ * those files for a few seconds, and the directory rename then fails with
+ * EPERM even though nothing is wrong. Only those lock codes on win32 are
+ * retried, within a fixed budget; any other failure, or a lock that outlasts
+ * the budget, is thrown unchanged.
+ */
+export async function renameWithLockRetry(
+  from,
+  to,
+  { platform = process.platform, rename = renameSync, budgetMs = 60000, delayMs = 500 } = {}
+) {
+  const deadline = Date.now() + budgetMs
+  for (;;) {
+    try {
+      rename(from, to)
+      return
+    } catch (error) {
+      const transient = platform === 'win32' && TRANSIENT_RENAME_CODES.has(error?.code)
+      if (!transient || Date.now() + delayMs > deadline) throw error
+      await new Promise((resolve) => setTimeout(resolve, delayMs))
+    }
+  }
+}
 async function prepareRuntime(target = resolveRuntimeTarget()) {
   const temporaryDirectory = mkdtempSync(path.join(path.dirname(RUNTIME_ROOT), '.runtime-stage-'))
   const stagedRoot = path.join(temporaryDirectory, 'runtime')
@@ -422,11 +453,11 @@ async function prepareRuntime(target = resolveRuntimeTarget()) {
     smokePnpm(executable, path.join(stagedPnpm, 'bin', 'pnpm.mjs'), pnpmVersion, stagedBin)
 
     if (existsSync(RUNTIME_ROOT)) {
-      renameSync(RUNTIME_ROOT, previousRoot)
+      await renameWithLockRetry(RUNTIME_ROOT, previousRoot)
       previousRuntimeMoved = true
     }
     try {
-      renameSync(stagedRoot, RUNTIME_ROOT)
+      await renameWithLockRetry(stagedRoot, RUNTIME_ROOT)
     } catch (error) {
       if (previousRuntimeMoved) {
         try {

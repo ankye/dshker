@@ -11,6 +11,7 @@ import fs, {
 } from 'node:fs'
 import {
   NODE_HEADERS_ARTIFACT,
+  renameWithLockRetry,
   resolveRuntimeTarget,
   sha256File,
   verifyStagedRuntime
@@ -134,5 +135,52 @@ describe('runtime verification', () => {
     } finally {
       rmSync(root, { recursive: true, force: true })
     }
+  })
+})
+
+describe('installing the verified stage', () => {
+  const locked = (code) => Object.assign(new Error(code), { code })
+
+  it('waits out a transient Windows lock before renaming the stage', async () => {
+    const rename = vi
+      .fn()
+      .mockImplementationOnce(() => {
+        throw locked('EPERM')
+      })
+      .mockImplementationOnce(() => {
+        throw locked('EBUSY')
+      })
+      .mockImplementationOnce(() => undefined)
+    await renameWithLockRetry('stage', 'runtime', { platform: 'win32', rename, delayMs: 1 })
+    expect(rename).toHaveBeenCalledTimes(3)
+  })
+
+  it('throws a lock that outlasts the budget unchanged', async () => {
+    const error = locked('EPERM')
+    const rename = vi.fn(() => {
+      throw error
+    })
+    await expect(
+      renameWithLockRetry('stage', 'runtime', {
+        platform: 'win32',
+        rename,
+        budgetMs: 5,
+        delayMs: 1
+      })
+    ).rejects.toBe(error)
+    expect(rename.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it.each([
+    ['linux', 'EPERM'],
+    ['win32', 'ENOENT']
+  ])('does not retry %s %s', async (platform, code) => {
+    const rename = vi.fn(() => {
+      throw locked(code)
+    })
+    await expect(
+      renameWithLockRetry('stage', 'runtime', { platform, rename, delayMs: 1 })
+    ).rejects.toMatchObject({ code })
+    expect(rename).toHaveBeenCalledTimes(1)
   })
 })
