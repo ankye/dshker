@@ -115,7 +115,7 @@ jobs:
       matrix:
         include:
           - name: macOS arm64
-            os: macos-14
+            os: macos-15
             script: dist:mac-arm64
             coreTarget: darwin-arm64
             artifact: dshker-launcher-macos-arm64
