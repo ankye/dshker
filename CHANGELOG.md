@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.1.100 — 2026-11-16
+
+### 简体中文 (zh-CN)
+
+- **损坏的 DSH 版本会在启动前被识别。** Launcher 现在除了检查内置入口文件，还会确认这个版本的依赖层能真正解析（源码启动用的 `tsx`，以及入口引用的 Harness 包）。链接层坏掉时状态页会直接说明“依赖树不可解析”，而不是等 DSH 启动后才报模块找不到；切换到其他版本即可重新准备。
+- **换磁盘不用再手打路径。** 页面内目录选择器现在会在每一层列表顶部列出当前层级走不到的磁盘与挂载卷：Windows 上是其它盘符（如 `D:`），macOS/Linux 上是挂载卷。选择后仍由 DSH 自己的目录后端列出内容、新建文件夹并报错；选择器本来能通过向上导航到达的目录不会重复出现。某个磁盘无响应或卷不可读时，列表与原来完全一致。
+
+### English (en-US)
+
+- **A damaged DSH version is reported before launch.** Besides the built entry file, the Launcher now proves a version's dependency layer actually resolves: `tsx` for the source launch, and the Harness packages that entry imports. A broken link layer is reported as an unresolvable dependency tree in the status surface instead of surfacing later as a missing module from DSH; switching to another version prepares a clean one.
+- **Switch disks without typing a path.** The in-page directory browser now lists the disks and mounted volumes the current level cannot reach by navigating upward: other drive letters on Windows (such as `D:`), mounted volumes on macOS and Linux. Choosing one still lists its contents, creates folders and reports failures through DSH's own directory backend, and a directory already reachable by navigating up is never repeated. An unresponsive disk or unreadable volume leaves the listing exactly as before.
+
 ## 0.1.99 — 2026-11-12
 
 ### 简体中文 (zh-CN)
