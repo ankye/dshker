@@ -1,4 +1,4 @@
-import { lstat, readFile } from 'node:fs/promises'
+import { lstat, readFile, stat } from 'node:fs/promises'
 import nodePath from 'node:path'
 import type {
   LauncherHarnessCommitView,
@@ -60,7 +60,6 @@ export async function readHarnessReadiness(harnessDirectory: string): Promise<Ha
     if (!gitMetadata.isFile() && !gitMetadata.isDirectory()) {
       throw new Error('Not a repository entry.')
     }
-    return { kind: 'ready' }
   } catch {
     return {
       kind: 'invalid',
@@ -68,6 +67,60 @@ export async function readHarnessReadiness(harnessDirectory: string): Promise<Ha
       message: 'The Launcher Harness directory is missing its built DSH checkout.'
     }
   }
+  try {
+    await assertResolvableDependencies(harnessDirectory)
+  } catch {
+    return {
+      kind: 'invalid',
+      harnessDirectory,
+      message: 'The Launcher Harness directory has an unresolvable dependency tree.'
+    }
+  }
+  return { kind: 'ready' }
+}
+
+/** Harness packages the built entry may import; a resolution failure is a broken install, not a missing feature. */
+const ENTRY_DEPENDENCY_PATTERN =
+  /(?:from\s*|import\s*\(\s*|import\s+)['"](@deepseek-ai\/[^'"]+)['"]/gu
+/** How many entry dependencies to resolve: enough to prove the link layer, bounded for every readiness read. */
+const MAX_ENTRY_DEPENDENCIES = 2
+/** Source launches run `dsh` through `--import tsx/esm`, which the worktree preparer also requires. */
+const SOURCE_LAUNCH_DEPENDENCY = nodePath.join('node_modules', 'tsx', 'package.json')
+
+/**
+ * Proves the checkout's dependency layer resolves, not just that its files exist.
+ * `assertDirectRegularFile` refuses every symlink component, so this check follows
+ * `node_modules` links on purpose: a pnpm link layer that no longer resolves makes
+ * the child fail on its first import even though every checked-in file is present.
+ */
+async function assertResolvableDependencies(harnessDirectory: string): Promise<void> {
+  const builtEntry = nodePath.join(harnessDirectory, 'apps', 'cli', 'lib', 'bin.js')
+  const source = await readFile(builtEntry, 'utf8')
+  const dependencies = new Set<string>([nodePath.join(harnessDirectory, SOURCE_LAUNCH_DEPENDENCY)])
+  let entryDependencies = 0
+  for (const match of source.matchAll(ENTRY_DEPENDENCY_PATTERN)) {
+    if (entryDependencies === MAX_ENTRY_DEPENDENCIES) break
+    const name = match[1]
+    if (name === undefined) continue
+    dependencies.add(
+      nodePath.join(
+        harnessDirectory,
+        'apps',
+        'cli',
+        'node_modules',
+        ...name.split('/'),
+        'package.json'
+      )
+    )
+    entryDependencies += 1
+  }
+  await Promise.all(Array.from(dependencies, (path) => assertResolvableRegularFile(path)))
+}
+
+/** Requires a path that resolves through links to a regular file. */
+async function assertResolvableRegularFile(filePath: string): Promise<void> {
+  const metadata = await stat(filePath)
+  if (!metadata.isFile()) throw new Error('A resolvable regular file is required.')
 }
 
 /** Checkout metadata that survives an unbuilt checkout; absent keys mean unreadable. */

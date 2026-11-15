@@ -126,6 +126,12 @@ describe('LauncherHarnessService DSH PATH handoff', () => {
         'utf8'
       )
       await writeFile(nodePath.join(versionDirectory, 'apps', 'cli', 'lib', 'bin.js'), '', 'utf8')
+      await mkdir(nodePath.join(versionDirectory, 'node_modules', 'tsx'), { recursive: true })
+      await writeFile(
+        nodePath.join(versionDirectory, 'node_modules', 'tsx', 'package.json'),
+        JSON.stringify({ name: 'tsx' }),
+        'utf8'
+      )
       await writeFile(
         nodePath.join(versionDirectory, 'packages', 'settings', 'settings', 'package.json'),
         JSON.stringify({ version: '1.0.0' }),

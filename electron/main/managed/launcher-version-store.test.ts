@@ -167,6 +167,10 @@ describe('managed DSH version worktree recovery', () => {
         const builtEntry = path.join(directory, 'apps', 'cli', 'lib', 'bin.js')
         mkdirSync(path.dirname(builtEntry), { recursive: true })
         writeFileSync(builtEntry, 'process.stdout.write("built")\n')
+        // Readiness also proves the source launcher's tsx dependency resolves.
+        const tsx = path.join(directory, 'node_modules', 'tsx', 'package.json')
+        mkdirSync(path.dirname(tsx), { recursive: true })
+        writeFileSync(tsx, JSON.stringify({ name: 'tsx' }))
       })
     )
 
