@@ -21,3 +21,13 @@
       name: '@deepseek-ai/dsh-host-directory-picker-browse'
     - id: dsh-launcher-ui-directory-picker-browse
       name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'
+
+# The in-page picker starts at the home directory and its breadcrumb only walks
+# ancestors, so another disk (Windows) or a mounted volume (POSIX) is reachable
+# only by typing its path. This Launcher-owned Host plugin decorates the mounted
+# browse capability and prepends those roots to every listing. The relative name
+# resolves beside this overlay file, which is why the plugin ships as a sibling
+# extra resource and is never installed into a profile or the Harness checkout.
+- insert:
+    - id: dshker-directory-roots
+      name: './dshker-directory-roots.mjs'

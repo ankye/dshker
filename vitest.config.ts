@@ -12,6 +12,7 @@ export default defineConfig({
       'src/**/*.test.ts',
       'electron/**/*.test.ts',
       'packages/**/*.test.ts',
+      'resources/**/*.test.mjs',
       'tools/**/*.test.mjs'
     ],
     exclude: [...configDefaults.exclude, '**/*.e2e.test.ts'],
