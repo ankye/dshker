@@ -1,14 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.1.101 — 2026-11-16
 
 ### 简体中文 (zh-CN)
 
-- **在当前目录切换 DSH 内核。** 切换已获取的分支、稳定版或提交会复用现有工作目录和本地依赖。存在未提交改动时会阻止切换，准备失败后可重新选择同一版本重试。
+- **在当前目录切换 DSH 内核。** 切换已获取的分支、稳定版或提交会复用现有工作目录和本地依赖。目标版本缺少的依赖仍需安装。DSH Web 运行中或有未提交的受跟踪文件改动时，切换会被阻止。准备失败后可重新选择同一版本重试。
 
 ### English (en-US)
 
-- **Switch DSH versions in the current checkout.** Selecting a fetched branch, release, or commit reuses the existing checkout and local dependencies. Local changes block switching. If preparation fails, select the same version again to retry.
+- **Switch DSH versions in the current checkout.** Selecting a fetched branch, release, or commit reuses the existing checkout and local dependencies. The selected version may still require missing packages to be installed. Switching is blocked while DSH Web is running or tracked files have uncommitted changes. If preparation fails, select the same version again to retry.
 
 ## 0.1.100 — 2026-11-16
 
