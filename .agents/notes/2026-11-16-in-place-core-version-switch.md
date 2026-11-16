@@ -36,3 +36,17 @@ used for a switch or build in this change.
 - The macOS Electron renderer mounted in an isolated profile. Full native Harness
   rebuild and launch after switching, including Windows dependency junctions,
   remain tracked in OpenSpec task 13.3.
+
+## Publication
+
+The public stable release `v0.1.101` tags `d87079e7`. GitHub Actions Package run
+43865015345 passed all 14 jobs, including the six native desktop package jobs
+and the publication check. The public latest Release has 25 nonempty uploaded
+assets. All 14 installer and archive SHA-256 values match the published checksum
+files, and the Release body matches the tagged CHANGELOG entry.
+
+The separate Windows Quality job in run 43865015341 still reports the existing
+directory-picker test failure in `resources/dshker-directory-roots.test.mjs`.
+The test expects a POSIX listing to stay unchanged on a Windows host that adds
+its drive roots. Native upgrade and in-place Harness switching remain open for
+hands-on testing.
