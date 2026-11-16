@@ -6,6 +6,7 @@ DeepSeek Harness can be developed from many Git revisions, but users need a desk
 
 - Add a desktop launcher with product defaults at `~/.dshlauncher/harness`, `~/.dshlauncher/plugins`, `~/.dshlauncher/presets`, and `~/.dshlauncher/settings`; first launch does not ask users to select storage directories.
 - Add managed clone, fetch, exact-SHA worktree, retained-version, and explicit branch/tag/commit selection workflows for DeepSeek Harness repositories.
+- Reuse the same Git checkout and local dependencies for the Launcher Core version page, including existing installations that already run from a linked worktree.
 - Preserve explicit managed-tool registrations. For the existing Launcher pnpm command path, resolve installed Windows npm/Corepack shims or native pnpm executables from PATH and named package-manager locations; use verified file paths without executing a shim through a shell.
 - Keep downloaded plugin and Agent preset sources under the Launcher roots. Launcher Settings own desktop selections and source records.
 - Launch only the selected worktree's already-built standard `dsh web --no-open` command through the registered Node executable, and treat the loopback URL that process announces as the sole runtime address and readiness signal.

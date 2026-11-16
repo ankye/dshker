@@ -156,6 +156,7 @@ export type ManagedOperationErrorCode =
   | 'managed.git_remote_invalid'
   | 'managed.git_revision_invalid'
   | 'managed.git_operation_failed'
+  | 'managed.git_repository_dirty'
   | 'managed.plugin_catalog_read_failed'
   | 'managed.plugin_catalog_refresh_failed'
   | 'managed.bundled_seed_unavailable'
@@ -488,7 +489,8 @@ export type LauncherHarnessState =
       readonly kind: 'ready'
       readonly harnessDirectory: string
       readonly remoteUrl: string
-      readonly currentBranch: string
+      /** Null identifies an exact commit selected without a branch. */
+      readonly currentBranch: string | null
       readonly branches: readonly string[]
       readonly revision: string | undefined
       readonly launch: LauncherHarnessLaunchView
@@ -511,7 +513,7 @@ export type LauncherHarnessState =
        * available for recovery instead of showing an empty state.
        */
       readonly remoteUrl?: string
-      readonly currentBranch?: string
+      readonly currentBranch?: string | null
       readonly branches: readonly string[]
       readonly revision: string | undefined
       readonly commits: readonly LauncherHarnessCommitView[]

@@ -61,21 +61,25 @@ describe('computeOperationStepProgress', () => {
     return { stream: 'launcher', occurredAt: 0, text: `${text}\n`, seq: 0 }
   }
 
-  it('counts a fetch step into update totals but not plain commit switches', () => {
+  it('allocates a fetch step to updates before the first event, with six steps for a selection', () => {
     const updateEntries = [
       launcherEntry('Updating DSH to the newest origin/master commit…'),
       launcherEntry('Fetching DSH updates from origin (git fetch --prune --tags origin)…'),
       launcherEntry(
         'Fetching DSH updates from origin (git fetch --prune --tags origin) finished in 4s.'
       ),
-      launcherEntry('Removing untracked build residue from the DSH checkout…')
+      launcherEntry('Checking the current DSH checkout…')
     ]
-    // A plain commit switch runs no fetch step at all.
-    const switchEntries = [launcherEntry('Removing untracked build residue from the DSH checkout…')]
+    const switchEntries = [launcherEntry('Checking the current DSH checkout…')]
 
     const update = computeOperationStepProgress('update', updateEntries, 0, 42_000)
     const commitSwitch = computeOperationStepProgress('switch', switchEntries, 0, 42_000)
 
+    expect(computeOperationStepProgress('update', [], 0, 42_000)).toEqual({
+      stepPosition: 1,
+      totalSteps: 7,
+      elapsedSeconds: 42
+    })
     expect(update).toEqual({ stepPosition: 2, totalSteps: 7, elapsedSeconds: 42 })
     expect(commitSwitch).toEqual({ stepPosition: 1, totalSteps: 6, elapsedSeconds: 42 })
   })

@@ -82,7 +82,7 @@ describe('BundledHarnessBootstrap activity', () => {
       })
 
       expect(created).toBe(true)
-      // The seed publishes history only; per-version directories do the building.
+      // Version preparation runs after the seed publishes the repository.
       expect(activity).toHaveLength(2)
       expect(activity[0]).toContain('Importing the bundled DSH Git history')
       expect(activity[1]).toContain('official DSH remote')

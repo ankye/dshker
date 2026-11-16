@@ -104,7 +104,7 @@ async function openSourceLink(linkId: LauncherExternalLinkId): Promise<void> {
         <article v-else class="launch-version" data-selected="true">
           <div class="launch-version-identity">
             <p class="eyebrow">{{ t('launch.version') }}</p>
-            <h4>{{ harness.state.value.currentBranch }}</h4>
+            <h4>{{ harness.state.value.currentBranch ?? t('versions.core.detachedHead') }}</h4>
             <p class="launch-version-label">{{ t('launch.commit') }}</p>
             <strong
               class="launch-revision"

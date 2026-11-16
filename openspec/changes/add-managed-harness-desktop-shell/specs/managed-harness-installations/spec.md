@@ -55,7 +55,7 @@ The launcher SHALL resolve every requested branch, tag, or commit from its manag
 
 ### Requirement: Version management separates remote refresh from activation
 
-The Core version view SHALL show the HTTPS origin, current branch, current complete commit SHA, stable release tags, and development commits from the fetched origin branch. Its Refresh action SHALL run `git fetch --prune --tags origin` and rebuild those lists without checking out, installing, building, or restarting DSH. Its update, branch-switch, and row-switch actions SHALL require an explicit user activation and SHALL refuse while the Launcher-started DSH Web process is running.
+The Core version view SHALL show the HTTPS origin, selected branch or detached HEAD, current complete commit SHA, stable release tags, and development commits from origin/master. Its Refresh action SHALL fetch and prune origin branch refs and fetch tags without checking out, installing, building, or restarting DSH. Its update, branch-switch, and row-switch actions SHALL require explicit user activation and SHALL refuse while the Launcher-started DSH Web process is running or starting. Update SHALL fetch master and tags. Branch and row selection SHALL use local fetched refs.
 
 #### Scenario: User refreshes the version list
 
@@ -66,7 +66,7 @@ The Core version view SHALL show the HTTPS origin, current branch, current compl
 #### Scenario: User activates a listed version
 
 - **WHEN** the user selects Update, a branch, or a version row while DSH Web is stopped
-- **THEN** the Launcher runs `git clean -xdf` in the verified Launcher-owned Harness checkout, checks out the selected fetched commit, installs its locked dependencies, and builds its DSH CLI before marking it launchable
+- **THEN** the Launcher verifies the existing checkout, checks out the selected fetched commit without cleaning, installs its locked dependencies, and builds its DSH CLI before marking it launchable
 - **AND** the selected row becomes the current version only after those operations complete
 
 ### Requirement: Curated plugin catalog is a parsed Launcher-owned source checkout
@@ -81,7 +81,7 @@ The Install extension view SHALL use `https://github.com/awesome-dsh-plugin/awes
 
 ### Requirement: Managed worktrees are retained and mutation-protected
 
-The launcher SHALL block switching, updating, deleting, or retargeting a worktree that is active, starting, stopping, unresolved after a crash, tampered with, or still referenced by a retained rollback record. Before an explicit switch or update rebuilds a verified Launcher-owned Harness checkout, it SHALL run `git clean -xdf` in that checkout to remove untracked and ignored dependency and build residue. It SHALL NOT reset tracked files or run cleanup in an unmanaged repository, native DSH home, plugin directory, preset directory, or settings directory. Explicit deletion of an inactive worktree SHALL require proof of exact target containment and absence of all active references.
+For workspace-managed installations, the launcher SHALL block switching, updating, deleting, or retargeting a worktree that is active, starting, stopping, unresolved after a crash, tampered with, or still referenced by a retained rollback record. It SHALL NOT reset tracked files or run cleanup in an unmanaged repository, native DSH home, plugin directory, preset directory, or settings directory. Explicit deletion of an inactive worktree SHALL require proof of exact target containment and absence of all active references.
 
 #### Scenario: User attempts to switch while a runtime is active
 

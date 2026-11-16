@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
@@ -25,7 +25,7 @@ describe('launcher console activity', () => {
     readonly logPath: string
     readonly cleanup: () => Promise<void>
   }> {
-    const root = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-console-'))
+    const root = await mkdtemp(nodePath.join(await realpath(tmpdir()), 'dsh-launcher-console-'))
     const logPath = nodePath.join(root, 'logs', 'dsh-web.log')
     const options: LauncherHarnessServiceOptions = {
       harnessDirectory: nodePath.join(root, 'harness'),

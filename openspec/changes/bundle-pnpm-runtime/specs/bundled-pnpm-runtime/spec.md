@@ -6,7 +6,7 @@ Run DSH Web and DSH package operations on a known standalone Node/pnpm pair.
 DSH's native builtin loader requires a Node V8 context; Electron's
 `ELECTRON_RUN_AS_NODE` process mode does not provide one.
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: The staged runtime is complete, target-specific, and verified
 
@@ -101,35 +101,28 @@ registered Node executable and SHALL apply the staged runtime PATH so the DSH
 plugin manager resolves the bundled pnpm. The bundled runtime SHALL NOT replace
 the installation's registered Node or toolchain used for worktree preparation.
 
-### Requirement: A failed version preparation can be retried without damaging the active version
+#### Scenario: A managed installation starts its child
 
-Before retrying an incomplete target version, the version store SHALL inspect
-Git's registered worktree paths. If the exact target is registered, it SHALL
-remove only that worktree and verify the registration is gone before creating a
-fresh worktree. If it is not registered, it SHALL remove only the exact target
-directory. A failed build SHALL NOT update the active-version pointer.
-If the incomplete target is the currently active version, the operation SHALL
-refuse without deleting or rebuilding that directory.
+- **WHEN** a managed installation starts DSH Web
+- **THEN** the core runs the child using that installation's registered Node executable
+
+### Requirement: A failed Launcher Core preparation can be retried in the current checkout
+
+A Core build failure SHALL leave a non-launchable preparation record. On
+explicit retry the Launcher SHALL verify the registered checkout, reuse its
+existing directory, and activate the exact SHA only after the build and
+readiness validation succeed.
 
 Direct filesystem admission SHALL inspect every path component for symbolic
 links or Windows junctions. It SHALL accept a normalized absolute path when the
 filesystem reports an equivalent canonical spelling, including Windows 8.3
 aliases.
 
-#### Scenario: A missing failed worktree directory remains registered
+#### Scenario: A build fails after selecting a revision
 
-- **WHEN** a failed version build leaves a Git worktree registration but its
-  target directory has been removed, and the user retries that same version
-- **THEN** the stale registration is removed, the exact commit is prepared
-  again, and the active-version pointer changes only after successful build
-  and validation
-
-#### Scenario: The incomplete target is still active
-
-- **WHEN** the selected commit matches the active pointer but its prepared
-  checkout is incomplete
-- **THEN** the operation returns a typed error without removing the active
-  checkout or changing the pointer
+- **WHEN** a Core build fails and the user retries that version
+- **THEN** the Launcher prepares the exact commit in the same checkout and
+  writes the ready record after successful build and validation
 
 ### Requirement: Target packaging and release checks cover shipped files
 

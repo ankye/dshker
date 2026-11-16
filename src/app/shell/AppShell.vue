@@ -133,6 +133,7 @@ const TOAST_ERROR_MESSAGE_KEYS: Readonly<Record<string, Parameters<typeof shell.
   'managed.harness_plugin_incompatible': 'toast.error.harnessPluginIncompatible',
   'managed.harness_port_in_use': 'toast.error.harnessPortInUse',
   'managed.git_operation_failed': 'toast.error.gitOperationFailed',
+  'managed.git_repository_dirty': 'toast.error.gitRepositoryDirty',
   'managed.plugin_catalog_read_failed': 'toast.error.pluginCatalogReadFailed',
   'managed.plugin_catalog_refresh_failed': 'toast.error.pluginCatalogRefreshFailed'
 }
@@ -150,6 +151,7 @@ const TOAST_ERROR_DETAIL_KEYS: Readonly<Record<string, Parameters<typeof shell.t
   'managed.harness_plugin_incompatible': 'toast.error.detail.harnessPluginIncompatible',
   'managed.harness_port_in_use': 'toast.error.detail.harnessPortInUse',
   'managed.git_operation_failed': 'toast.error.detail.gitOperationFailed',
+  'managed.git_repository_dirty': 'toast.error.detail.gitRepositoryDirty',
   'managed.plugin_catalog_read_failed': 'toast.error.detail.pluginCatalogReadFailed',
   'managed.plugin_catalog_refresh_failed': 'toast.error.detail.pluginCatalogRefreshFailed'
 }
@@ -222,9 +224,9 @@ const dshVersion = computed(() => {
     )
     if (taggedVersion !== undefined) return taggedVersion.tag
     const shortRevision = current.revision.slice(0, 7)
-    return current.currentBranch === undefined
-      ? shortRevision
-      : `${current.currentBranch} · ${shortRevision}`
+    return typeof current.currentBranch === 'string'
+      ? `${current.currentBranch} · ${shortRevision}`
+      : shortRevision
   }
 
   switch (current.kind) {
@@ -241,9 +243,9 @@ const dshVersion = computed(() => {
 const dshVersionTitle = computed(() => {
   const current = harness.state.value
   if (current?.revision === undefined) return dshVersion.value
-  return current.currentBranch === undefined
-    ? current.revision
-    : `${current.currentBranch} · ${current.revision}`
+  return typeof current.currentBranch === 'string'
+    ? `${current.currentBranch} · ${current.revision}`
+    : current.revision
 })
 const dshRuntimeState = computed(() => harness.state.value?.launch.kind ?? 'unknown')
 const dshRuntimeLabel = computed(() => {

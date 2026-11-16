@@ -193,6 +193,7 @@ export const enUS: Record<MessageKey, string> = {
   'versions.core.description': 'Shows the current Git commit history in ~/.dshlauncher/harness.',
   'versions.core.remote': 'Remote:',
   'versions.core.branch': 'Current branch:',
+  'versions.core.detachedHead': 'Detached HEAD',
   'versions.core.currentVersion': 'Current version:',
   'versions.core.stable': 'Stable',
   'versions.core.development': 'Development',
@@ -205,10 +206,12 @@ export const enUS: Record<MessageKey, string> = {
   'versions.core.change': 'Change',
   'versions.core.current': 'Current',
   'versions.core.switch': 'Switch',
+  'versions.core.retryBuild': 'Retry build',
   'versions.core.selected': 'Selected',
   'versions.core.currentMark': 'Current',
   'versions.core.empty': 'No readable Git commits',
-  'versions.core.notBuiltNotice': 'The core is not built yet; run update again to repair:',
+  'versions.core.notBuiltNotice':
+    'The core is not ready. Select a version or branch to retry the build.',
   'versions.core.empty.description':
     'This source has not synchronised any commit yet. Confirm the directory is an accessible Git repository, then read it again.',
   'versions.core.commit': 'Commit',

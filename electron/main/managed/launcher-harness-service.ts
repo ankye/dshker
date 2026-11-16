@@ -36,10 +36,11 @@ import {
 } from './launcher-harness-views'
 import { LauncherOperationReporter } from './launcher-operation-reporter'
 import {
+  launcherVersionDirectory,
   materializeLauncherVersion,
-  pruneInactiveVersions,
   readCurrentVersionPointer,
-  versionDirectory
+  assertLauncherVersionCheckout,
+  type LauncherVersionPointer
 } from './launcher-version-store'
 import { terminateManagedProcessTree } from './process-tree'
 import { runText } from './process-utils'
@@ -50,6 +51,14 @@ import { assertProfileCompatibility } from './profile-compatibility'
 
 /** A plugin command may resolve locally, but must never leave the UI busy indefinitely. */
 const PLUGIN_COMMAND_TIMEOUT_MILLISECONDS = 120_000
+const ORIGIN_MASTER = 'refs/remotes/origin/master'
+const ALL_ORIGIN_BRANCHES = '+refs/heads/*:refs/remotes/origin/*'
+const ORIGIN_MASTER_REFSPEC = `+refs/heads/master:${ORIGIN_MASTER}`
+
+interface ActiveLauncherVersion {
+  readonly pointer: LauncherVersionPointer
+  readonly directory: string
+}
 
 /**
  * The one DSH Web subject this service owns.
@@ -84,25 +93,18 @@ export {
 
 /** Inputs for the single Launcher-owned Harness checkout. */
 export interface LauncherHarnessServiceOptions {
-  /** Main Git repository: history, refs, and fetch target; never built in place. */
+  /** Main Git repository and checkout for new installations. */
   readonly harnessDirectory: string
-  /** Per-version worktrees: one directory per exact commit, built in isolation. */
+  /** Contains the active checkout for installations upgraded from per-version worktrees. */
   readonly versionsDirectory: string
-  /** Atomically-flipped pointer naming the active version's commit. */
+  /** Atomic record of the checkout anchor and its preparation state. */
   readonly currentVersionPointerPath: string
   /** Launcher-owned root for cloned and copied plugin sources. */
   readonly pluginSourcesDirectory: string
   readonly dshHomeDirectory: string
   /** Launcher-owned preferences outside the checkout, retained across revision switches. */
   readonly launchPreferencesPath: string
-  /**
-   * File receiving the full stdout and stderr of the launched DSH Web process.
-   *
-   * The in-memory console keeps only the newest 1000 fragments, so a failure
-   * that scrolls past that cap survives only here. It sits beside the launch
-   * preferences, outside the checkout, so switching revisions never removes the
-   * evidence of the launch that just failed.
-   */
+  /** Durable DSH Web log outside the checkout. */
   readonly launchLogPath: string
   /** Launcher-owned DSH overlay enabling detailed Cordis startup diagnostics for this child only. */
   readonly diagnosticsPatchPath: string
@@ -119,13 +121,7 @@ export interface LauncherHarnessServiceOptions {
   }>
   /** Resolves the child-only PATH lazily when a DSH Web launch is requested. */
   readonly resolveDshCommandSearchPath: () => Promise<string>
-  /**
-   * The core's DSH Web child, which now owns the process, the port and the log.
-   *
-   * A shell without a core has no runtime at all: the service refuses with
-   * `managed.core_unavailable` rather than spawning its own second copy, which
-   * is what keeps exactly one writer for this process.
-   */
+  /** Authoritative owner of the DSH Web child. */
   readonly runtime?: () => CoreHarnessRuntimePort | undefined
 }
 
@@ -227,18 +223,18 @@ export class LauncherHarnessService {
   /** Returns only facts read from the Launcher checkout and the native DSH web profile. */
   async getState(): Promise<LauncherHarnessState> {
     await this.#loadPort()
-    if (this.#bootstrap !== undefined) {
-      const preparing = this.#bootstrap === 'preparing'
+    if (this.#bootstrap === 'preparing') {
       return {
         ...(await this.#stateTail()),
-        kind: preparing ? 'preparing' : 'invalid',
-        message: preparing
-          ? 'The bundled DSH is being prepared.'
-          : (this.#bootstrap as { readonly message: string }).message
+        kind: 'preparing',
+        message: 'The bundled DSH is being prepared.'
       }
     }
     const active = await this.#activeVersion()
     if (active === undefined) {
+      if (this.#bootstrap?.kind === 'failed') {
+        return { ...(await this.#stateTail()), kind: 'invalid', message: this.#bootstrap.message }
+      }
       // No active version yet: distinguish a repository that was never created
       // (fresh install before the seed) from one awaiting its first version.
       let repositoryExists = false
@@ -262,15 +258,19 @@ export class LauncherHarnessService {
             message: 'The Launcher Harness directory has not been initialized.'
           }
     }
-    const readiness = await readHarnessReadiness(active.directory)
-    if (readiness.kind !== 'ready') {
+    try {
+      await this.#assertVersionReady(active)
+    } catch (error) {
+      if (!(error instanceof ManagedHarnessRuntimeError)) throw error
       return {
         ...(await this.#stateTail()),
-        ...readiness
+        kind: 'invalid',
+        harnessDirectory: active.directory,
+        currentBranch: active.pointer.status === 'legacy' ? null : active.pointer.branch,
+        revision: active.pointer.commit,
+        message: error.message
       }
     }
-    // Version history comes from the main repository; the active worktree names
-    // the revision the pointer selected, which is what the UI marks as current.
     const [metadata, plugins] = await Promise.all([
       tryReadLauncherCheckoutMetadata(this.#options.gitExecutable, this.#options.harnessDirectory),
       readProfilePluginViews(
@@ -283,9 +283,9 @@ export class LauncherHarnessService {
       kind: 'ready',
       harnessDirectory: active.directory,
       remoteUrl: metadata.remoteUrl ?? '',
-      currentBranch: metadata.currentBranch ?? 'master',
+      currentBranch: active.pointer.status === 'legacy' ? null : active.pointer.branch,
       branches: metadata.branches,
-      revision: active.commit,
+      revision: active.pointer.commit,
       launch: this.#launch,
       port: this.#port,
       commits: metadata.commits,
@@ -306,7 +306,6 @@ export class LauncherHarnessService {
       launch: this.#launch,
       port: this.#port,
       remoteUrl: metadata.remoteUrl,
-      currentBranch: metadata.currentBranch,
       branches: metadata.branches,
       revision: metadata.revision,
       commits: metadata.commits,
@@ -359,7 +358,7 @@ export class LauncherHarnessService {
   async refreshVersions(): Promise<LauncherHarnessState> {
     return this.#operations.reportOperation('Refreshing the DSH version list', async () => {
       await this.#assertSwitchableRepository()
-      await this.#fetchOrigin()
+      await this.#fetchOrigin(ALL_ORIGIN_BRANCHES)
       return this.getState()
     })
   }
@@ -369,30 +368,17 @@ export class LauncherHarnessService {
       'Updating DSH to the newest origin/master commit',
       async () => {
         await this.#assertSwitchableRepository()
-        await this.#fetchOrigin()
-        const commit = (
-          await runText(
-            this.#options.gitExecutable,
-            launcherGitArguments([
-              '-C',
-              this.#options.harnessDirectory,
-              'rev-parse',
-              'origin/master'
-            ])
-          )
-        ).trim()
-        await this.#materializeVersion(commit)
+        await this.#fetchOrigin(ORIGIN_MASTER_REFSPEC)
+        await this.#materializeVersion(
+          await this.#resolveRevision(ORIGIN_MASTER),
+          'master',
+          ORIGIN_MASTER
+        )
         return this.getState()
       }
     )
   }
-  /**
-   * Materializes the main repository's current commit as the first version.
-   *
-   * Migration path for checkouts created before per-version directories: the
-   * existing repository stays the history source and its working tree is left
-   * untouched; the active version simply becomes a worktree of its HEAD.
-   */
+  /** Prepares HEAD in the bundled clone on the first run. Existing installs wait for an explicit switch. */
   async prepareCurrentVersion(): Promise<LauncherHarnessState> {
     return this.#operations.reportOperation(
       'Preparing the active DSH version from the existing repository',
@@ -403,13 +389,7 @@ export class LauncherHarnessService {
         ) {
           return this.getState()
         }
-        const commit = (
-          await runText(
-            this.#options.gitExecutable,
-            launcherGitArguments(['-C', this.#options.harnessDirectory, 'rev-parse', 'HEAD'])
-          )
-        ).trim()
-        await this.#materializeVersion(commit)
+        await this.#materializeVersion(await this.#resolveRevision('HEAD'), null, ORIGIN_MASTER)
         return this.getState()
       },
       { allowWhileAdmissionBlocked: true }
@@ -607,21 +587,22 @@ export class LauncherHarnessService {
         )
       }
       await this.#assertSwitchableRepository()
-      await this.#materializeVersion(commit)
+      await this.#materializeVersion(commit, null, ORIGIN_MASTER)
       return this.getState()
     })
   }
-  /**
-   * Builds one exact commit in its own directory and only then flips the
-   * active-version pointer; the orchestration lives in the version store.
-   */
-  async #materializeVersion(commit: string): Promise<void> {
+  /** Builds the selected commit in the existing checkout. */
+  async #materializeVersion(
+    commit: string,
+    branch: string | null,
+    reference: string
+  ): Promise<void> {
     await materializeLauncherVersion(
       this.#options.gitExecutable,
       this.#options.harnessDirectory,
       this.#options.versionsDirectory,
       this.#options.currentVersionPointerPath,
-      commit,
+      { commit, branch, reference },
       {
         loggedStep: (description, step) => this.#operations.loggedStep(description, step),
         install: (directory) =>
@@ -631,25 +612,26 @@ export class LauncherHarnessService {
           this.#runPluginCommand(launcherProfilePluginArguments('update'), directory),
         validate: (directory) =>
           assertProfileCompatibility(directory, this.#options.dshHomeDirectory),
-        event: (message) => this.recordOperationActivity(message)
+        event: (message) => this.#operations.event(message)
       }
     )
-    // Keep the operation active until cleanup completes so closing the window
-    // cannot interrupt work owned by this version switch.
-    await pruneInactiveVersions(
-      this.#options.gitExecutable,
-      this.#options.harnessDirectory,
-      this.#options.versionsDirectory,
-      commit,
-      (message) => this.recordOperationActivity(message)
-    ).catch((error: unknown) => {
-      this.recordOperationActivity(
-        `Version cleanup could not start: ${error instanceof Error ? error.message : 'unknown error'}`
+  }
+  async #resolveRevision(reference: string): Promise<string> {
+    return (
+      await runText(
+        this.#options.gitExecutable,
+        launcherGitArguments([
+          '-C',
+          this.#options.harnessDirectory,
+          'rev-parse',
+          '--verify',
+          `${reference}^{commit}`
+        ])
       )
-    })
+    ).trim()
   }
   /** Fetches origin refs while streaming git's own progress into the console. */
-  async #fetchOrigin(): Promise<void> {
+  async #fetchOrigin(refspec: string): Promise<void> {
     await this.#operations.loggedStep(
       'Fetching DSH updates from origin (git fetch --prune --tags origin)',
       () =>
@@ -664,7 +646,8 @@ export class LauncherHarnessService {
             '--progress',
             '--prune',
             '--tags',
-            'origin'
+            'origin',
+            refspec
           ]),
           { onOutput: (stream, text) => this.#appendProcessOutput(stream, text) }
         )
@@ -681,7 +664,7 @@ export class LauncherHarnessService {
     }> = {}
   ): Promise<void> {
     const { workingDirectory, ...childExecution } = execution
-    const directory = workingDirectory ?? (await this.#requireActiveDirectory())
+    const directory = workingDirectory ?? (await this.#requireActiveVersion()).directory
     const launch = resolvePnpmCommand(
       this.#options.pnpmExecutable,
       this.#options.pnpmLauncher,
@@ -704,7 +687,6 @@ export class LauncherHarnessService {
         )
       }
       await this.#assertSwitchableRepository()
-      await this.#fetchOrigin()
       const branches = await readLauncherBranches(
         this.#options.gitExecutable,
         this.#options.harnessDirectory
@@ -715,30 +697,19 @@ export class LauncherHarnessService {
           'The selected DSH branch is unavailable.'
         )
       }
-      const commit = (
-        await runText(
-          this.#options.gitExecutable,
-          launcherGitArguments([
-            '-C',
-            this.#options.harnessDirectory,
-            'rev-parse',
-            `origin/${branch}`
-          ])
-        )
-      ).trim()
-      await this.#materializeVersion(commit)
+      const reference = `refs/remotes/origin/${branch}`
+      await this.#materializeVersion(await this.#resolveRevision(reference), branch, reference)
       return this.getState()
     })
   }
-  /**
-   * Starts the core's DSH Web child from the bundled Harness checkout.
-   *
-   * The command, the port preflight, the process tree and the log all belong to
-   * the core now. This method keeps what only the shell can do: check that the
-   * active version is usable, hand the core the packaged pnpm facts and the
-   * verbose overlay, and render the record the core answers with.
-   */
+  /** Verifies the active checkout and starts DSH Web through the core. */
   async start(): Promise<LauncherHarnessState> {
+    if (this.hasActiveOperation()) {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.operation_in_progress',
+        'Another DSH operation is already in progress.'
+      )
+    }
     // The slot is claimed before the first await: readiness checks are async, so
     // two quick activations would both pass a check placed after them and ask the
     // core for two children.
@@ -758,11 +729,8 @@ export class LauncherHarnessService {
     try {
       await this.#loadPort()
       const active = await this.#requireActiveVersion()
+      await this.#assertVersionReady(active)
       await assertProfileCompatibility(active.directory, this.#options.dshHomeDirectory)
-      const readiness = await readHarnessReadiness(active.directory)
-      if (readiness.kind !== 'ready') {
-        throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)
-      }
       const commandSearchPath = await this.#options.resolveDshCommandSearchPath()
       request = {
         launchId: randomUUID(),
@@ -936,14 +904,21 @@ export class LauncherHarnessService {
       // Shutdown must not fail on a core that is already gone.
     }
   }
-  /** The active version's commit and directory, or undefined before the first switch. */
-  async #activeVersion(): Promise<Readonly<{ commit: string; directory: string }> | undefined> {
-    const commit = await readCurrentVersionPointer(this.#options.currentVersionPointerPath)
-    if (commit === undefined) return undefined
-    return { commit, directory: versionDirectory(this.#options.versionsDirectory, commit) }
+  /** Resolves the recorded checkout anchor independently of the selected commit. */
+  async #activeVersion(): Promise<ActiveLauncherVersion | undefined> {
+    const pointer = await readCurrentVersionPointer(this.#options.currentVersionPointerPath)
+    if (pointer === undefined) return undefined
+    return {
+      pointer,
+      directory: launcherVersionDirectory(
+        this.#options.harnessDirectory,
+        this.#options.versionsDirectory,
+        pointer
+      )
+    }
   }
   /** The active version's directory; a missing pointer is a typed failure. */
-  async #requireActiveVersion(): Promise<Readonly<{ commit: string; directory: string }>> {
+  async #requireActiveVersion(): Promise<ActiveLauncherVersion> {
     const active = await this.#activeVersion()
     if (active === undefined) {
       throw new ManagedHarnessRuntimeError(
@@ -954,21 +929,9 @@ export class LauncherHarnessService {
     return active
   }
 
-  async #requireActiveDirectory(): Promise<string> {
-    return (await this.#requireActiveVersion()).directory
-  }
-  /**
-   * Version operations need the main Git repository and a stopped child — the
-   * built artifact belongs to per-version directories, not to the main
-   * repository, so an unbuilt active version can be repaired by switching.
-   */
+  /** Version operations require the repository and a stopped DSH Web child. */
   async #assertSwitchableRepository(): Promise<void> {
-    if (this.#launch.kind === 'running' || this.#launch.kind === 'starting') {
-      throw new ManagedHarnessRuntimeError(
-        'runtime.busy_running',
-        'Stop DSH Web before changing its version or plugins.'
-      )
-    }
+    await this.#assertDshStopped()
     try {
       await assertLauncherGitRepository(this.#options.harnessDirectory)
     } catch (error) {
@@ -978,10 +941,40 @@ export class LauncherHarnessService {
       )
     }
   }
+  async #assertDshStopped(): Promise<void> {
+    if (this.#launch.kind !== 'running' && this.#launch.kind !== 'starting') {
+      // A headless core can retain this subject after a desktop restart.
+      const view = await (await this.#runtime()).status(LAUNCHER_HARNESS_SUBJECT)
+      if (view?.state === 'running' || view?.state === 'starting') {
+        this.#applyLaunchView(view)
+        this.#feed.start()
+      }
+    }
+    if (this.#launch.kind === 'running' || this.#launch.kind === 'starting') {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.busy_running',
+        'Stop DSH Web before changing its version or plugins.'
+      )
+    }
+  }
   /** Plugin operations run the DSH CLI, which needs the built active version. */
   async #assertReadyForVersionOperation(): Promise<void> {
     await this.#assertSwitchableRepository()
-    const active = await this.#requireActiveVersion()
+    await this.#assertVersionReady(await this.#requireActiveVersion())
+  }
+  async #assertVersionReady(active: ActiveLauncherVersion): Promise<void> {
+    if (active.pointer.status === 'preparing') {
+      throw new ManagedHarnessRuntimeError(
+        'runtime.worktree_invalid',
+        'The selected DSH version did not finish preparing. Select it again to retry.'
+      )
+    }
+    await assertLauncherVersionCheckout(
+      this.#options.gitExecutable,
+      this.#options.harnessDirectory,
+      active.directory,
+      active.pointer.commit
+    )
     const readiness = await readHarnessReadiness(active.directory)
     if (readiness.kind !== 'ready') {
       throw new ManagedHarnessRuntimeError('runtime.worktree_invalid', readiness.message)

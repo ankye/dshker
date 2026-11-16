@@ -10,14 +10,14 @@ const pluginCatalog = usePluginCatalog()
 
 <template>
   <div
-    v-if="versionView.activeVersionTab.value === 'core' && harness.state.value?.kind === 'ready'"
+    v-if="versionView.activeVersionTab.value === 'core' && harness.hasVersionRepository.value"
     class="version-toolbar-actions"
   >
     <div class="version-toolbar-group">
       <button
         class="version-action-button version-action-button--icon"
         type="button"
-        :disabled="harness.loading.value"
+        :disabled="!harness.canChangeVersion.value"
         data-testid="refresh-core-versions"
         @click="harness.refreshVersions"
       >
@@ -32,7 +32,7 @@ const pluginCatalog = usePluginCatalog()
       <button
         class="version-action-button version-action-button--primary"
         type="button"
-        :disabled="harness.loading.value || harness.state.value.launch.kind === 'running'"
+        :disabled="!harness.canChangeVersion.value"
         @click="harness.update"
       >
         {{ t('versions.core.update') }}

@@ -28,16 +28,11 @@ Launcher SHALL 仅在受管版本同时满足以下条件时报告就绪：`pack
 - **WHEN** 内置入口不引用任何 `@deepseek-ai/*` 包
 - **THEN** Launcher 只要求 `tsx` 可解析，并以入口实际引用的包集合为准，不额外要求无关包存在
 
-### Requirement: Incomplete versions keep the existing recovery paths
+### Requirement: The Launcher Core can explicitly retry an incomplete version in place
 
-判定为不完整 SHALL 沿用既有处理：非活动版本在下次准备时被移除并重建；活动版本 SHALL NOT 被原地删除，Launcher SHALL 明确提示先切换到其他版本。SHALL NOT 为活动版本新增静默自动重建。
+Launcher Core 的版本判定为不完整时，SHALL 阻止启动与插件操作并保留版本选择。用户显式选择版本后，Launcher SHALL 在现有工作目录完成依赖安装、构建和就绪校验。SHALL NOT 删除工作目录或自动重建。
 
-#### Scenario: Switching away from an incomplete active version
+#### Scenario: Retrying the incomplete version
 
-- **WHEN** 当前活动版本不完整，用户选择另一个版本
-- **THEN** Launcher 准备并切换到新版本，随后清理旧版本目录；切回时重新准备
-
-#### Scenario: Preparing the incomplete active version again
-
-- **WHEN** 用户对同一活动版本再次触发准备
-- **THEN** Launcher 拒绝原地删除并返回明确错误，要求先切换版本
+- **WHEN** 用户再次选择依赖不完整或准备中断的版本
+- **THEN** Launcher 在同一目录重试准备，校验成功后方可启动

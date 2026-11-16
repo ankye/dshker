@@ -19,16 +19,16 @@ export const zhCNErrors = {
   'toast.error.runtimeOwnerConfigurationInvalid': '运行所有者配置无效',
   'toast.error.runtimeOwnerShutdownFailed': '尚未确认运行所有者已停止',
   'toast.error.gitOperationFailed': 'Git 操作失败',
+  'toast.error.gitRepositoryDirty': '内核目录有本地改动',
   'toast.error.pluginCatalogReadFailed': '插件目录读取失败',
   'toast.error.pluginCatalogRefreshFailed': '插件目录刷新失败',
   'toast.error.detail.bridge': '桌面能力未就绪，读取和注册目录暂不可用。请重启 Launcher 后重试。',
-  'toast.error.detail.harnessLaunchFailed':
-    '内核未启动。请在“控制台”查看输出，确认版本可用后重试。',
+  'toast.error.detail.harnessLaunchFailed': '请在“控制台”查看内核操作失败的原因，处理后重试。',
   'toast.error.detail.harnessBusyRunning':
     '切换内核版本或增删扩展前需要先停止 DSH Web。请在“一键启动”停止后重试。',
   'toast.error.detail.harnessLaunchInProgress': '上一个内核操作尚未结束。请等待其完成后重试。',
   'toast.error.detail.harnessWorktreeInvalid':
-    '`~/.dshlauncher/harness` 尚未就绪或已损坏。请先完成内核安装，再执行该操作。',
+    '请在“控制台”查看当前内核目录的检查结果，处理后重试。',
   'toast.error.detail.harnessInputInvalid': '该选项已不再有效。请刷新列表后重新选择。',
   'toast.error.detail.harnessPluginOperationFailed':
     'DSH 扩展命令执行失败，扩展列表保持原样。请在“控制台”查看输出后重试。',
@@ -49,6 +49,7 @@ export const zhCNErrors = {
   'toast.error.detail.runtimeOwnerShutdownFailed':
     '停止操作未确认完成，DSH 可能仍在运行。请保留当前任务并查看控制台诊断，确认所有者与进程状态后再操作。',
   'toast.error.detail.gitOperationFailed': '仓库未变更。请检查网络与分支权限后重试。',
+  'toast.error.detail.gitRepositoryDirty': '请先提交本地改动或将它们保存到内核目录之外，再重试。',
   'toast.error.detail.pluginCatalogReadFailed':
     '当前插件列表已保留。请在“控制台”查看 Git 原因；如果目录损坏，请重启 Launcher 后重试。',
   'toast.error.detail.pluginCatalogRefreshFailed':
@@ -77,18 +78,19 @@ export const enUSErrors = {
   'toast.error.runtimeOwnerConfigurationInvalid': 'The runtime owner configuration is invalid',
   'toast.error.runtimeOwnerShutdownFailed': 'Runtime owner shutdown is not confirmed',
   'toast.error.gitOperationFailed': 'The Git operation failed.',
+  'toast.error.gitRepositoryDirty': 'The core checkout has local changes',
   'toast.error.pluginCatalogReadFailed': 'The plugin catalog could not be read.',
   'toast.error.pluginCatalogRefreshFailed': 'The plugin catalog could not be refreshed.',
   'toast.error.detail.bridge':
     'Desktop capabilities are not ready, so reading and registering directories is unavailable. Restart the Launcher and retry.',
   'toast.error.detail.harnessLaunchFailed':
-    'The core did not start. Check the Console output, confirm the version is usable, and retry.',
+    'Check the core operation’s failure in Console and resolve it before retrying.',
   'toast.error.detail.harnessBusyRunning':
     'Stop DSH Web before switching the core version or changing extensions. Stop it in Launch, then retry.',
   'toast.error.detail.harnessLaunchInProgress':
     'The previous core operation has not finished. Wait for it to complete and retry.',
   'toast.error.detail.harnessWorktreeInvalid':
-    '`~/.dshlauncher/harness` is not ready or is damaged. Finish installing the core, then retry.',
+    'Check the current core directory’s validation result in Console, then resolve the issue and retry.',
   'toast.error.detail.harnessInputInvalid':
     'That selection is no longer valid. Refresh the list and choose again.',
   'toast.error.detail.harnessPluginOperationFailed':
@@ -111,6 +113,8 @@ export const enUSErrors = {
     'The stop operation was not confirmed. DSH may still be running. Preserve current tasks and inspect Console diagnostics; verify owner and process status before taking action.',
   'toast.error.detail.gitOperationFailed':
     'The repository is unchanged. Check network access and branch permissions, then retry.',
+  'toast.error.detail.gitRepositoryDirty':
+    'Commit your local changes or save them outside the core directory, then retry.',
   'toast.error.detail.pluginCatalogReadFailed':
     'The current plugin list was kept. Check the Git reason in Console; if the checkout is damaged, restart the Launcher and retry.',
   'toast.error.detail.pluginCatalogRefreshFailed':

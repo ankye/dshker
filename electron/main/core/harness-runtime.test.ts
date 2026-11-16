@@ -93,6 +93,13 @@ describe('core harness runtime client', () => {
     ])
   })
 
+  it('rejects ambiguous runtime status instead of reporting the subject as absent', async () => {
+    const rpc = fakeRpc(() => ({ present: true }))
+    await expect(new CoreHarnessRuntime(rpc).status('launcher-harness')).rejects.toMatchObject({
+      code: 'p2p.invalid_payload'
+    })
+  })
+
   it('carries the console cursor and the entries the core retained', async () => {
     const rpc = fakeRpc(() => ({
       entries: [{ seq: 7, stream: 'command', text: '$ dsh web\n', occurredAt: 1 }],
@@ -133,7 +140,7 @@ describe('core harness runtime client', () => {
     ).rejects.toMatchObject({ code: 'p2p.invalid_payload' })
     await expect(
       new CoreHarnessRuntime(fakeRpc(() => null)).status('launcher-harness')
-    ).resolves.toBeUndefined()
+    ).rejects.toMatchObject({ code: 'p2p.invalid_payload' })
   })
 
   it('carries the core refusal through unchanged', async () => {

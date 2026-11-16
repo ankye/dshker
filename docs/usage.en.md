@@ -17,11 +17,11 @@ DSHKer Launcher does not take ownership of `$DSH_HOME` or `~/.dsh`. Do not move 
 ## Change or update the core
 
 1. Open **Version management → Core**.
-2. Choose **Refresh list** to fetch the configured HTTPS origin and rebuild the displayed commit and tag list. Refresh does not switch versions or restart DSH.
+2. Choose **Refresh list** to fetch branches and tags from the configured HTTPS origin and update the displayed version choices.
 3. Stop DSH Web before selecting **Update**, a branch, or a commit row.
-4. Wait for dependency installation and the DSH build to finish. The selected version changes only after that preparation succeeds.
+4. Wait for dependency installation and the DSH build to finish. Launch becomes available once the selected version is ready. If preparation fails, select the version again to retry.
 
-The selected core lives at `~/.dshlauncher/harness`. It is Git-managed by Launcher; do not edit, clean, reset, or switch it from another Git client while it is active.
+Launcher checks out the exact commit of the fetched branch, release, or version row in the existing directory. Fresh installations use `~/.dshlauncher/harness`. Upgraded installations keep the directory that was active before the switch. The switch reuses local dependencies and may download packages missing from the selected lockfile. Commit or move tracked changes and any local files that conflict with the selected commit before switching.
 
 ## Manage extensions
 

@@ -177,8 +177,12 @@ export class CoreHarnessRuntime implements CoreHarnessRuntimePort {
     signal?: AbortSignal
   ): Promise<CoreHarnessLaunchView | undefined> {
     const answer = await this.#call('runtime.status', { subjectId }, signal)
-    if (!isRecord(answer) || answer.present !== true || !('launch' in answer)) return undefined
-    return launchViewOf(answer)
+    if (isRecord(answer) && answer.present === false && !('launch' in answer)) return undefined
+    if (!isRecord(answer) || answer.present !== true)
+      throw new PeerHelperError('p2p.invalid_payload')
+    const view = launchViewOf(answer)
+    if (view.subjectId !== subjectId) throw new PeerHelperError('p2p.invalid_payload')
+    return view
   }
 
   async console(

@@ -179,14 +179,16 @@ dshkerd autostart enable --state ~/.dshkerd
 
 首次运行会自动建立以下 Launcher 自己管理的目录：
 
-| 目录                      | 用途                                   |
-| ------------------------- | -------------------------------------- |
-| `~/.dshlauncher/harness`  | 选中的 DeepSeek Harness 内核与构建产物 |
-| `~/.dshlauncher/plugins`  | 精选插件目录源代码                     |
-| `~/.dshlauncher/presets`  | Launcher 下载的预设源代码              |
-| `~/.dshlauncher/settings` | Launcher 偏好与记录                    |
+| 目录                      | 用途                                        |
+| ------------------------- | ------------------------------------------- |
+| `~/.dshlauncher/harness`  | DeepSeek Harness Git 仓库及新安装的工作目录 |
+| `~/.dshlauncher/plugins`  | 精选插件目录源代码                          |
+| `~/.dshlauncher/presets`  | Launcher 下载的预设源代码                   |
+| `~/.dshlauncher/settings` | Launcher 偏好与记录                         |
 
 若 Harness 目录为空，应用会在后台解压内置 DSH、安装锁定依赖并构建。准备完成前“一键启动”保持不可用，但主界面不会被阻塞。
+
+版本管理在当前工作目录切换内核并复用本地依赖。旧版升级后继续用当前活动的 `versions/<原始提交>` 目录。
 
 需要时可按侧边栏顺序使用：
 

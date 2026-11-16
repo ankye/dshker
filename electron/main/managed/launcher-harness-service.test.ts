@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process'
-import { access, mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { promisify } from 'node:util'
@@ -23,16 +23,13 @@ import {
   LauncherHarnessService
 } from './launcher-harness-service'
 import { LAUNCH_PREFERENCES_FORMAT, parseLaunchPreferencesPort } from './launch-preferences'
-import {
-  cleanLauncherHarnessCheckout,
-  launcherProfilePluginArguments
-} from './launcher-harness-commands'
+import { launcherProfilePluginArguments } from './launcher-harness-commands'
 import { writeCurrentVersionPointer } from './launcher-version-store'
 
 const execFileAsync = promisify(execFile)
 
-async function hostGit(cwd: string, arguments_: readonly string[]): Promise<void> {
-  await execFileAsync('git', [...arguments_], { cwd, encoding: 'utf8' })
+async function hostGit(cwd: string, arguments_: readonly string[]): Promise<string> {
+  return (await execFileAsync('git', [...arguments_], { cwd, encoding: 'utf8' })).stdout.trim()
 }
 
 describe('formatLauncherLifecycleEvent', () => {
@@ -83,10 +80,10 @@ describe('LauncherHarnessService DSH PATH handoff', () => {
   it('passes the lazily resolved PATH into the existing core launch request', async () => {
     const temporaryRoot = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-command-path-'))
     const root = await realpath(temporaryRoot)
-    const commit = 'a'.repeat(40)
-    const versionDirectory = nodePath.join(root, 'versions', commit)
+    const versionDirectory = nodePath.join(root, 'harness')
     const profileDirectory = nodePath.join(root, 'dsh-home', 'profiles', 'web')
     const requests: CoreHarnessLaunchRequest[] = []
+    let childRunning = false
     const launchView = (state: CoreHarnessLaunchView['state']): CoreHarnessLaunchView => ({
       launchId: 'launch-path-test',
       subjectId: 'launcher-harness',
@@ -104,10 +101,14 @@ describe('LauncherHarnessService DSH PATH handoff', () => {
     const runtime: CoreHarnessRuntimePort = {
       start: async (request) => {
         requests.push(request)
+        childRunning = true
         return launchView('running')
       },
-      stop: async () => launchView('stopped'),
-      status: async () => launchView('running'),
+      stop: async () => {
+        childRunning = false
+        return launchView('stopped')
+      },
+      status: async () => (childRunning ? launchView('running') : undefined),
       console: async (cursor) => ({ entries: [], cursor }),
       portGet: async () => ({ mode: 'auto' }),
       portSet: async (_filePath, port) => port
@@ -119,7 +120,15 @@ describe('LauncherHarnessService DSH PATH handoff', () => {
         recursive: true
       })
       await mkdir(profileDirectory, { recursive: true })
-      await writeFile(nodePath.join(versionDirectory, '.git'), 'gitdir: test\n', 'utf8')
+      await hostGit(versionDirectory, ['init', '--initial-branch=master'])
+      await hostGit(versionDirectory, ['config', 'user.email', 'launcher-test@example.test'])
+      await hostGit(versionDirectory, ['config', 'user.name', 'DSHKer Launcher Test'])
+      await hostGit(versionDirectory, [
+        'remote',
+        'add',
+        'origin',
+        'https://example.invalid/harness.git'
+      ])
       await writeFile(
         nodePath.join(versionDirectory, 'package.json'),
         JSON.stringify({ version: '1.0.0' }),
@@ -142,11 +151,18 @@ describe('LauncherHarnessService DSH PATH handoff', () => {
         JSON.stringify({ dependencies: {}, dsh: { profile: { bundles: [] } } }),
         'utf8'
       )
-      await writeCurrentVersionPointer(nodePath.join(root, 'harness-current.json'), commit)
+      await hostGit(versionDirectory, ['add', 'package.json'])
+      await hostGit(versionDirectory, ['commit', '-m', 'initial'])
+      const commit = await hostGit(versionDirectory, ['rev-parse', 'HEAD'])
+      await hostGit(versionDirectory, ['update-ref', 'refs/remotes/origin/master', commit])
+      await hostGit(versionDirectory, ['switch', '--detach', commit])
+      const pointerPath = nodePath.join(root, 'harness-current.json')
+      const activeVersion = { checkout: 'repository', commit, branch: 'master' } as const
+      await writeCurrentVersionPointer(pointerPath, { ...activeVersion, status: 'preparing' })
       const service = new LauncherHarnessService({
-        harnessDirectory: nodePath.join(root, 'harness'),
+        harnessDirectory: versionDirectory,
         versionsDirectory: nodePath.join(root, 'versions'),
-        currentVersionPointerPath: nodePath.join(root, 'harness-current.json'),
+        currentVersionPointerPath: pointerPath,
         pluginSourcesDirectory: nodePath.join(root, 'plugins'),
         dshHomeDirectory: nodePath.join(root, 'dsh-home'),
         launchPreferencesPath: nodePath.join(root, 'launch-preferences.json'),
@@ -163,41 +179,34 @@ describe('LauncherHarnessService DSH PATH handoff', () => {
         runtime: () => runtime
       })
 
-      await service.start()
+      await expect(service.start()).rejects.toMatchObject({ code: 'runtime.worktree_invalid' })
+      await expect(service.getState()).resolves.toMatchObject({
+        kind: 'invalid',
+        revision: commit,
+        currentBranch: 'master'
+      })
+      expect(requests).toHaveLength(0)
 
+      await writeCurrentVersionPointer(pointerPath, { ...activeVersion, status: 'ready' })
+      service.setBootstrapState('preparing')
+      await expect(service.start()).rejects.toMatchObject({ code: 'runtime.operation_in_progress' })
+      expect(requests).toHaveLength(0)
+      service.setBootstrapState(undefined)
+
+      childRunning = true
+      await expect(service.switchVersion(commit)).rejects.toMatchObject({
+        code: 'runtime.busy_running'
+      })
+      expect(service.getRuntimeState()).toMatchObject({ kind: 'running' })
+      await service.stop()
+
+      await expect(service.start()).resolves.toMatchObject({ kind: 'ready', revision: commit })
       expect(requests).toHaveLength(1)
+      expect(requests[0]?.directory).toBe(versionDirectory)
       expect(requests[0]?.pnpmCommandSearchPath).toBe('/runtime/bin:/usr/bin:/opt/cocos/bin')
       await service.stop()
     } finally {
       await rm(temporaryRoot, { recursive: true, force: true })
-    }
-  })
-})
-
-describe('cleanLauncherHarnessCheckout', () => {
-  it('removes ignored and untracked build residue while preserving tracked source', async () => {
-    const root = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-clean-'))
-    try {
-      await hostGit(root, ['init'])
-      await hostGit(root, ['config', 'user.email', 'launcher-test@example.test'])
-      await hostGit(root, ['config', 'user.name', 'DSHKer Launcher Test'])
-      await writeFile(nodePath.join(root, '.gitignore'), 'node_modules/\n', 'utf8')
-      await writeFile(nodePath.join(root, 'tracked-source.txt'), 'source\n', 'utf8')
-      await hostGit(root, ['add', '.gitignore', 'tracked-source.txt'])
-      await hostGit(root, ['commit', '-m', 'initial'])
-      await mkdir(nodePath.join(root, 'node_modules'))
-      await writeFile(nodePath.join(root, 'node_modules', 'stale.txt'), 'stale\n', 'utf8')
-      await writeFile(nodePath.join(root, 'generated.txt'), 'generated\n', 'utf8')
-
-      await cleanLauncherHarnessCheckout('git', root)
-
-      await expect(access(nodePath.join(root, 'node_modules'))).rejects.toThrow()
-      await expect(access(nodePath.join(root, 'generated.txt'))).rejects.toThrow()
-      await expect(readFile(nodePath.join(root, 'tracked-source.txt'), 'utf8')).resolves.toBe(
-        'source\n'
-      )
-    } finally {
-      await rm(root, { recursive: true, force: true })
     }
   })
 })

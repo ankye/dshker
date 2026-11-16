@@ -569,6 +569,9 @@ async function launcherHarnessResult<T>(operation: () => Promise<T>): Promise<Ap
     if (owner !== undefined) {
       return apiFail(LAUNCHER_HARNESS_ERROR_CODES[owner.code], owner.message)
     }
+    if (error instanceof GitRuntimeError && error.code === 'git.repository_dirty') {
+      return apiFail('managed.git_repository_dirty', error.message)
+    }
     if (error instanceof ManagedHarnessRuntimeError) {
       return apiFail(
         LAUNCHER_HARNESS_ERROR_CODES[error.code] ?? 'managed.harness_launch_failed',

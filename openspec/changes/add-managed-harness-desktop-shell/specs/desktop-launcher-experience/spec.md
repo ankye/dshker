@@ -354,17 +354,22 @@ The Run page SHALL expose a copyable rendering observation containing host devic
 - **AND** an unavailable field is represented as an explicit unavailable state
 - **AND** no URL, cookie, storage, request-header, credential, or token value is read or copied
 
-### Requirement: Version switching builds each revision in isolation
+### Requirement: Core version switching reuses the current checkout
 
-The Launcher SHALL materialise each version in its own directory (a `git worktree` of the main repository) rather than swapping the single checkout in place. The main repository SHALL retain its history and refs and SHALL never be built or cleaned. The active-version pointer SHALL be written atomically through a same-directory temporary rename only after the new version's install, build, and profile reconciliation succeed, so a failed or interrupted switch never leaves the one usable version in a broken state. Deletion of replaced version directories SHALL run off the critical path after the pointer flip and SHALL be retried on the next switch when interrupted. The version list SHALL render from the main repository's Git history even when the active version is not built, so the user can recover by switching again.
+The Launcher Core experience SHALL check out selected revisions in its existing directory and reuse its local dependencies. New installations SHALL use the bundled repository. An installation upgraded from per-version directories SHALL reuse its active linked worktree at its existing path. The Launcher SHALL preserve local branches, reject tracked changes, and refuse to overwrite colliding untracked or ignored files. It SHALL verify that the core reports no live child, hold launch and version mutation mutually exclusive, and write an atomic preparation record before mutating the checkout. It SHALL mark the exact HEAD ready only after the locked install, build, profile reconciliation, and readiness and compatibility checks succeed.
 
 #### Scenario: User switches to a new commit
 
 - **WHEN** the user selects a commit, branch, or the latest origin/master update
-- **THEN** the Launcher asserts the commit is on origin/master, prepares a fresh worktree in the versions directory, installs dependencies, builds, and reconciles the web profile — all in the new directory
-- **AND** it writes the pointer only after every step succeeds
-- **AND** it replaces the previous version directory in the background
-- **AND** a previously prepared commit is reused instantly without rebuilding
+- **THEN** the Launcher verifies the commit against origin/master for listed commit and tag selections or the target fetched branch tip for branch selections
+- **AND** it checks out that commit, installs dependencies, builds, and reconciles the web profile in the same directory
+- **AND** it marks that commit launchable only after every step succeeds
+
+#### Scenario: Preparation fails or is interrupted
+
+- **WHEN** preparation stops before the verified version is activated
+- **THEN** the version list remains available while launch and plugin mutations are blocked
+- **AND** the user can retry the same revision in the same directory
 
 #### Scenario: User starts the controller process
 

@@ -276,14 +276,16 @@ When an update is available, **Download and open installer** shows progress and 
 
 The first packaged launch creates these Launcher-owned directories automatically:
 
-| Directory                 | Purpose                                             |
-| ------------------------- | --------------------------------------------------- |
-| `~/.dshlauncher/harness`  | Selected DeepSeek Harness checkout and build output |
-| `~/.dshlauncher/plugins`  | Curated plugin catalog source                       |
-| `~/.dshlauncher/presets`  | Launcher-downloaded preset sources                  |
-| `~/.dshlauncher/settings` | Launcher preferences and records                    |
+| Directory                 | Purpose                                                            |
+| ------------------------- | ------------------------------------------------------------------ |
+| `~/.dshlauncher/harness`  | DeepSeek Harness Git repository and checkout for new installations |
+| `~/.dshlauncher/plugins`  | Curated plugin catalog source                                      |
+| `~/.dshlauncher/presets`  | Launcher-downloaded preset sources                                 |
+| `~/.dshlauncher/settings` | Launcher preferences and records                                   |
 
 If the Harness directory is empty, the application unpacks the bundled DSH source there in the background, installs its locked dependencies, and builds it. The Launch button stays disabled until that work completes; the app window remains usable.
+
+Version management switches the existing checkout in place and reuses its local dependencies. Upgraded installations keep their active `versions/<original-commit>` directory as the working checkout.
 
 Then use the sidebar in this order when needed:
 

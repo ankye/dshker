@@ -1,12 +1,9 @@
-import { runText } from './process-utils'
 import { ManagedHarnessRuntimeError } from './runtime-errors'
 
 /**
  * Platform-safe argument prefix for the Launcher's own Git commands.
  *
- * pnpm's nested node_modules can nest far past Windows' 260-character path
- * limit; without long-path file APIs `git clean` fails mid-deletion and bricks
- * the only checkout. Mirrors the managed-git runner's deterministic prefix.
+ * Enables long paths in Windows checkouts, like the managed Git runner.
  */
 export function launcherGitArguments(arguments_: readonly string[]): readonly string[] {
   return process.platform === 'win32' ? ['-c', 'core.longpaths=true', ...arguments_] : arguments_
@@ -53,14 +50,6 @@ export function pnpmCommandEnvironment(
   }
   delete environment.ELECTRON_RUN_AS_NODE
   return environment
-}
-
-/** Removes untracked and ignored build residue from a verified Launcher checkout. */
-export async function cleanLauncherHarnessCheckout(
-  gitExecutable: string,
-  harnessDirectory: string
-): Promise<void> {
-  await runText(gitExecutable, launcherGitArguments(['-C', harnessDirectory, 'clean', '-xdf']))
 }
 
 /** Builds the standard DSH forwarder invocation for the native web profile. */

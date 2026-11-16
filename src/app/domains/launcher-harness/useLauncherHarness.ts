@@ -113,6 +113,25 @@ const canStart = computed(
     state.value?.launch.kind !== 'starting' &&
     !loading.value
 )
+const hasVersionRepository = computed(() => {
+  const current = state.value
+  return (
+    current !== undefined &&
+    (current.kind === 'ready' ||
+      current.remoteUrl !== undefined ||
+      current.branches.length > 0 ||
+      current.commits.length > 0 ||
+      current.stableVersions.length > 0)
+  )
+})
+const canChangeVersion = computed(
+  () =>
+    hasVersionRepository.value &&
+    !loading.value &&
+    state.value?.kind !== 'preparing' &&
+    state.value?.launch.kind !== 'running' &&
+    state.value?.launch.kind !== 'starting'
+)
 
 /** Reads one authoritative Launcher state without publishing a user-operation busy state. */
 async function readState(): Promise<void> {
@@ -205,14 +224,14 @@ async function update(): Promise<void> {
 
 /** Switches only to the selected complete Git commit. */
 async function switchVersion(request: SwitchLauncherHarnessVersionRequest): Promise<void> {
-  if (!window.dshLauncher || loading.value) return
+  if (!window.dshLauncher || !canChangeVersion.value) return
   await applyOperation('switch', () => window.dshLauncher!.launcherHarness.switchVersion(request))
 }
 
-/** Fetches and switches to an origin branch selected from the current list. */
-async function switchBranch(request: SwitchLauncherHarnessBranchRequest): Promise<void> {
-  if (!window.dshLauncher || loading.value) return
-  await applyOperation('switch', () => window.dshLauncher!.launcherHarness.switchBranch(request))
+/** Switches to an already fetched origin branch selected from the current list. */
+async function switchBranch(request: SwitchLauncherHarnessBranchRequest): Promise<boolean> {
+  if (!window.dshLauncher || !canChangeVersion.value) return false
+  return applyOperation('switch', () => window.dshLauncher!.launcherHarness.switchBranch(request))
 }
 
 /** Installs one curated plugin source through the standard DSH CLI forwarder. */
@@ -282,9 +301,7 @@ export interface LauncherOperationProgress {
 
 /** A completed step's console record; the format is owned by the main process. */
 const COMPLETED_STEP_PATTERN = /finished in \d+s\./u
-/** The fetch step only update and branch switches run before the six build steps. */
-const FETCH_STEP_PATTERN = /^Fetching DSH updates from origin/u
-/** The switch pipeline's fixed step count; mirrors `#switchCheckout` in main. */
+/** Both commit and branch selection use the six in-place switch steps. */
 const SWITCH_CHECKOUT_STEP_COUNT = 6
 
 /**
@@ -302,14 +319,12 @@ export function computeOperationStepProgress(
 ): LauncherOperationProgress | undefined {
   if (operation !== 'switch' && operation !== 'update' && operation !== 'refresh') return undefined
   let completedSteps = 0
-  let sawFetchStep = false
   for (const entry of entries) {
     if (entry.stream !== 'launcher') continue
-    if (FETCH_STEP_PATTERN.test(entry.text)) sawFetchStep = true
     if (COMPLETED_STEP_PATTERN.test(entry.text)) completedSteps += 1
   }
   const totalSteps =
-    operation === 'refresh' ? 1 : SWITCH_CHECKOUT_STEP_COUNT + (sawFetchStep ? 1 : 0)
+    operation === 'refresh' ? 1 : SWITCH_CHECKOUT_STEP_COUNT + (operation === 'update' ? 1 : 0)
   return {
     stepPosition: Math.min(completedSteps + 1, totalSteps),
     totalSteps,
@@ -322,7 +337,7 @@ async function applyOperation(
   ipcOperation: () => ReturnType<
     NonNullable<typeof window.dshLauncher>['launcherHarness']['update']
   >
-): Promise<void> {
+): Promise<boolean> {
   loading.value = true
   activeOperation.value = operation
   operationStartedAtMs = Date.now()
@@ -335,11 +350,12 @@ async function applyOperation(
       // so the state is re-read before the busy flag clears.
       await readState()
       error.value = result.code
-      return
+      return false
     }
     state.value = result.data
     consoleFeed.value = mergeConsoleEntries(consoleFeed.value, result.data.console)
     error.value = undefined
+    return true
   } finally {
     loading.value = false
     activeOperation.value = undefined
@@ -395,6 +411,8 @@ export function useLauncherHarness() {
     exportLog,
     ready,
     canStart,
+    hasVersionRepository,
+    canChangeVersion,
     refresh,
     start,
     stop,

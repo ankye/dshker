@@ -29,7 +29,7 @@ repositories.
 - [x] 3.2 [Owner: Launcher] Validate explicit Git remote identities and create managed mirrors only under the Harness root. Dependencies: 2.3, 3.1. Evidence: `electron/main/managed/git/remote.test.ts` (12 cases) and `mirror.test.ts` prove rejection of unsupported remotes and zero out-of-root writes.
 - [x] 3.3 [Owner: Launcher] Resolve selected branch, tag, or commit references to exact SHAs and detect rewritten observations. Dependencies: 3.2. Evidence: `electron/main/managed/git/worktree.test.ts` resolves a fetched branch against real Git fixtures; `revision.ts` rejects ambiguous refs.
 - [x] 3.4 [Owner: Launcher] Materialize, verify, retain, and explicitly select detached exact-SHA worktrees. Dependencies: 3.3. Evidence: `electron/main/managed/git/worktree.test.ts` covers clean detached materialization, `git.repository_dirty`, and containment refusal for an escaping installation id.
-- [ ] 3.5 [Owner: Launcher] Prepare exact revision-bound plugin and configuration generations using the selected Node/pnpm tools and declared lockfile. Dependencies: 2.4, 3.1, 3.4. Partially delivered: `launcher-harness-service.ts` runs `git clean -xdf`, `pnpm install --frozen-lockfile`, and `pnpm run build` on version switch; `launcher-harness-service.test.ts` proves ignored and untracked residue is removed while tracked source remains. Remaining: generation identity is not bound to the SHA, and no test proves invalid tool or lockfile state blocks activation.
+- [ ] 3.5 [Owner: Launcher] Prepare exact revision-bound plugin and configuration generations using the selected Node/pnpm tools and declared lockfile. Dependencies: 2.4, 3.1, 3.4. The bundled Core installs locked dependencies and builds in its checkout. Generation identity and invalid tool or lockfile coverage remain open for workspace-managed installations.
 
 ## 4. Runtime supervision and launch
 
@@ -99,3 +99,9 @@ repositories.
 ## 12. Core/profile plugin compatibility
 
 - [x] 12.1 [Owner: Launcher] Refuse a DSH Web launch or version-pointer flip when installed profile plugins declare peer ranges outside the selected core, with an explicit renderer error and no compatibility shim. Evidence: `electron/main/managed/profile-compatibility.test.ts`, `ipc-error-codes.test.ts`, and a clean real profile launch on port `3099` after removing five incompatible plugins from the local profile.
+
+## 13. In-place Launcher Core switching
+
+- [x] 13.1 [Owner: Launcher] Switch a fetched branch, tag, or commit in one checkout and preserve existing linked checkout paths on upgrade. Verify local changes, existing dependencies, branch selection, exact HEAD, and interrupted-build retry in real Git fixtures.
+- [x] 13.2 [Owner: Launcher] Gate launch and plugin operations on the ready version record, expose same-version retry, and document switching in both languages. Verify launch refusal and recovery UI.
+- [ ] 13.3 [Owner: QA] Verify native macOS and Windows switching against real Harness builds and runtime startup, including an upgrade from a prior Windows installation with workspace junctions.

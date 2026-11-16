@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import nodePath from 'node:path'
 import { LauncherHarnessService } from './launcher-harness-service'
@@ -20,7 +20,7 @@ describe('launch log file', () => {
     readonly logPath: string
     readonly cleanup: () => Promise<void>
   }> {
-    const root = await mkdtemp(nodePath.join(tmpdir(), 'dsh-launcher-log-'))
+    const root = await mkdtemp(nodePath.join(await realpath(tmpdir()), 'dsh-launcher-log-'))
     const logPath = nodePath.join(root, 'logs', 'dsh-web.log')
     const service = new LauncherHarnessService({
       harnessDirectory: nodePath.join(root, 'harness'),

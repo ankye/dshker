@@ -1,5 +1,7 @@
 ## Context
 
+后续修订：`add-managed-harness-desktop-shell` 的 Core 原地切换改为在当前目录显式重试。下文的工作树删除与重建描述记录 0.1.100 的交付行为。
+
 `readHarnessReadiness` 是状态页、插件操作与版本准备共用的单一就绪判定。它原本只证明"文件在"：`package.json`、`apps/cli/lib/bin.js`、`.git`。2026-11-15 的 Windows 事故证明这不够：pnpm 的 workspace 链接层被破坏后，所有文件仍在，子进程启动即 `ERR_MODULE_NOT_FOUND`，而判定仍报就绪，导致损坏版本被反复复用（切换复用、应用重装也复用）。
 
 ## Decisions

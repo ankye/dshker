@@ -29,8 +29,7 @@ export type HarnessReadiness =
  * DSH CLI entry. Read-only: it never creates or repairs.
  *
  * The Git entry is accepted as either a directory (a plain repository) or a
- * regular file (a `git worktree` pointer file), because every per-version
- * directory is a worktree of the main repository.
+ * regular file for an existing installation's linked worktree.
  */
 export async function readHarnessReadiness(harnessDirectory: string): Promise<HarnessReadiness> {
   try {
@@ -126,7 +125,6 @@ async function assertResolvableRegularFile(filePath: string): Promise<void> {
 /** Checkout metadata that survives an unbuilt checkout; absent keys mean unreadable. */
 export interface LauncherCheckoutMetadata {
   readonly remoteUrl?: string
-  readonly currentBranch?: string
   readonly branches: readonly string[]
   readonly revision: string | undefined
   readonly commits: readonly LauncherHarnessCommitView[]
@@ -145,22 +143,20 @@ export async function tryReadLauncherCheckoutMetadata(
   harnessDirectory: string
 ): Promise<LauncherCheckoutMetadata> {
   try {
-    const [remoteUrl, currentBranch, branches, revision, commits, stableVersions] =
-      await Promise.all([
-        runText(
-          gitExecutable,
-          launcherGitArguments(['-C', harnessDirectory, 'remote', 'get-url', 'origin'])
-        ).then((value) => value.trim()),
-        readLauncherCurrentBranch(gitExecutable, harnessDirectory),
-        readLauncherBranches(gitExecutable, harnessDirectory),
-        runText(
-          gitExecutable,
-          launcherGitArguments(['-C', harnessDirectory, 'rev-parse', 'HEAD'])
-        ).then((value) => value.trim()),
-        readLauncherCommits(gitExecutable, harnessDirectory, 'origin/master'),
-        readLauncherStableVersions(gitExecutable, harnessDirectory)
-      ])
-    return { remoteUrl, currentBranch, branches, revision, commits, stableVersions }
+    const [remoteUrl, branches, revision, commits, stableVersions] = await Promise.all([
+      runText(
+        gitExecutable,
+        launcherGitArguments(['-C', harnessDirectory, 'remote', 'get-url', 'origin'])
+      ).then((value) => value.trim()),
+      readLauncherBranches(gitExecutable, harnessDirectory),
+      runText(
+        gitExecutable,
+        launcherGitArguments(['-C', harnessDirectory, 'rev-parse', 'HEAD'])
+      ).then((value) => value.trim()),
+      readLauncherCommits(gitExecutable, harnessDirectory, 'origin/master'),
+      readLauncherStableVersions(gitExecutable, harnessDirectory)
+    ])
+    return { remoteUrl, branches, revision, commits, stableVersions }
   } catch {
     return { branches: [], revision: undefined, commits: [], stableVersions: [] }
   }
@@ -239,19 +235,6 @@ export async function readLauncherStableVersions(
       return { ...commit, tag }
     })
   )
-}
-
-export async function readLauncherCurrentBranch(
-  gitExecutable: string,
-  harnessDirectory: string
-): Promise<string> {
-  const branch = (
-    await runText(
-      gitExecutable,
-      launcherGitArguments(['-C', harnessDirectory, 'branch', '--show-current'])
-    )
-  ).trim()
-  return branch.length === 0 ? 'master' : branch
 }
 
 export async function readLauncherBranches(

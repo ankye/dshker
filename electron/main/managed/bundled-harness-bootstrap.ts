@@ -75,9 +75,7 @@ export class BundledHarnessBootstrap {
         'origin',
         options.remoteUrl
       ])
-      // Dependencies and build artifacts live in per-version directories; the
-      // repository published here is history only, so nothing is installed or
-      // built at seed time.
+      // Publish the repository before the version service prepares it in place.
       await rmdir(options.harnessDirectory)
       await rename(checkout, options.harnessDirectory)
       return true

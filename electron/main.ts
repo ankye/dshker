@@ -529,10 +529,8 @@ async function bringPeerServicesOnline(peerManagement: PeerManagement): Promise<
 /**
  * Guarantees an active version exists before the shell settles.
  *
- * Fresh installs get theirs from the bundled seed; an existing single-checkout
- * installation (pre per-version directories) is migrated by materializing its
- * current commit as the first version directory. The repository's own working
- * tree is deliberately left untouched.
+ * Fresh installs build the bundled repository in place. An existing version
+ * record is left for the user's next explicit switch.
  */
 async function initializeActiveVersion(
   service: LauncherHarnessService,

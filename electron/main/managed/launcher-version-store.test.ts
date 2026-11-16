@@ -1,26 +1,26 @@
 import { execFileSync } from 'node:child_process'
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   realpathSync,
   rmSync,
-  statSync,
   writeFileSync
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
+  LAUNCHER_VERSION_POINTER_FORMAT,
+  assertLauncherVersionCheckout,
   materializeLauncherVersion,
-  pruneInactiveVersions,
   readCurrentVersionPointer,
-  versionDirectory,
   writeCurrentVersionPointer
 } from './launcher-version-store'
 
 const roots: string[] = []
+const masterReference = 'refs/remotes/origin/master'
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
@@ -33,53 +33,37 @@ function git(repository: string, arguments_: readonly string[]): string {
   }).trim()
 }
 
-function expectWorktreeRegistered(registrations: string, directory: string): void {
-  const expected = statSync(directory)
-  expect(expected.ino).not.toBe(0)
-  const registeredIdentities = registrations
-    .split(/\r?\n/u)
-    .filter((line) => line.startsWith('worktree '))
-    .map((line) => statSync(line.slice('worktree '.length)))
-    .map(({ dev, ino }) => `${dev}:${ino}`)
-  expect(registeredIdentities).toContain(`${expected.dev}:${expected.ino}`)
+function write(directory: string, relativePath: string, contents: string): void {
+  const file = path.join(directory, relativePath)
+  mkdirSync(path.dirname(file), { recursive: true })
+  writeFileSync(file, contents)
 }
 
-function commit(repository: string, message: string): string {
+function commit(repository: string, source: string): string {
+  write(repository, 'src/example.ts', source)
   git(repository, ['add', '--all'])
-  git(repository, ['commit', '-m', message])
+  git(repository, ['-c', 'commit.gpgSign=false', 'commit', '-m', source])
   return git(repository, ['rev-parse', 'HEAD'])
 }
 
-function createRepository(): {
-  readonly repository: string
-  readonly versions: string
-  readonly pointer: string
-  readonly previousCommit: string
-  readonly targetCommit: string
-} {
+function createRepository() {
   const root = realpathSync(mkdtempSync(path.join(tmpdir(), 'launcher-version-store-')))
   roots.push(root)
   const repository = path.join(root, 'harness')
   const versions = path.join(root, 'versions')
-  mkdirSync(repository, { recursive: true })
-  mkdirSync(versions, { recursive: true })
-  execFileSync('git', ['init', '--initial-branch=master', repository], {
-    encoding: 'utf8',
-    windowsHide: true
-  })
+  mkdirSync(repository)
+  mkdirSync(versions)
+  git(repository, ['init', '--initial-branch=master'])
   git(repository, ['config', 'user.name', 'Launcher Test'])
   git(repository, ['config', 'user.email', 'launcher-test@example.invalid'])
-  writeFileSync(path.join(repository, 'package.json'), '{"name":"harness-test"}\n')
-  mkdirSync(path.join(repository, 'apps', 'cli', 'src'), { recursive: true })
-  writeFileSync(path.join(repository, 'apps', 'cli', 'src', 'bin.ts'), 'export {}\n')
-  const previousCommit = commit(repository, 'initial source')
-  writeFileSync(
-    path.join(repository, 'apps', 'cli', 'src', 'bin.ts'),
-    'export const current = true\n'
-  )
-  const targetCommit = commit(repository, 'selected source')
-  git(repository, ['update-ref', 'refs/remotes/origin/master', targetCommit])
+  git(repository, ['config', 'core.autocrlf', 'false'])
+  write(repository, '.gitignore', 'node_modules/\napps/cli/lib/\n')
+  write(repository, 'package.json', '{"name":"harness-test"}\n')
+  const previousCommit = commit(repository, 'export const version = "previous"\n')
+  const targetCommit = commit(repository, 'export const version = "target"\n')
+  git(repository, ['update-ref', masterReference, targetCommit])
   return {
+    root,
     repository,
     versions,
     pointer: path.join(root, 'current-version.json'),
@@ -88,125 +72,292 @@ function createRepository(): {
   }
 }
 
-function steps(build: (directory: string) => Promise<void>) {
+function readyArtifacts(directory: string): void {
+  write(directory, 'apps/cli/lib/bin.js', 'process.stdout.write("built")\n')
+  write(directory, 'node_modules/tsx/package.json', '{"name":"tsx"}\n')
+}
+
+function steps(
+  build: (directory: string) => Promise<void> = async (directory) => readyArtifacts(directory)
+) {
   return {
     loggedStep: async <T>(_description: string, step: () => Promise<T>): Promise<T> => step(),
-    install: async () => undefined,
-    build,
-    reconcilePlugins: async () => undefined,
-    validate: async () => undefined,
-    event: () => undefined
+    install: vi.fn(async (_directory: string) => undefined),
+    build: vi.fn(build),
+    reconcilePlugins: vi.fn(async (_directory: string) => undefined),
+    validate: vi.fn(async (_directory: string) => undefined),
+    event: vi.fn()
   }
 }
 
-describe('managed DSH version worktree recovery', () => {
-  it('preserves an incomplete version when it is still the active pointer target', async () => {
-    const { repository, versions, pointer, targetCommit } = createRepository()
-    await writeCurrentVersionPointer(pointer, targetCommit)
-    const target = versionDirectory(versions, targetCommit)
-    let installStarted = false
+function switchVersion(
+  fixture: ReturnType<typeof createRepository>,
+  commit: string,
+  operations = steps(),
+  branch: string | null = null
+): Promise<void> {
+  return materializeLauncherVersion(
+    'git',
+    fixture.repository,
+    fixture.versions,
+    fixture.pointer,
+    {
+      commit,
+      branch,
+      reference: branch === null ? masterReference : `refs/remotes/origin/${branch}`
+    },
+    operations
+  )
+}
 
-    await expect(
-      materializeLauncherVersion('git', repository, versions, pointer, targetCommit, {
-        ...steps(async () => undefined),
-        install: async () => {
-          installStarted = true
-        }
-      })
-    ).rejects.toMatchObject({ code: 'runtime.worktree_invalid' })
+describe('switching DSH versions in the selected checkout', () => {
+  it('builds a fresh installation in the existing repository and preserves its caches and local refs', async () => {
+    const fixture = createRepository()
+    const { repository, versions, pointer, targetCommit } = fixture
+    const cachedDependency = 'node_modules/cached-package/keep'
+    write(repository, cachedDependency, 'cache')
+    const operations = steps()
 
-    expect(await readCurrentVersionPointer(pointer)).toBe(targetCommit)
-    expect(existsSync(target)).toBe(false)
-    expect(installStarted).toBe(false)
+    await switchVersion(fixture, targetCommit, operations)
+    expect(await readCurrentVersionPointer(pointer)).toEqual({
+      status: 'ready',
+      checkout: 'repository',
+      commit: targetCommit,
+      branch: null
+    })
+    expect(git(repository, ['rev-parse', 'HEAD'])).toBe(targetCommit)
+    expect(git(repository, ['rev-parse', '--abbrev-ref', 'HEAD'])).toBe('HEAD')
+    expect(operations.install).toHaveBeenCalledWith(repository)
+    expect(operations.build).toHaveBeenCalledWith(repository)
+    expect(operations.reconcilePlugins).toHaveBeenCalledWith(repository)
+    expect(operations.validate).toHaveBeenCalledWith(repository)
+    expect(readFileSync(path.join(repository, cachedDependency), 'utf8')).toBe('cache')
+    expect(git(repository, ['rev-parse', 'refs/heads/master'])).toBe(targetCommit)
+    expect(readdirSync(versions)).toEqual([])
   })
 
-  it('refuses recovery with a typed error when Git worktree registrations cannot be read', async () => {
-    const { repository, versions, pointer, targetCommit } = createRepository()
-    const invalidRepository = path.join(path.dirname(repository), 'not-a-git-repository')
-    mkdirSync(invalidRepository)
+  it('keeps the original linked worktree path and installed dependencies across repeated switches', async () => {
+    const fixture = createRepository()
+    const { repository, versions, pointer, previousCommit, targetCommit } = fixture
+    const active = path.join(versions, previousCommit)
+    git(repository, ['worktree', 'add', '--detach', active, previousCommit])
+    write(active, 'node_modules/cached-package/keep', 'original worktree cache')
+    readyArtifacts(active)
+    await writeCurrentVersionPointer(pointer, { status: 'legacy', commit: previousCommit })
+    const operations = steps()
 
-    await expect(
-      materializeLauncherVersion(
-        'git',
-        invalidRepository,
-        versions,
-        pointer,
-        targetCommit,
-        steps(async () => undefined)
+    await switchVersion(fixture, targetCommit, operations)
+    expect(await readCurrentVersionPointer(pointer)).toEqual({
+      status: 'ready',
+      checkout: previousCommit,
+      commit: targetCommit,
+      branch: null
+    })
+    expect(git(active, ['rev-parse', 'HEAD'])).toBe(targetCommit)
+
+    await switchVersion(fixture, previousCommit, operations)
+    expect(await readCurrentVersionPointer(pointer)).toMatchObject({
+      status: 'ready',
+      checkout: previousCommit
+    })
+    expect(git(active, ['rev-parse', 'HEAD'])).toBe(previousCommit)
+    expect(operations.install.mock.calls).toEqual([[active], [active]])
+    expect(readFileSync(path.join(active, 'node_modules/cached-package/keep'), 'utf8')).toBe(
+      'original worktree cache'
+    )
+    expect(readdirSync(versions)).toEqual([previousCommit])
+  })
+
+  it('retries the same HEAD after interrupted preparation even when runnable-looking files exist', async () => {
+    const fixture = createRepository()
+    const { repository, pointer, previousCommit, targetCommit } = fixture
+    await switchVersion(fixture, previousCommit)
+    const failedOperations = steps(async (directory) => {
+      readyArtifacts(directory)
+      throw new Error('native build interrupted')
+    })
+
+    await expect(switchVersion(fixture, targetCommit, failedOperations)).rejects.toThrow(
+      'native build interrupted'
+    )
+    expect(git(repository, ['rev-parse', 'HEAD'])).toBe(targetCommit)
+    expect(await readCurrentVersionPointer(pointer)).toMatchObject({
+      status: 'preparing',
+      commit: targetCommit
+    })
+
+    const retryOperations = steps()
+    await switchVersion(fixture, targetCommit, retryOperations)
+    expect(retryOperations.install).toHaveBeenCalledWith(repository)
+    expect(retryOperations.build).toHaveBeenCalledWith(repository)
+    expect(await readCurrentVersionPointer(pointer)).toMatchObject({
+      status: 'ready',
+      commit: targetCommit
+    })
+  })
+
+  it('rebuilds the selected version when its dependency tree no longer resolves', async () => {
+    const fixture = createRepository()
+    const { repository, pointer, targetCommit } = fixture
+    await switchVersion(fixture, targetCommit)
+    rmSync(path.join(repository, 'node_modules', 'tsx'), { recursive: true })
+    const operations = steps()
+
+    await switchVersion(fixture, targetCommit, operations)
+    expect(operations.install).toHaveBeenCalledWith(repository)
+    expect(operations.build).toHaveBeenCalledWith(repository)
+    expect(await readCurrentVersionPointer(pointer)).toMatchObject({
+      status: 'ready',
+      commit: targetCommit
+    })
+  })
+
+  it.each(['staged', 'unstaged'])(
+    'protects %s changes to tracked files before writing the pointer',
+    async (state) => {
+      const fixture = createRepository()
+      const { repository, pointer, previousCommit, targetCommit } = fixture
+      const file = 'src/example.ts'
+      await switchVersion(fixture, targetCommit)
+      write(repository, file, 'local content')
+      if (state === 'staged') git(repository, ['add', file])
+      const gitStatus = git(repository, ['status', '--porcelain'])
+      const operations = steps()
+
+      await expect(switchVersion(fixture, previousCommit, operations)).rejects.toMatchObject({
+        code: 'git.repository_dirty'
+      })
+      expect(readFileSync(path.join(repository, file), 'utf8')).toBe('local content')
+      expect(git(repository, ['status', '--porcelain'])).toBe(gitStatus)
+      expect(git(repository, ['rev-parse', 'HEAD'])).toBe(targetCommit)
+      expect(await readCurrentVersionPointer(pointer)).toMatchObject({
+        status: 'ready',
+        commit: targetCommit
+      })
+      expect(operations.install).not.toHaveBeenCalled()
+    }
+  )
+
+  it('preserves untracked files when switching across revisions with different ignore rules', async () => {
+    const fixture = createRepository()
+    const { repository, targetCommit } = fixture
+    const generated = '.dsh-build/record.json'
+    write(repository, '.gitignore', 'node_modules/\napps/cli/lib/\n.dsh-build/\n')
+    const newerCommit = commit(repository, 'export const version = "newer"\n')
+    git(repository, ['update-ref', masterReference, newerCommit])
+    await switchVersion(fixture, newerCommit)
+    write(repository, generated, 'cached build record')
+    write(repository, 'local-notes.txt', 'local notes')
+
+    await switchVersion(fixture, targetCommit)
+    expect(git(repository, ['status', '--porcelain', '--untracked-files=all'])).toContain(
+      '.dsh-build/record.json'
+    )
+    await switchVersion(fixture, newerCommit)
+
+    expect(git(repository, ['rev-parse', 'HEAD'])).toBe(newerCommit)
+    expect(readFileSync(path.join(repository, generated), 'utf8')).toBe('cached build record')
+    expect(readFileSync(path.join(repository, 'local-notes.txt'), 'utf8')).toBe('local notes')
+  })
+
+  it.each(['apps/cli/lib/custom.js', 'custom.js'])(
+    'preserves %s when the selected commit would replace a local file',
+    async (collidingFile) => {
+      const fixture = createRepository()
+      const { repository, targetCommit } = fixture
+      write(repository, collidingFile, 'tracked in the new version')
+      git(repository, ['add', '--force', collidingFile])
+      git(repository, ['-c', 'commit.gpgSign=false', 'commit', '-m', 'Track former ignored path'])
+      const collidingCommit = git(repository, ['rev-parse', 'HEAD'])
+      git(repository, ['update-ref', masterReference, collidingCommit])
+      await switchVersion(fixture, targetCommit)
+      write(repository, collidingFile, 'existing local content')
+      const operations = steps()
+
+      await expect(switchVersion(fixture, collidingCommit, operations)).rejects.toMatchObject({
+        code: 'runtime.worktree_invalid'
+      })
+      expect(git(repository, ['rev-parse', 'HEAD'])).toBe(targetCommit)
+      expect(readFileSync(path.join(repository, collidingFile), 'utf8')).toBe(
+        'existing local content'
       )
+      expect(operations.install).not.toHaveBeenCalled()
+    }
+  )
+
+  it('selects a locally fetched branch tip outside master only through its own remote ref', async () => {
+    const fixture = createRepository()
+    const { repository, pointer, previousCommit, targetCommit } = fixture
+    git(repository, ['switch', '--detach', previousCommit])
+    const branchCommit = commit(repository, 'export const version = "integration"\n')
+    git(repository, ['update-ref', 'refs/remotes/origin/integration', branchCommit])
+    git(repository, ['switch', 'master'])
+
+    await expect(switchVersion(fixture, branchCommit)).rejects.toMatchObject({
+      code: 'runtime.input_invalid'
+    })
+    expect(await readCurrentVersionPointer(pointer)).toBeUndefined()
+
+    await switchVersion(fixture, branchCommit, steps(), 'integration')
+    expect(await readCurrentVersionPointer(pointer)).toMatchObject({
+      status: 'ready',
+      commit: branchCommit,
+      branch: 'integration'
+    })
+    expect(git(repository, ['rev-parse', 'HEAD'])).toBe(branchCommit)
+    expect(git(repository, ['rev-parse', 'refs/heads/master'])).toBe(targetCommit)
+  })
+
+  it('refuses a ready checkout whose HEAD moved outside the Launcher', async () => {
+    const fixture = createRepository()
+    const { repository, previousCommit, targetCommit } = fixture
+    await switchVersion(fixture, previousCommit)
+    git(repository, ['switch', '--detach', targetCommit])
+
+    await expect(
+      assertLauncherVersionCheckout('git', repository, repository, previousCommit)
     ).rejects.toMatchObject({ code: 'runtime.worktree_invalid' })
   })
 
-  it('removes only a stale failed worktree registration before retrying the same commit', async () => {
-    const { repository, versions, pointer, previousCommit, targetCommit } = createRepository()
-    await writeCurrentVersionPointer(pointer, previousCommit)
-    const target = versionDirectory(versions, targetCommit)
-
-    await expect(
-      materializeLauncherVersion('git', repository, versions, pointer, targetCommit, {
-        ...steps(async () => {
-          throw new Error('native build failed')
-        })
-      })
-    ).rejects.toThrow('native build failed')
-    expect(await readCurrentVersionPointer(pointer)).toBe(previousCommit)
-    expect(existsSync(target)).toBe(true)
-
-    // Reproduce the log: failed preparation directory was removed, but Git kept
-    // its linked-worktree registration for this exact version path.
-    rmSync(target, { recursive: true, force: true })
-    expect(git(repository, ['worktree', 'list', '--porcelain'])).toContain('prunable')
-
-    await materializeLauncherVersion(
-      'git',
-      repository,
-      versions,
+  it('refuses a persisted checkout outside the registered version directories', async () => {
+    const fixture = createRepository()
+    const { pointer, previousCommit, targetCommit } = fixture
+    writeFileSync(
       pointer,
-      targetCommit,
-      steps(async (directory) => {
-        const builtEntry = path.join(directory, 'apps', 'cli', 'lib', 'bin.js')
-        mkdirSync(path.dirname(builtEntry), { recursive: true })
-        writeFileSync(builtEntry, 'process.stdout.write("built")\n')
-        // Readiness also proves the source launcher's tsx dependency resolves.
-        const tsx = path.join(directory, 'node_modules', 'tsx', 'package.json')
-        mkdirSync(path.dirname(tsx), { recursive: true })
-        writeFileSync(tsx, JSON.stringify({ name: 'tsx' }))
+      JSON.stringify({
+        format: LAUNCHER_VERSION_POINTER_FORMAT,
+        status: 'ready',
+        commit: previousCommit,
+        checkout: '../outside',
+        branch: null
       })
     )
+    const operations = steps()
 
-    expect(await readCurrentVersionPointer(pointer)).toBe(targetCommit)
-    expect(existsSync(path.join(target, 'apps', 'cli', 'lib', 'bin.js'))).toBe(true)
-    const registrations = git(repository, ['worktree', 'list', '--porcelain'])
-    expect(
-      registrations.split(/\r?\n/u).filter((line) => line.startsWith('worktree '))
-    ).toHaveLength(2)
-    expectWorktreeRegistered(registrations, repository)
-    expectWorktreeRegistered(registrations, target)
-    expect(registrations).not.toContain('prunable')
+    await expect(switchVersion(fixture, targetCommit, operations)).rejects.toMatchObject({
+      code: 'runtime.version_pointer_invalid'
+    })
+    expect(operations.install).not.toHaveBeenCalled()
   })
 
-  it('removes previous version packages only after the new version is active', async () => {
-    const { repository, versions, pointer, previousCommit, targetCommit } = createRepository()
-    const previousDirectory = versionDirectory(versions, previousCommit)
-    const activeDirectory = versionDirectory(versions, targetCommit)
-    const unrelatedDirectory = path.join(path.dirname(versions), 'unrelated-data')
-    mkdirSync(unrelatedDirectory)
-    writeFileSync(path.join(unrelatedDirectory, 'keep.txt'), 'preserve')
-    git(repository, ['worktree', 'add', '--detach', previousDirectory, previousCommit])
-    git(repository, ['worktree', 'add', '--detach', activeDirectory, targetCommit])
-    await writeCurrentVersionPointer(pointer, targetCommit)
+  it('refuses a matching SHA in a worktree attached to a different Git repository', async () => {
+    const fixture = createRepository()
+    const { root, repository, versions, pointer, previousCommit, targetCommit } = fixture
+    const foreignRepository = path.join(root, 'foreign')
+    const foreignWorktree = path.join(versions, previousCommit)
+    git(root, ['clone', '--local', repository, foreignRepository])
+    git(foreignRepository, ['worktree', 'add', '--detach', foreignWorktree, previousCommit])
+    await writeCurrentVersionPointer(pointer, { status: 'legacy', commit: previousCommit })
+    const operations = steps()
 
-    await pruneInactiveVersions('git', repository, versions, targetCommit, () => undefined)
-
-    expect(existsSync(previousDirectory)).toBe(false)
-    expect(existsSync(activeDirectory)).toBe(true)
-    expect(readFileSync(path.join(unrelatedDirectory, 'keep.txt'), 'utf8')).toBe('preserve')
-    const registrations = git(repository, ['worktree', 'list', '--porcelain'])
-    expect(
-      registrations.split(/\r?\n/u).filter((line) => line.startsWith('worktree '))
-    ).toHaveLength(2)
-    expectWorktreeRegistered(registrations, repository)
-    expectWorktreeRegistered(registrations, activeDirectory)
-    expect(() => statSync(previousDirectory)).toThrow()
+    await expect(switchVersion(fixture, targetCommit, operations)).rejects.toMatchObject({
+      code: 'runtime.worktree_invalid'
+    })
+    expect(git(foreignWorktree, ['rev-parse', 'HEAD'])).toBe(previousCommit)
+    expect(await readCurrentVersionPointer(pointer)).toEqual({
+      status: 'legacy',
+      commit: previousCommit
+    })
+    expect(operations.install).not.toHaveBeenCalled()
   })
 })
