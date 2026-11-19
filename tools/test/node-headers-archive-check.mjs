@@ -14,7 +14,7 @@ const evidencePath = path.join(evidenceDirectory, 'verification.json')
 const temporaryDirectory = mkdtempSync(path.join(tmpdir(), 'dshker-node-headers-'))
 
 try {
-  const url = `https://nodejs.org/dist/v22.23.3/${NODE_HEADERS_ARTIFACT.filename}`
+  const url = `https://nodejs.org/dist/v24.22.3/${NODE_HEADERS_ARTIFACT.filename}`
   const response = await fetch(url)
   assert.equal(
     response.ok,
@@ -42,7 +42,7 @@ try {
       '1',
       '-C',
       temporaryDirectory,
-      'node-v22.23.3/include/node'
+      'node-v24.22.3/include/node'
     ],
     { windowsHide: true }
   )
@@ -55,7 +55,7 @@ try {
     `${JSON.stringify(
       {
         status: 'verified',
-        nodeVersion: '22.23.3',
+        nodeVersion: '24.22.3',
         archive: NODE_HEADERS_ARTIFACT.filename,
         archiveSha256,
         headersTreeSha256,

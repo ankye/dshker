@@ -22,12 +22,12 @@ import path from 'node:path'
 
 describe('the pinned standalone Node target', () => {
   it.each([
-    ['darwin', 'arm64', 'node-v22.23.3-darwin-arm64.tar.gz'],
-    ['darwin', 'x64', 'node-v22.23.3-darwin-x64.tar.gz'],
-    ['win32', 'arm64', 'node-v22.23.3-win-arm64.zip'],
-    ['win32', 'x64', 'node-v22.23.3-win-x64.zip'],
-    ['linux', 'arm64', 'node-v22.23.3-linux-arm64.tar.gz'],
-    ['linux', 'x64', 'node-v22.23.3-linux-x64.tar.gz']
+    ['darwin', 'arm64', 'node-v24.22.3-darwin-arm64.tar.gz'],
+    ['darwin', 'x64', 'node-v24.22.3-darwin-x64.tar.gz'],
+    ['win32', 'arm64', 'node-v24.22.3-win-arm64.zip'],
+    ['win32', 'x64', 'node-v24.22.3-win-x64.zip'],
+    ['linux', 'arm64', 'node-v24.22.3-linux-arm64.tar.gz'],
+    ['linux', 'x64', 'node-v24.22.3-linux-x64.tar.gz']
   ])('resolves the pinned artifact for %s-%s', (platform, arch, filename) => {
     expect(resolveRuntimeTarget(['--platform', platform, '--arch', arch])).toMatchObject({
       platform,
@@ -41,8 +41,8 @@ describe('the pinned standalone Node target', () => {
 
   it('pins one exact, independently verified headers archive for every platform target', () => {
     expect(NODE_HEADERS_ARTIFACT).toEqual({
-      filename: 'node-v22.23.3-headers.tar.gz',
-      sha256: 'eff1a7e67736bdf25db421ddaa613ed605f751a7b9fe07fb473ea880d1348987'
+      filename: 'node-v24.22.3-headers.tar.gz',
+      sha256: 'bc93bde109befc916a62348caae708a48f9550150d786398fea2d773607c18da'
     })
   })
 

@@ -10,7 +10,7 @@ DSH's native builtin loader requires a Node V8 context; Electron's
 
 ### Requirement: The staged runtime is complete, target-specific, and verified
 
-`tools/prepare-runtime.mjs` SHALL stage the official Node 22.23.3 binary, its
+`tools/prepare-runtime.mjs` SHALL stage the official Node 24.22.3 binary, its
 license and complete `include/node` headers, the pinned pnpm package, and
 `versions.json` with schema version 4, platform, architecture, Node version,
 the target Node archive name and SHA-256, the exact-version official headers

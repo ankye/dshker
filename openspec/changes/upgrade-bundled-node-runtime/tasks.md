@@ -1,0 +1,6 @@
+- [x] Pin official Node 24.22.3 archive names and digests for all supported targets (source: nodejs.org SHASUMS256.txt).
+- [x] Update the staged-runtime descriptor validation pin in `electron/main/pnpm-launcher.ts`.
+- [x] Sync `tools/release-smoke.mjs`, `electron/main/pnpm-launcher.test.ts`, `tools/prepare-runtime.test.mjs`, `tools/release-smoke.test.mjs`, and `tools/test/node-headers-archive-check.mjs`.
+- [x] Sync README, README.zh-CN, docs/architecture.md, docs/release.md, and the bundled-pnpm-runtime spec text.
+- [x] Stage and verify the new runtime on win32-x64 (`runtime:prepare` + `runtime:verify`).
+- [x] Package the win32-x64 installer and confirm the bundled-runtime release check.

@@ -44,36 +44,36 @@ const launcherRoot = fileURLToPath(new URL('..', import.meta.url))
 const RUNTIME_ROOT = path.join(launcherRoot, 'resources', 'runtime')
 const BIN_DESTINATION = path.join(RUNTIME_ROOT, 'bin')
 const BIN_SOURCE = path.join(launcherRoot, 'resources', 'runtime-bin')
-const NODE_VERSION = '22.23.3'
+const NODE_VERSION = '24.22.3'
 const NODE_RELEASE_BASE = `https://nodejs.org/dist/v${NODE_VERSION}`
 export const NODE_HEADERS_ARTIFACT = Object.freeze({
   filename: `node-v${NODE_VERSION}-headers.tar.gz`,
-  sha256: 'eff1a7e67736bdf25db421ddaa613ed605f751a7b9fe07fb473ea880d1348987'
+  sha256: 'bc93bde109befc916a62348caae708a48f9550150d786398fea2d773607c18da'
 })
 const NODE_ARTIFACTS = Object.freeze({
   'darwin-arm64': Object.freeze({
     filename: `node-v${NODE_VERSION}-darwin-arm64.tar.gz`,
-    sha256: '23b25245dcfb9af7262f8ff142e9e2e0af025368117329e7a7458a51e5922f53'
+    sha256: 'ff6e17d4874b76d272212b908cc020d6e815fba5a6c7eaaa06add725840307fd'
   }),
   'darwin-x64': Object.freeze({
     filename: `node-v${NODE_VERSION}-darwin-x64.tar.gz`,
-    sha256: '8a677b0219178efd6eb0e475457c4afb452b521a92f6e67845a73bd85727f2a8'
+    sha256: '977614af0504c81045e7fd85596dbca0e5f951b96681516dadafedcca8c447f7'
   }),
   'win32-arm64': Object.freeze({
     filename: `node-v${NODE_VERSION}-win-arm64.zip`,
-    sha256: '33dad22e4cef5ee8f9fbb1b0d037fdacd0e56d12a4580f0d63f68b894deab535'
+    sha256: 'b3cc74a295b39d4f273271e96f58c06dd2b35757ca12abec64c7d0598b434f14'
   }),
   'win32-x64': Object.freeze({
     filename: `node-v${NODE_VERSION}-win-x64.zip`,
-    sha256: '2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71'
+    sha256: 'e612af99f626ab415ea225af6bce5c971feb448cb5cae250bb1c3fa50c5f7d9f'
   }),
   'linux-arm64': Object.freeze({
     filename: `node-v${NODE_VERSION}-linux-arm64.tar.gz`,
-    sha256: '5ced2d48d1d7198739b7f86804de0171aefb6823b684b12341d3321afc3cb0b2'
+    sha256: '261af2af250dfd7e9f25cf151d1b2713a0adf8f10a9ad116c4947f68627affe8'
   }),
   'linux-x64': Object.freeze({
     filename: `node-v${NODE_VERSION}-linux-x64.tar.gz`,
-    sha256: '1084aa36196bba4c3a5e69a1ee388a6e4ff729dad09445fbcd434b28fe3c24af'
+    sha256: '061ec3e3062115705b56b51fa9cc330ab50d34b6969387d4e4b1a50c6809acc2'
   })
 })
 

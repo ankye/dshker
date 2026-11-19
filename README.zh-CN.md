@@ -238,11 +238,11 @@ npm run build:electron
 每次打包前都会先准备并对版本做校验的内置运行时：
 
 ```bash
-npm run runtime:prepare   # 下载并校验 Node 22.23.3，准备固定版本 pnpm
+npm run runtime:prepare   # 下载并校验 Node 24.22.3，准备固定版本 pnpm
 npm run runtime:verify    # 发布门禁：校验目标平台、二进制摘要、版本并做烟测
 ```
 
-`runtime:prepare` 会按目标平台和架构下载 Node 官方 22.23.3 归档，并先校验固定的 SHA-256，再将归档标识、可执行文件摘要和固定版本 pnpm 写入 `resources/runtime/versions.json`，并对实际 Node/pnpm 组合做烟测。DSH Web 和插件命令使用这个独立 Node，为 DSH 原生加载器提供所需的 V8 context。应用不再启用 Electron 的 Node 模式；内置运行时缺失或校验失败时会明确拒绝启动，不会回退到系统 Node/pnpm。macOS、Windows、Linux（含 arm64）的目标构建脚本都会选择相应平台的运行时。
+`runtime:prepare` 会按目标平台和架构下载 Node 官方 24.22.3 归档，并先校验固定的 SHA-256，再将归档标识、可执行文件摘要和固定版本 pnpm 写入 `resources/runtime/versions.json`，并对实际 Node/pnpm 组合做烟测。DSH Web 和插件命令使用这个独立 Node，为 DSH 原生加载器提供所需的 V8 context。应用不再启用 Electron 的 Node 模式；内置运行时缺失或校验失败时会明确拒绝启动，不会回退到系统 Node/pnpm。macOS、Windows、Linux（含 arm64）的目标构建脚本都会选择相应平台的运行时。
 
 ## 打包与发布
 

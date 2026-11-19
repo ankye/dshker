@@ -336,11 +336,11 @@ npm run build:electron
 Packaging stages and verifies a standalone runtime before every build:
 
 ```bash
-npm run runtime:prepare   # download checksum-pinned Node 22.23.3 and stage pinned pnpm
+npm run runtime:prepare   # download checksum-pinned Node 24.22.3 and stage pinned pnpm
 npm run runtime:verify    # release gate: verify target, binary digest, versions, and smoke
 ```
 
-`runtime:prepare` downloads the official Node 22.23.3 archive for the selected
+`runtime:prepare` downloads the official Node 24.22.3 archive for the selected
 platform and architecture, verifies its pinned SHA-256 digest, and records the
 archive identity, executable digest, and pinned pnpm version in
 `resources/runtime/versions.json`. It smoke-tests the actual staged Node/pnpm

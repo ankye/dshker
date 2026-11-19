@@ -61,7 +61,7 @@ be the exact stable semantic version `v${package.json.version}`.
 
 Every desktop build stages and verifies the runtime DSH package operations will
 use: `npm run runtime:prepare` runs before every `electron-builder` invocation.
-It downloads the official Node 22.23.3 archive for the exact platform and
+It downloads the official Node 24.22.3 archive for the exact platform and
 architecture plus Node's separate version-matched headers archive, verifies
 both pinned SHA-256 values, stages the Node binary, license, complete
 `include/node` build headers, and pinned pnpm distribution, then smoke-tests

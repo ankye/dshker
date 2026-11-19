@@ -250,7 +250,7 @@ export async function bundledRuntimeHolds(releaseDir, manifest) {
       descriptor?.schemaVersion !== 4 ||
       descriptor.platform !== platform ||
       descriptor.arch !== arch ||
-      descriptor.node !== '22.23.3' ||
+      descriptor.node !== '24.22.3' ||
       typeof descriptor.pnpm !== 'string' ||
       !descriptor.pnpm ||
       typeof descriptor.nodeArchive !== 'string' ||

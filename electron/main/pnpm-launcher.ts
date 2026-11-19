@@ -10,7 +10,7 @@ export interface PnpmLauncher {
   readonly commandSearchPath: string
 }
 
-const NODE_VERSION = '22.23.3'
+const NODE_VERSION = '24.22.3'
 
 /**
  * Resolve only the required, staged standalone Node/pnpm pair. Missing runtime
