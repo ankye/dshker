@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.1.102 — 2026-11-20
+
+### 简体中文
+
+- **内置 Node 升级到 24.22.3。** 新版 DSH 的 `engines` 要求 Node >=24.9.0，旧内置 Node 22.23.3 启动 DSH Web 时会在日志中记录"不支持的引擎"警告。安装包现在携带经 SHA-256 校验的官方 Node 24.22.3（六个平台归档与独立 headers 归档全部换用官方新校验和）；内置运行时缺失或校验失败时仍然拒绝启动，不会回退到系统 Node/pnpm。
+
+### English (en-US)
+
+- **Bundled Node upgraded to 24.22.3.** Recent DSH versions require Node >=24.9.0 in `engines`; the bundled Node 22.23.3 logged an unsupported-engine warning when starting DSH Web. The installer now ships the SHA-256-verified official Node 24.22.3 (all six platform archives and the separate headers archive use the new official digests); a missing or invalid staged runtime still refuses to launch instead of falling back to system Node/pnpm.
+
 ## 0.1.101 — 2026-11-16
 
 ### 简体中文 (zh-CN)
