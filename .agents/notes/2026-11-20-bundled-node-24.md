@@ -61,3 +61,13 @@ move.
   plus `release: 0.1.102`, pushed to `main` with annotated tag `v0.1.102`;
   GitHub Actions builds the stable installers and publishes the Release the
   user downloads.
+
+## Publication record
+
+The public stable release `v0.1.102` tags `64e2d25`. GitHub Actions Package
+run 44623449843 passed, including the six native desktop package jobs and
+the standalone dshkerd CLI artifacts. The public Release "DSHKer Launcher
+v0.1.102" was created at 2026-11-19T22:10:32Z with 25 nonempty assets
+covering all six desktop targets, the dshkerd archives with their own
+checksums and manifest, and the per-target release manifests; the tag job
+itself validated and assembled every asset before creating the Release.
